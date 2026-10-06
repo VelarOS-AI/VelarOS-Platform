@@ -76,7 +76,7 @@ const SenseExemptions = [
     reason: 'memory=操作系统的内存(WMI 属性名),不是 VelarOS 记忆能力域',
   },
   {
-    // text-files 单元的编码类型会出现在 velaros:files 的模型面声明里,生成器要求闭包里的类型带这个标记
+    // 模型面类型闭包由声明生成器核对
     pattern: /@AgentView\b/u,
     reason: '代码面声明生成器的标记(这个类型会给模型看),不是 Agent 执行域语义',
   },

@@ -62,18 +62,18 @@ if (values['project-images']) runtimeOptions.project = { images: true }
 if (values['resident-modules'] !== undefined) {
   const modules = values['resident-modules'] === 'none' ? [] : values['resident-modules'].split(',')
   if (
-    modules.some((name) => !['project', 'shell', 'images'].includes(name)) ||
+    modules.some((name) => !['project', 'images'].includes(name)) ||
     new Set(modules).size !== modules.length ||
     (modules.includes('images') && !values['project-images'])
   )
     throw new Error(
-      '--resident-modules must be none or unique project,shell,images names; images requires --project-images'
+      '--resident-modules must be none or unique project,images names; images requires --project-images'
     )
   runtimeOptions.residentModules = modules.map((name) => ({ module: `velaros:${name}` }))
 }
 if (values['resident-exports'] !== undefined) {
   const names = values['resident-exports'].split(',')
-  const selected = names.map((name) => /^(project|shell|images)\.([A-Za-z_$][\w$]*)$/.exec(name))
+  const selected = names.map((name) => /^(project|images)\.([A-Za-z_$][\w$]*)$/.exec(name))
   if (
     selected.some((match) => !match || (match[1] === 'images' && !values['project-images'])) ||
     new Set(names).size !== names.length

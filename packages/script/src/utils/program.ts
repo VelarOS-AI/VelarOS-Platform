@@ -12,10 +12,10 @@ import { CodeSurfaceLimits } from '../contract/constants.js'
 /** 内存里那份程序的文件名；诊断按它过滤。后缀是 `.js`——模型写的就是 JavaScript，靠 `checkJs` 查。 */
 export const ProgramFileName = '/program.js'
 
-/** 能力模块的统一前缀：`import { read } from 'velaros:files'`。 */
+/** 能力模块的统一前缀：`import { read } from 'velaros:project'`。 */
 export const CapabilityModulePrefix = 'velaros:'
 
-/** 从模块名取命名空间：`velaros:files` → `files`。不是能力模块就返回 null。 */
+/** 从模块名取命名空间：`velaros:project` → `files`。不是能力模块就返回 null。 */
 export function readCapabilityNamespace(moduleSpecifier: string): Nullable<string> {
   return moduleSpecifier.startsWith(CapabilityModulePrefix)
     ? moduleSpecifier.slice(CapabilityModulePrefix.length)
@@ -42,7 +42,7 @@ export function describeOversized(what: 'source' | 'blobs', actual: number): str
 /**
  * 按预算保留结尾。
  *
- * 保留结尾而不是开头，与 `velaros:shell` 的 run 回执同一个口径：失败现场在尾部。
+ * 保留结尾而不是开头，与 `execution 宿主` 的 run 回执同一个口径：失败现场在尾部。
  * 截掉时在头上留一句说明，模型才知道自己看到的是一段而不是全部。
  */
 export function keepTail(text: string, budgetChars: number): { text: string; dropped: number } {

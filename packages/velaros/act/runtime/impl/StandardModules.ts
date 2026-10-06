@@ -1,7 +1,6 @@
 import type { AgentSupervisorApi } from '@velaros-ai/agent'
 import type { ContextViewApi } from '@velaros-ai/context'
 import { isPlainObject } from '@velaros-ai/core'
-import { isNull } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
@@ -18,10 +17,6 @@ import { VelarCodeModule, VelarProjectModule } from '../../../project/contract/s
 import { projectCapabilityPorts } from '../../../project/impl/operations/ProjectCapabilityPorts.js'
 import { projectCodeOperations } from '../../../project/impl/operations/ProjectCodeOperations.js'
 import { projectFileOperations } from '../../../project/impl/operations/ProjectFileOperations.js'
-import type { ShellOperationContext } from '../../../shell/contract/requires.js'
-import { VelarShellModule } from '../../../shell/contract/surface.js'
-import { shellOperations } from '../../../shell/impl/ShellOperations.js'
-import type { ShellRunInput } from '../../../shell/types/shell-command.js'
 import type { AgentsHost, WidgetHost } from '../../agents/contract/requires.js'
 import { agentsModule, interactionModule, widgetModule } from '../../agents/index.js'
 import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
@@ -37,7 +32,6 @@ import type {
   McpModuleOptions,
   ProjectCapabilityModuleOptions,
   ProjectImagesModuleOptions,
-  ShellCapabilityModuleOptions,
 } from '../contract/requires.js'
 import type { ScriptSubmission } from '../types/session.js'
 import { scriptInputCopy } from '../utils/program-context.js'
@@ -169,63 +163,6 @@ export function createProjectImagesModule(
       images,
       attachImage: (image) => call.attach({ type: 'image-data', ...image }),
     }),
-  })
-}
-
-/** Shell 观察保留任意命令表达力，调用同一领域实现的宿主受限执行口。 */
-export function createShellCapabilityModule(
-  options: ShellCapabilityModuleOptions
-): OperationModuleDefinition {
-  return capabilityModules.create({
-    surface: VelarShellModule,
-    implementation: shellOperations,
-    instanceId: options.instanceId,
-    context: (call) => {
-      const context: ShellOperationContext = {
-        recordDiagnostic: call.recordDiagnostic,
-        shell: options.shell,
-        approval: options.approval,
-        abortSignal: call.signal,
-        sessionId: call.invocation.sessionId,
-      }
-      // 宿主要看命令跑着时的输出：每段带上是哪个会话、哪段执行、哪次调用。
-      const output = options.output
-      if (output) {
-        const { sessionId, executionId, id } = call.invocation
-        context.onOutput = (text) => output({ sessionId, executionId, invocationId: id, text })
-      }
-      return context
-    },
-    observation: {
-      run: async (input, call) => {
-        let result
-        try {
-          result = await shellOperations.run(input as ShellRunInput, {
-            recordDiagnostic: call.recordDiagnostic,
-            shell: options.shell,
-            approval: options.approval,
-            abortSignal: call.signal,
-            sessionId: call.invocation.sessionId,
-            observation: true,
-          })
-        } catch (error) {
-          if (
-            ['OBSERVATION_EFFECT_DENIED', 'OBSERVATION_SHELL_UNAVAILABLE'].includes(
-              (error as { code?: string }).code ?? ''
-            )
-          )
-            call.recordEffect('none')
-          throw error
-        }
-        call.recordEffect('unknown')
-        if (!result.timedOut && !result.aborted && !isNull(result.exitCode))
-          call.recordObservation?.({
-            completed: true,
-            protection: result.confinement?.enforcement ?? 'none',
-          })
-        return normalizeCapabilityValue(result)
-      },
-    },
   })
 }
 

@@ -270,8 +270,8 @@ const manifest = {
     longRunRequiresObservedCompaction: true,
     source:
       scriptactCapabilities === 'on-demand'
-        ? 'formal Runtime and model provider composition with Shell/Node, on-demand project code, search, child agents, default context maintenance'
-        : 'formal Runtime and model provider composition with Shell/Node, core runtime controls and default context maintenance',
+        ? 'formal Runtime and model provider composition with Node.js and Execa, on-demand project code, search, child agents, default context maintenance'
+        : 'formal Runtime and model provider composition with Node.js and Execa, core runtime controls and default context maintenance',
     limitations: [
       'Task is newly authored and frozen on a real upstream project; model training exposure is unknown',
       'Runtime host comparison; this attempt does not exercise Desktop renderer integration',

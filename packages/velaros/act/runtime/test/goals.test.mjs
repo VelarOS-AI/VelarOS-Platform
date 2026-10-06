@@ -202,7 +202,7 @@ test('INV-48 native final text preserves an active goal until an explicit goal o
               type: 'tool-call',
               value: {
                 id: 'complete-goal-explicitly',
-                name: 'node',
+                name: 'exec',
                 input: {
                   code: "import {goal} from 'velaros:system'; const current = await goal.get(); await goal.update({baseRevision: current.revision, status: 'complete', reason: '已核对全部交付与验证结果'});",
                 },
@@ -288,7 +288,7 @@ test('INV-48 native goal completion is discoverable from the first actual reques
           type: 'tool-call',
           value: {
             id: 'explicit-completion',
-            name: 'node',
+            name: 'exec',
             input: {
               code: "import * as goal from 'velaros:system-goal'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'交付和验证已核对'});",
             },

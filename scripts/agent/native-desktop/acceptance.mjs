@@ -67,7 +67,8 @@ async function main() {
     const id = /native_fixture_(A|B|cancel|codex)/.exec(text)?.[1]
     assert.ok(id, 'fixture task identity absent')
     const marker = [...text.matchAll(/当前帧标记：(@@[A-Za-z0-9_]+)/g)].at(-1)?.[1]
-    if (id !== 'codex') assert.match(marker ?? '', /^@@s[a-f0-9]{8,}$/)
+    const native = body.tools?.some((tool) => (tool.name ?? tool.function?.name) === 'exec')
+    if (id !== 'codex' && !native) assert.match(marker ?? '', /^@@s[a-f0-9]{8,}$/)
     const index = (state.get(id)?.length ?? 0) + 1
     const events = state.get(id) ?? []
     events.push({
@@ -100,47 +101,68 @@ async function main() {
       quote(id) +
       ' > ' +
       quote(join(directory, 'outside-' + id + '.txt'))
+    const code = `import {execaCommand} from 'execa';console.log((await execaCommand(${JSON.stringify(command)},{shell:true,timeout:10000})).stdout);`
+    const execute = index === 1 && !['cancel', 'codex'].includes(id)
     const content =
       id === 'codex'
         ? '本机 Codex 零模型验收完成。'
-        : index === 1 && id !== 'cancel'
-          ? marker +
-            ' execute\nimport {run} from "velaros:shell"; import {output} from "velaros"; output(await run({command:' +
-            JSON.stringify(command) +
-            ',timeoutMs:10000}));\n' +
-            marker
-          : marker + ' done\n原生离线验收完成。'
-    emit({
-      type: 'response.output_item.added',
-      output_index: 0,
-      item: {
-        type: 'message',
-        id: 'msg_1',
-        role: 'assistant',
-        content: [],
-        status: 'in_progress',
-        phase: 'final_answer',
-      },
-    })
-    emit({
-      type: 'response.output_text.delta',
-      item_id: 'msg_1',
-      output_index: 0,
-      content_index: 0,
-      delta: content,
-    })
-    emit({
-      type: 'response.output_item.done',
-      output_index: 0,
-      item: {
-        type: 'message',
-        id: 'msg_1',
-        role: 'assistant',
-        status: 'completed',
-        content: [{ type: 'output_text', text: content, annotations: [] }],
-        phase: 'final_answer',
-      },
-    })
+        : native
+          ? '原生离线验收完成。'
+          : execute
+            ? `${marker} execute\n${code}\n${marker}`
+            : `${marker} done\n原生离线验收完成。`
+    if (native && execute) {
+      const item = { type: 'function_call', id: `fc_${id}`, call_id: `call_${id}`, name: 'exec' }
+      const argumentsText = JSON.stringify({ code })
+      emit({
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { ...item, arguments: '' },
+      })
+      emit({
+        type: 'response.function_call_arguments.delta',
+        item_id: item.id,
+        output_index: 0,
+        delta: argumentsText,
+      })
+      emit({
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: { ...item, arguments: argumentsText, status: 'completed' },
+      })
+    } else {
+      emit({
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_1',
+          role: 'assistant',
+          content: [],
+          status: 'in_progress',
+          phase: 'final_answer',
+        },
+      })
+      emit({
+        type: 'response.output_text.delta',
+        item_id: 'msg_1',
+        output_index: 0,
+        content_index: 0,
+        delta: content,
+      })
+      emit({
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_1',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: content, annotations: [] }],
+          phase: 'final_answer',
+        },
+      })
+    }
     emit({
       type: 'response.completed',
       response: {
@@ -266,10 +288,10 @@ async function main() {
       assert.equal(trace.omitted, 0)
       assert.equal(trace.turns.length, 2)
       assert.equal(trace.turns.at(-1).done, true)
-      assert.equal(trace.turns[0].executions[0].calls[0].module, 'velaros:shell')
-      assert.ok(trace.turns[0].executions[0].calls[0].input.includes('sleep 0.6'))
+      assert.equal(trace.turns[0].executions[0].language, 'node')
+      assert.ok(trace.turns[0].executions[0].source.includes('sleep 0.6'))
       assert.ok(
-        trace.turns[0].executions[0].calls[0].output.includes(join(directory, 'workspaces', name))
+        trace.turns[0].executions[0].processOutput.includes(join(directory, 'workspaces', name))
       )
     }
     assert.equal(peak, 2, 'actual upstream requests never overlapped')

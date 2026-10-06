@@ -1,6 +1,6 @@
 /**
  * 内核编辑操作的形状（replace_lines、replace_text、add_import 等）写成 schema：内核测试用它核对自己构造的操作合法，
- * 不是模型面的东西——模型面在 `velaros:files` 的 edit（整份写入）与项目空间的端口里。
+ * 不是模型面的东西——模型面在 `velaros:project` 的 edit（整份写入）与项目空间的端口里。
  */
 
 import { z } from 'zod'

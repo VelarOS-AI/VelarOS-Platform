@@ -121,15 +121,13 @@ export interface ScriptProtocolOptions {
   /** 宿主选择面向标准 Node 的精简执行说明。 */
   readonly presentation?: 'node'
   /** 当前运行配置允许的控制声明。 */
-  readonly allowed?: ReadonlyArray<'blobs' | 'observe' | 'execute' | 'shell' | 'done'>
+  readonly allowed?: ReadonlyArray<'blobs' | 'observe' | 'execute' | 'done'>
   /** 模型发起执行的缺省可见期限，文本与原生工具共用；默认随历史封段退役，仍受展示预算约束。 */
   readonly defaultRetain?: ScriptRetention
   /** 每帧随机标记的前缀，只接受 @@ 后的字母数字下划线。 */
   readonly markerPrefix?: string
   /** 声明名称可配置，必须唯一且符合 JavaScript 标识符格式。 */
-  readonly names?: Readonly<
-    Partial<Record<'blobs' | 'observe' | 'execute' | 'shell' | 'done', string>>
-  >
+  readonly names?: Readonly<Partial<Record<'blobs' | 'observe' | 'execute' | 'done', string>>>
   /** 最大完整响应字符数。 */
   readonly maxChars?: number
   /** 单个控制头最大字符数。 */

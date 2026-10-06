@@ -360,7 +360,7 @@ for (const module of selectedModules) {
     continue
   }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
-  // 能力单元登记的名字是「包名/单元」，引用时就这么写（@velaros-ai/velaros/files）。
+  // 能力单元登记的名字是「包名/单元」，引用时就这么写（@velaros-ai/velaros/project）。
   const packageName = module.unit ? module.name.slice(0, -(module.unit.length + 1)) : module.name
   if (manifest.name !== packageName) fail(`${label}: 包名与登记表不符（${manifest.name}）`)
 

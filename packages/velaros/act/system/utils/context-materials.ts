@@ -1,4 +1,5 @@
 import type { ContextContent } from '@velaros-ai/context'
+import { isEmpty } from '@velaros-ai/core'
 
 /** 从原文区间中扣除已送达或本帧已选择的范围，保留每个缺口。 */
 function uncovered(
@@ -31,7 +32,7 @@ export function contextMaterialPages(
       visible.get(page.record.ref.id) ?? []
     ).map((range) => ({ page, ...range }))
   )
-  const candidates = unread.length
+  const candidates = !isEmpty(unread)
     ? unread
     : ordered.map((page) => ({ page, start: page.offset, end: page.offset + page.text.length }))
   const selected = new Map<string, Array<{ start: number; end: number }>>()

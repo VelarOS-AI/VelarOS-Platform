@@ -7,8 +7,8 @@ import { test } from 'node:test'
 
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { createRuntime, createShellCapabilityModule } from '../../../dist/act/runtime/index.js'
-import { createLocalShellHost, createShellEnvironment } from '../../../dist/shell/local.js'
+import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createLocalShellHost, createShellEnvironment } from '../../../dist/execution/local.js'
 
 import { done, modelText, turn } from './support/model-turn.mjs'
 
@@ -94,23 +94,15 @@ for (const defect of ['artifact', 'protection']) {
     const runtime = await createRuntime({
       workspace: project,
       dataDir: join(root, 'state'),
-      runner: nodeSubprocessCodeRunner,
+      node: createNodeExecutionEnvironment({
+        cwd: project,
+        directory: join(root, 'runs'),
+        host,
+        environment: { NODE_TEST_CONTEXT: undefined },
+      }),
       agents: false,
       search: false,
       memory: false,
-      modules: [
-        createShellCapabilityModule({
-          instanceId: 'task-loop-shell',
-          approval: {},
-          shell: {
-            resolveCwd: async (cwd) => {
-              assert.equal(resolve(project, cwd ?? '.'), project)
-              return project
-            },
-            runCommand: run,
-          },
-        }),
-      ],
       context: {
         maintenance: false,
         completion: {
@@ -171,11 +163,11 @@ for (const defect of ['artifact', 'protection']) {
           const round = requests.length
           if (round === 1) {
             assert.match(modelText(request), /Repair double and publish the repair status/)
-            assert.match(request.instructions + modelText(request), /Shell 和 Node/)
+            assert.match(request.instructions + modelText(request), /Node.js/)
             yield turn(
               request,
               program(
-                `import {run} from 'velaros:shell';import {output} from 'velaros';output(await run({command:${JSON.stringify(command)},timeoutMs:5000}));`
+                `import {execaCommand} from 'execa';import {output} from 'velaros';const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
               )
             )
           } else if (round === 2) {
@@ -195,7 +187,7 @@ for (const defect of ['artifact', 'protection']) {
             yield turn(
               request,
               program(
-                `import {read,edit} from 'velaros:project';import {run} from 'velaros:shell';import {output} from 'velaros';const current=(await read({files:[{path:'src/double.mjs'}]})).files[0];if(current.text!==${JSON.stringify(originalSource)})throw Error('unexpected current source');await edit({steps:${JSON.stringify(steps)}});output(await run({command:${JSON.stringify(command)},timeoutMs:5000}));`
+                `import {read,edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';const current=(await read({files:[{path:'src/double.mjs'}]})).files[0];if(current.text!==${JSON.stringify(originalSource)})throw Error('unexpected current source');await edit({steps:${JSON.stringify(steps)}});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
               )
             )
           } else if (round === 3 || round === 5) {
@@ -214,7 +206,7 @@ for (const defect of ['artifact', 'protection']) {
             yield turn(
               request,
               program(
-                `import {edit} from 'velaros:project';import {run} from 'velaros:shell';import {output} from 'velaros';await edit({steps:${JSON.stringify([step])}});output(await run({command:${JSON.stringify(command)},timeoutMs:5000}));`
+                `import {edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';await edit({steps:${JSON.stringify([step])}});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
               )
             )
           } else assert.fail(`unexpected round ${round}`)
@@ -248,7 +240,7 @@ for (const defect of ['artifact', 'protection']) {
     )
     assert.deepEqual(
       commands.map((entry) => entry.exitCode),
-      [1, 0, 0, 0, 0]
+      [0, 0]
     )
     assert(commands.every((entry) => entry.cleanupIncomplete === false))
     assert.equal(await readFile(join(project, 'src/double.mjs'), 'utf8'), repairedSource)

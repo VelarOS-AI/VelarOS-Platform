@@ -12,7 +12,6 @@
 
 2026-09-18：`@velaros-ai/project`（项目空间）整包拆掉：装配表（`createProjectSpace`）离开本仓库，空间由产品自己装；给三件共用能力装项目端口的那一半搬回本单元，
 成了 `projectCapabilityPorts`（连同交给 agent 编码会话的验证判据 `projectVerificationPolicy`），宿主端口 `ProjectHostPort` 也登记在本单元的注入面。
-那边登记表的 INV-2、INV-3、INV-4、INV-5 随端口搬回来、接着编号，成了这里的 INV-26、INV-27、INV-28、INV-29，改由 `projectCapabilityPorts` 配上三件能力真实的操作来测；
 它们本来就是从这里的原 INV-7、INV-16、INV-21（以及原 INV-14、INV-17 的一半）搬过去的；INV-7、INV-16、INV-21 照旧作废、不复用。
 那边的 INV-1（空间挂五个命名空间、模块清单）随装配表作废；INV-6（入口门禁）由本单元的 INV-12 管着，不另立。
 
@@ -42,11 +41,10 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-19 | 读出来的就是原文：像密钥的片段不遮，照读到的原文写 replace 照常能改；搜索片段取命中所在的行，行太长时以命中为中心收窄，命中一定在片段里 | 测试 | `spec/acceptance.test.ts` |
 | INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 两份代码模版（`template.js`、`code-template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它们整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
-| INV-23 | 行号照 `wc -l` 数，和 `velaros:files` 一样：结尾换行之后那个零宽的行不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；读到文件末尾的窗口，正文结尾的换行照原样在，整份读回来原样 write 回去不多一行也不少一行；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
+| INV-23 | 行号照 `wc -l` 数：结尾换行之后那个零宽的行不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；读到文件末尾的窗口，正文结尾的换行照原样在，整份读回来原样 write 回去不多一行也不少一行；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
 | INV-24 | read 交回要的整段，list 全部条目，search 全部命中及连续正文；search.contextLines 接受非负安全整数，窗口止于文件边界、重叠或相邻窗口合并，按合并后的正文总量守内存；edit、inspect 交回完整差量，patch 缺省摘要、full 返回完整差量，完整审计保留；超限明确报错，不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts`、`spec/selection-acceptance.test.ts`、`test/search-context.test.ts` |
 | INV-25 | 声明里写给模型的上限就是常量表 `ProjectFileLimits`、`ProjectCodeLimits` 与缺省策略里的数：改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
-| INV-26 | 项目里的危险命令每次都由用户亲自确认（高风险、手动、不可记忆，确认文案说「当前项目」，风险分类 `project-command:dangerous`）；被拒时抛错、一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回 | 测试 | `spec/acceptance.test.ts` |
-| INV-27 | 命令的工作目录与演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），一个进程都不起、什么都不镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-27 | 演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），拒绝镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 演练沙箱落回不问人、不按名单拦：点名的路径核过（点名了没变化的就拒绝，`VALIDATION`）就把同一份差量的指纹交给宿主落回；镜像里命令的输出原样交回 | 测试 | `spec/acceptance.test.ts` |
 | INV-29 | 项目里看图（共用的 `velaros:images`）只看项目里的图：出了项目（含经符号链接指到外面）的那一张看不了（`PERMISSION`），项目里的都照常交给模型 | 测试 | `spec/acceptance.test.ts` |
 | INV-30 | 语言查询只借读源码端口（`listFiles` / `read` / `listSymbols`）：不消耗项目的修改、执行与审批能力，宿主给的内核就算带着写入口本包也够不着 | 测试 | `spec/language-acceptance.test.ts` |

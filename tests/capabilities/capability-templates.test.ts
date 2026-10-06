@@ -11,7 +11,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
@@ -24,12 +23,15 @@ import {
   createCodeSurfaceSession,
   nodeSubprocessCodeRunner,
 } from '../../packages/script/src/index'
+import { createLocalShellHost } from '../../packages/velaros/execution/local'
 import { solidPng } from '../../packages/velaros/images/spec/support'
 import type { ProjectHostPort } from '../../packages/velaros/project/index'
-import { createProjectCodeQuery } from '../../packages/velaros/project/index'
-import { createProjectKernel, typescriptPlugin } from '../../packages/velaros/project/index'
+import {
+  createProjectCodeQuery,
+  createProjectKernel,
+  typescriptPlugin,
+} from '../../packages/velaros/project/index'
 import { createLocalSandboxHost } from '../../packages/velaros/sandbox/local'
-import { createLocalShellHost } from '../../packages/velaros/shell/local'
 import type { MountedCapabilityModule } from '../support/spaces'
 import { projectSpace, systemSpace } from '../support/spaces'
 
@@ -125,93 +127,6 @@ const CommandScripts: Record<string, string> = {
 }
 
 /** 同一段 shell 模版在两个空间里各跑一遍：git 仓库在 gitDir。 */
-function shellCalls(gitDir: string): string {
-  return `
-export const passed = await runTests('node checks/pass.js')
-export const failed = await runTests('node checks/fail.js')
-export const errors = await errorLines('node checks/build.js')
-export const git = await gitState('${gitDir}')
-export const todos = await findTodos('src')
-export const server = await startServer('node server.js')
-export const tool = await afterInstall('node --version')
-`
-}
-
-/** 后台启动只承诺任务句柄；后续脚本读取实际输出，再显式停止。 */
-async function runShellTemplate(space: Space, cwd: string): Promise<Record<string, any>> {
-  const { values } = await runProgram(
-    space,
-    'shell',
-    `${template('shell/template.js')}${shellCalls(cwd)}`
-  )
-  expect(values.server.taskId).toBeString()
-  const task = JSON.stringify(values.server.taskId)
-  try {
-    const deadline = Date.now() + 5000
-    do {
-      const next = await runProgram(
-        space,
-        'shell',
-        `${template('shell/template.js')}\nexport const log=await taskOutput(${task},5)`
-      )
-      values.log = next.values.log
-      if (values.log.lastLines?.includes('listening on http://localhost:43210')) break
-      await delay(20)
-    } while (Date.now() < deadline)
-  } finally {
-    const last = await runProgram(
-      space,
-      'shell',
-      `${template('shell/template.js')}\nexport const stopped=await stopTask(${task})`
-    )
-    values.stopped = last.values.stopped
-  }
-  return values
-}
-
-/** shell 模版在任何一个空间里都该交回的样子。 */
-function expectShellResults(values: Record<string, any>): void {
-  expect(values.passed).toMatchObject({
-    success: true,
-    exitCode: 0,
-    signal: null,
-    timedOut: false,
-    aborted: false,
-    truncated: false,
-  })
-  expect(values.passed.durationMs).toBeGreaterThanOrEqual(0)
-  expect(values.failed).toMatchObject({ exitCode: 1, timedOut: false })
-  expect(values.failed.tail).toContain('AssertionError: expected 1 to equal 2')
-  expect(values.errors).toMatchObject({ success: false, count: 2 })
-  expect(values.errors.errors).toEqual([
-    'src/a.ts(3,5): error TS2304: Cannot find name x',
-    'Error: build failed',
-  ])
-  expect(values.git.branch).toBe('main')
-  expect(values.git.changed.join('\n')).toContain('README.md')
-  expect(values.git.recent).toHaveLength(1)
-  expect(values.git.recent[0]).toEndWith(' init')
-  expect(values.todos).toMatchObject({
-    status: 'matched',
-    total: 2,
-    perFile: { './a.ts': 1, './b.ts': 1 },
-  })
-  expect(values.todos.first).toContainEqual({
-    file: './a.ts',
-    line: 2,
-    text: '// TODO: handle empty input',
-  })
-  expect(values.server.taskId).toBeString()
-  expect(values.server.status).toBe('running')
-  expect(values.server.lastLines).toBeArray()
-  expect(values.log).toMatchObject({
-    status: 'running',
-    lastLines: ['listening on http://localhost:43210'],
-  })
-  expect(values.stopped).toMatchObject({ taskId: values.server.taskId, stopped: true })
-  expect(values.tool).toMatch(/^v\d+\.\d+\.\d+$/)
-}
-
 describe('系统空间里的模版', () => {
   let root = ''
   let space: Space
@@ -268,63 +183,6 @@ describe('系统空间里的模版', () => {
     await dispose()
     if (root) await removeTemporary(root)
   })
-
-  test('velaros:files：看、找、批量读、改一行、删几行、改 JSON、新建、几个文件一起改、撤回', async () => {
-    const { values } = await runProgram(
-      space,
-      'files',
-      `${template('files/template.js')}
-export const shown = await showFile('.zshrc')
-export const grep = await grepFile('logs/app.log', /error/i, 2)
-export const many = await readMany(['.zshrc', 'missing.cfg'])
-export const replacedOnce = await replaceOnce('.zshrc', 'export EDITOR=nano', 'export EDITOR=vi')
-export const missedOnce = await replaceOnce('.zshrc', 'export EDITOR=nano', 'export EDITOR=vi')
-export const setExisting = await setLine('.zshrc', /^export EDITOR=/, 'export EDITOR=vim')
-export const setAppended = await setLine('.zshrc', /^export PAGER=/, 'export PAGER=less')
-export const deleted = await deleteLines('.zshrc', /^alias ll=/)
-export const json = await updateJson('settings.json', 'theme', 'dark')
-export const created = await createFile('bin/hello.sh')
-export const replaced = await replaceInFiles(['notes/a.md', 'notes/b.md'], 'oldName', 'newName')
-export const replacedOnDisk = typeof replaced === 'string' ? replaced : (await read({ files: [{ path: 'notes/b.md' }] })).files
-export const reverted = typeof replaced === 'string' ? replaced : await revert(replaced.changeId)
-`
-    )
-    expect(values.shown).toBe("export PATH=/usr/bin\nalias ll='ls -l'\nexport EDITOR=nano\n")
-    expect(values.grep).toEqual({ total: 3, last: ['4: ERROR b', '6: ERROR c'] })
-    // 读到的那项交回解析过的路径（系统空间里是绝对路径），读不了的那项照传入的原样。
-    expect(relative(root, values.many[0].path)).toBe('.zshrc')
-    expect(values.many[0].text).toBe("export PATH=/usr/bin\nalias ll='ls -l'\nexport EDITOR=nano\n")
-    expect(values.many[1].path).toBe('missing.cfg')
-    expect(values.many[1].error).toBeString()
-    for (const name of ['replacedOnce', 'setExisting', 'setAppended', 'deleted', 'json', 'created'])
-      expect(values[name].changeId, name).toBeString()
-    // 同一处已经换过了：再换就找不到原文，程序拿到的是原因码和说明，不是一个崩掉的程序。
-    expect(values.missedOnce.code).toBe('FILES_EDIT_UNRESOLVED')
-    expect(values.missedOnce.message).toContain('oldText')
-    expect(await readFile(join(root, '.zshrc'), 'utf8')).toBe(
-      'export PATH=/usr/bin\nexport EDITOR=vim\nexport PAGER=less\n'
-    )
-    expect(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'))).toEqual({
-      theme: 'dark',
-    })
-    expect(values.created.files[0]).toMatchObject({ created: true })
-    expect(await readFile(join(root, 'bin/hello.sh'), 'utf8')).toBe('#!/bin/sh\necho hello\n')
-    expect(values.replaced.changed.map((path: string) => relative(root, path))).toEqual([
-      'notes/a.md',
-      'notes/b.md',
-    ])
-    expect(values.replacedOnDisk[0].text).toBe('nothing\nnewName again, newName\n')
-    // 撤回之后两个文件都回到改之前。
-    expect(values.reverted.files).toHaveLength(2)
-    expect(await readFile(join(root, 'notes/b.md'), 'utf8')).toBe(
-      'nothing\noldName again, oldName\n'
-    )
-  }, 180_000)
-
-  test('velaros:shell：跑测试、筛错误、看 git、rg 找东西、起后台服务再停掉、刷新环境', async () => {
-    const values = await runShellTemplate(space, 'repo')
-    expectShellResults(values)
-  }, 180_000)
 
   test.skipIf(!canConfine)(
     'velaros:sandbox：镜像里试命令、失败就丢、看差量、只落回一部分、镜像里重新构建、丢掉',
@@ -550,10 +408,5 @@ export const reverted = typeof renamed === 'string' ? renamed : await revert(ren
     // 撤销之后改名整次回去了。
     expect(values.reverted.changedFiles).toHaveLength(2)
     expect(await readFile(join(root, 'src/app.ts'), 'utf8')).toContain('return loadSettings()')
-  }, 180_000)
-
-  test('velaros:shell：同一份模版在项目里照样跑得通', async () => {
-    const values = await runShellTemplate(space, '.')
-    expectShellResults(values)
   }, 180_000)
 })

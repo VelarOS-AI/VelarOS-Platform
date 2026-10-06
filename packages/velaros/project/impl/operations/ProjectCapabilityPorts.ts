@@ -1,37 +1,25 @@
 /**
  * 项目给共用能力装的端口：`ProjectCapabilityPorts` 与整个进程唯一的 `projectCapabilityPorts`。接口 `ProjectCapabilityPortsApi` 在本文件的类上方。
- * 命令的工作目录钳在项目内、前台命令在项目资源门里排队；沙箱只镜像项目内的目录；看图只看项目里的。路径的判定与内核拒绝的翻译在 `utils/capability-ports.ts`。
+ * 沙箱只镜像项目内的目录；看图只看项目里的。路径的判定与内核拒绝的翻译在 `utils/capability-ports.ts`。
  */
 
 import { AppError } from '@velaros-ai/core/error'
 import type { ImageSpacePort } from '@velaros-ai/velaros/images'
 import type { RehearsalSandboxHostPort, SandboxSurfacePort } from '@velaros-ai/velaros/sandbox'
-import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
-import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 
-import type {
-  ProjectHostPort,
-  ProjectImagesHost,
-  ProjectShellHostPort,
-} from '../../contract/requires.js'
+import type { ProjectHostPort, ProjectImagesHost } from '../../contract/requires.js'
 import { genericFailure, insideProject, projectRelativePath } from '../../utils/capability-ports.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
 
 /**
- * 项目空间给三件跨空间共用的能力（`velaros:shell`、`velaros:sandbox`、`velaros:images`）装的端口，按这一次调用的宿主端口现装。
+ * 项目空间给沙箱与图片能力（`velaros:sandbox`、`velaros:images`）装的端口，按这一次调用的宿主端口现装。
  *
  * 能力本身不认识项目：两个空间的差别全落在端口上，模型那边只有一套说明。装空间是产品的事——产品每次分发调用时拿宿主端口
- * 调这里的方法，把得到的端口塞进那件能力的调用上下文。都不问人：危险命令由 `velaros:shell` 自己问，沙箱落回不问。
+ * 调这里的方法，把得到的端口塞进那件能力的调用上下文。权限由对应能力和宿主共同实施。
  */
 export interface ProjectCapabilityPortsApi {
-  /**
-   * `velaros:shell` 的项目端口：工作目录按解开符号链接后的真实路径钳在项目内，出了项目在问用户之前就拒绝（PERMISSION）；
-   * 前台命令在项目资源门里排队（只读的走读门，其余走写门），后台命令直接交宿主；输出原样交回。
-   * 确认文案说「当前项目」，风险分类 `project-command:dangerous`。`abortSignal` 是这次调用的，排队时一直核对。
-   */
-  shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort
   /**
    * `velaros:sandbox` 的项目端口：源目录钳在项目内（不给就是项目根）；每次按句柄操作都重新核对当前项目对真实源目录的授权，落回走项目写门；建、看差量、落回、丢弃、镜像里跑命令都交宿主的沙箱，
    * 落回不问人。宿主没给沙箱时，每个操作都明说这台机器上没有演练沙箱（UNAVAILABLE）。
@@ -51,47 +39,12 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
     this.gate = gate
   }
 
-  public shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort {
-    const root = () => project.getRootPath()
-    const port: ShellSpacePort = {
-      resolveCwd: (cwd) => insideProject(root(), cwd ?? '.', '工作目录'),
-      commandPolicy: () => ({ scopeLabel: '当前项目', riskScope: 'project-command:dangerous' }),
-      runCommand: async (command, options, allowDangerous, signal) => {
-        const invoke = () => project.runCommand(command, options, allowDangerous, signal)
-        // 后台命令交给宿主的任务管理，不占门；前台命令按只读与否走读门或写门。
-        return options?.background
-          ? invoke()
-          : this.gate.run(
-              root(),
-              !shellCommandPolicy.isReadOnly(command),
-              signal ?? abortSignal,
-              invoke
-            )
-      },
-      listBackgroundTasks: (options) => project.listBackgroundTasks(options),
-      refreshShellEnvironment: () => project.refreshShellEnvironment(),
-      terminateBackgroundTask: (request) => project.terminateBackgroundTask(request),
-    }
-    const observe = project.runObservationCommand?.bind(project)
-    if (observe)
-      port.runObservationCommand = async (command, options, signal) => {
-        const cwd = await insideProject(root(), options.cwd ?? '.', '工作目录')
-        return this.gate.run(
-          root(),
-          !shellCommandPolicy.isReadOnly(command),
-          signal ?? abortSignal,
-          () => observe(command, { ...options, cwd }, signal ?? abortSignal)
-        )
-      }
-    return port
-  }
-
   public sandbox(project: ProjectHostPort, abortSignal: AbortSignal): SandboxSurfacePort {
     const sandbox = (): RehearsalSandboxHostPort => {
       if (!project.sandbox)
         throw new AppError(
           'UNAVAILABLE',
-          '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 edit，要跑脚本用 velaros:shell 的 run'
+          '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 edit，要跑命令用 Node.js 的 Execa'
         )
       return project.sandbox
     }

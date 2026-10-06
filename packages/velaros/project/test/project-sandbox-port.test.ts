@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { ShellLimits } from '@velaros-ai/velaros/shell/contracts'
+import { ShellLimits } from '@velaros-ai/velaros/execution/contracts'
 
 import { createProjectPortsHarness, failureOf, fakeSandboxHost } from '../spec/support'
 
@@ -38,7 +38,7 @@ describe('项目里的 velaros:sandbox', () => {
       const failure = await failureOf(call('sandbox', operation, input))
       expect(failure.code, operation).toBe('UNAVAILABLE')
       expect(failure.message, operation).toContain('velaros:project')
-      expect(failure.message, operation).toContain('velaros:shell')
+      expect(failure.message, operation).toContain('Execa')
     }
   })
 

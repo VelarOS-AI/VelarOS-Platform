@@ -51,7 +51,7 @@ export function checkedProgramFile(path: Optional<string>, typescript: boolean):
 }
 
 /**
- * 声明里提供了哪些模块、各自导出哪些名字（`declare module 'velaros:files' { export function read… }`）。
+ * 声明里提供了哪些模块、各自导出哪些名字（`declare module 'velaros:project' { export function read… }`）。
  * names 用来核对 import 的名字：声明里出现过的都算，类型也算——import 一个类型名跑起来只是 undefined，不值得拦；
  * listed 是说给模型听的那份，只列值（函数、常量、转出的命名空间）。含 `export * from` 的模块说不全自己有什么，open 为真、不核对名字。
  */

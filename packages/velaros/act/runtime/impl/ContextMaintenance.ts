@@ -2,7 +2,7 @@ import type { ContextContent, ContextRecord, ContextRef, ContextStorage } from '
 import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
-import { isUndefined, toNullable } from '@velaros-ai/core'
+import { isNull, isUndefined, optionalWhen, toNullable } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnDelta } from '@velaros-ai/kernel'
@@ -411,7 +411,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         if (record.sequence > snapshot.volume.through) break
         if (!(await read(record.ref))) return
       }
-      if (page.nextAfter === null || page.nextAfter >= snapshot.volume.through) break
+      if (isNull(page.nextAfter) || page.nextAfter >= snapshot.volume.through) break
       after = page.nextAfter
     }
     if (
@@ -437,7 +437,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         kind: page.record.kind,
         title: page.record.title,
         text: page.text,
-        ...(narrationWitness(snapshot, page) ? { canWitness: true } : {}),
+        canWitness: optionalWhen(narrationWitness(snapshot, page), true),
       })),
     })
     const model = this.dependencies.tools.model(id, control)

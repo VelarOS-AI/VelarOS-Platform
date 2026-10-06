@@ -1,5 +1,5 @@
 import type { ContextContent, ContextRef } from '@velaros-ai/context'
-import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelResponseFormat } from '@velaros-ai/kernel'
 
@@ -111,11 +111,10 @@ export function volumeNarrationPatch(
     )
       throw new AppError('VALIDATION', '同一事项不能同时解决并作为新的未解事项发布')
   }
-  return {
+  const patch: ContextPatch = {
     baseRevision: snapshot.baseRevision,
     summary: value.summary,
     unresolved,
-    ...(active ? { active } : {}),
     volume: {
       summary: value.summary,
       unresolved,
@@ -123,6 +122,7 @@ export function volumeNarrationPatch(
       evidence,
     },
   }
+  return active ? { ...patch, active } : patch
 }
 
 /** 只有本卷完整可见的同会话执行结果可作为自动关闭事项的见证。 */
@@ -154,7 +154,7 @@ function narrationQuote(text: string, quote: string) {
     JSON.parse(text)
     json = true
   } catch {
-    // 普通执行文本只能按原文引用，不猜测其中的转义含义。
+    // arch-guard:silent-catch-ok 普通执行文本只能按原文引用，不猜测其中的转义含义。
   }
   if (json && spans.size < 2) {
     for (const token of text.matchAll(/"(?:[^"\\]|\\[\s\S])*"/gu)) {
@@ -235,7 +235,7 @@ function narrationActive(
       ids.has(item.id) ||
       !snapshot.active.items.some((prior) => prior.id === item.id && prior.kind === 'question') ||
       !isArray(item.evidence) ||
-      !item.evidence.length ||
+      isEmpty(item.evidence) ||
       item.evidence.length > ActiveContextLimits.evidence
     )
       throw new AppError('VALIDATION', '自动叙事只能逐项解决现有未解事项')

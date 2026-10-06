@@ -21,3 +21,5 @@ docs/
 
 # CI workflows and repository templates are not part of the code format pass.
 .github/
+## 冻结评测任务按原始字节参与候选身份核对。
+scripts/agent/long-tasks/*-task.json

@@ -5,7 +5,7 @@
  */
 
 import type { ApprovalPort } from '@velaros-ai/kernel'
-import type { ShellProcessConfinementProvider } from '@velaros-ai/velaros/shell'
+import type { ShellProcessConfinementProvider } from '@velaros-ai/velaros/execution'
 
 import type {
   SandboxApplyOptions,

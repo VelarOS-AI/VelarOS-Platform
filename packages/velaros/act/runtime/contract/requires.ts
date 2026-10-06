@@ -21,14 +21,10 @@ import type { CodeProgramRequest, CodeRunnerApi, NodeCodeRunnerOptions } from '@
 import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
+import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 import type { ImageSpacePort } from '@velaros-ai/velaros/images'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
-import type {
-  ShellHostPort,
-  ShellOperationContext,
-  ShellSpacePort,
-} from '@velaros-ai/velaros/shell'
 
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
@@ -258,7 +254,7 @@ export interface VelarosRuntimeOptions {
   readonly storage?: ContextStorage
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
-  /** Shell 与 Node 执行环境；内部观察和维护复用该环境的只读进程口。 */
+  /** Node 执行环境；内部观察和维护复用该环境的只读进程口。 */
   readonly node?: NodeCodeRunnerOptions
   /** 宿主挂载的领域模块；标准模块由运行时提供。 */
   readonly modules?: readonly OperationModuleDefinition[]
@@ -268,14 +264,16 @@ export interface VelarosRuntimeOptions {
   readonly limits?: Partial<ActRunLimits>
 }
 
-/** 通过已授权的 Shell 宿主启动标准 Node 业务进程。 */
-export interface ShellNodeEnvironmentOptions {
+/** 通过 execution 宿主启动标准 Node 业务进程。 */
+export interface NodeExecutionEnvironmentOptions {
   /** 标准进程的绝对工作目录。 */
   readonly cwd: string
   /** 执行日志与能力目录的宿主存储位置。 */
   readonly directory: string
+  /** 默认 npm 环境的绝对根目录；发行宿主提供可由独立 Node 读取的实际文件。 */
+  readonly packageDirectory?: string
   /** 沿用当前工作区授权与约束的命令宿主。 */
-  readonly shell: ShellHostPort
+  readonly host: ShellHostPort
   /** 真实 Node 可执行文件；Electron 宿主提供随产品分发的独立 Node 路径。 */
   readonly executable?: string
   /** 本次原生进程的宿主环境覆盖。 */
@@ -283,23 +281,11 @@ export interface ShellNodeEnvironmentOptions {
   /** 在启动前审批本次源码，拒绝时不派发。 */
   readonly authorize?: NodeCodeRunnerOptions['authorize']
   /** 宿主脚本卡使用本次执行身份显示实时输出。 */
-  readonly output?: (output: ShellInvocationOutput) => void
+  readonly output?: (output: NodeExecutionOutput) => void
 }
 
-/** 在同一 Kernel 注册 Shell 的正常执行及受限观察实现。 */
-export interface ShellCapabilityModuleOptions {
-  /** 宿主资源身份。 */
-  readonly instanceId: string
-  /** 同一空间的命令能力，观察时必须实现 runObservationCommand。 */
-  readonly shell: ShellSpacePort
-  /** 一次性危险操作仍使用现有审批端口。 */
-  readonly approval: ShellOperationContext['approval']
-  /** 宿主要在界面上显示命令跑着时的输出就给：前台命令每吐出一段回调一次，带上是哪段执行的哪次调用。 */
-  readonly output?: (output: ShellInvocationOutput) => void
-}
-
-/** 一次 `velaros:shell` 调用跑着时吐出的一段输出。 */
-export interface ShellInvocationOutput {
+/** Node 执行时交给宿主界面的一段输出。 */
+export interface NodeExecutionOutput {
   /** 调用所属会话。 */
   readonly sessionId: string
   /** 调用所在的那段执行，与回合追踪里的 `executionId` 相同。 */

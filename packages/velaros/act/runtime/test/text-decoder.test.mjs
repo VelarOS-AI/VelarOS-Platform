@@ -427,16 +427,3 @@ test('text executions default to segment retention while explicit and host durat
   assert.equal(program('execute', { defaultRetain: 4 }).retainTurns, 4)
   assert.equal(program('execute({retain:1})', { defaultRetain: 4 }).retainTurns, 1)
 })
-
-test('shell control preserves literal command text and emits a shell preview', () => {
-  const decoder = new ScriptTurnDecoder('@@s_shell', {
-    presentation: 'node',
-    allowed: ['shell', 'execute', 'done'],
-  })
-  const source = "cat <<'EOF'\n$literal `quoted`\nEOF"
-  const events = decoder.push(`@@s_shell shell()\n${source}\n@@s_shell`)
-  const decoded = decoder.finish()
-  assert.equal(decoded.submission.executions[0].program.language, 'shell')
-  assert.equal(decoded.submission.executions[0].program.source, source)
-  assert.ok(events.some((event) => event.type === 'program' && event.kind === 'shell'))
-})

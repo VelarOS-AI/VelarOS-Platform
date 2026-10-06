@@ -5,6 +5,14 @@
 export * from './contract/constants.js'
 export { VelarCodeModule, VelarProjectModule } from './contract/surface.js'
 export type {
+  FileSearchEntry,
+  FileSearchMatch,
+  FileSearchMode,
+  FileSearchOptions,
+  FileSearchPathMatchMode,
+  FileSearchResult,
+} from './types/local-search.js'
+export type {
   ProjectSnapshotCapture,
   ProjectSnapshotEntry,
   ProjectSnapshotFile,

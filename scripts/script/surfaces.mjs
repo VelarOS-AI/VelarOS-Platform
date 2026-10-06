@@ -7,35 +7,16 @@
 //
 // **命名空间按能力起名，不按空间起名。** 一件能力只有一份实现、一份声明、一份代码模版；
 // 每个空间注入自己的端口（作用域、策略、落盘），模型那边不必挑「这是哪个空间的看图」。
-// 真正是两件事的不硬合：本机文件（`files`，系统空间）与受项目治理的文件（`project`，项目空间）各是一件能力。
+// 项目事务文件能力集中在 project，通用执行使用 Node.js、Execa 与 diff。
 // 空间是一张装配表：给哪些能力、每件能力用哪个端口、哪几件常驻。装空间是产品的事（ADR 0013），端口的本机实现在各单元的 `./local` 入口，
 // 项目给共用能力的端口在 `@velaros-ai/velaros/project` 的 `projectCapabilityPorts`；仓库层测试照这个写法装的两份在 `tests/support/spaces.ts`。
 
 export const CodeSurfaces = [
   {
-    /** 模型在程序里写成 `import { read } from 'velaros:files'` 的那个名字。 */
-    namespace: 'files',
-    /** 相对 packages/ 的目录。 */
-    directory: 'velaros',
-    /** 能力单元的目录（能力按目录放在一个包里时填）；模版相对它找。 */
-    unit: 'files',
-    /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
-    interfaces: ['FileOperationsApi'],
-    /** 代码模版：日常最常用写法的示例（只是示例，不要求照着写），import 只写一次；相对单元目录（没有单元就相对包目录）。能力按装配叠加时写成数组，按顺序接成一份。 */
-    templates: 'template.js',
-  },
-  {
     namespace: 'images',
     directory: 'velaros',
     unit: 'images',
     interfaces: ['ImageOperationsApi'],
-    templates: 'template.js',
-  },
-  {
-    namespace: 'shell',
-    directory: 'velaros',
-    unit: 'shell',
-    interfaces: ['ShellOperationsApi'],
     templates: 'template.js',
   },
   {
@@ -276,9 +257,7 @@ export const StandardSurfaces = [
  * 登记在这里而不是靠猜，是因为丢错一个参数模型就会写出调不通的程序。
  */
 export const HostContextTypes = new Set([
-  'FileOperationContext',
   'ImageOperationContext',
-  'ShellOperationContext',
   'SandboxOperationContext',
   'ProjectOperationContext',
   'ComputerOperationContext',
@@ -321,7 +300,7 @@ export const BannedModelFacingAliases = Object.freeze({
 /** 能力模块的统一前缀；与 `@velaros-ai/script` 的 `CapabilityModulePrefix` 必须一致。 */
 export const CapabilityModulePrefix = 'velaros:'
 
-/** 能力模块在包里的常量名：`velaros:files` → `VelarFilesModule`，`velaros:system-goal` → `VelarSystemGoalModule`。 */
+/** 能力模块在包里的常量名：`velaros:project` → `VelarProjectModule`，`velaros:system-goal` → `VelarSystemGoalModule`。 */
 export function surfaceConstantName(namespace) {
   return `Velar${namespace
     .split('-')

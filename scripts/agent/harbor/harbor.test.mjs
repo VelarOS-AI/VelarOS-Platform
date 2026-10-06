@@ -10,7 +10,7 @@ import { toTrajectory } from './atif.mjs'
 import { readTraceArtifact } from './trace-artifact.mjs'
 import { runTask } from './run.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
-import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
+import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 
 async function directory(t) {
   const path = await mkdtemp(join(tmpdir(), 'scriptact-harbor-'))
@@ -443,6 +443,7 @@ test('the first model request reports the shell that the local host will actuall
   await host.dispose()
   let observed = false
   const result = await runTask({
+    isolatedContainer: true,
     instruction: 'Report readiness.',
     workspace,
     output,
@@ -460,7 +461,7 @@ test('the first model request reports the shell that the local host will actuall
         assert(request.compiledPrompt.includes('pathEntries'))
         assert(request.compiledPrompt.includes('available'))
         assert(request.compiledPrompt.includes('commandDiscovery'))
-        assert.match(request.instructions, /Shell 和 Node/u)
+        assert.match(request.instructions, /Node.js/u)
         assert.match(request.instructions, /index.json/u)
         const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。/)[1]
         yield { type: 'text', text: `Ready.\n${marker} done` }
@@ -481,6 +482,7 @@ test('a candidate working window reaches real context planning and remains bound
   ]) {
     const output = await directory(t)
     const result = await runTask({
+      isolatedContainer: true,
       instruction: 'Report readiness.',
       workspace,
       output,
@@ -528,7 +530,7 @@ test(
           type: 'text',
           text:
             calls === 1
-              ? `${marker} execute\nimport {read,edit} from 'velaros:project';import {run} from 'velaros:shell';import {output} from 'velaros';await read({files:[{path:'value.txt'}]});await edit({steps:[{action:'replace',path:'value.txt',oldText:'before',newText:'after'}]});output(await run({command:'printf passed > command.txt'}));\n${marker}\n`
+              ? `${marker} execute\nimport {read,edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';await read({files:[{path:'value.txt'}]});await edit({steps:[{action:'replace',path:'value.txt',oldText:'before',newText:'after'}]});console.log((await execaCommand('printf passed > command.txt',{shell:true})).exitCode);\n${marker}\n`
               : calls === 2
                 ? `${marker} execute\nimport { output } from 'velaros'; output('missing closing marker');`
                 : `Done.\n${marker} done`,
@@ -538,6 +540,7 @@ test(
       },
     }
     const result = await runTask({
+      isolatedContainer: true,
       workspace,
       output,
       model,
@@ -566,13 +569,14 @@ test(
     assert.equal(trajectory.agent.name, 'velaros-scriptact')
     assert(
       trajectory.steps.some((step) =>
-        step.tool_calls?.some((call) => call.function_name === 'velaros:shell.run')
+        step.tool_calls?.some((call) => call.function_name === 'velaros:project.edit')
       )
     )
     assert(trajectory.steps.some((step) => step.extra?.request))
     assert.equal(cacheKeys.size, 1)
     let nextCacheKey
     const next = await runTask({
+      isolatedContainer: true,
       workspace,
       output: await directory(t),
       model: {
@@ -601,6 +605,7 @@ test('a frozen task-retention candidate keeps accepted receipt history stable ac
     const receipts = []
     const currentResults = []
     const result = await runTask({
+      isolatedContainer: true,
       workspace: await directory(t),
       output: await directory(t),
       identity: { sourceCommit: 'controlled', runtimeOptions: { protocol: { defaultRetain } } },
@@ -675,6 +680,7 @@ test('an image-enabled candidate delivers project images as multimodal model inp
   await writeFile(join(workspace, 'pixel.png'), Buffer.from(png, 'base64'))
   let calls = 0
   const result = await runTask({
+    isolatedContainer: true,
     workspace,
     output: await directory(t),
     identity: { sourceCommit: 'controlled', runtimeOptions: { project: { images: true } } },
@@ -704,20 +710,21 @@ test('an image-enabled candidate delivers project images as multimodal model inp
   assert.equal(calls, 2)
 })
 
-test('a discovery-only candidate keeps project, shell and images available without resident declarations', async (t) => {
+test('a discovery-only candidate keeps project, npm and images available without resident declarations', async (t) => {
   const workspace = await directory(t)
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII='
   await writeFile(join(workspace, 'pixel.png'), Buffer.from(png, 'base64'))
   let calls = 0
   const result = await runTask({
+    isolatedContainer: true,
     workspace,
     output: await directory(t),
     identity: {
       sourceCommit: 'controlled',
       runtimeOptions: { project: { images: true }, residentModules: [] },
     },
-    instruction: 'Discover the available project, shell and image APIs, then inspect the image.',
+    instruction: 'Discover the available project and image APIs, then inspect the image.',
     turns: 4,
     model: {
       id: 'controlled-model',
@@ -738,9 +745,9 @@ test('a discovery-only candidate keeps project, shell and images available witho
         const scripts = [
           `import {modules} from 'velaros:system'; import {output} from 'velaros';
 const project = await modules.describe({module:'velaros:project',exports:['read']});
-const shell = await modules.describe({module:'velaros:shell',exports:['run']});
+const {execa} = await import('execa');
 const images = await modules.describe({module:'velaros:images',exports:['view']});
-if (!project.declarations || !shell.declarations || !images.declarations) throw 'Discovery failed';
+if (!project.declarations || typeof execa !== 'function' || !images.declarations) throw 'Discovery failed';
 output({marker:'DISCOVERY_OK',images:images.declarations});`,
           "import {view} from 'velaros:images'; await view({files:[{path:'pixel.png'}]});",
         ]

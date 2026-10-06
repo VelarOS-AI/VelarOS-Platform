@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses), browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath), web (web search and pages read as text in a hidden browser page the host provides, falling back from Google to Bing) and sessions (sessions in one conversation hand each other work and pass messages: the model-facing surface and input checks, with the host behind a port). One plain directory per unit, one convention for all.",
+  "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/velaros#readme",
@@ -22,18 +22,6 @@
     "node": ">=20.0.0"
   },
   "exports": {
-    "./files": {
-      "types": "./dist/files/index.d.ts",
-      "import": "./dist/files/index.js"
-    },
-    "./files/contracts": {
-      "types": "./dist/files/contracts.d.ts",
-      "import": "./dist/files/contracts.js"
-    },
-    "./files/local": {
-      "types": "./dist/files/local.d.ts",
-      "import": "./dist/files/local.js"
-    },
     "./images": {
       "types": "./dist/images/index.d.ts",
       "import": "./dist/images/index.js"
@@ -46,17 +34,17 @@
       "types": "./dist/images/local.d.ts",
       "import": "./dist/images/local.js"
     },
-    "./shell": {
-      "types": "./dist/shell/index.d.ts",
-      "import": "./dist/shell/index.js"
+    "./execution": {
+      "types": "./dist/execution/index.d.ts",
+      "import": "./dist/execution/index.js"
     },
-    "./shell/contracts": {
-      "types": "./dist/shell/contracts.d.ts",
-      "import": "./dist/shell/contracts.js"
+    "./execution/contracts": {
+      "types": "./dist/execution/contracts.d.ts",
+      "import": "./dist/execution/contracts.js"
     },
-    "./shell/local": {
-      "types": "./dist/shell/local.d.ts",
-      "import": "./dist/shell/local.js"
+    "./execution/local": {
+      "types": "./dist/execution/local.d.ts",
+      "import": "./dist/execution/local.js"
     },
     "./sandbox": {
       "types": "./dist/sandbox/index.d.ts",
@@ -177,7 +165,7 @@
     "dist",
     "README.md",
     "computer/runtime",
-    "shell/native",
+    "execution/native",
     "office/vendor",
     "browser/vendor"
   ],
@@ -185,7 +173,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs && node ../../scripts/build/copy-act-templates.mjs",
-    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/spec/language-acceptance.test.ts project/spec/selection-acceptance.test.ts project/test/search-context.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test memory/test/foundation-concurrency.test.ts office/spec/acceptance.test.ts office/test browser/spec/acceptance.test.ts browser/test browser/test/core/foundation-queue.test.ts web/spec/acceptance.test.ts web/test sessions/spec/acceptance.test.ts sessions/test && node --test act/runtime/test/node-runtime.test.mjs act/runtime/test/trace-session-activity.test.mjs act/runtime/test/observation-reuse.test.mjs act/runtime/test/snapshot-observation.test.mjs act/runtime/test/program-catalog.test.mjs act/runtime/test/goals.test.mjs act/runtime/test/host-notes.test.mjs act/runtime/test/request-presentation.test.mjs act/runtime/test/context-index.test.mjs act/runtime/test/execution-presentation.test.mjs act/runtime/test/run-projection.test.mjs act/runtime/test/host-instructions.test.mjs act/runtime/test/event-delivery.test.mjs act/runtime/test/effect-scheduler.test.mjs act/runtime/test/runtime-diagnostics.test.mjs act/runtime/test/trace-index.test.mjs act/system/spec/acceptance.test.mjs act/system/spec/runtime.test.mjs act/system/spec/long-term-memory.test.mjs act/system/spec/store.test.mjs act/search/spec/acceptance.test.mjs act/agents/spec/acceptance.test.mjs act/runtime/test/system-modules.test.mjs act/runtime/test/model-tools.test.mjs act/runtime/test/context-maintenance.test.mjs act/runtime/test/volume-narration.test.mjs act/runtime/test/context-maintenance-retry.test.mjs act/runtime/test/output-context.test.mjs act/runtime/test/output-history-identity.test.mjs act/runtime/test/decision-basis.test.mjs act/runtime/test/completion-recovery.test.mjs act/runtime/test/task-loop.test.mjs act/runtime/test/task-lifecycle.test.mjs act/runtime/test/act-run.test.mjs act/runtime/test/act-children.test.mjs act/runtime/test/child-task-materials.test.mjs act/runtime/test/advanced-search.test.mjs act/runtime/test/context-management.test.mjs act/runtime/test/context-memory.test.mjs act/runtime/test/foundation-context.test.mjs act/runtime/test/failed-call-recall.test.mjs act/runtime/test/foundation-lifecycle.test.mjs act/runtime/test/text-decoder.test.mjs act/runtime/test/text-runtime.test.mjs act/runtime/test/model-protocol.test.mjs act/runtime/test/script-submission.test.mjs act/runtime/test/incremental-edit.test.mjs act/runtime/test/program-context.test.mjs act/runtime/test/runtime.test.mjs act/runtime/test/dual-core.test.mjs act/runtime/test/platform.test.mjs && bun test act/runtime/test/provider.test.ts act/runtime/test/McpClientConnection.test.ts act/runtime/test/trace-accounting.test.ts",
+    "test": "bun run build && bun test images/spec/acceptance.test.ts images/test execution/spec/acceptance.test.ts execution/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/spec/language-acceptance.test.ts project/spec/selection-acceptance.test.ts project/test/search-context.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test memory/test/foundation-concurrency.test.ts office/spec/acceptance.test.ts office/test browser/spec/acceptance.test.ts browser/test browser/test/core/foundation-queue.test.ts web/spec/acceptance.test.ts web/test sessions/spec/acceptance.test.ts sessions/test && node --test act/runtime/test/node-runtime.test.mjs act/runtime/test/trace-session-activity.test.mjs act/runtime/test/observation-reuse.test.mjs act/runtime/test/snapshot-observation.test.mjs act/runtime/test/program-catalog.test.mjs act/runtime/test/goals.test.mjs act/runtime/test/host-notes.test.mjs act/runtime/test/request-presentation.test.mjs act/runtime/test/context-index.test.mjs act/runtime/test/execution-presentation.test.mjs act/runtime/test/run-projection.test.mjs act/runtime/test/host-instructions.test.mjs act/runtime/test/event-delivery.test.mjs act/runtime/test/effect-scheduler.test.mjs act/runtime/test/runtime-diagnostics.test.mjs act/runtime/test/trace-index.test.mjs act/system/spec/acceptance.test.mjs act/system/spec/runtime.test.mjs act/system/spec/long-term-memory.test.mjs act/system/spec/store.test.mjs act/search/spec/acceptance.test.mjs act/agents/spec/acceptance.test.mjs act/runtime/test/system-modules.test.mjs act/runtime/test/model-tools.test.mjs act/runtime/test/context-maintenance.test.mjs act/runtime/test/volume-narration.test.mjs act/runtime/test/context-maintenance-retry.test.mjs act/runtime/test/output-context.test.mjs act/runtime/test/output-history-identity.test.mjs act/runtime/test/decision-basis.test.mjs act/runtime/test/completion-recovery.test.mjs act/runtime/test/task-loop.test.mjs act/runtime/test/task-lifecycle.test.mjs act/runtime/test/act-run.test.mjs act/runtime/test/act-children.test.mjs act/runtime/test/child-task-materials.test.mjs act/runtime/test/advanced-search.test.mjs act/runtime/test/context-management.test.mjs act/runtime/test/context-memory.test.mjs act/runtime/test/foundation-context.test.mjs act/runtime/test/failed-call-recall.test.mjs act/runtime/test/foundation-lifecycle.test.mjs act/runtime/test/text-decoder.test.mjs act/runtime/test/text-runtime.test.mjs act/runtime/test/model-protocol.test.mjs act/runtime/test/script-submission.test.mjs act/runtime/test/incremental-edit.test.mjs act/runtime/test/program-context.test.mjs act/runtime/test/runtime.test.mjs act/runtime/test/dual-core.test.mjs act/runtime/test/platform.test.mjs && bun test act/runtime/test/provider.test.ts act/runtime/test/McpClientConnection.test.ts act/runtime/test/trace-accounting.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros"
   },
   "dependencies": {

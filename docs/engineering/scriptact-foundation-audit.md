@@ -100,7 +100,7 @@ ContextMemory 单独保存底座正文，RecentContext 单独保存冻结正文�
 
 这是**持有有效旧 ID，且当前范围已不同**时的缺陷，不是无须身份即可操作任意资源。当前 Desktop 抽样中 files 只挂在系统会话，项目会话使用 project 内核；也没有在该文件发现演练 sandbox 挂载。因此本报告没有证明当前 Desktop 项目隔离已被这两条路径穿透。Platform 公共受限端口和多项目宿主的合同仍不成立。每项目创建一个默认 sandbox host 也不足以证明隔离，因为持久 manifest/默认目录可以共享。
 
-证据：[undo](../../packages/velaros/files/impl/FileOperations.ts#L249)、[全局账](../../packages/velaros/files/impl/FileOperations.ts#L389)、[sandbox 项目端口](../../packages/velaros/project/impl/operations/ProjectCapabilityPorts.ts#L98)、Desktop 装配（`VelarOS-Desktop/src/main/application/runtime/WorkspaceSession.ts#L195`）。执行组已独立复核，见 `execution/cross-review.md`。
+证据：undo（Git 源码 `d3b6c5cd:packages/velaros/files/impl/FileOperations.ts#L249`）、全局账（Git 源码 `d3b6c5cd:packages/velaros/files/impl/FileOperations.ts#L389`）、[sandbox 项目端口](../../packages/velaros/project/impl/operations/ProjectCapabilityPorts.ts#L98)、Desktop 装配（`VelarOS-Desktop/src/main/application/runtime/WorkspaceSession.ts#L195`）。执行组已独立复核，见 `execution/cross-review.md`。
 
 建议资源句柄统一绑定 scope/resource identity/generation；每次恢复、应用和撤销验证当前授权与规范路径。领域 owner 持有资源身份，宿主提供策略，Kernel 保留调用身份。测试交叉两项目、授权收窄、重启、符号链接变化和合法同范围恢复；不要靠增加随机 ID 长度处理授权问题。
 
@@ -108,7 +108,7 @@ ContextMemory 单独保存底座正文，RecentContext 单独保存冻结正文�
 
 files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 undo 账中，`writeOfPlan` 因而不传 expected；准备结束到实际落盘之间若有外部修改，会被静默覆盖。小文件对照会传 expected 并正确拒绝。探针分别得到 `external-change` 保留和被替换为 `planned` 的结果。
 
-证据：[保留条件](../../packages/velaros/files/utils/plan.ts#L177)、[提交前提](../../packages/velaros/files/utils/batch.ts#L79)。已有的早期指纹检查不能替代提交边界的校验；当前单 Runtime 写闸门也管不到外部编辑器和其他 Runtime。
+证据：保留条件（Git 源码 `d3b6c5cd:packages/velaros/files/utils/plan.ts#L177`）、提交前提（Git 源码 `d3b6c5cd:packages/velaros/files/utils/batch.ts#L79`）。已有的早期指纹检查不能替代提交边界的校验；当前单 Runtime 写闸门也管不到外部编辑器和其他 Runtime。
 
 建议所有大小都保留版本/摘要前提，撤销正文另按保留预算处理；提交端落实冲突检测与原子替换，并如实限定对不合作外部进程的保证。验收围绕阈值上下、编码/换行、创建/删除、跨实例和准备后外部修改，不能只修一个大文件样例。
 
@@ -118,7 +118,7 @@ files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 und
 
 领域方面，files.edit 在异步定位后、sandbox.apply 在 diff 后、computer.typeText 在 ensureAvailable 后，已发生取消仍进入副作用。探针使用可控端口，不操作真实桌面。这里能在提交前合作停止，应补复查和端口级 signal，而不是把它们与不可中断的已提交操作混淆。
 
-证据：[Kernel prepare](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L410)、[dispose](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L554)、[写闸门](../../packages/velaros/act/runtime/impl/ComposedRuntime.ts#L637)、[files 提交](../../packages/velaros/files/impl/FileOperations.ts#L229)。
+证据：[Kernel prepare](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L410)、[dispose](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L554)、[写闸门](../../packages/velaros/act/runtime/impl/ComposedRuntime.ts#L637)、files 提交（Git 源码 `d3b6c5cd:packages/velaros/files/impl/FileOperations.ts#L229`）。
 
 建议定义：可合作取消、可物理终止、无法确认停止的执行类型；区分 prepared/started/committed/settled，并传播 deadline/signal。无法确认停止时保持在途/unknown 事实、隔离冲突资源，并让关闭流程在有界时间报告未收束任务。**不得简单 Promise.race 超时后释放写锁。** 已真实提交的迟到成功仍应记录 committed，不能伪装成取消且无效果。
 
@@ -164,7 +164,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 
 证据：[一致性检查](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L115)、[模式检查](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L395)。建议规范化后统一比较，构造阶段拒绝差异；不用另设第二份权限名单。
 
-同源生成还存在语义盲点：[files 的 AgentView](../../packages/velaros/files/impl/FileOperations.ts#L94) 概述“一次成败”，实际 LocalFilePort 逐文件提交并支持 partial；[sandbox 的 AgentView](../../packages/velaros/sandbox/impl/SandboxOperations.ts#L36) 承诺 apply 要用户点头，当前 apply 行为与产品规则是直接执行。生成器会忠实复制这些错误承诺。应在 TS 文档中准确区分批次预检、单文件原子提交和部分完成，按当前 apply 行为更新说明，再重新生成；故障注入结果必须与模型所见承诺一致。
+同源生成还存在语义盲点：files 的 AgentView（Git 源码 `d3b6c5cd:packages/velaros/files/impl/FileOperations.ts#L94`） 概述“一次成败”，实际 LocalFilePort 逐文件提交并支持 partial；[sandbox 的 AgentView](../../packages/velaros/sandbox/impl/SandboxOperations.ts#L36) 承诺 apply 要用户点头，当前 apply 行为与产品规则是直接执行。生成器会忠实复制这些错误承诺。应在 TS 文档中准确区分批次预检、单文件原子提交和部分完成，按当前 apply 行为更新说明，再重新生成；故障注入结果必须与模型所见承诺一致。
 
 ### F11：并发前必须换掉按时间归账
 
@@ -198,7 +198,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 | 浏览器超时释放队列但旧 action 可能继续 | browser `runWithHoldCap` 会释放槽位以避免死锁，超时本身不物理取消旧 Promise | 会话代次/目标身份应阻止旧动作恢复后污染新状态；需 Electron/CDP 假后端迟到动作验证。本轮静态发现，未复现真实浏览器交错事故 |
 | 长期记忆同 ID 并行更新是最后写入获胜 | MemoryScope 读 tags 后原子替换，防半文件，但没有 revision/CAS；当前覆盖合同不承诺自动合并 | 多 agent 共享同 scope/id 时明确接受覆盖或使用 CAS/串行更新；验证 save/save 与 save/remove。当前不能按缺少合并能力宣称数据已经丢失 |
 
-来源：[Shell 默认模式](../../packages/velaros/shell/impl/local/LocalShellHost.ts#L149)、[浏览器等待](../../packages/velaros/browser/utils/session.ts#L105)、[长期记忆写入](../../packages/velaros/memory/impl/MemoryScope.ts#L56)。这些风险应按实际启用的能力进入验收，不能以抽样未见异常代替证明。
+来源：Shell 默认模式（Git 源码 `d3b6c5cd:packages/velaros/shell/impl/local/LocalShellHost.ts#L149`）、[浏览器等待](../../packages/velaros/browser/utils/session.ts#L105)、[长期记忆写入](../../packages/velaros/memory/impl/MemoryScope.ts#L56)。这些风险应按实际启用的能力进入验收，不能以抽样未见异常代替证明。
 
 ## 4. 应当保留的核心设计
 

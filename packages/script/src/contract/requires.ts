@@ -18,6 +18,8 @@ export interface NodeCodeRunnerOptions {
   readonly cwd: string
   /** 宿主持有的归档目录，进程只需读取其中的能力目录。 */
   readonly directory: string
+  /** 默认 npm 环境的绝对根目录（含 node_modules）；省略时使用 Script 包的生产依赖。 */
+  readonly packageDirectory?: string
   /** 在计时与启动前完成本次源码的宿主审批；拒绝时不得启动进程。 */
   authorize?(request: NodeProcessRequest, signal: AbortSignal): Promise<void>
   /** 启动真实 Node，将 source 作为 ESM 标准输入；signal 必须终止并回收进程树。 */

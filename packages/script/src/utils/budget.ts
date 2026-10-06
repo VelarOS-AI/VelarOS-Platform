@@ -15,7 +15,7 @@ import type {
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'
 
-/** 日志按预算保留结尾，与 `velaros:shell` 的 run 回执同口径：失败现场在尾部。单行太长的先各自截一刀，免得一行顶掉整份预算。 */
+/** 日志按预算保留结尾，与 `execution 宿主` 的 run 回执同口径：失败现场在尾部。单行太长的先各自截一刀，免得一行顶掉整份预算。 */
 export function fitLogsToBudget(logs: readonly string[], notices: CodeCallNotice[]): string[] {
   const clipped = logs.map((line) =>
     line.length > CodeSurfaceTuning.logLineChars

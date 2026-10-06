@@ -381,9 +381,7 @@ export class RuntimeSession implements VelarosSession {
             presentation: 'node',
             allowed:
               dependencies.protocol?.allowed ??
-              (dependencies.node
-                ? ['shell', 'execute', 'done']
-                : ['shell', 'observe', 'blobs', 'execute', 'done']),
+              (dependencies.node ? ['execute', 'done'] : ['observe', 'blobs', 'execute', 'done']),
           }
         : dependencies.protocol
     )
@@ -450,7 +448,6 @@ export class RuntimeSession implements VelarosSession {
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
             this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd(),
-            this.config.allowed.includes('shell'),
             modules
           )
         : runtimeInstructions({
@@ -795,8 +792,8 @@ export class RuntimeSession implements VelarosSession {
         : undefined
     const environment = {
       ...frameEnvironment(this.dependencies.environment),
-      ...(this.dependencies.parentTask ? { parentTask: this.dependencies.parentTask } : {}),
     }
+    if (this.dependencies.parentTask) environment.parentTask = this.dependencies.parentTask
     const extra =
       JSON.stringify(environment).length +
       (goal ? JSON.stringify(goal).length : 0) +

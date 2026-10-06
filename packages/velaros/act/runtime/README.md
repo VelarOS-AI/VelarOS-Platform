@@ -5,8 +5,8 @@ Act 运行时：把模型、脚本执行、Kernel 与上下文存储装成一条
 ## 用法
 
 ```ts
-import { createRuntime, createShellNodeEnvironment } from '@velaros-ai/velaros'
-import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
+import { createRuntime, createNodeExecutionEnvironment } from '@velaros-ai/velaros'
+import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 
 // 宿主给：模型凭据，项目目录与状态目录（都是绝对路径，状态目录在项目之外），以及怎么问用户
 declare const apiKey: string
@@ -16,7 +16,7 @@ declare function askUser(message: string): Promise<string>
 
 const shell = createLocalShellHost({cwd:projectRoot, processConfinement:{mode:'workspace-write',workspaceRoot:projectRoot}})
 const runtime = await createRuntime({
-  node: createShellNodeEnvironment({cwd:projectRoot, directory:`${stateDir}/node`, shell}),
+  node: createNodeExecutionEnvironment({cwd:projectRoot, directory:`${stateDir}/node`, host: shell}),
   workspace: projectRoot,
   dataDir: stateDir,
   model: { provider: 'openai', model: 'your-model', baseURL: 'https://api.openai.com/v1', apiKey },
@@ -57,7 +57,7 @@ for await (const event of liveEvents) {
 projector.finish() // 交付结束：清掉没接纳的预览
 ```
 
-标准 Node 会话采用精简执行说明。支持原生工具的模型驱动在允许 execute 和 done 的作用域使用原生调用：主会话提供 `shell({code})` 与 `node({code})`，上下文整理和高级搜索提供受限执行器上的 `node({code})`。入口遵守当前 allowed、maxChars 和 maxBlocks；普通文本承载进度和最终答复。整份响应完成且调用校验通过后统一派发，调用和真实回执持久配对，重开会话继续恢复。自定义文本驱动沿用文本控制段。应用能力通过 `$VELAROS_HOST_DIR/index.json` 与按操作生成的 `.d.ts` 文件发现，保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察继续使用受限执行器。审批由 `createShellNodeEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；Shell 的实际约束证据会随 Node 回执返回。
+标准 Node 会话采用精简执行说明。支持原生工具的模型驱动在允许 execute 和 done 的作用域使用原生调用：主会话提供 `exec({code})`，上下文整理和高级搜索提供受限执行器上的 `exec({code})`。入口遵守当前 allowed、maxChars 和 maxBlocks；普通文本承载进度和最终答复。整份响应完成且调用校验通过后统一派发，调用和真实回执持久配对，重开会话继续恢复。自定义文本驱动沿用文本控制段。应用能力通过 `$VELAROS_HOST_DIR/index.json` 与按操作生成的 `.d.ts` 文件发现，保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察继续使用受限执行器。审批由 `createNodeExecutionEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；宿主的实际约束证据会随 Node 回执返回。
 
 自动封卷叙事优先将原始需求、当前事项和整卷工作材料完整交给结构化模型调用，生成事实摘要、本卷新增未解事项与失败尝试。材料标出本卷完整可见的真实执行见证；模型可选用这些结果中的唯一原文引文或一层 JSON 字符串值，逐项关闭已有 question。宿主将解码引文映射回不可变原文的 UTF-16 区间，核对原文与解码值之间的唯一性和原文长度上限，再绑定当前版本、最新完整用户原文，事项与叙事一起原子发布。用户约束及未提及的事项继续保留，每卷只保存该卷新增问题。只有供应商明确标记可等待重试的瞬时错误才原样重试，最多两次，单次退避不超过三十秒；每次都经过活动与祖先预算，取消立即生效，失败响应及已收到用量分别保留，每卷只发布一次完整叙事。完整材料超出容量时使用交互式分页整理。显式整理与容量压力整理仍可按证据调整各分区的展示。
 
@@ -65,7 +65,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros` | Node | `createRuntime` 与会话；把能力挂进来的 `createCapabilityModule`、`createShellCapabilityModule`、`createProjectCapabilityModule`、`createMcpModule` 与 `createMcpClientConnection`；可靠交付 `createEventDelivery` |
+| `@velaros-ai/velaros` | Node | `createRuntime` 与会话；把能力挂进来的 `createCapabilityModule`、`createProjectCapabilityModule`、`createMcpModule` 与 `createMcpClientConnection`；可靠交付 `createEventDelivery` |
 | `@velaros-ai/velaros/contracts` | 任何进程 | 上限与代际 `VelarosRunLimits`、`McpLimits`、`ScriptLeaseLimits`、`GoalLimits`（宿主用用户正文建目标前按它截断）、`VelarosRuntimeContract`，目标、笔记、追踪、搜索结果这些可移植数据 |
 | `@velaros-ai/velaros/renderer` | 任何进程，含渲染进程 | 事件投影 `createActEventProjector` 与展示快照 `ActPresentation` |
 
@@ -125,8 +125,8 @@ projector.finish() // 交付结束：清掉没接纳的预览
 - `onMetric` 只收不含正文的计量，回调要快速返回，抛错不影响业务结果。
 - 普通执行输出超过展示预算时，保留带来源位置和范围的数组前段、文本片段；小元数据只占实际大小，余量用于正文。旧版结果预览已经截断时，从归档 output 或 rawValue 生成展示，诊断保留，引用指向实际原值字段。完整原值可按引用召回；展示片段不代表已读全文，也不会重新执行脚本。
 - 根引用卡明确标记 `bodyIncluded: false`，不冻结为已交付结果；容量恢复后正文可以进入历史。已完整保留的普通输出将预算留给新结果，短引用和旧 UUID 引用按同一身份核对，图片附件仍单独交付。
-- `createShellCapabilityModule` 给了 `output`，前台命令跑着时每吐出一段就回调一次，带上会话、`executionId` 与调用 `invocationId`（与追踪里的同名字段相同），宿主据此把运行中的输出画在对应的脚本卡上；回调要快速返回，抛错只记日志、不打断命令。
-- 调用回执里的有界 `diagnostic` 独立投影成观察材料：执行放在对应回执的 `code/detail`，观察放在 `observation.safety`，并保留调用身份。脚本只输出 stdout 也能看到 Shell 诊断；成功回执合并保留带诊断的条目，效果、成败和可见租约仍按原始事实处理。
+- `createNodeExecutionEnvironment` 给了 `output`，前台命令跑着时每吐出一段就回调一次，带上会话、`executionId` 与 `${executionId}:exec` 输出身份，宿主据此把运行中的输出画在对应的脚本卡上；回调要快速返回，抛错只记日志、不打断命令。
+- 调用回执里的有界 `diagnostic` 独立投影成观察材料：执行放在对应回执的 `code/detail`，观察放在 `observation.safety`，并保留调用身份。能力调用的诊断随实际回执呈现；成功回执合并保留带诊断的条目，效果、成败和可见租约仍按原始事实处理。
 - 执行结果首次进入段内历史时，在该条正文剩余额度内附上完整调用诊断并冻结；当前帧继续列身份、状态、错误码和效果，完全匹配的诊断正文通过 `detailInHistory` 指向历史。状态或正文变化、未知效果、容量不足、旧历史未记录诊断交付或关闭历史时，当前帧仍完整交付诊断。审计保留全部正文，重启逐字复用，租约释放、到期、封段和授权重置遵循结果的可见边界。
 - 投影器的 `apply` 收持久事件、按游标去重，`applyLive` 收实时事件、预览不推进游标；交付结束调 `finish()`，重新消费要建新的投影器。
 - `createEventDelivery({ persist, deliver })` 先落盘再严格按 append 顺序交付，落盘可以合批；任何一步失败就停止后续交付，首个错误留给 `append`、`flush`、`close`。

@@ -56,8 +56,8 @@ export const sandboxModule = createCapabilityModule({
 ## 约定
 
 - `resolveSource` 要交回绝对路径；本机沙箱不替空间补相对路径，给相对路径抛 `VALIDATION`。
-- 镜像里的命令由 `@velaros-ai/velaros/shell` 的受约束执行器钉在镜像根，只能写镜像和沙箱自己的临时目录，网络缺省断开；没有约束后端的宿主建不出沙箱（`SHELL_CONFINEMENT_UNAVAILABLE`），Windows 要在配置里注入 `confinementProvider`。
-- 镜像里的危险命令照 `velaros:shell` 的判定经 `approval` 问，被拒就抛错、不起进程；`apply` 不问用户。
+- 镜像里的命令由 `@velaros-ai/velaros/execution` 的受约束执行器钉在镜像根，只能写镜像和沙箱自己的临时目录，网络缺省断开；没有约束后端的宿主建不出沙箱（`SHELL_CONFINEMENT_UNAVAILABLE`），Windows 要在配置里注入 `confinementProvider`。
+- 镜像里的危险命令照 execution 宿主的判定经 `approval` 问，被拒就抛错、不起进程；`apply` 不问用户。
 - `apply` 先按完整差量核对再落：点名了没变化的路径抛 `VALIDATION`，源目录自建沙箱以来变过抛 `SANDBOX_CONFLICT`，镜像在核对之后又变过抛 `SANDBOX_CHANGED`，三种都是一个文件都没写；落到一半出错时错误的 `context.applied` 点名已落的路径；`.git` 的变化永远不落。
 - 同时最多 `RehearsalSandboxLimits.sandboxes` 个沙箱，源目录超过 `RehearsalSandboxLimits.files` 个文件或 `RehearsalSandboxLimits.bytes` 字节建不出；差量与输出不折叠，只守内存上限，超出的点名没附差量或标 `truncated`。
 - 镜像落在沙箱基目录（缺省是系统临时目录下的 `velaros-sandbox`），宿主重启后按 id 从清单重新认出；`dispose()` 只停镜像里的进程、保留镜像，删镜像要 `discard`。

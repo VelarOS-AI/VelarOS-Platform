@@ -26,7 +26,7 @@
 - 合同与数据：`contract/provides.ts` 登记产品面，`requires.ts` 声明宿主注入面，`constants.ts` 放公开常量；代码面能力可有生成的 `surface.ts`。类的 API 写在类上方，公开 API 经 provides 登记。`types/` 只放类型，公开签名用到的类型从入口导出；可移植数据不得带行为或 Node 类型。
 - `impl/` 一类一文件，文件名与类名一致，公开成员由接口控制；私有方法用于实例相关逻辑，纯函数进 utils。实现文件必须登记 layers，下层不得依赖上层。utils 放有中文说明的纯函数与常量，不放类、类型声明或可变全局状态。
 - 模型能力按当前 ScriptAct 链路维护。给模型的合同一律由 TS 操作接口生成，不手写 schema：领域能力与 Act 各职责组都在登记的 surfaceFile（操作接口所在的 `impl/*Operations.ts`）上用 `@AgentView` 写模型文档、`@OperationEffect` 写效果、`@OperationModes execute` 标只能在 execute 里用的写操作，由 `scripts/script/surfaces.mjs` 和生成器写出 `contract/surface.ts`（声明、派生 schema、版本号与模板）；`impl/*Module.ts` 只把生成的模型面与实现绑成 Kernel 模块（宿主上下文、读取登记、效果核对），由 Runtime 装配。标准模块 `velaros`、`velaros:program` 同样由 script 包的 TS 接口生成。若模块登记 toolsFile/toolDefiner，则遵守该模块的集中定义检查。
-- 自管理能力集中在 `packages/velaros/act/system`，模型经 `velaros:system` 使用 modules/memory/store；运行装配在 act/runtime，搜索在 act/search，子任务与交互在 act/agents。业务能力在 files、project、browser 等同级能力单元。目录、宿主包子路径与模型 import 名称分别按实际映射说明。
+- 自管理能力集中在 `packages/velaros/act/system`，模型经 `velaros:system` 使用 modules/memory/store；运行装配在 act/runtime，搜索在 act/search，子任务与交互在 act/agents。业务能力在 project、browser 等同级能力单元；进程与终端基础设施在 execution。目录、宿主包子路径与模型 import 名称分别按实际映射说明。
 - 模型可调用操作必须有生成的声明、效果声明、发现内容和使用模板。入参的数值上限写进 `@AgentView` 文档，数字取自所属单元的常量表，入参核对引用同一份常量，验收核对两边一致；派生 schema 只管形状。领域模板在能力单元根，Act 模板在职责组根；生成物不能手改。相应修改运行 `generate:script` / `check:script`、`generate:act-catalog` / `check:act-catalog`，需要读取构建结果的命令先构建所属包。
 - 入口文件只转发，与 package.json 的 exports 及 dist 目标对应；普通包、能力单元和登记为 packageEntry 的根入口按各自映射处理。公开面由合同控制，实现类、内部接口和 utils 不作为公开 API。新增子路径必须有能力边界或运行环境边界依据，不增加同一职责的重复入口。
 - 注入集中在 requires.ts。环境变量按所属模块的常量表和 environmentPrefixes 登记。依赖优先使用文件头静态导入，不用内联 import 类型；源码动态 import 仅允许登记的 lazyImports 目标及加载文件，bin 启动壳按自己的运行边界处理。

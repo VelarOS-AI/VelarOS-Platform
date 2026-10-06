@@ -30,7 +30,7 @@ colima start scriptact-bench --cpus 2 --memory 4 --disk 24 --root-disk 8 --vm-ty
 
 每个候选使用新的 bundle 目录；`prepare.mjs` 拒绝覆盖非空目录。已存在的 Linux/Codex 归档只在指纹和哈希匹配时复用，防止后续准备改写旧试验的安装依据。
 
-`prepare.mjs --resident-exports shell.run,project.edit` 将指定操作的正式声明及依赖类型放入首轮说明，配置参与候选指纹；完整模块仍可用 `--resident-modules` 指定。主指标是实际任务请求数、耗时与费用；预置说明的字符量与本地合成响应只验证交付行为，不能证明模型会省去查询轮次。
+`prepare.mjs --resident-exports project.edit,project.inspect` 将指定操作的正式声明及依赖类型放入首轮说明，配置参与候选指纹；完整模块仍可用 `--resident-modules` 指定。主指标是实际任务请求数、耗时与费用；预置说明的字符量与本地合成响应只验证交付行为，不能证明模型会省去查询轮次。
 
 迭代候选必须沿用上一轮依赖锁，例如 `node scripts/agent/harbor/prepare.mjs .velaros-workspace/bench/candidate-v2 --model gpt-5.6-sol --reasoning high --pricing .velaros-workspace/bench/parallel-54/model-pricing.json --lockfile .velaros-workspace/bench/candidate-v1/bun.lock`。准备脚本用 frozen-lockfile 校验，并在 identity 中记录锁文件 SHA-256。
 
@@ -252,7 +252,7 @@ PYTHONPATH=. .velaros-workspace/bench/venv/bin/python scripts/agent/harbor/claud
 
 看图接入候选用 `prepare.mjs --project-images`，把正式 Runtime 的 `project.images` 开关写入 identity 和指纹，并将 `velaros:images` 作为常驻能力。真实 Runtime 回归确认项目 PNG 以多模态图片进入下一次模型请求。该项独立于结果租约参数，旧 bundle 的能力集合固定；图片相关开发题之外，还需检查常驻声明对文本任务费用、缓存和成绩的影响。
 
-`prepare.mjs --resident-modules none` 将完整声明改为按需查询；也可指定 `project,shell,images` 的子集。此项传给 Runtime 现有 residentModules 配置并纳入 bundle 指纹；已启用的模块仍可通过 modules.describe 查询、import 和调用，图片能力仍由 --project-images 开启。真实 Runtime 回归覆盖项目/Shell/图片查询与图片进入下一轮请求。合成首帧检查中，默认系统提示为 27,737 字符，只有 Shell 常驻为 13,510 字符，全部按需查询为 4,797 字符。这些是字符量，真实 token、额外发现轮次和任务收益须另行付费验证。
+`prepare.mjs --resident-modules none` 使用按需能力目录；也可指定 `project,images` 的子集供受限执行器选择合同。配置参与候选指纹，图片能力由 `--project-images` 开启。标准 Node 会话通过 `$VELAROS_HOST_DIR/index.json` 查询已授权能力，按需读取操作声明并 import。默认 npm 包可直接导入，真实 Runtime 回归覆盖包解析、项目事务和图片进入下一轮请求。任务请求数、耗时与费用须用冻结候选单独验证。
 
 ## 执行包装器的本地回归
 

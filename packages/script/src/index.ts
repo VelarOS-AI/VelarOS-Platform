@@ -8,7 +8,11 @@ export {
 } from './contract/constants.js'
 export { CodeProgramEditLimits } from './contract/constants.js'
 export { ScriptOutputLimits } from './contract/constants.js'
-export { NodeEnvironmentVariables, NodeExecutionLimits } from './contract/constants.js'
+export {
+  NodeDefaultPackages,
+  NodeEnvironmentVariables,
+  NodeExecutionLimits,
+} from './contract/constants.js'
 export type { KernelScriptSessionApi } from './contract/provides.js'
 export type { ScriptPackageCompilerApi } from './contract/provides.js'
 export type {

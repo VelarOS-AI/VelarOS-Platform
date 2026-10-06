@@ -1,5 +1,5 @@
 import type { ContextCompletionResult } from '@velaros-ai/context'
-import { isNull } from '@velaros-ai/core'
+import { isNull, optionalWhen } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
@@ -1024,7 +1024,7 @@ export class ActLoop implements ActLoopApi {
         mode: frames.mode,
         phase: current.phase.phase,
         frameId: evidence.id,
-        ...(frames.fold ? { automaticHistory: true as const } : {}),
+        automaticHistory: optionalWhen(Boolean(frames.fold), true as const),
         pressure:
           turns < this.policy.foldTurns
             ? ('critical' as const)

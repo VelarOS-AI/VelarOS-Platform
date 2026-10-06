@@ -14,8 +14,6 @@ import {
   createProjectCapabilityModule,
   createRuntime,
 } from '../../../dist/act/runtime/index.js'
-import { fileOperations, VelarFilesModule } from '../../../dist/files/index.js'
-import { createLocalFilePort } from '../../../dist/files/local.js'
 import {
   createProjectContextSource,
   createProjectKernel,
@@ -23,9 +21,7 @@ import {
   VelarProjectModule,
 } from '../../../dist/project/index.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
 
 async function storageFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'platform-integration-'))
@@ -60,13 +56,11 @@ async function open(runtime) {
   return s
 }
 
-test('INV-4 all 14 generated module surfaces / 102 operations use the same strict registry and templates', async (t) => {
+test('INV-4 all 12 generated module surfaces / 95 operations use the same strict registry and templates', async (t) => {
   const f = await storageFixture(t)
   const modules = []
   for (const unit of [
-    'files',
     'images',
-    'shell',
     'sandbox',
     'project',
     'computer',
@@ -90,10 +84,10 @@ test('INV-4 all 14 generated module surfaces / 102 operations use the same stric
       )
     }
   }
-  assert.equal(modules.length, 14)
+  assert.equal(modules.length, 12)
   assert.equal(
     modules.reduce((n, m) => n + Object.keys(m.operations).length, 0),
-    102
+    95
   )
   const kernel = createOperationRuntime({
     modules,
@@ -142,7 +136,7 @@ test('INV-4 all 14 generated module surfaces / 102 operations use the same stric
   assert.equal(dispatched, 0)
 })
 
-test('INV-1 real Project and Files operations run through Node, shared receipts and v2 materialization', async (t) => {
+test('INV-1 real project transaction operations run through Node, shared receipts and v2 materialization', async (t) => {
   const f = await storageFixture(t)
   await writeFile(join(f.root, 'a.txt'), 'one\n')
   const kernel = await createProjectKernel({ root: f.root })
@@ -152,7 +146,6 @@ test('INV-1 real Project and Files operations run through Node, shared receipts 
     kernel: async () => kernel,
     queryCode: async () => ({}),
   }
-  const files = createLocalFilePort({ resolvePath: (path) => join(f.root, path) })
   let activated = 0
   let disposed = 0
   const module = createCapabilityModule({
@@ -175,15 +168,7 @@ test('INV-1 real Project and Files operations run through Node, shared receipts 
     storage: f.storage,
     runner: nodeSubprocessCodeRunner,
     context: { sources: [source] },
-    modules: [
-      module,
-      createCapabilityModule({
-        surface: VelarFilesModule,
-        implementation: fileOperations,
-        instanceId: f.root,
-        context: (call) => ({ files, abortSignal: call.signal }),
-      }),
-    ],
+    modules: [module],
   })
   f.cleanup.push(() => runtime.close())
   const s = await open(runtime)
@@ -200,13 +185,13 @@ test('INV-1 real Project and Files operations run through Node, shared receipts 
   assert.equal(state.view.progress.step, 1)
   ok(
     await s.execute({
-      source: `import {output} from 'velaros';import {read,edit} from 'velaros:files';const file=(await read({files:[{path:'a.txt'}]})).files[0];if('error' in file)throw Error(file.error.message);await edit({steps:[{action:'replace',path:'a.txt',oldText:file.text.trim(),newText:'three'}]});output('file changed');`,
+      source: `import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'a.txt'}]})).files[0];if('error' in file)throw Error(file.error.message);await edit({steps:[{action:'replace',path:'a.txt',oldText:file.text.trim(),newText:'three'}]});output('file changed');`,
     })
   )
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'three\n')
   state = await s.view.inspect()
   assert(
-    state.mandatory.some((r) => r.operation === 'velaros:files.edit' && r.effect === 'committed')
+    state.mandatory.some((r) => r.operation === 'velaros:project.edit' && r.effect === 'committed')
   )
   await runtime.close()
   assert.equal(activated, 1)

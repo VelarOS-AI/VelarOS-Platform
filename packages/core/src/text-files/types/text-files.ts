@@ -5,7 +5,7 @@
 
 import type { TextEncodings } from '../contract/constants.js'
 
-/** @AgentView 文件在磁盘上的文本编码。utf8-bom、utf16le、utf16be 带 BOM，-nobom 的不带；gb18030 也包括 GBK 与 GB2312 的文件。 */
+/**  文件在磁盘上的文本编码。utf8-bom、utf16le、utf16be 带 BOM，-nobom 的不带；gb18030 也包括 GBK 与 GB2312 的文件。 */
 export type TextEncoding = (typeof TextEncodings)[number]
 
 /** 一段字节解码出的正文与认出的编码。 */

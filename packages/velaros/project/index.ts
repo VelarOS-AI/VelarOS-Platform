@@ -54,7 +54,6 @@ export type {
   ProjectPlugin,
   ProjectPluginContext,
   ProjectProviders,
-  ProjectShellHostPort,
   ProjectSpacePort,
   ProjectValidator,
   TelemetryProvider,
@@ -268,5 +267,16 @@ export type { ExternalLanguageServiceApi } from './impl/language/ExternalLanguag
 export { createExternalLanguageService } from './impl/language/ExternalLanguageService.js'
 
 // ── 产品面：TypeScript 项目池 ────────────────────────────────────
+export type { LocalFileSearchOptions } from './contract/requires.js'
+export type { LocalFileSearchApi } from './impl/files/LocalFileSearch.js'
+export { createLocalFileSearch } from './impl/files/LocalFileSearch.js'
 export type { TypeScriptProjectsApi } from './impl/language/TypeScriptProjectPool.js'
 export { typeScriptProjects } from './impl/language/TypeScriptProjectPool.js'
+export type {
+  FileSearchEntry,
+  FileSearchMatch,
+  FileSearchMode,
+  FileSearchOptions,
+  FileSearchPathMatchMode,
+  FileSearchResult,
+} from './types/local-search.js'

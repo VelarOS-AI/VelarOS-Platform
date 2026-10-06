@@ -21,6 +21,9 @@ async function probeRuntime(){
  try{
   const session=await runtime.openSession('packed')
   await session.context.append({kind:'user',body:'Probe durable state'})
+  const defaults=await session.execute({source: `import {execa} from 'execa';import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {diffLines} from 'diff';import {parse,stringify} from 'yaml';import {createNode} from 'yaml/util';import {writeFile} from 'node:fs/promises';await writeFile('probe.yml',stringify({answer:42}));if((await globby('*.yml')).length!==1||!diffLines('a','b').length||parse('answer: 42').answer!==42||typeof createNode!=='function')throw Error('default package failed');console.log((await execa(rgPath,['42','probe.yml'])).stdout);`})
+  assert.equal(defaults.result.failed,undefined,JSON.stringify(defaults));assert.match(defaults.result.process.stdout,/answer: 42/)
+
   const saved=await session.execute({source:"import {output} from 'velaros';import {store} from 'velaros:system';const space=await store.create({name:'packed',description:'Published package probe'});output(await store.set({store:space.id,key:'ready',baseRevision:0,value:true}));"})
   assert.equal(saved.result.failed,undefined,JSON.stringify(saved));assert.equal(saved.result.value.default.value,true)
   const events=[];for await(const event of session.submit('Verify packaged runtime'))events.push(event)

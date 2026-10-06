@@ -7,25 +7,25 @@ import { test } from 'node:test'
 import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
-import { createNodeCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner, NodeDefaultPackages } from '@velaros-ai/script'
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import {
-  createRuntime,
-  createShellCapabilityModule,
-  createShellNodeEnvironment,
-} from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
 import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
-import { projectCapabilityPorts } from '../../../dist/project/index.js'
-import { createLocalShellHost } from '../../../dist/shell/local.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 async function fixture(t, extra = {}, mode = 'danger-full-access') {
   const root = await mkdtemp(join(tmpdir(), 'velaros-native-'))
   const cwd = join(root, 'workspace')
   await mkdir(cwd)
   const shell = createLocalShellHost({ cwd, processConfinement: { mode, workspaceRoot: cwd } })
-  const node = createShellNodeEnvironment({ cwd, directory: join(root, 'runs'), shell, ...extra })
+  const node = createNodeExecutionEnvironment({
+    cwd,
+    directory: join(root, 'runs'),
+    host: shell,
+    ...extra,
+  })
   t.after(async () => {
     await shell.dispose()
     await rm(root, { recursive: true, force: true })
@@ -41,6 +41,8 @@ const request = (source, timeoutMs = 10_000, operations = {}) => ({
   blobs: {},
   input: undefined,
 })
+const commandProgram = (command) =>
+  `import {execaCommand} from 'execa'; await execaCommand(${JSON.stringify(command)}, {shell:true,stdout:'inherit',stderr:'inherit'});`
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
@@ -67,7 +69,7 @@ test('provider code-only stream failures retry through the real SDK without repe
         type: 'function_call',
         id: `fc_${index}`,
         call_id: `call_${index}`,
-        name: 'node',
+        name: 'exec',
       }
       parts.push(
         { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
@@ -186,7 +188,7 @@ for (const reportUsage of [false, true])
               type: 'tool-call',
               value: {
                 id: 'append-once',
-                name: 'node',
+                name: 'exec',
                 input: {
                   code: "import {appendFile} from 'node:fs/promises'; await appendFile('effects.txt','x'); console.log('written')",
                 },
@@ -244,14 +246,14 @@ test('native Node calls preserve a restricted runner and expose only the allowed
         assert.doesNotMatch(request.instructions, /snapshotPlans/)
         assert.deepEqual(
           request.response.tools.map((tool) => tool.name),
-          ['node']
+          ['exec']
         )
         if (++turn === 1)
           yield {
             type: 'tool-call',
             value: {
               id: 'read',
-              name: 'node',
+              name: 'exec',
               input: {
                 code: "import {readFile} from 'node:fs/promises'; console.log(await readFile('input.txt','utf8'))",
               },
@@ -263,7 +265,7 @@ test('native Node calls preserve a restricted runner and expose only the allowed
             type: 'tool-call',
             value: {
               id: 'write',
-              name: 'node',
+              name: 'exec',
               input: {
                 code: "import {writeFile} from 'node:fs/promises'; await writeFile('input.txt','changed')",
               },
@@ -292,9 +294,9 @@ test('native decoder rejects ungranted Shell and honors configured response budg
     /原生执行入口/
   )
   decoder.reset()
-  decoder.acceptTool({ id: 'one', name: 'node', input: { code: 'console.log(1)' } })
+  decoder.acceptTool({ id: 'one', name: 'exec', input: { code: 'console.log(1)' } })
   assert.throws(
-    () => decoder.acceptTool({ id: 'two', name: 'node', input: { code: 'console.log(2)' } }),
+    () => decoder.acceptTool({ id: 'two', name: 'exec', input: { code: 'console.log(2)' } }),
     /原生执行入口/
   )
   assert.throws(() => new NativeTurnDecoder({ maxChars: 8 }).push('ninechars'), /超过协议字符预算/)
@@ -304,7 +306,11 @@ test('INV-10 native executions honor the common segment, task and finite retenti
   for (const duration of [undefined, 'segment', 'task', 1, 2, 32]) {
     const decoder = new NativeTurnDecoder(duration === undefined ? {} : { defaultRetain: duration })
     for (const name of ['shell', 'node'])
-      decoder.acceptTool({ id: name, name, input: { code: name === 'shell' ? 'true' : '1' } })
+      decoder.acceptTool({
+        id: name,
+        name: 'exec',
+        input: { code: name === 'shell' ? 'true' : '1' },
+      })
     assert.deepEqual(
       decoder.finish().submission.executions.map((execution) => execution.program.retainTurns),
       [duration ?? 'segment', duration ?? 'segment']
@@ -343,11 +349,11 @@ test('INV-10 native result leases survive their configured scope without re-exec
                 type: 'tool-call',
                 value: {
                   id: `step-${turn}`,
-                  name: turn % 2 ? 'shell' : 'node',
+                  name: 'exec',
                   input: {
                     code:
                       turn % 2
-                        ? 'cat source.txt; printf x >> calls.txt'
+                        ? commandProgram('cat source.txt; printf x >> calls.txt')
                         : "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')",
                   },
                 },
@@ -420,8 +426,12 @@ test('fresh native output shares unused result capacity and reaches the next req
               type: 'tool-call',
               value: {
                 id: `output-${index}`,
-                name: 'shell',
-                input: { code: index === 0 ? 'cat source.txt' : `printf 'receipt-${index}'` },
+                name: 'exec',
+                input: {
+                  code: commandProgram(
+                    index === 0 ? 'cat source.txt' : `printf 'receipt-${index}'`
+                  ),
+                },
               },
             }
         } else {
@@ -447,7 +457,7 @@ test('fresh native output shares unused result capacity and reaches the next req
   assert.equal(turn, 2)
 })
 
-test('native Shell/Node calls execute after acceptance and recover matched history from storage', async (t) => {
+test('native Execa/Node calls execute after acceptance and recover matched history from storage', async (t) => {
   const f = await fixture(t)
   const requests = []
   let turn = 0
@@ -461,13 +471,17 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
       assert.equal(request.response.type, 'tools')
       assert.deepEqual(
         request.response.tools.map((tool) => tool.name),
-        ['shell', 'node']
+        ['exec']
       )
       turn++
       if (turn === 1)
         yield {
           type: 'tool-call',
-          value: { id: 'call_shell', name: 'shell', input: { code: "printf '7' > input.txt" } },
+          value: {
+            id: 'call_shell',
+            name: 'exec',
+            input: { code: commandProgram("printf '7' > input.txt") },
+          },
         }
       else if (turn === 2) {
         assert.equal(request.history.filter((message) => message.toolExchange).length, 1)
@@ -475,7 +489,7 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
           type: 'tool-call',
           value: {
             id: 'call_node',
-            name: 'node',
+            name: 'exec',
             input: {
               code: "import {readFile,writeFile} from 'node:fs/promises'; const n=Number(await readFile('input.txt','utf8')); await writeFile('answer.json',JSON.stringify({answer:n*6})); console.log(n*6)",
             },
@@ -508,7 +522,7 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
     (message) => message.toolResult?.callId === 'call_node'
   )
   assert(nodeResult, 'the delivered output must identify its native tool call')
-  assert.equal(nodeResult.toolResult.toolName, 'node')
+  assert.equal(nodeResult.toolResult.toolName, 'exec')
   assert.match(nodeResult.content, /42/)
   const nodeSource = requests[2].history.find(
     (message) => message.toolExchange?.calls[0]?.id === 'call_node'
@@ -519,9 +533,9 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
     ),
     'native call source is already present in assistant history'
   )
-  assert(events.some((event) => event.type === 'program' && event.kind === 'shell'))
+  assert(events.some((event) => event.type === 'program' && event.kind === 'execute'))
   const trace = await runtime.trace('native', { fullContent: true })
-  assert.equal(trace.turns[0].executions[0].language, 'shell')
+  assert.equal(trace.turns[0].executions[0].language, 'node')
   assert.equal(trace.turns[1].executions[0].language, 'node')
   await runtime.close()
   runtime = await createRuntime({
@@ -564,15 +578,20 @@ test('native independent calls retain a failed command and execute the remaining
                 type: 'tool-call',
                 value: {
                   id: 'failed-check',
-                  name,
-                  input: { code: name === 'shell' ? 'exit 7' : "throw new Error('check failed')" },
+                  name: 'exec',
+                  input: {
+                    code:
+                      name === 'shell'
+                        ? commandProgram('exit 7')
+                        : "throw new Error('check failed')",
+                  },
                 },
               }
               yield {
                 type: 'tool-call',
                 value: {
                   id: 'node-check',
-                  name: 'node',
+                  name: 'exec',
                   input: {
                     code: "import {appendFile} from 'node:fs/promises';await appendFile('checks.txt','node-once\\n');console.log('node checked')",
                   },
@@ -582,8 +601,12 @@ test('native independent calls retain a failed command and execute the remaining
                 type: 'tool-call',
                 value: {
                   id: 'shell-check',
-                  name: 'shell',
-                  input: { code: "printf 'shell-once\\n' >> checks.txt; printf 'shell checked'" },
+                  name: 'exec',
+                  input: {
+                    code: commandProgram(
+                      "printf 'shell-once\\n' >> checks.txt; printf 'shell checked'"
+                    ),
+                  },
                 },
               }
             } else yield { type: 'text', text: '一项命令失败，另两项检查均已完成。' }
@@ -607,7 +630,7 @@ test('native independent calls retain a failed command and execute the remaining
         (message) => message.toolResult?.callId === 'failed-check'
       )
       assert.match(failed.content, /PROGRAM_ERROR/)
-      assert.match(failed.content, new RegExp(`"exitCode":${name === 'shell' ? 7 : 1}`, 'u'))
+      assert.match(failed.content, new RegExp(`"exitCode":1`, 'u'))
       const trace = await runtime.trace('independent', { fullContent: true })
       assert.deepEqual(
         trace.turns[0].executions.map((execution) => execution.status),
@@ -650,7 +673,10 @@ test('native abnormal process termination stops later calls', async (t) => {
           async *stream() {
             if (++turns === 1)
               for (const id of ['first', 'later'])
-                yield { type: 'tool-call', value: { id, name: 'shell', input: { code: 'true' } } }
+                yield {
+                  type: 'tool-call',
+                  value: { id, name: 'exec', input: { code: commandProgram('true') } },
+                }
             else yield { type: 'text', text: '执行环境中断，后续调用已取消。' }
             yield { type: 'finish', reason: 'stop' }
           },
@@ -706,7 +732,10 @@ test('cancelling a native batch during its first process prevents later calls', 
           ['first', "printf 'first-started'; sleep 5; exit 7"],
           ['later', "printf 'must not run' > later.txt"],
         ])
-          yield { type: 'tool-call', value: { id, name: 'shell', input: { code } } }
+          yield {
+            type: 'tool-call',
+            value: { id, name: 'exec', input: { code: commandProgram(code) } },
+          }
         yield { type: 'finish', reason: 'stop' }
       },
     },
@@ -740,11 +769,15 @@ test('native response with a later invalid tool input performs no earlier write'
         if (++turn === 1) {
           yield {
             type: 'tool-call',
-            value: { id: 'a', name: 'shell', input: { code: 'touch forbidden.txt' } },
+            value: {
+              id: 'a',
+              name: 'exec',
+              input: { code: commandProgram('touch forbidden.txt') },
+            },
           }
           yield {
             type: 'tool-call',
-            value: { id: 'b', name: 'node', input: { wrong: 'console.log(1)' } },
+            value: { id: 'b', name: 'exec', input: { wrong: 'console.log(1)' } },
           }
         } else yield { type: 'text', text: '结束。' }
         yield { type: 'finish', reason: 'stop' }
@@ -786,8 +819,8 @@ test('cancelling a later native model turn preserves the completed call and neve
             type: 'tool-call',
             value: {
               id: 'write_once',
-              name: 'shell',
-              input: { code: "printf 'once\\n' >> effects.txt" },
+              name: 'exec',
+              input: { code: commandProgram("printf 'once\\n' >> effects.txt") },
             },
           }
         else if (turn === 2) {
@@ -808,65 +841,6 @@ test('cancelling a later native model turn preserves the completed call and neve
   assert(
     requests.at(-1).history.some((message) => message.toolExchange?.calls[0].id === 'write_once')
   )
-})
-
-test('discovered host shell owns background tasks across separate Node executions', async (t) => {
-  const f = await fixture(t)
-  const runtime = await createRuntime({
-    node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
-    storage: localContextStorage({ path: join(f.root, 'background.sqlite') }),
-    modules: [
-      createShellCapabilityModule({
-        instanceId: f.cwd,
-        shell: projectCapabilityPorts.shell({
-          getRootPath: () => f.cwd,
-          runCommand: (...args) => f.shell.runCommand(...args),
-          listBackgroundTasks: (...args) => f.shell.listBackgroundTasks(...args),
-          refreshShellEnvironment: () => f.shell.refreshShellEnvironment(),
-          terminateBackgroundTask: (...args) => f.shell.terminateBackgroundTask(...args),
-        }),
-        approval: {
-          awaitConfirmation: async () => {},
-          awaitConfirmationDecision: async () => ({ approved: true, message: null }),
-        },
-      }),
-    ],
-  })
-  t.after(() => runtime.close())
-  const session = await runtime.openSession('background-owner')
-  await session.context.append({ kind: 'user', body: 'Start and stop a managed background task' })
-  const discover = `
-    import {readFile,writeFile} from 'node:fs/promises';
-    import {join} from 'node:path'; import {pathToFileURL} from 'node:url';
-    const root=process.env.VELAROS_HOST_DIR;
-    const entry=JSON.parse(await readFile(join(root,'index.json'),'utf8')).find(item=>item.module==='velaros:shell');
-    const shell=await import(pathToFileURL(join(root,entry.client)));
-  `
-  const started = await session.execute({
-    source: `${discover}
-    const started=await shell.run({command:'sleep 60',background:true});
-    await writeFile('task.json',JSON.stringify(started.backgroundProcess));
-    console.log(started.success);
-  `,
-  })
-  assert.equal(started.result.failed, undefined, JSON.stringify(started))
-  const { taskId } = JSON.parse(await readFile(join(f.cwd, 'task.json'), 'utf8'))
-  assert.equal(
-    (await f.shell.listBackgroundTasks({ taskId, sessionId: 'background-owner' }))[0].status,
-    'running'
-  )
-  const stopped = await session.execute({
-    source: `${discover}
-    const {taskId}=JSON.parse(await readFile('task.json','utf8'));
-    console.log(JSON.stringify({tasks:await shell.listTasks({taskId}),stop:await shell.stop({taskId})}));
-  `,
-  })
-  assert.equal(stopped.result.failed, undefined, JSON.stringify(stopped))
-  assert.equal(JSON.parse(stopped.result.process.stdout).stop.stopped, true)
 })
 
 test('standard Node resolves cwd ESM/npm, writes ordinary files and automatically captures stdout/stderr', async (t) => {
@@ -1338,7 +1312,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       async *stream(req) {
         inspect?.(req)
         const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
-        assert.match(req.instructions, /Shell 和 Node/)
+        assert.match(req.instructions, /Node.js/)
         yield {
           type: 'text',
           text:
@@ -1402,7 +1376,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   assert.deepEqual(JSON.parse(recalled.result.process.stdout), manifest.artifacts)
 })
 
-test('Shell source is decoded directly, persisted with its language and reusable by sourceRef', async (t) => {
+test('Execa command source persists and is reusable by sourceRef', async (t) => {
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
@@ -1416,8 +1390,9 @@ test('Shell source is decoded directly, persisted with its language and reusable
   const session = await runtime.openSession('shell-owner')
   await session.context.append({ kind: 'user', body: 'Write a literal file using shell' })
   const receipt = await session.execute({
-    language: 'shell',
-    source: "cat <<'EOF' > literal.txt\n$literal `quoted` 中文\nEOF\ncat literal.txt",
+    source: commandProgram(
+      "cat <<'EOF' > literal.txt\n$literal `quoted` 中文\nEOF\ncat literal.txt"
+    ),
   })
   assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
   assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), '$literal `quoted` 中文\n')
@@ -1607,5 +1582,131 @@ test('native child status keeps actionable delivery metadata and recalls the imm
       memoryPrompt(JSON.stringify(changed)).split('runtime：\n')[1].split('\n')[0]
     )
     assert.deepEqual(display.children, changed.partitions.runtime.children)
+  }
+})
+
+test('default npm packages work in entrypoints, saved files and child Node processes', async (t) => {
+  const f = await fixture(t)
+  const runner = createNodeCodeRunner(f.node)
+  const source = `
+    import {execa} from 'execa';
+    import {diffLines} from 'diff';
+    import {rgPath} from '@vscode/ripgrep';
+    import {globby} from 'globby';
+    import {parse,stringify} from 'yaml';
+    import {createNode} from 'yaml/util';
+    import {writeFile} from 'node:fs/promises';
+    const changes=diffLines('before\\n','after\\n');
+    if(!changes.some(change=>change.added)) throw Error('diff unavailable');
+    await writeFile('saved.mjs', "import {execa} from 'execa';import {diffLines} from 'diff';console.log((await execa(process.execPath,['-p','6*7'])).stdout,diffLines('a','b').length);");
+    await writeFile('fixture.yml',stringify({answer:42}));
+    if(parse(stringify({answer:42})).answer!==42) throw Error('YAML failed');
+    if(typeof createNode!=='function') throw Error('YAML subpath failed');
+    if(!(await globby(['*.yml'])).includes('fixture.yml')) throw Error('globby failed');
+    const match=await execa(rgPath,['--fixed-strings','42','fixture.yml']);
+    console.log(match.stdout);
+    await writeFile('packages.mjs',"import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {parse} from 'yaml';console.log(Boolean(rgPath), (await globby('*.yml')).length, parse('answer: 42').answer);");
+    console.log((await execa(process.execPath,['packages.mjs'])).stdout);
+    const child=await execa(process.execPath,['saved.mjs']);
+    console.log(child.stdout);
+    const failed=await execa(process.execPath,['-e',"process.stderr.write('diagnostic');process.exit(7)"],{reject:false});
+    console.log(JSON.stringify({exitCode:failed.exitCode,stderr:failed.stderr}));
+  `
+  const result = await runner.run(request(source), noCalls, () => {})
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.match(result.process.stdout, /42 2/)
+  assert.match(result.process.stdout, /answer: 42/)
+  assert.match(result.process.stdout, /true 1 42/)
+  assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
+})
+
+test('capabilities cannot shadow default npm packages through either registration path', async (t) => {
+  const f = await fixture(t)
+  const execute = t.mock.method(f.node, 'execute', async () => {
+    throw Error('conflicting packages must be rejected before launch')
+  })
+  const runner = createNodeCodeRunner(f.node)
+  for (const specifier of NodeDefaultPackages.flatMap((name) => [name, `${name}/util`])) {
+    for (const registration of [
+      { operations: { [specifier]: ['run'] } },
+      { packages: [{ specifier, exports: {} }] },
+    ]) {
+      const result = await runner.run(
+        { ...request('console.log("must not execute")'), ...registration },
+        noCalls,
+        () => {}
+      )
+      assert.equal(result.ok, false)
+      assert.equal(result.error.code, 'CONFLICT', JSON.stringify(result))
+      assert.equal(result.process, undefined)
+    }
+  }
+  assert.equal(execute.mock.callCount(), 0)
+})
+
+test('workspace npm packages take precedence and broken workspace packages report their own failure', async (t) => {
+  const f = await fixture(t)
+  const path = join(f.cwd, 'node_modules', 'diff')
+  await mkdir(path, { recursive: true })
+  await writeFile(
+    join(path, 'package.json'),
+    JSON.stringify({ type: 'module', exports: './index.js' })
+  )
+  await writeFile(join(path, 'index.js'), "export const localVersion='workspace';")
+  const runner = createNodeCodeRunner(f.node)
+  const local = await runner.run(
+    request("import {localVersion} from 'diff';console.log(localVersion)"),
+    noCalls,
+    () => {}
+  )
+  assert.equal(local.ok, true, JSON.stringify(local))
+  assert.equal(local.process.stdout.trim(), 'workspace')
+  await writeFile(join(path, 'index.js'), "export {missing} from './missing.js';")
+  const broken = await runner.run(
+    request("import * as diff from 'diff';console.log(diff)"),
+    noCalls,
+    () => {}
+  )
+  assert.equal(broken.ok, false)
+  assert.match(broken.process.stderr, /missing.js/)
+  const yaml = join(f.cwd, 'node_modules', 'yaml')
+  await mkdir(yaml)
+  await writeFile(
+    join(yaml, 'package.json'),
+    JSON.stringify({ type: 'module', exports: { '.': './index.js' } })
+  )
+  await writeFile(join(yaml, 'index.js'), 'export const version="workspace";')
+  const privateSubpath = await runner.run(request("import 'yaml/util'"), noCalls, () => {})
+  assert.equal(privateSubpath.ok, false)
+  assert.equal(privateSubpath.error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
+})
+
+test('only project workspaces receive project transaction capabilities', async (t) => {
+  const f = await fixture(t)
+  for (const project of [false, true]) {
+    const runtime = await createRuntime({
+      node: f.node,
+      ...(project ? { workspace: f.cwd } : {}),
+      dataDir: join(f.root, `scope-${project}`),
+      agents: false,
+      search: false,
+      memory: false,
+    })
+    try {
+      const session = await runtime.openSession('scope')
+      await session.context.append({
+        kind: 'user',
+        body: 'Inspect available application capabilities',
+      })
+      const receipt = await session.execute({
+        source:
+          "import {readFile} from 'node:fs/promises';console.log(JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')).map(entry=>entry.module));",
+      })
+      assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
+      assert.equal(receipt.result.process.stdout.includes('velaros:project'), project)
+      assert.doesNotMatch(receipt.result.process.stdout, /velaros:(shell|files)/)
+    } finally {
+      await runtime.close()
+    }
   }
 })

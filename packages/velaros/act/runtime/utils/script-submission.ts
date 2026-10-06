@@ -69,13 +69,8 @@ function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   } else if (!isUndefined(value.source)) {
     checkFields(value, ['source', 'language', 'modules', 'input', 'blobs', ...lease], label)
     checkText(value.source, `${label}.source`, 1)
-    if (!isUndefined(value.language) && !['node', 'shell'].includes(String(value.language)))
-      throw submissionInput('language 必须是 node 或 shell')
-    if (
-      value.language === 'shell' &&
-      ['modules', 'input', 'blobs'].some((key) => !isUndefined(value[key]))
-    )
-      throw submissionInput('Shell 程序使用命令正文和普通文件传递数据')
+    if (!isUndefined(value.language) && value.language !== 'node')
+      throw submissionInput('language 必须是 node')
     if (!isUndefined(value.modules)) checkStrings(value.modules, `${label}.modules`)
   } else if (!isUndefined(value.sourceRef)) {
     checkFields(value, ['sourceRef', 'edits', 'input', 'blobs', ...lease], label)

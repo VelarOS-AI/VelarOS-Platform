@@ -564,7 +564,7 @@ function declarationModule(program, specifier, headers, exports, wanted, wantedV
   }
   const types = [...constants, ...declared]
 
-  // 类型与导出项都放进 `declare module` 块里：模型写 `import { read } from 'velaros:files'`，
+  // 类型与导出项都放进 `declare module` 块里：模型写 `import { read } from 'velaros:project'`，
   // 而且类型因此有了作用域——两件能力可以各有一个同名类型而不撞，平铺声明做不到。
   const indented = (text) =>
     text
@@ -847,7 +847,7 @@ if (!OutputOption) {
       }
     : generatedSchema
   const target = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
-  const text = `${SurfaceFileHeader}\n\n/** Shell 与 Node 的正式入参合同。 */\nexport const NativeExecutionSchema = ${JSON.stringify(schema)} as const\n`
+  const text = `${SurfaceFileHeader}\n\n/** exec 入口的正式入参合同。 */\nexport const NativeExecutionSchema = ${JSON.stringify(schema)} as const\n`
   if (!ts.sys.fileExists(target) || readFileSync(target, 'utf8') !== text) {
     if (ShouldWrite) writeFileSync(target, text)
     else {

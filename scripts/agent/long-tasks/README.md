@@ -4,7 +4,7 @@
 
 ## 用法
 
-先准备任务 JSON 指定的源码提交和独占 Python 环境，并用 `scripts/agent/freeze-standard-runtime.mjs` 保存候选。`prepare.mjs <campaign-directory> <attempt-id> <candidate-name> [paired|scriptact] [task-file.json] [development] [on-demand|shell-node] [request|goal]` 执行零模型基线检查、确认新功能验收拒绝原项目、预检终态导出，再冻结任务、候选和评测脚本。默认执行配对；`scriptact` 用于单独复测开发候选。重复使用已经看过结果的独立任务时，指定 `development`，冻结清单与汇总随之标为开发复测，原任务文件保持首次定义。
+先准备任务 JSON 指定的源码提交和独占 Python 环境，并用 `scripts/agent/freeze-standard-runtime.mjs` 保存候选。`prepare.mjs <campaign-directory> <attempt-id> <candidate-name> [paired|scriptact] [task-file.json] [development] [on-demand|node] [request|goal]` 执行零模型基线检查、确认新功能验收拒绝原项目、预检终态导出，再冻结任务、候选和评测脚本。默认执行配对；`scriptact` 用于单独复测开发候选。重复使用已经看过结果的独立任务时，指定 `development`，冻结清单与汇总随之标为开发复测，原任务文件保持首次定义。
 
 任务模式默认 `request`，按原有普通提交执行。显式 `goal` 将同一原始任务正文交给 Runtime 的目标模式，最终目标状态和读取故障写入 solve 记录；任务提示、期限、模型、依赖、验收和 Codex 配置保持同一冻结来源。该开关改变 ScriptAct 的完成控制，必须作为独立配置报告；不能将目标状态自行视为功能验收通过。清单和指标记录 `scriptactTaskMode`，旧清单缺省为普通请求。在首次独立任务需要后置参数而不设置开发标志时，`development` 的位置传空字符串。
 

@@ -3,7 +3,7 @@
  * 每一条对应 spec/invariants.md 里的一个编号。
  * 改动或删除已有用例要在差量报告里点名并说明理由。这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
  * 一律经代码面的能力端口调（和模型的程序是同一条路），断言程序看得到的 code 与 message。
- * 共用能力（`velaros:shell`、`velaros:sandbox`、`velaros:images`）用的是它们真实的操作，只有宿主是假的（INV-26～INV-29）。
+ * 共用能力（`execution 宿主`、`velaros:sandbox`、`velaros:images`）用的是它们真实的操作，只有宿主是假的（INV-26～INV-29）。
  */
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
@@ -29,7 +29,6 @@ import {
 import { ProjectExecutionGate } from '../impl/operations/ProjectExecutionGate'
 
 import {
-  commandResult,
   createProjectHarness,
   createProjectPortsHarness,
   failureOf,
@@ -653,46 +652,7 @@ describe('不问人，只排队', () => {
 })
 
 describe('共用能力的项目端口', () => {
-  test('INV-26 项目里的危险命令每次都由用户亲自确认；被拒一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回', async () => {
-    const denied = await createProjectPortsHarness(root, { approve: false })
-    expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe(
-      'PERMISSION'
-    )
-    expect(denied.runs).toEqual([])
-    expect(denied.confirmations).toHaveLength(1)
-    expect(denied.confirmations[0]?.options).toMatchObject({
-      approvalRisk: 'high',
-      requireManualApproval: true,
-      rememberRiskScope: false,
-      riskScope: 'project-command:dangerous',
-    })
-    expect(denied.confirmations[0]?.message).toContain('当前项目')
-
-    // 用户点了头：宿主收到的是「已确认的危险命令」。
-    const approved = await createProjectPortsHarness(root)
-    await approved.call('shell', 'run', { command: 'rm -rf ./dist' })
-    expect(
-      approved.runs.map(({ command, allowDangerous }) => ({ command, allowDangerous }))
-    ).toEqual([{ command: 'rm -rf ./dist', allowDangerous: true }])
-
-    // 会改项目的、长驻的都不问（审批端口会拒，也一次都没被叫到）；输出原样交回，像密钥的片段也不遮。
-    const secret = ['sk', 'live', '0123456789abcdefghijklmnopqrstuvwxyz'].join('-')
-    const quiet = await createProjectPortsHarness(root, {
-      approve: false,
-      runCommand: async (command, options) =>
-        commandResult(command, options?.cwd ?? root, { stdout: `key=${secret}` }),
-    })
-    for (const command of ['touch created.txt', 'npm run dev', 'ls'])
-      expect((await quiet.call('shell', 'run', { command })).stdout).toBe(`key=${secret}`)
-    expect(quiet.confirmations).toEqual([])
-    expect(quiet.runs.map(({ command, options }) => [command, options?.background])).toEqual([
-      ['touch created.txt', false],
-      ['npm run dev', true],
-      ['ls', false],
-    ])
-  })
-
-  test('INV-27 命令的工作目录与沙箱的源目录按真实路径钳在项目之内：出了项目（含经符号链接指到外面）在问用户之前就拒绝，一个进程都不起、什么都不镜像', async () => {
+  test('INV-27 沙箱的源目录按真实路径钳在项目之内：出了项目（含经符号链接指到外面）在问用户之前就拒绝，拒绝镜像', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'project-acceptance-outside-'))
     await mkdir(join(root, 'src'))
     await symlink(outside, join(root, 'escape'))
@@ -700,20 +660,12 @@ describe('共用能力的项目端口', () => {
     try {
       const harness = await createProjectPortsHarness(root, { sandbox: sandbox.host })
       for (const where of ['..', outside, 'escape', 'escape/deeper']) {
-        const refused = await failureOf(
-          harness.call('shell', 'run', { command: 'rm -rf build', cwd: where })
-        )
-        expect({ where, code: refused.code }).toEqual({ where, code: 'PERMISSION' })
-        expect(refused.message).toContain('项目之内')
         const mirrored = await failureOf(harness.call('sandbox', 'create', { source: where }))
         expect({ where, code: mirrored.code }).toEqual({ where, code: 'PERMISSION' })
       }
       expect(harness.confirmations).toEqual([])
-      expect(harness.runs).toEqual([])
       expect(sandbox.calls).toEqual([])
       // 项目里的照常：工作目录与源目录交给宿主时是解析好的绝对路径。
-      await harness.call('shell', 'run', { command: 'ls', cwd: 'src' })
-      expect(harness.runs[0]?.options?.cwd).toBe(join(root, 'src'))
       expect(await harness.call('sandbox', 'create', { source: 'src' })).toMatchObject({
         source: join(root, 'src'),
       })

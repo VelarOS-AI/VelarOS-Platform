@@ -2,7 +2,7 @@
  * 本机演练沙箱引擎的工作类型：镜像清单与文件印记、落回时的冲突、登记表里的一项。只在单元内用，不出包。
  */
 
-import type { ConfinedShellRunnerApi } from '@velaros-ai/velaros/shell'
+import type { ConfinedShellRunnerApi } from '@velaros-ai/velaros/execution'
 
 import type { SandboxRecord } from './rehearsal-sandbox.js'
 

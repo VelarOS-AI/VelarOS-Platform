@@ -20,7 +20,7 @@ import {
   createCodeSurfaceSession,
   nodeSubprocessCodeRunner,
 } from '@velaros-ai/script'
-import { ShellErrorCodes, ShellLimits } from '@velaros-ai/velaros/shell/contracts'
+import { ShellErrorCodes, ShellLimits } from '@velaros-ai/velaros/execution/contracts'
 
 import { VelarSandboxModule } from '../contract/surface'
 import type {

@@ -11,7 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 import { textFileIo } from '@velaros-ai/core/text-files'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { createConfinedShellRunner } from '@velaros-ai/velaros/shell/local'
+import { createConfinedShellRunner } from '@velaros-ai/velaros/execution/local'
 
 import { RehearsalSandboxLimits } from '../contract/constants.js'
 import type { LocalSandboxHostOptions, RehearsalSandboxHostPort } from '../contract/requires.js'
@@ -58,7 +58,7 @@ export function createLocalSandboxHost(options: LocalSandboxHostOptions = {}): L
  * 本机演练沙箱：把目录镜像到临时区，镜像里跑的命令一律受进程约束；跑完能看差量、能把文件变化落回源目录、能整个丢弃。
  *
  * 实现是 `LocalSandboxHost`，宿主创建并持有。它就是 `velaros:sandbox` 空间端口里除作用域（`resolveSource`）之外的全部：
- * 空间给端口时把这里原样接上，自己只补「源目录可以是哪儿」；项目空间的宿主端口也把它当沙箱给。每个沙箱有自己的受约束执行器（`@velaros-ai/velaros/shell/local`
+ * 空间给端口时把这里原样接上，自己只补「源目录可以是哪儿」；项目空间的宿主端口也把它当沙箱给。每个沙箱有自己的受约束执行器（`@velaros-ai/velaros/execution/local`
  * 的 `createConfinedShellRunner`）：约束固定是 `workspace-write`、写根是镜像根与沙箱自己的临时目录、网络按创建时的选择；
  * 没有约束后端的宿主上建不出沙箱。宿主重启后，按 id 用到的沙箱从基目录下的清单重新登记。
  */

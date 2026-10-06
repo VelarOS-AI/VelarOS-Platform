@@ -15,11 +15,10 @@ export interface NodeProgramCheckerApi extends CodeProgramCheckerApi {}
 class NodeProgramChecker implements NodeProgramCheckerApi {
   public check(input: {
     source: string
-    language?: 'node' | 'shell'
+    language?: 'node'
     granted: readonly GrantedModule[]
     modules?: Readonly<Record<string, string>>
   }): CodeProgramCheckResult {
-    if (input.language === 'shell') return { ok: true }
     const file = ts.createSourceFile(
       'program.js',
       input.source,
@@ -68,7 +67,7 @@ class NodeProgramChecker implements NodeProgramCheckerApi {
 
   public typecheck(input: {
     source: string
-    language?: 'node' | 'shell'
+    language?: 'node'
     granted: readonly GrantedModule[]
   }): CodeProgramCheckResult {
     return this.check(input)

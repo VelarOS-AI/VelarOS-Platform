@@ -7,7 +7,7 @@ export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
-export type { ShellNodeEnvironmentApi } from './contract/provides.js'
+export type { NodeExecutionEnvironmentApi } from './contract/provides.js'
 export type {
   ObservationReuseOptions,
   ObservationReusePort,
@@ -19,7 +19,6 @@ export type {
   VelarosRuntimeOptions,
 } from './contract/requires.js'
 export type { CapabilityModuleOptions } from './contract/requires.js'
-export type { ShellCapabilityModuleOptions, ShellInvocationOutput } from './contract/requires.js'
 export type {
   McpAuthorizationProvider,
   McpConnectionOptions,
@@ -32,18 +31,18 @@ export type { ProjectCapabilityModuleOptions } from './contract/requires.js'
 export type { ProjectImagesModuleOptions } from './contract/requires.js'
 export type { ContextMaintenanceOptions } from './contract/requires.js'
 export type { EventDeliveryOptions } from './contract/requires.js'
-export type { ShellNodeEnvironmentOptions } from './contract/requires.js'
+export type { NodeExecutionEnvironmentOptions } from './contract/requires.js'
+export type { NodeExecutionOutput } from './contract/requires.js'
 export { createCapabilityModule } from './impl/CapabilityModules.js'
 export type { VelarosRuntime } from './impl/ComposedRuntime.js'
 export { createRuntime } from './impl/ComposedRuntime.js'
 export { createEventDelivery } from './impl/EventDelivery.js'
 export type { McpClientConnectionApi } from './impl/McpClientConnection.js'
 export { createMcpClientConnection } from './impl/McpClientConnection.js'
+export { createNodeExecutionEnvironment } from './impl/NodeExecutionEnvironment.js'
 export type { VelarosSession } from './impl/RuntimeSession.js'
-export { createShellNodeEnvironment } from './impl/ShellNodeEnvironment.js'
 export { createProjectCapabilityModule } from './impl/StandardModules.js'
 export { createProjectCodeModule, createProjectImagesModule } from './impl/StandardModules.js'
-export { createShellCapabilityModule } from './impl/StandardModules.js'
 export { createMcpModule } from './impl/StandardModules.js'
 export type {
   McpRawCallResult,

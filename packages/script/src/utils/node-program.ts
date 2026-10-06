@@ -6,10 +6,19 @@ import { pathToFileURL } from 'node:url'
 import { isEmpty, isUndefined, toNullable, toOptional, TypeGuards } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { CodeSurfaceLimits, ScriptOutputLimits } from '../contract/constants.js'
+import {
+  CodeSurfaceLimits,
+  NodeDefaultPackages,
+  ScriptOutputLimits,
+} from '../contract/constants.js'
 import type { CodeRunRequest } from '../types/runner.js'
 
 import { createOutputCollector, validateOutputOptions } from './output-capture.js'
+
+/** 默认 npm 包拥有整个导入命名空间，子路径仍由 Node 的 exports 规则核对。 */
+function isDefaultPackage(specifier: string): boolean {
+  return NodeDefaultPackages.some((name) => specifier === name || specifier.startsWith(`${name}/`))
+}
 
 /** 正式输出合同的原生模块；普通任务直接使用 console，内部结构化产物按需导入。 */
 function outputModule(): string {
@@ -32,12 +41,13 @@ export const output = collector.output;
 `
 }
 
-/** 只为授权包和本次不可变程序补充解析；标准库、npm 与普通文件仍由 Node 链接。 */
+/** 授权能力与预装 npm 包共用加载入口，工作区依赖优先交给 Node 正常解析。 */
 export async function nodeProgramSource(
   request: CodeRunRequest,
   catalog: string,
   cwd: string,
-  capabilities: Readonly<Record<string, string>>
+  capabilities: Readonly<Record<string, string>>,
+  packageDirectory?: string
 ): Promise<{ bootstrap: string; preload: string; entrypoint: string }> {
   const specifiers: Record<string, string> = Object.create(null)
   const sources: Record<string, string> = Object.create(null)
@@ -46,6 +56,7 @@ export async function nodeProgramSource(
     if (
       isBuiltin(name) ||
       ['velaros', 'velaros:program'].includes(name) ||
+      isDefaultPackage(name) ||
       Object.hasOwn(specifiers, name)
     )
       throw new AppError('CONFLICT', `能力包导入名冲突：${name}`)
@@ -76,6 +87,7 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
     if (
       packages.has(pkg.specifier) ||
       isBuiltin(pkg.specifier) ||
+      isDefaultPackage(pkg.specifier) ||
       (Object.hasOwn(specifiers, pkg.specifier) && pkg.specifier !== 'velaros')
     )
       throw new AppError('CONFLICT', `能力包导入名冲突：${pkg.specifier}`)
@@ -100,10 +112,16 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
   await writeFile(
     loader,
     `const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
+const defaults = ${JSON.stringify(NodeDefaultPackages)};
+const packageParentURL = ${JSON.stringify(packageDirectory ? url(join(packageDirectory, 'package.json')) : import.meta.url)};
 export async function resolve(specifier, context, nextResolve) {
   if (Object.hasOwn(specifiers, specifier)) return {url:specifiers[specifier], shortCircuit:true};
   if (specifier.startsWith('velaros:')) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
-  return nextResolve(specifier, context);
+  try { return await nextResolve(specifier, context); }
+  catch (error) {
+    if (error.code !== 'ERR_MODULE_NOT_FOUND' || error.url || !defaults.some(name => specifier === name || specifier.startsWith(name+'/'))) throw error;
+    return nextResolve(specifier, {...context, parentURL:packageParentURL});
+  }
 }
 `,
     { mode: 0o600 }

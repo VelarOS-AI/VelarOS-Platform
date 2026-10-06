@@ -37,7 +37,7 @@ export function contextTextChange(
         return JSON.stringify({ checked: parsed.checked, result })
       }
     } catch {
-      // 普通文本和不完整 JSON 片段直接比较，恢复依然使用原记录。
+      // arch-guard:silent-catch-ok 普通文本和不完整 JSON 片段直接比较，恢复依然使用原记录。
     }
     return value.text
   }

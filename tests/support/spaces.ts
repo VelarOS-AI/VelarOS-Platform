@@ -12,18 +12,16 @@ import type {
   CapabilityOperationContext,
   CapabilityOperationTable,
 } from '../../packages/script/src/index'
-import type { FileOperationContext } from '../../packages/velaros/files/index'
-import { fileOperations } from '../../packages/velaros/files/index'
-import { VelarFilesModule } from '../../packages/velaros/files/contracts'
-import { createLocalFilePort } from '../../packages/velaros/files/local'
+import type { ShellHostPort } from '../../packages/velaros/execution/index'
+import { VelarImagesModule } from '../../packages/velaros/images/contracts'
 import type {
   ImageAttachment,
   ImageOperationContext,
   ImageSpacePort,
 } from '../../packages/velaros/images/index'
 import { imageOperations } from '../../packages/velaros/images/index'
-import { VelarImagesModule } from '../../packages/velaros/images/contracts'
 import { createLocalImagePort } from '../../packages/velaros/images/local'
+import { VelarCodeModule, VelarProjectModule } from '../../packages/velaros/project/contracts'
 import type {
   CodeAnalysisInput,
   CodeQueryInput,
@@ -42,21 +40,13 @@ import {
   projectCodeOperations,
   projectFileOperations,
 } from '../../packages/velaros/project/index'
-import { VelarCodeModule, VelarProjectModule } from '../../packages/velaros/project/contracts'
+import { VelarSandboxModule } from '../../packages/velaros/sandbox/contracts'
 import type {
   RehearsalSandboxHostPort,
   SandboxOperationContext,
   SandboxSurfacePort,
 } from '../../packages/velaros/sandbox/index'
 import { sandboxOperations } from '../../packages/velaros/sandbox/index'
-import { VelarSandboxModule } from '../../packages/velaros/sandbox/contracts'
-import type {
-  ShellHostPort,
-  ShellOperationContext,
-  ShellSpacePort,
-} from '../../packages/velaros/shell/index'
-import { shellOperations } from '../../packages/velaros/shell/index'
-import { VelarShellModule } from '../../packages/velaros/shell/contracts'
 
 /** 测试装配的公开能力说明。 */
 export interface MountedCapabilityModule {
@@ -95,18 +85,10 @@ function attachImageOf(
 
 /** 共用能力的操作表：三件在两个空间里一样，只有端口不同。 */
 function sharedOperations(
-  shell: (context: CapabilityOperationContext) => Promise<ShellOperationContext>,
   sandbox: (context: CapabilityOperationContext) => Promise<SandboxOperationContext>,
   images: (context: CapabilityOperationContext) => Promise<ImageOperationContext>
 ): CapabilityOperationTable {
   return {
-    shell: {
-      run: async (input, context) => shellOperations.run(input, await shell(context)),
-      listTasks: async (input, context) => shellOperations.listTasks(input, await shell(context)),
-      refreshEnvironment: async (_input, context) =>
-        shellOperations.refreshEnvironment(await shell(context)),
-      stop: async (input, context) => shellOperations.stop(input, await shell(context)),
-    },
     sandbox: {
       create: async (input, context) => sandboxOperations.create(input, await sandbox(context)),
       run: async (input, context) => sandboxOperations.run(input, await sandbox(context)),
@@ -120,17 +102,6 @@ function sharedOperations(
   }
 }
 
-/** 给 shell 的上下文带上会话（给了才带：后台任务按它登记与核对归属）。 */
-function shellContextOf(call: SystemSpaceCall, shell: ShellSpacePort): ShellOperationContext {
-  const context: ShellOperationContext = {
-    abortSignal: call.abortSignal,
-    approval: call.approval,
-    shell,
-  }
-  if (call.sessionId) context.sessionId = call.sessionId
-  return context
-}
-
 /**
  * 装一个系统空间：`shell` 是本机 shell 宿主（或者测试替身，要有 `resolvePath`），`sandbox` 是本机演练沙箱（不给就没有沙箱）。
  * 文件与看图的端口用本机实现，路径都经 `shell.resolvePath` 解析；命令在本机任意目录跑，确认文案说在哪个目录。
@@ -142,20 +113,7 @@ export function systemSpace(input: {
 }): TestSpace {
   const host = input.shell
   const resolvePath = (path?: string) => host.resolvePath(path)
-  const files = createLocalFilePort({ resolvePath })
   const imagePort = createLocalImagePort({ resolvePath })
-  const shellPort: ShellSpacePort = {
-    resolveCwd: async (cwd) => resolvePath(cwd),
-    commandPolicy: (cwd) => ({
-      scopeLabel: cwd ?? '系统运行环境',
-      riskScope: 'system-command:dangerous',
-    }),
-    runCommand: (command, options, allowDangerous, abortSignal) =>
-      host.runCommand(command, options, allowDangerous, abortSignal),
-    listBackgroundTasks: (options) => host.listBackgroundTasks(options),
-    refreshShellEnvironment: () => host.refreshShellEnvironment(),
-    terminateBackgroundTask: (request) => host.terminateBackgroundTask(request),
-  }
   const sandboxHost = (): RehearsalSandboxHostPort => {
     if (!input.sandbox) throw new Error('这个测试空间没有接演练沙箱')
     return input.sandbox
@@ -170,24 +128,13 @@ export function systemSpace(input: {
   }
   const call = (context: CapabilityOperationContext) =>
     Promise.resolve(input.resolveCall(context.signal))
-  const fileContext = async (
-    context: CapabilityOperationContext
-  ): Promise<FileOperationContext> => ({ abortSignal: (await call(context)).abortSignal, files })
   return {
     modules: [
-      { surface: VelarFilesModule, resident: true },
-      { surface: VelarShellModule, resident: true },
       { surface: VelarImagesModule, resident: false },
       { surface: VelarSandboxModule, resident: false },
     ],
     operations: {
-      files: {
-        read: async (input, context) => fileOperations.read(input, await fileContext(context)),
-        edit: async (input, context) => fileOperations.edit(input, await fileContext(context)),
-        undo: async (input, context) => fileOperations.undo(input, await fileContext(context)),
-      },
       ...sharedOperations(
-        async (context) => shellContextOf(await call(context), shellPort),
         async (context) => {
           const current = await call(context)
           return {
@@ -226,7 +173,6 @@ export function projectSpace(input: { resolveCall: Resolve<ProjectSpaceCall> }):
   return {
     modules: [
       { surface: VelarProjectModule, resident: true },
-      { surface: VelarShellModule, resident: true },
       { surface: VelarCodeModule, resident: false },
       { surface: VelarSandboxModule, resident: false },
       { surface: VelarImagesModule, resident: false },
@@ -259,13 +205,6 @@ export function projectSpace(input: { resolveCall: Resolve<ProjectSpaceCall> }):
           projectCodeOperations.analyze(input as CodeAnalysisInput, await toolContext(context)),
       },
       ...sharedOperations(
-        async (context) => {
-          const current = await call(context)
-          return shellContextOf(
-            current,
-            projectCapabilityPorts.shell(current.project, current.abortSignal)
-          )
-        },
         async (context) => {
           const current = await call(context)
           return {

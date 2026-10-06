@@ -346,7 +346,7 @@ test('INV-40 动态字面量路径在任何能力副作用前预检并保留目�
       declarations: "declare module 'velaros:proof' { export function read(): Promise<number> }",
     },
   ]
-  for (const target of ['./missing.js', 'velaros/shell', 'node:fs']) {
+  for (const target of ['./missing.js', 'velaros/execution', 'node:fs']) {
     const result = await session.submit({
       program: {
         source: `import {read} from 'velaros:proof'; await read(); await import(${JSON.stringify(target)})`,

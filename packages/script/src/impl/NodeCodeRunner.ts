@@ -55,13 +55,6 @@ class NodeCodeRunner implements CodeRunnerApi {
     if (signal?.aborted) return failure('ABORTED', '执行已取消。')
     if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0)
       return failure('TIMEOUT', '需要有限的执行时限。')
-    if (
-      request.language === 'shell' &&
-      (!isUndefined(request.input) ||
-        !isEmpty(Object.keys(request.modules)) ||
-        !isEmpty(Object.keys(request.blobs)))
-    )
-      return failure('VALIDATION', 'Shell 程序使用命令正文和普通文件传递数据')
     const controller = new AbortController()
     const cancel = () => controller.abort(signal?.reason)
     signal?.addEventListener('abort', cancel, { once: true })
@@ -308,14 +301,20 @@ class NodeCodeRunner implements CodeRunnerApi {
       controller.signal.throwIfAborted()
       outputFile = join(directory, 'output.ndjson')
       await writeFile(outputFile, '', { mode: 0o600 })
-      const program = await nodeProgramSource(request, catalog, this.options.cwd, clients)
+      const program = await nodeProgramSource(
+        request,
+        catalog,
+        this.options.cwd,
+        clients,
+        this.options.packageDirectory
+      )
       const processRequest = {
         source: request.source,
         language: request.language,
         mode: request.mode,
-        bootstrap: request.language === 'shell' ? undefined : program.bootstrap,
+        bootstrap: program.bootstrap,
         preload: program.preload,
-        entrypoint: request.language === 'shell' ? undefined : program.entrypoint,
+        entrypoint: program.entrypoint,
         cwd: this.options.cwd,
         sessionId: request.host?.sessionId,
         executionId: request.host?.executionId,
@@ -409,7 +408,7 @@ class NodeCodeRunner implements CodeRunnerApi {
               ? describeChildExit(result.exitCode, result.stderr)
               : {
                   code,
-                  message: `${request.language === 'shell' ? 'Shell' : 'Node'} 执行失败：${code}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
+                  message: `Node 执行失败：${code}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
                 })
         ),
       }

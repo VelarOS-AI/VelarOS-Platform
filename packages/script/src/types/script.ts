@@ -27,10 +27,10 @@ export interface CodeProgramEdit {
  * 走 `blobs` 只有一层；脚本里按名字引用（`blobs.patch`）。
  */
 export interface CodeProgramRequest {
-  /** 默认 Node.js ESM；shell 将正文直接交给宿主命令解释器。 */
-  language?: 'node' | 'shell'
+  /** 标准 Node.js ESM。 */
+  language?: 'node'
   /**
-   * Node 正文是 **JavaScript ES 模块**：支持普通 `import`、顶层 `await` 与 `export`；shell 正文是原始命令。
+   * 正文是 **JavaScript ES 模块**：支持普通 `import`、顶层 `await` 与 `export`。
    *
    * 写 JavaScript 而不是 TypeScript：执行之前只查语法、核对每个 import 落得到，不查类型；
    * 字段名拼错、入参形状错由运行时当场报（能力的入参按 schema 校验，写错的那次调用不生效）。
@@ -239,7 +239,7 @@ export interface NodeProcessRequest {
   readonly preload?: string
   /** 宿主生成的启动文件；使用文件入口使 fork 可以直接继承普通 Node 参数。 */
   readonly entrypoint?: string
-  readonly language?: 'node' | 'shell'
+  readonly language?: 'node'
   /** 宿主选择的权限，不由模型源码决定。 */
   readonly mode?: 'execute' | 'observe'
   readonly source: string

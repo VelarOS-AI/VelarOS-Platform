@@ -1667,14 +1667,14 @@ test('INV-62 a segment base follows early inputs without separating native calls
     content: 'Read current source',
     toolExchange: {
       text: 'Read current source',
-      calls: [{ id: 'c1', name: 'node', input: { code: 'console.log(1)' } }],
-      results: [{ id: 'c1', name: 'node', output: { resultRef: 'result-4' } }],
+      calls: [{ id: 'c1', name: 'exec', input: { code: 'console.log(1)' } }],
+      results: [{ id: 'c1', name: 'exec', output: { resultRef: 'result-4' } }],
     },
   }
   const result = {
     role: 'user',
     content: '1',
-    toolResult: { callId: 'c1', toolName: 'node' },
+    toolResult: { callId: 'c1', toolName: 'exec' },
   }
   const history = {
     messages: [call, result],

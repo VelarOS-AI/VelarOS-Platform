@@ -2,7 +2,7 @@
 
 import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { ShellLimits } from '@velaros-ai/velaros/shell/contracts'
+import { ShellLimits } from '@velaros-ai/velaros/execution/contracts'
 
 import { RehearsalSandboxLimits } from '../contract/constants.js'
 
@@ -17,7 +17,7 @@ export function sandboxIdOf(value: unknown): string {
   return value
 }
 
-/** 镜像里一条命令的超时：不给交宿主用它的缺省，给了钳进 `velaros:shell` 同一个上限（钳而不拒，超了按上限跑）。 */
+/** 镜像里一条命令的超时：不给交宿主用它的缺省，给了钳进 `execution 宿主` 同一个上限（钳而不拒，超了按上限跑）。 */
 export function sandboxTimeoutOf(value: Optional<number>): Optional<number> {
   return isUndefined(value)
     ? undefined

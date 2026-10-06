@@ -107,16 +107,13 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     blobs: 'blobs',
     observe: 'observe',
     execute: 'execute',
-    shell: 'shell',
     done: 'done',
     ...options.names,
   }
   if (
-    Object.keys(names).some(
-      (key) => !['blobs', 'observe', 'execute', 'shell', 'done'].includes(key)
-    ) ||
+    Object.keys(names).some((key) => !['blobs', 'observe', 'execute', 'done'].includes(key)) ||
     Object.values(names).some((name) => !isString(name) || !/^[A-Za-z_$][\w$]*$/u.test(name)) ||
-    new Set(Object.values(names)).size !== 5
+    new Set(Object.values(names)).size !== 4
   )
     throw protocolFailure('协议声明名称必须合法且唯一')
   for (const name of Object.values(names))
@@ -137,7 +134,7 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     limits.concurrency > 16
   )
     throw protocolFailure('协议预算超出范围')
-  const allowed = options.allowed ?? ['blobs', 'observe', 'execute', 'shell', 'done']
+  const allowed = options.allowed ?? ['blobs', 'observe', 'execute', 'done']
   if (
     !allowed.length ||
     new Set(allowed).size !== allowed.length ||
@@ -199,7 +196,7 @@ export function protocolRules(options: ScriptProtocolOptions): string {
   const { names, maxBlocks, allowed, defaultRetain } = protocolConfig(options)
   if (options.presentation === 'node')
     return [
-      `用本帧标记后的 ${names.execute}() 开始 Node.js ESM${allowed.includes('shell') ? `，或 ${names.shell}() 开始 Shell 命令` : ''}；以独立一行的同一标记闭合，结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。`,
+      `用本帧标记后的 ${names.execute}() 开始 Node.js ESM；以独立一行的同一标记闭合，结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。`,
       allowed.includes('observe')
         ? `${names.observe}() 注册持续只读 Node 观察；可通过普通程序参数提供 input、blobs 或 sourceRef。`
         : '',
@@ -249,9 +246,6 @@ export function protocolInstructions(
   if (options.presentation === 'node')
     return [
       `当前帧标记：${marker}。允许：${allowed.map((kind) => names[kind]).join(', ')}。`,
-      allowed.includes('shell')
-        ? `Shell：\n${marker} ${names.shell}()\n# Shell 命令\n${marker}`
-        : '',
       `Node：\n${marker} ${names.execute}()\n// Node.js ESM\n${marker}\n任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`,
       !isEmpty(Object.keys(inputs))
         ? `宿主参数：${Object.keys(inputs)

@@ -2,7 +2,7 @@
  * 验收测试与实现测试共用的替身，两个都装着真内核：
  * - `createProjectHarness`：两件工具的假空间。两件工具只经根入口拿（projectFileOperations、projectCodeOperations、createProjectKernel），
  *   两件工具不问人，所以这个空间里没有审批端口，也没有授权口子。
- * - `createProjectPortsHarness`：一个假宿主（`ProjectHostPort`），三件共用能力（`velaros:shell`、`velaros:sandbox`、`velaros:images`）的操作
+ * - `createProjectPortsHarness`：一个假宿主（`ProjectHostPort`），三件共用能力（`execution 宿主`、`velaros:sandbox`、`velaros:images`）的操作
  *   配上 `projectCapabilityPorts` 现装的项目端口——产品装项目空间时就是这样接的。审批（只有危险命令会问）与交给宿主的命令都记下来。
  * 调用都走代码面的能力端口（createCapabilityPort），和模型的程序是同一条路：失败时程序只看得见 code 与 message。
  */
@@ -11,6 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ApprovalPort } from '@velaros-ai/kernel'
 import type { CapabilityOperationContext, CodeAttachment } from '@velaros-ai/script'
 import { createCapabilityPort } from '@velaros-ai/script'
+import type { ShellCommandResult } from '@velaros-ai/velaros/execution'
 import type { ImageAttachment, ImageOperationContext } from '@velaros-ai/velaros/images'
 import { imageOperations } from '@velaros-ai/velaros/images'
 import type {
@@ -20,12 +21,6 @@ import type {
   SandboxRecord,
 } from '@velaros-ai/velaros/sandbox'
 import { sandboxOperations } from '@velaros-ai/velaros/sandbox'
-import type {
-  ShellCommandResult,
-  ShellOperationContext,
-  ShellRunCommandOptions,
-} from '@velaros-ai/velaros/shell'
-import { shellOperations } from '@velaros-ai/velaros/shell'
 
 import {
   type CodeAnalysisInput,
@@ -140,19 +135,11 @@ export interface RecordedConfirmation {
   options?: Parameters<ApprovalPort['awaitConfirmation']>[2]
 }
 
-/** 一次交给宿主的命令：命令、选项（工作目录是项目端口解析好的）、是不是用户确认过的危险命令。 */
-export interface HostRun {
-  command: string
-  options?: ShellRunCommandOptions
-  allowDangerous?: boolean
-}
-
 /** 假宿主的开关：用户点不点确认、宿主怎么回命令、有没有演练沙箱与缩图口子、交图走哪条通道。 */
 export interface ProjectPortsHarnessOptions {
   /** 用户点不点确认（只有危险命令会问）；缺省点头。 */
   approve?: boolean
   /** 宿主怎么回一条命令（交到这里的每一条都先记进 `runs`）；缺省交回成功的空回执。 */
-  runCommand?: ProjectHostPort['runCommand']
   /** 宿主的演练沙箱：不给就是这台机器上没有沙箱。 */
   sandbox?: RehearsalSandboxHostPort
   /** 宿主的缩图口子：不给就是宿主没有图像处理能力。 */
@@ -201,7 +188,6 @@ export async function createProjectPortsHarness(
 ) {
   const kernel = await createProjectKernel({ root })
   const confirmations: RecordedConfirmation[] = []
-  const runs: HostRun[] = []
   const attachments: CodeAttachment[] = []
   const approved = options.approve !== false
   const approval: ApprovalPort = {
@@ -214,39 +200,16 @@ export async function createProjectPortsHarness(
       return { approved, message: approved ? null : '用户拒绝了这次操作。', autoApproved: false }
     },
   }
-  const respond: ProjectHostPort['runCommand'] =
-    options.runCommand ??
-    (async (command, runOptions) => commandResult(command, runOptions?.cwd ?? root))
   const host: ProjectHostPort = {
     getRootPath: () => root,
     kernel: async () => kernel,
     queryCode: async () => ({}),
-    runCommand: async (command, runOptions, allowDangerous, signal) => {
-      runs.push({ command, options: runOptions, allowDangerous })
-      return respond(command, runOptions, allowDangerous, signal)
-    },
-    listBackgroundTasks: async () => [],
-    refreshShellEnvironment: async () => ({ shell: '/bin/sh', variableCount: 0, refreshedAt: 0 }),
-    terminateBackgroundTask: async () => ({
-      terminated: false,
-      statusAfter: 'unknown',
-      message: '这个用例没接后台任务',
-    }),
   }
   if (options.sandbox) host.sandbox = options.sandbox
   if (options.resizeImage) host.resizeImage = options.resizeImage
   const sessionId = options.sessionId ?? 'project-ports'
   const signalOf = (call: CapabilityOperationContext): AbortSignal =>
     call.signal ?? new AbortController().signal
-  const shell = (call: CapabilityOperationContext): ShellOperationContext => {
-    const abortSignal = signalOf(call)
-    return {
-      abortSignal,
-      approval,
-      shell: projectCapabilityPorts.shell(host, abortSignal),
-      sessionId,
-    }
-  }
   const sandbox = (call: CapabilityOperationContext): SandboxOperationContext => {
     const abortSignal = signalOf(call)
     return { abortSignal, approval, sandbox: projectCapabilityPorts.sandbox(host, abortSignal) }
@@ -258,12 +221,6 @@ export async function createProjectPortsHarness(
     attachImage: options.attachImage ?? ((image) => call.attach({ type: 'image-data', ...image })),
   })
   const port = createCapabilityPort({
-    shell: {
-      run: async (input, call) => shellOperations.run(input, shell(call)),
-      listTasks: async (input, call) => shellOperations.listTasks(input, shell(call)),
-      refreshEnvironment: async (_input, call) => shellOperations.refreshEnvironment(shell(call)),
-      stop: async (input, call) => shellOperations.stop(input, shell(call)),
-    },
     sandbox: {
       create: async (input, call) => sandboxOperations.create(input, sandbox(call)),
       run: async (input, call) => sandboxOperations.run(input, sandbox(call)),
@@ -289,7 +246,7 @@ export async function createProjectPortsHarness(
       }) as ProgramFailure
     return throughJson(outcome.value) as T
   }
-  return { kernel, host, call, confirmations, runs, attachments, sessionId }
+  return { kernel, host, call, confirmations, attachments, sessionId }
 }
 
 /**

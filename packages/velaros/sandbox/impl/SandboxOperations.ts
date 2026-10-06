@@ -6,7 +6,7 @@
 
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { ShellLimits } from '@velaros-ai/velaros/shell/contracts'
+import { ShellLimits } from '@velaros-ai/velaros/execution/contracts'
 
 import type { SandboxOperationContext } from '../contract/requires.js'
 import type {
@@ -103,7 +103,7 @@ export class SandboxOperations implements SandboxOperationsApi {
     if (request)
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     ctx.abortSignal.throwIfAborted()
-    // 输出不折叠：跟 velaros:shell 同一个只守内存的上限。
+    // 输出不折叠：跟 execution 宿主 同一个只守内存的上限。
     const outcome = await ctx.sandbox.runInSandbox(
       {
         sandboxId: id,

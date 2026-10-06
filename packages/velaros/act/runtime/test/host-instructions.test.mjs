@@ -48,7 +48,7 @@ test('base instructions stay small while authorized packages are discoverable on
     })
     for await (const event of f.session.submit('Translate 今天晴天.'))
       assert.notEqual(event.type, 'error')
-    assert.match(instructions, /Shell 和 Node/)
+    assert.match(instructions, /Node.js/)
     assert.match(instructions, /index.json/)
     assert(instructions.length < 1800)
     const result = await f.session.execute({
@@ -143,7 +143,7 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   const events = []
   for await (const event of f.session.submit('user-text-only')) events.push(event)
   assert.match(frames[0].instructions, /host-language-first/)
-  assert.match(frames[0].instructions, /Shell 和 Node/)
+  assert.match(frames[0].instructions, /Node.js/)
   assert.match(frames[0].compiledPrompt, /当前帧标记/)
   const turn = events.find((event) => event.type === 'turn')
   const trace = await f.session.trace(turn.turnId)
@@ -516,7 +516,7 @@ test('every frame carries the local clock and host environment entries in runtim
   assert(Math.abs(Date.parse(environment.time) - Date.now()) < 60_000)
   assert.match(environment.localTime, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [A-Z][a-z]+day$/)
   assert.equal(environment.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone)
-  assert.match(frames[0].instructions, /Shell 和 Node/)
+  assert.match(frames[0].instructions, /Node.js/)
 })
 
 test('a failing host environment drops only its own entries and the run goes on', async (t) => {

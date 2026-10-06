@@ -1,6 +1,13 @@
 import type { AssistantModelMessage, JSONValue, LanguageModel, ModelMessage } from 'ai'
 
-import { isArray, isPlainObject, isString, isUndefined, optionalWhen } from '@velaros-ai/core'
+import {
+  isArray,
+  isPlainObject,
+  isString,
+  isUndefined,
+  optionalWhen,
+  optionalWhenLazy,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelContinuation, ModelHistoryMessage, ModelToolCall } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -87,7 +94,10 @@ export function restoreResponseContinuations(
             message,
             {
               role: 'tool',
-              ...(breakpoint ? { providerOptions: marked[breakpoint.index]!.providerOptions } : {}),
+              providerOptions: optionalWhenLazy(
+                breakpoint,
+                () => marked[breakpoint!.index]!.providerOptions
+              ),
               content: exchange.results.map((item) => ({
                 type: 'tool-result',
                 toolCallId: item.id,

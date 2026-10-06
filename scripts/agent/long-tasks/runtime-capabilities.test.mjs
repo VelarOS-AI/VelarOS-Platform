@@ -6,12 +6,12 @@ import { test } from 'node:test'
 
 import {
   createRuntime,
-  createShellNodeEnvironment,
+  createNodeExecutionEnvironment,
 } from '../../../packages/velaros/dist/act/runtime/index.js'
-import { createLocalShellHost } from '../../../packages/velaros/dist/shell/local.js'
+import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
 import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
 
-for (const mode of ['on-demand', 'shell-node'])
+for (const mode of ['on-demand', 'node'])
   for (const taskMode of ['request', 'goal'])
     test(`capability and task modes reach the real Node catalog and lifecycle: ${mode}/${taskMode}`, async (t) => {
       const root = await mkdtemp(join(tmpdir(), 'velaros-capability-mode-'))
@@ -30,7 +30,7 @@ for (const mode of ['on-demand', 'shell-node'])
         dataDir: join(root, 'data'),
         memory: false,
         ...runtimeCapabilityOptions(mode),
-        node: createShellNodeEnvironment({ cwd, directory: join(root, 'runs'), shell }),
+        node: createNodeExecutionEnvironment({ cwd, directory: join(root, 'runs'), host: shell }),
         model: {
           id: 'offline-capability-check',
           nativeTools: true,
@@ -43,7 +43,7 @@ for (const mode of ['on-demand', 'shell-node'])
                 type: 'tool-call',
                 value: {
                   id: 'goal-completion',
-                  name: 'node',
+                  name: 'exec',
                   input: {
                     code: "import {goal} from 'velaros:system'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'已验证测试夹具'});",
                   },
@@ -65,10 +65,10 @@ for (const mode of ['on-demand', 'shell-node'])
       for (const name of ['velaros:project', 'velaros:code', 'velaros:agents', 'velaros:search'])
         assert.equal(modules.includes(name), mode === 'on-demand', name)
       const command = await session.execute({
-        language: 'shell',
-        source: 'printf shell-capability-check',
+        source:
+          "import {execa} from 'execa';console.log((await execa(process.execPath,['-p','21*2'])).stdout)",
       })
-      assert.equal(command.result.process.stdout, 'shell-capability-check')
+      assert.equal(command.result.process.stdout.trim(), '42')
       const objective = 'Finish the fixture'
       for await (const event of session.submit(
         objective,
@@ -85,7 +85,7 @@ for (const mode of ['on-demand', 'shell-node'])
       } else assert.equal(goal, null)
       assert.deepEqual(
         requests[0].response.tools.map((tool) => tool.name),
-        ['shell', 'node']
+        ['exec']
       )
       assert.equal(requests[0].instructions.includes('velaros:agents'), mode === 'on-demand')
       assert.equal(requests[0].instructions.includes('velaros:search'), mode === 'on-demand')

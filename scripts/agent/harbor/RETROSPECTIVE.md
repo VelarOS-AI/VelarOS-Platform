@@ -128,7 +128,7 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 离线核对真实 Shell 环境、工作目录、工具可用性和后续成功调用；优先减少失败后再问模型的往返，不向通用运行时硬编码某道题的工具路径。
 
-实现与回归：[ShellOperations.ts](../../../packages/velaros/shell/impl/ShellOperations.ts)、[run.mjs](../../../scripts/agent/harbor/run.mjs)。
+实现与回归：ShellOperations.ts（Git 源码 `d3b6c5cd:packages/velaros/shell/impl/ShellOperations.ts`）、[run.mjs](../../../scripts/agent/harbor/run.mjs)。
 
 证据：validation-39-go-path-diagnosis.json（`.velaros-workspace/bench/campaign/validation-39-go-path-diagnosis.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-40-scriptact-1/instance_future-architect__vuls__xTPWiHH/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-47-scriptact-1/instance_navidrome__navidrome-e1__DSyTCq6/agent/traces.json`）。
 
@@ -198,7 +198,7 @@ segment 租约与冻结历史已有修复。显式释放是允许的状态变化
 
 Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错误线索。
 
-实现与回归：[OperationRuntime.ts](../../../packages/kernel/src/impl/runtime/OperationRuntime.ts)、[results.ts](../../../packages/velaros/shell/utils/results.ts)、[operation-diagnostics.test.ts](../../../packages/kernel/spec/operation-diagnostics.test.ts)。
+实现与回归：[OperationRuntime.ts](../../../packages/kernel/src/impl/runtime/OperationRuntime.ts)、results.ts（Git 源码 `d3b6c5cd:packages/velaros/shell/utils/results.ts`）、[operation-diagnostics.test.ts](../../../packages/kernel/spec/operation-diagnostics.test.ts)。
 
 证据：command-feedback-20-local-validation.json（`.velaros-workspace/bench/campaign/command-feedback-20-local-validation.json`）。
 
@@ -278,7 +278,7 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 命令策略已有分类修复和真实 Shell 回归，真实前台服务及显式后台语义保留。
 
-实现与回归：[command-policy.ts](../../../packages/velaros/shell/utils/command-policy.ts)、[shell-command.test.ts](../../../packages/velaros/shell/test/shell-command.test.ts)。
+实现与回归：command-policy.ts（Git 源码 `d3b6c5cd:packages/velaros/shell/utils/command-policy.ts`）、shell-command.test.ts（Git 源码 `d3b6c5cd:packages/velaros/shell/test/shell-command.test.ts`）。
 
 证据：validation-36-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-36-scriptact-final-diagnosis.json`）、validation-37-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-37-scriptact-final-diagnosis.json`）。
 

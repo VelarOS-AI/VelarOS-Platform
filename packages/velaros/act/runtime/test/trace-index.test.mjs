@@ -169,7 +169,7 @@ test('observation summaries say what a turn registered and which run fed its req
     search: false,
     memory: false,
     context: { maintenance: false },
-    protocol: { allowed: ['shell', 'execute', 'observe', 'done'] },
+    protocol: { allowed: ['execute', 'observe', 'done'] },
     model: {
       id: 'trace-observation',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },

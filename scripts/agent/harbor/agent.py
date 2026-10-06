@@ -71,7 +71,7 @@ tar -xzf /tmp/scriptact-agent.tar.gz -C /opt/velaros-scriptact
 rm /tmp/scriptact-agent.tar.gz
 chmod -R a+rX /opt/velaros-scriptact
 cd /opt/velaros-scriptact
-node/bin/node --input-type=module -e "await import('@velaros-ai/velaros'); await import('@velaros-ai/velaros/shell/local')"
+node/bin/node --input-type=module -e "await import('@velaros-ai/velaros'); await import('@velaros-ai/velaros/execution/local')"
 """, timeout_sec=180)
             self.identity = {**self.identity, "portable": metadata}
             return
@@ -102,7 +102,7 @@ unzip -q bun.zip
 rm bun.zip
 export PATH="/opt/velaros-scriptact/node/bin:/opt/velaros-scriptact/bun-linux-${bun_arch}:$PATH"
 bun install --production --ignore-scripts --frozen-lockfile
-node --input-type=module -e "await import('@velaros-ai/velaros'); await import('@velaros-ai/velaros/shell/local')"
+node --input-type=module -e "await import('@velaros-ai/velaros'); await import('@velaros-ai/velaros/execution/local')"
 chmod -R a+rX /opt/velaros-scriptact
 """, timeout_sec=600)
 

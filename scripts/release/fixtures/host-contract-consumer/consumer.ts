@@ -1,43 +1,31 @@
-import { createActRunService, type ActRunEvent, type ActRunServiceOptions } from '@velaros-ai/agent'
+import { createActRunService,type ActRunEvent,type ActRunServiceOptions } from '@velaros-ai/agent'
 import type { ApprovalPort } from '@velaros-ai/kernel'
-import { createRuntime, type VelarosRuntimeOptions } from '@velaros-ai/velaros'
 import { createModelRequestClient } from '@velaros-ai/model'
-import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/velaros/project'
-import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
-import { createCapabilityPort } from '@velaros-ai/script'
-import { FileLimits } from '@velaros-ai/velaros/files/contracts'
-import { createLocalFilePort } from '@velaros-ai/velaros/files/local'
-import { officeOperations, type OfficeOperationContext } from '@velaros-ai/velaros/office'
-import type { OfficeEnvironmentInspection, OfficeWritten } from '@velaros-ai/velaros/office/contracts'
+import { createNodeExecutionEnvironment,createRuntime,type VelarosRuntimeOptions } from '@velaros-ai/velaros'
+import { ComputerInputLimits,type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
+import { shellCommandPolicy,type LocalShellHostApi } from '@velaros-ai/velaros/execution'
+import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import {
-  createMemoryStore,
-  memoryOperations,
-  type MemoryOperationContext,
-  type MemoryScopeApi,
-  type MemoryStoreApi,
+createMemoryStore,
+memoryOperations,
+type MemoryOperationContext,
+type MemoryScopeApi,
+type MemoryStoreApi,
 } from '@velaros-ai/velaros/memory'
-import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velaros/project'
-import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velaros/shell'
-import { webOperations, type WebOperationContext, type WebPage, type WebSpacePort } from '@velaros-ai/velaros/web'
-import { sessionsOperations, type SessionsOperationContext, type SessionsSpacePort } from '@velaros-ai/velaros/sessions'
-import type { SessionAnswer, SessionPeer, SessionTold } from '@velaros-ai/velaros/sessions/contracts'
-import type { WebPageText, WebSearchResults } from '@velaros-ai/velaros/web/contracts'
-import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
+import { officeOperations,type OfficeOperationContext } from '@velaros-ai/velaros/office'
+import type { OfficeEnvironmentInspection,OfficeWritten } from '@velaros-ai/velaros/office/contracts'
+import { languageQueries,projectCapabilityPorts,type LanguageReadPort,type LanguageToolContext,type ProjectHostPort } from '@velaros-ai/velaros/project'
+import { sessionsOperations,type SessionsOperationContext,type SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type { SessionAnswer,SessionPeer,SessionTold } from '@velaros-ai/velaros/sessions/contracts'
+import { webOperations,type WebOperationContext,type WebPage,type WebSpacePort } from '@velaros-ai/velaros/web'
+import type { WebPageText,WebSearchResults } from '@velaros-ai/velaros/web/contracts'
 
 // 空间由宿主自己装：共用能力的项目端口从 projectCapabilityPorts 取，本机实现从各单元的 `./local` 入口取，再接成代码面的能力端口。
 declare const projectHost: ProjectHostPort
 declare const approval: ApprovalPort
 const localShell: LocalShellHostApi = createLocalShellHost({ cwd: '/workspace/example' })
-const machineFiles = createLocalFilePort({ resolvePath: (path) => localShell.resolvePath(path) })
-const projectCapabilities = createCapabilityPort({
-  shell: {
-    run: async (input, context) => {
-      const abortSignal = context.signal ?? new AbortController().signal
-      return shellOperations.run(input, { abortSignal, approval, shell: projectCapabilityPorts.shell(projectHost, abortSignal) })
-    },
-  },
-})
-void [projectCapabilities.listOperations(), machineFiles.locate('~/notes.md'), shellCommandPolicy.analyze('ls -la').isReadOnly, FileLimits.fileBytes]
+const node = createNodeExecutionEnvironment({cwd:'/workspace/example', directory:'/tmp/host-contract',host:localShell})
+void [node, shellCommandPolicy.analyze('ls -la').isReadOnly, projectCapabilityPorts.images(projectHost)]
 
 declare const source: LanguageReadPort
 const languageContext: LanguageToolContext = {

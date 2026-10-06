@@ -41,6 +41,7 @@ export type { ProjectContextSourceApi } from '../impl/operations/ProjectContextS
  */
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
+export type { LocalFileSearchApi } from '../impl/files/LocalFileSearch.js'
 export type { ExternalLanguageServiceApi } from '../impl/language/ExternalLanguageService.js'
 export type { LanguageQueriesApi } from '../impl/language/LanguageQueries.js'
 export type { TypeScriptProjectsApi } from '../impl/language/TypeScriptProjectPool.js'

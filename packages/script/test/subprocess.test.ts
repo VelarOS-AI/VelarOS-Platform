@@ -31,7 +31,7 @@ async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
 }
 
 describe('INV-28 宿主 Node 进程注入与回收', () => {
-  test('Shell 文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
+  test('Execa 启动文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
     fixture(async (root, directory) => {
       const cwd = join(root, '有 空格')
       await mkdir(cwd)
@@ -54,11 +54,13 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
         return { value: call.input }
       }
       const shell = await runner.run(
-        request('node saved.mjs', {
-          language: 'shell',
-          input: undefined,
-          operations: { demo: ['read'] },
-        }),
+        request(
+          "import {execa} from 'execa';console.log((await execa(process.execPath,['saved.mjs'])).stdout)",
+          {
+            input: undefined,
+            operations: { demo: ['read'] },
+          }
+        ),
         dispatch,
         log
       )
@@ -90,7 +92,10 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
       expect(forked).toMatchObject({ ok: true })
       expect(forked.process?.stdout).toContain('fork')
       const denied = await runner.run(
-        request('node saved.mjs', { language: 'shell', input: undefined }),
+        request(
+          "import {execa} from 'execa';console.log((await execa(process.execPath,['saved.mjs'])).stdout)",
+          { input: undefined }
+        ),
         dispatch,
         log
       )
@@ -138,14 +143,16 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
       expect(result.error?.code).toBe('RUNNER_CRASHED')
       expect(result.process?.stdout).toBe('partial')
     }))
-  test('真实 Node 同步失败、输出与 Shell heredoc 使用同一进程口', () =>
+  test('真实 Node 同步失败、输出与 Execa heredoc 使用同一进程口', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
       const result = await runner.run(
-        request("cat <<'EOF' > note.txt\n$notExpanded `literal`\nEOF\ncat note.txt", {
-          language: 'shell',
-          input: undefined,
-        }),
+        request(
+          "import {execaCommand} from 'execa';console.log((await execaCommand(\"cat <<'EOF' > note.txt\\n$notExpanded `literal`\\nEOF\\ncat note.txt\",{shell:true})).stdout)",
+          {
+            input: undefined,
+          }
+        ),
         noCalls,
         log
       )

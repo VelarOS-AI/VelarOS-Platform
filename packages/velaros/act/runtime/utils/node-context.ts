@@ -1,4 +1,12 @@
-import { isArray, isEmpty, isNumber, isPlainObject, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNumber,
+  isPlainObject,
+  isString,
+  isTrue,
+  isUndefined,
+} from '@velaros-ai/core'
 
 import type { MemoryFrameDisplay } from '../types/memory.js'
 
@@ -14,7 +22,7 @@ export function nodeGoalState(goal: unknown, inputs: readonly unknown[]): unknow
   for (const input of inputs) {
     if (
       !isPlainObject(input) ||
-      input.bodyInHistory !== true ||
+      !isTrue(input.bodyInHistory) ||
       !isString(input.text) ||
       !isNumber(input.offset) ||
       !Number.isSafeInteger(input.offset) ||
@@ -134,7 +142,7 @@ function nodeMaintenanceState(maintenance: unknown, items: unknown): unknown {
   const unresolved = maintenance.unresolved.map((text) => {
     if (!isString(text) || !text) return text
     const index = bodies.get(text)
-    if (index === undefined) return text
+    if (isUndefined(index)) return text
     const reference = { textAt: `/task/active/items/${index}/text` }
     return JSON.stringify(reference).length < JSON.stringify(text).length ? reference : text
   })

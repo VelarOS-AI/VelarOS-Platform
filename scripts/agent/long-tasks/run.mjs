@@ -59,10 +59,10 @@ const recovery =
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const candidate = manifest.candidate
 const importAt = (file) => import(pathToFileURL(join(candidate, 'packages', file)))
-const { createRuntime, createShellNodeEnvironment } = await importAt(
+const { createRuntime, createNodeExecutionEnvironment } = await importAt(
   'velaros/dist/act/runtime/index.js'
 )
-const { createLocalShellHost } = await importAt('velaros/dist/shell/local.js')
+const { createLocalShellHost } = await importAt('velaros/dist/execution/local.js')
 const modelPackage = await importAt('model/dist/index.js')
 const credentials = JSON.parse(await readFile(manifest.credentials, 'utf8')).chat
 const redact = (error) => String(error).replaceAll(credentials.apiKey, '[redacted]')
@@ -280,10 +280,10 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
       model,
       memory: false,
       ...capabilities,
-      node: createShellNodeEnvironment({
+      node: createNodeExecutionEnvironment({
         cwd: workspace,
         directory: join(output, 'node'),
-        shell: host,
+        host,
       }),
       modelTools: { concurrency: manifest.concurrency },
       context: { policy: { windowTokens: manifest.inputWindowTokens } },

@@ -235,14 +235,14 @@ test('advanced search uses native Node calls with evidence ownership and report 
     assert.equal(request.response.type, 'tools')
     assert.deepEqual(
       request.response.tools.map((tool) => tool.name),
-      ['node']
+      ['exec']
     )
     if (f.calls === 1) {
       yield {
         type: 'tool-call',
         value: {
           id: 'read',
-          name: 'node',
+          name: 'exec',
           input: {
             code: `import {read} from 'velaros:evidence'; import {output} from 'velaros'; output(await read({target:${JSON.stringify(target)}}));`,
           },
@@ -255,7 +255,7 @@ test('advanced search uses native Node calls with evidence ownership and report 
         type: 'tool-call',
         value: {
           id: 'report',
-          name: 'node',
+          name: 'exec',
           input: {
             code: `import {report} from 'velaros:evidence'; await report(${JSON.stringify({ findings: [{ text: 'logout located', evidenceIds: [evidence.id] }], gaps: [], nextSteps: [] })});`,
           },
@@ -285,7 +285,7 @@ for (const valid of [true, false])
         type: 'tool-call',
         value: {
           id: `step-${f.calls}`,
-          name: 'node',
+          name: 'exec',
           input: {
             code:
               f.calls === 1

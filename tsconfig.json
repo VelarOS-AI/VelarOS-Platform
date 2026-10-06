@@ -23,10 +23,9 @@
       "@velaros-ai/kernel/client": ["./packages/kernel/src/client.ts"],
       "@velaros-ai/kernel/serve": ["./packages/kernel/src/serve.ts"],
       "@velaros-ai/kernel/remote": ["./packages/kernel/src/remote.ts"],
-      "@velaros-ai/velaros/files": ["./packages/velaros/files/index.ts"],
       "@velaros-ai/velaros/images": ["./packages/velaros/images/index.ts"],
       "@velaros-ai/velaros/sandbox": ["./packages/velaros/sandbox/index.ts"],
-      "@velaros-ai/velaros/shell": ["./packages/velaros/shell/index.ts"],
+      "@velaros-ai/velaros/execution": ["./packages/velaros/execution/index.ts"],
       "@velaros-ai/velaros/project": ["./packages/velaros/project/index.ts"],
       "@velaros-ai/velaros/*": ["./packages/velaros/*"]
     }

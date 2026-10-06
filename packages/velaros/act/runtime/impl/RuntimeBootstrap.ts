@@ -25,6 +25,7 @@ import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-
 import type { CodeRunnerApi } from '@velaros-ai/script'
 import { createNodeCodeRunner, nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
+import { createLocalShellHost } from '../../../execution/local.js'
 import { createLocalImagePort } from '../../../images/local.js'
 import type { MemoryScopePort } from '../../../memory/index.js'
 import { createMemoryStore } from '../../../memory/index.js'
@@ -35,7 +36,6 @@ import {
   createProjectKernel,
   createProjectObservationProvider,
 } from '../../../project/index.js'
-import { createLocalShellHost } from '../../../shell/local.js'
 import type { VelarosSearchOptions } from '../../search/index.js'
 import { SystemCatalogLimits } from '../../system/contract/constants.js'
 import {
@@ -50,7 +50,7 @@ import type {
   VelarosRuntimeOptions,
 } from '../contract/requires.js'
 
-import { createShellNodeEnvironment } from './ShellNodeEnvironment.js'
+import { createNodeExecutionEnvironment } from './NodeExecutionEnvironment.js'
 import {
   createProjectCapabilityModule,
   createProjectCodeModule,
@@ -250,19 +250,19 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
     const node =
       options.node ??
       (!options.runner
-        ? createShellNodeEnvironment({
+        ? createNodeExecutionEnvironment({
             cwd: workspace ?? process.cwd(),
             directory: join(dataDir ?? tmpdir(), 'velaros-node'),
-            shell: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
+            host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
           })
         : undefined)
     const observationNode =
       node ??
       (options.runner === nodeSubprocessCodeRunner
-        ? createShellNodeEnvironment({
+        ? createNodeExecutionEnvironment({
             cwd: workspace ?? process.cwd(),
             directory: join(dataDir ?? tmpdir(), 'velaros-node'),
-            shell: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
+            host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
           })
         : undefined)
     const defaults = Boolean(options.workspace || (options.model && !('stream' in options.model)))
@@ -335,6 +335,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         ? createNodeCodeRunner({
             cwd: observationNode.cwd,
             directory: observationNode.directory,
+            packageDirectory: observationNode.packageDirectory,
             execute: (request, output, signal) =>
               observationNode.execute({ ...request, mode: 'observe' }, output, signal),
           })

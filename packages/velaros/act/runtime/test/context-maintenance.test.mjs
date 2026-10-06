@@ -560,7 +560,7 @@ for(const ref of [${JSON.stringify(audit.ref)},{sessionId:'unrelated',id:'secret
         }
         yield {
           type: 'tool-call',
-          value: { id: `request-read-${calls}`, name: 'node', input: { code } },
+          value: { id: `request-read-${calls}`, name: 'exec', input: { code } },
         }
         yield finish
       },
@@ -620,14 +620,14 @@ test('context maintenance publishes a validated native Node patch in one model r
       )
       assert.deepEqual(
         request.response.tools.map((tool) => tool.name),
-        ['node']
+        ['exec']
       )
       assert.equal(toolCalls, 1)
       yield {
         type: 'tool-call',
         value: {
           id: 'patch',
-          name: 'node',
+          name: 'exec',
           input: {
             code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
           },
@@ -802,7 +802,7 @@ test('native maintenance publishes a validated final-call patch without another 
         type: 'tool-call',
         value: {
           id: `step-${calls}`,
-          name: 'node',
+          name: 'exec',
           input: {
             code:
               calls === 1
@@ -851,7 +851,7 @@ test('native maintenance recovers an oversized initial projection and can read b
           type: 'tool-call',
           value: {
             id: `recover-${calls}`,
-            name: 'node',
+            name: 'exec',
             input: {
               code:
                 calls === 1
@@ -949,7 +949,7 @@ test('shared provider usage lets maintenance deliver the full original in its fi
                 {
                   type: 'tool-call',
                   toolCallId: `call-${mainCalls}-${maintenanceCalls}`,
-                  toolName: 'node',
+                  toolName: 'exec',
                   input: JSON.stringify({ code }),
                 },
               ]
@@ -1050,7 +1050,7 @@ test('native maintenance preserves large accepted evidence through the next requ
         type: 'tool-call',
         value: {
           id: `retained-material-${calls}`,
-          name: 'node',
+          name: 'exec',
           input: {
             code:
               calls === 1
@@ -1129,7 +1129,7 @@ test('native maintenance locally sizes its initial evidence using the standard p
         type: 'tool-call',
         value: {
           id: 'sized-delivery',
-          name: 'node',
+          name: 'exec',
           input: {
             code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(candidate)}));`,
           },

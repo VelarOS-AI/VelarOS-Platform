@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { AgentJob } from '@velaros-ai/agent'
 import type { ContextInputFile, ContextRef, ContextStorage } from '@velaros-ai/context'
 import { ContextLimits, createContextRuntime } from '@velaros-ai/context'
-import { isNull } from '@velaros-ai/core'
+import { isEmpty, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ParentTaskSnapshot, ParentTaskSource } from '../types/parent-task.js'
@@ -65,7 +65,7 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
             offset: chars,
             limit: ContextLimits.readChars,
           })
-          if (!part.text.length && chars < part.totalChars)
+          if (isEmpty(part.text) && chars < part.totalChars)
             throw new AppError('INVARIANT', '父任务原文归档不完整')
           chars += part.text.length
           let text = tail + part.text

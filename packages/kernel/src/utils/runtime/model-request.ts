@@ -23,8 +23,8 @@ function contextStatusView(status: ModelContextStatus) {
         mode: status.mode,
         phase: status.phase,
         history: '宿主按容量自动封存历史，已归档正文可按引用召回。',
-        ...(status.overload ? { overload: status.overload } : {}),
-        ...(status.stall ? { stall: status.stall } : {}),
+        overload: status.overload,
+        stall: status.stall,
       }
     : status
 }

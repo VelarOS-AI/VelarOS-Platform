@@ -1,5 +1,7 @@
 import type { LanguageModel, ModelMessage } from 'ai'
 
+import { isEmpty, isUndefined } from '@velaros-ai/core'
+
 import type { ModelTurnRequest } from '../../types/driver.js'
 import type { ModelInputSample, ModelTextEncoding } from '../../types/requests.js'
 import { estimateRequestInput, modelTextEncoding } from '../../utils/request-estimate.js'
@@ -45,7 +47,7 @@ export class ModelInputEstimator implements ModelInputEstimatorApi {
       )
     const counter = await this.counter
     let textTokens: Optional<number>
-    const calibrated = Boolean(counter && this.samples.length && generation === this.generation)
+    const calibrated = Boolean(counter && !isEmpty(this.samples) && generation === this.generation)
     const estimate = estimateRequestInput(request, restored, (text, bytes) => {
       textTokens = counter?.(text)
       return calibrated
@@ -63,7 +65,7 @@ export class ModelInputEstimator implements ModelInputEstimatorApi {
   public record(sample: ModelInputSample, inputTokens: number): void {
     if (
       sample.generation !== this.generation ||
-      sample.textTokens === undefined ||
+      isUndefined(sample.textTokens) ||
       sample.estimate.images?.count ||
       !Number.isSafeInteger(inputTokens) ||
       inputTokens <= 0

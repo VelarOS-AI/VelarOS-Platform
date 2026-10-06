@@ -15,7 +15,6 @@
 
 import type { ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velaros/images'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/velaros/sandbox'
-import type { ShellHostPort } from '@velaros-ai/velaros/shell'
 
 import type {
   AdapterCapability,
@@ -435,19 +434,8 @@ export interface ProjectOperationContext {
   sessionId?: string
 }
 
-/** 项目命令端口只需要工作区根与宿主命令能力，不要求文件或代码查询能力。 */
-export interface ProjectShellHostPort extends ShellHostPort {
-  /** 当前宿主授权的项目根；命令分发按真实路径检查该范围。 */
-  getRootPath(): string
-}
-
-/**
- * 宿主端口：项目给三件共用能力（`velaros:shell`、`velaros:sandbox`、`velaros:images`）装端口时向宿主要的东西。宿主每次分发调用时给一份，绑定当前项目根与会话。
- * 项目根与内核来自空间端口 `ProjectSpacePort`；跑命令、管后台任务的四件来自 `velaros:shell` 的 `ShellHostPort`
- * （本机实现是 `@velaros-ai/velaros/shell/local` 的本机宿主，项目端口会把工作目录钳在项目内、前台命令排进项目资源门再交给它）；
- * 演练沙箱与缩图可选。
- */
-export interface ProjectHostPort extends ProjectSpacePort, ProjectShellHostPort {
+/** 项目沙箱与图片所需的内核、根目录与可选宿主能力。 */
+export interface ProjectHostPort extends ProjectSpacePort {
   /** 演练沙箱（本机实现是 `@velaros-ai/velaros/sandbox/local`）；没接的宿主，项目里的 `velaros:sandbox` 每个操作都明说做不了。 */
   sandbox?: RehearsalSandboxHostPort
   /** 裁图缩图（可选）：`velaros:images` 看超过上限的图、只看一块区域时用。宿主没有图像处理能力就不给，view 遇到这种图会明说做不了。 */
@@ -507,4 +495,12 @@ export interface ProjectCodeIndexApi {
   isAvailable(): boolean
   /** 执行一次代码图谱查询；返回值原样交给调用方，本包只给它加上 `source` 字段。 */
   query(input: ProjectCodeIndexQuery, context: ProjectOperationContext): Promise<unknown>
+}
+
+/** 宿主文件浏览器的本机搜索配置。 */
+export interface LocalFileSearchOptions {
+  /** 平台决定受保护目录。 */
+  platform?: NodeJS.Platform
+  /** 当前用户家目录。 */
+  homeDir?: string
 }

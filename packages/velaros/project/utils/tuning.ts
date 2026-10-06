@@ -5,6 +5,17 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
+  /** 项目文件浏览器的搜索预算。 */
+  localSearch: Object.freeze({
+    /** 搜索结果的默认条数。 */
+    limit: 60,
+    /** 递归搜索的默认目录深度。 */
+    maxDepth: 6,
+    /** 内容搜索单文件允许的最大字节数。 */
+    fileBytes: 1024 * 1024,
+    /** 内容搜索单文件最多返回的命中行数。 */
+    resultsPerFile: 5,
+  }),
   /** 文件能力的适配层（utils/agent）：要整份正文时的读取预算，失败说明里的预览。 */
   agent: Object.freeze({
     /** 要整份正文时（按路径改之前取读取凭据、编码转换）向内核读取的字符预算；读不全就改不了、拒绝转换。 */

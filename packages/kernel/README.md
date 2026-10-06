@@ -141,7 +141,7 @@ await client.dispose()
 - 不给 `permissionBroker` 就是全拒；操作要的权限位必须同时写进模块清单的 `permissions`，没写的一律拒绝；未知操作在求权限之前就失败，任何一条被拒 provider 代码都不会运行。
 - 模块只能在 `start()` 之前登记；`start()` 与 `dispose()` 只真正跑一次，启动先按依赖序全部激活、再全部就绪，任一步失败按逆序回滚；`lifecycleFailureMode: 'degrade'` 时失败不抛，只交给 `onLifecycleFailure`。
 - `describeComposition()` 是只读观测面：能力的 `active: false` 表示只是声明了、这一代还没注册服务，依赖图解析不了的原因在 `resolutionError`；没有反向改写运行时的入口。
-- `createOperationRuntime`：模块 id 写成 `域:名`（如 `velaros:files`）；调用前先 `bind(sessionId, moduleId)`；操作自己的失败不抛，落在回执的 `outcome` 与 `error.code` 里，调用本身不成立（没绑定、未知操作、参数不合 schema、调用号冲突）才抛。
+- `createOperationRuntime`：模块 id 写成 `域:名`（如 `velaros:project`）；调用前先 `bind(sessionId, moduleId)`；操作自己的失败不抛，落在回执的 `outcome` 与 `error.code` 里，调用本身不成立（没绑定、未知操作、参数不合 schema、调用号冲突）才抛。
 - 领域可通过 `OperationContext.recordDiagnostic` 提供独立诊断摘要，随原始回执冻结保存并在同号重放时返回；重复记录采用最新摘要，超长显式标记截断。诊断是观察数据，Kernel 不据此改写成败、效果或重试策略。
 - 同一 `(sessionId, id)` 再调一次交回已存的回执、不会重跑，换了参数抛 `IDEMPOTENCY_CONFLICT`；`retry` 不是 `safe` 的调用别盲目重跑，效果未知的可以用 `reconcile` 按领域登记的核对器只读确认。
 - `InvocationJournal.claim` 必须跨进程原子去重，`settle` 失败必须抛错；没有审批界面的宿主用 `defaultDenyApprovalPort`，需要审批的操作一律拒绝。

@@ -70,7 +70,7 @@ export const GovernedModules = [
         'RuntimeTrace.ts',
         'RecentContext.ts',
         'StandardModules.ts',
-        'ShellNodeEnvironment.ts',
+        'NodeExecutionEnvironment.ts',
         'RuntimeBootstrap.ts',
         'RuntimeWorkspaceBinding.ts',
         'ChildTaskMaterials.ts',
@@ -281,32 +281,6 @@ export const GovernedModules = [
     acceptance: 'src/path-rules/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：@velaros-ai/velaros 里按目录放的几件能力，布局一样，清单与许可只在包根一份
-    directory: 'velaros',
-    unit: 'files',
-    name: '@velaros-ai/velaros/files',
-    contract: 'files/contract',
-    types: 'files/types',
-    portable: 'files.ts',
-    impl: 'files/impl',
-    utils: 'files/utils',
-    tuning: 'tuning.ts',
-    // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    // 空间端口：velaros:files 的操作经 ctx.files 调它；每个方法都必须有操作在调
-    hostPort: 'FileSpacePort',
-    hostPortField: 'files',
-    surfaceFile: 'files/impl/FileOperations.ts',
-    layers: [
-      // 代码面 files 命名空间的三个操作，与本机实现（本机文件端口、给宿主界面的全局搜索），互不依赖
-      ['FileOperations.ts', 'LocalFilePort.ts', 'LocalFileSearch.ts'],
-      // 留着能撤回的改动
-      ['FileChanges.ts'],
-    ],
-    invariants: 'files/spec/invariants.md',
-    acceptance: 'files/spec/acceptance.test.ts',
-  },
-  {
     directory: 'velaros',
     unit: 'images',
     name: '@velaros-ai/velaros/images',
@@ -331,33 +305,29 @@ export const GovernedModules = [
   },
   {
     directory: 'velaros',
-    unit: 'shell',
-    name: '@velaros-ai/velaros/shell',
-    contract: 'shell/contract',
-    types: 'shell/types',
+    unit: 'execution',
+    name: '@velaros-ai/velaros/execution',
+    contract: 'execution/contract',
+    types: 'execution/types',
     portable: 'shell-command.ts',
-    impl: 'shell/impl',
-    utils: 'shell/utils',
+    impl: 'execution/impl',
+    utils: 'execution/utils',
     // 本机宿主可调的超时、缓冲、保留条数、指标阈值，一处改全单元生效
     tuning: 'tuning.ts',
     // 根入口与可移植数据渲染进程都能加载：本机实现只从根入口导出类型，值在只给 Node 的 local 入口
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     // 本机宿主读写的环境变量：代码里出现的每个 VELAROS_* 名字都要登记在这里
     environmentTable: 'ShellEnvironmentVariables',
-    // 空间端口：velaros:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
-    hostPort: 'ShellSpacePort',
-    hostPortField: 'shell',
-    surfaceFile: 'shell/impl/ShellOperations.ts',
     // Windows 原生进程宿主（C++ 源码与构建脚本，构建产物放 native/win32-<架构>/）
     assets: ['native'],
     layers: [
-      // 代码面 shell 命名空间的操作，与本机实现（本机宿主、受约束执行器、命令执行器、shell 选择、受管子进程），互不依赖
-      ['ShellOperations.ts', 'local/'],
+      // 本机实现（本机宿主、受约束执行器、命令执行器、shell 选择、受管子进程），互不依赖
+      ['local/'],
       // 命令策略与审批请求互不依赖，上面那一层与演练沙箱共用
       ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
     ],
-    invariants: 'shell/spec/invariants.md',
-    acceptance: 'shell/spec/acceptance.test.ts',
+    invariants: 'execution/spec/invariants.md',
+    acceptance: 'execution/spec/acceptance.test.ts',
   },
   {
     directory: 'velaros',

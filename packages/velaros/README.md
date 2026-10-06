@@ -5,36 +5,16 @@
 ## 用法
 
 ```ts
-import { createCapabilityModule, createRuntime } from '@velaros-ai/velaros'
-import { fileOperations } from '@velaros-ai/velaros/files'
-import { VelarFilesModule } from '@velaros-ai/velaros/files/contracts'
-import { createLocalFilePort } from '@velaros-ai/velaros/files/local'
+import { createRuntime } from '@velaros-ai/velaros'
 
-// 宿主给：模型凭据，项目目录与状态目录（都是绝对路径，状态目录在项目之外），系统空间的路径解析
-declare const apiKey: string
-declare const projectRoot: string
-declare const stateDir: string
-declare function resolveSystemPath(path: string): string
-
-// 一件能力 = 单元的操作 + 空间给的端口：这里给会话挂上本机文件 velaros:files
-const files = createLocalFilePort({ resolvePath: resolveSystemPath })
-const filesModule = createCapabilityModule({
-  surface: VelarFilesModule,
-  implementation: fileOperations,
-  instanceId: 'system-files',
-  context: (call) => ({ abortSignal: call.signal, files }),
-})
-
-// 工作区预设另外装好项目能力、子任务、搜索与长期记忆
 const runtime = await createRuntime({
-  workspace: projectRoot,
-  dataDir: stateDir,
-  model: { provider: 'openai', model: 'your-model', baseURL: 'https://api.openai.com/v1', apiKey },
-  modules: [filesModule],
+  workspace: '/absolute/project',
+  dataDir: '/absolute/state',
+  model: { provider: 'openai', model: 'your-model', apiKey: process.env.API_KEY },
 })
 try {
   const session = await runtime.openSession('main')
-  for await (const event of session.submit('把 ~/notes 里的会议纪要整理进项目文档')) {
+  for await (const event of session.submit('检查项目并完成修改和验证')) {
     if (event.type === 'accepted') console.log(event.text)
     else if (event.type === 'error') console.error(event.message)
   }
@@ -42,6 +22,9 @@ try {
   await runtime.close()
 }
 ```
+
+默认执行环境为 Node.js ESM，预装 Execa、@vscode/ripgrep、globby、diff 与 yaml。模型通过 `exec({code})` 运行程序，文件操作使用 Node 标准库。项目工作区按需提供 `velaros:project` 的版本核对、原子提交和冲突撤回；应用能力通过运行目录中的 `index.json` 和操作声明发现。
+
 
 ## 入口
 
@@ -51,9 +34,8 @@ try {
 | [act/system](act/system/README.md) | `@velaros-ai/velaros/act/system` | 模型自管理的 `velaros:system`：发现能力、会话目标、任务笔记与长期记忆、持久空间 |
 | [act/search](act/search/README.md) | `@velaros-ai/velaros/act/search` | 有界高级搜索 `velaros:search` 与搜索支线里的证据读取 `velaros:evidence` |
 | [act/agents](act/agents/README.md) | `@velaros-ai/velaros/act/agents` | 子任务 `velaros:agents` 与用户交互 `velaros:interaction` |
-| [files](files/README.md) | `@velaros-ai/velaros/files` | 本机文件 `velaros:files`：读出连续的正文、按路径整份写或换掉一段原文、整次撤回 |
+| [execution](execution/README.md) | `@velaros-ai/velaros/execution`、`/execution/local` | 宿主进程权限、环境、终止与终端管理 |
 | [images](images/README.md) | `@velaros-ai/velaros/images` | 看图 `velaros:images`：把图片交到模型眼前 |
-| [shell](shell/README.md) | `@velaros-ai/velaros/shell` | 跑命令 `velaros:shell`：前台与后台任务，危险命令先问用户 |
 | [sandbox](sandbox/README.md) | `@velaros-ai/velaros/sandbox` | 演练沙箱 `velaros:sandbox`：在镜像里先跑，看过差量再落回 |
 | [project](project/README.md) | `@velaros-ai/velaros/project` | 受项目治理的文件 `velaros:project` 与问代码 `velaros:code`，连同项目内核与语言服务 |
 | [computer](computer/README.md) | `@velaros-ai/velaros/computer` | 桌面控制 `velaros:computer`：截主屏、鼠标、键盘 |

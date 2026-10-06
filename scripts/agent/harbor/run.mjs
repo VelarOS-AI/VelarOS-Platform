@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 
-import { createRuntime, createShellCapabilityModule } from '@velaros-ai/velaros'
-import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
+import { createRuntime, createNodeExecutionEnvironment } from '@velaros-ai/velaros'
+import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import { createTraceExporter, snapshot } from './trace-export.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
 
@@ -32,34 +32,6 @@ export async function runTask({
   const denied = async () => {
     throw new Error('Interactive approval is unavailable in this benchmark run')
   }
-  const shell = createShellCapabilityModule({
-    instanceId: 'harbor-shell',
-    approval: {
-      awaitConfirmation: isolatedContainer ? async () => {} : denied,
-      awaitConfirmationDecision: async () => ({
-        approved: isolatedContainer,
-        message: isolatedContainer
-          ? 'Authorized disposable task container'
-          : 'Unattended benchmark',
-      }),
-    },
-    shell: {
-      resolveCwd: async (cwd) => host.resolvePath(cwd),
-      commandPolicy: (cwd) => ({
-        scopeLabel: cwd ?? workspace,
-        riskScope: 'system-command:dangerous',
-      }),
-      runCommand: host.runCommand.bind(host),
-      runObservationCommand: host.runObservationCommand?.bind(host),
-      listBackgroundTasks: host.listBackgroundTasks.bind(host),
-      refreshShellEnvironment: async () => {
-        const result = await host.refreshShellEnvironment()
-        await inspect()
-        return result
-      },
-      terminateBackgroundTask: host.terminateBackgroundTask.bind(host),
-    },
-  })
   let runtime,
     session,
     status = 'starting',
@@ -76,10 +48,14 @@ export async function runTask({
       dataDir: join(output, 'state'),
       model,
       project: identity?.runtimeOptions?.project,
-      modules: [shell],
+      node: createNodeExecutionEnvironment({
+        cwd: workspace,
+        directory: join(output, 'node'),
+        host,
+        authorize: isolatedContainer ? async () => {} : denied,
+      }),
       residentModules: identity?.runtimeOptions?.residentModules ?? [
         { module: 'velaros:project' },
-        { module: 'velaros:shell' },
         ...(identity?.runtimeOptions?.project?.images ? [{ module: 'velaros:images' }] : []),
       ],
       memory: false,
@@ -107,7 +83,7 @@ export async function runTask({
         ),
       }),
       instructions:
-        'Complete the task autonomously in this isolated environment. Inspect the project, make the necessary changes, and verify the result using its normal development tools. No user is available for follow-up questions. Preserve unrelated files. Do not inspect hidden evaluation tests, solutions, reward files, or benchmark infrastructure. Use execute for shell commands; observe can read project files.',
+        'Complete the task autonomously in this isolated environment. Inspect the project, make the necessary changes, and verify the result using its normal development tools. No user is available for follow-up questions. Preserve unrelated files. Do not inspect hidden evaluation tests, solutions, reward files, or benchmark infrastructure. Use Node.js with Execa for commands and project for transactional edits.',
       limits: { turns, timeoutMs, outputTokens: 32768, safetyTokens: 2048 },
     })
     session = await runtime.openSession(`harbor-task-${randomUUID()}`)

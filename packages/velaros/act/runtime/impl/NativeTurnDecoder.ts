@@ -1,5 +1,5 @@
 import type { ActDecodedTurn, ActPreview, ActTurnDecoder } from '@velaros-ai/agent'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   modelRequestEncoder,
@@ -26,24 +26,15 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
 
   public constructor(options: ScriptProtocolOptions = {}) {
     this.config = protocolConfig(options)
-    const shell = this.config.allowed.includes('shell')
-    this.instructions = `${shell ? '通过 shell 执行命令，' : ''}通过 node 执行 JavaScript ESM。普通非零退出不取消其他调用；依赖步骤放在同一次调用里。检查执行结果后继续；任务完成时用普通文本答复。`
+    this.instructions =
+      '通过 exec 执行 JavaScript ESM，命令用 execa，文件用 Node 标准库，差异用 diff。依赖步骤在同一程序中顺序 await；检查执行结果后继续，任务完成时用普通文本答复。'
     this.response = {
       type: 'tools',
       tools: [
-        ...(shell
-          ? [
-              {
-                name: 'shell',
-                description: '在工作目录执行 Shell 命令，返回输出、退出码和日志路径。',
-                schema: NativeExecutionSchema,
-              },
-            ]
-          : []),
         {
-          name: 'node',
+          name: 'exec',
           description:
-            '在工作目录执行 Node.js ESM，支持顶层 await、标准库、项目依赖和按需导入的应用能力。console.log 返回输出。',
+            '在工作目录执行 JavaScript ESM，支持顶层 await、Node 标准库、预装 npm 包和按需导入的应用能力。console.log 返回输出。',
           schema: NativeExecutionSchema,
         },
       ],
@@ -66,7 +57,8 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public acceptTool(call: ModelToolCall): readonly ActPreview[] {
     this.consume(JSON.stringify(call).length)
     if (
-      !(call.name === 'node' || (call.name === 'shell' && this.config.allowed.includes('shell'))) ||
+      !this.config.allowed.includes('execute') ||
+      call.name !== 'exec' ||
       !call.id ||
       call.id.length > 256 ||
       this.calls.some((item) => item.id === call.id) ||
@@ -87,7 +79,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     }
     const index = this.calls.length
     this.calls.push({ ...call, input })
-    const kind = call.name === 'node' ? 'execute' : 'shell'
+    const kind = 'execute'
     return [
       { type: 'program', index, kind, phase: 'start', text: '' },
       { type: 'program', index, kind, phase: 'delta', text: input.code },
@@ -103,20 +95,16 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     return {
       message: this.text,
       done: isEmpty(this.calls),
-      ...(!isEmpty(this.calls)
-        ? {
-            submission: {
-              executions: this.calls.map((call) => ({
-                async: false,
-                program: {
-                  language: call.name,
-                  source: (call.input as NativeExecutionInput).code,
-                  retainTurns: this.config.defaultRetain,
-                },
-              })),
-            },
-          }
-        : {}),
+      submission: optionalWhenLazy(!isEmpty(this.calls), () => ({
+        executions: this.calls.map((call) => ({
+          async: false,
+          program: {
+            language: 'node',
+            source: (call.input as NativeExecutionInput).code,
+            retainTurns: this.config.defaultRetain,
+          },
+        })),
+      })),
       events: [],
     }
   }

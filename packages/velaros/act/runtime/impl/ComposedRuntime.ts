@@ -619,7 +619,7 @@ class ComposedRuntime implements VelarosRuntime {
             text: parentTask?.preview
               ? `${submission.text}\n\n父任务原始输入（用于核对本次分工的要求）：\n${parentTask.preview}`
               : submission.text,
-            ...(!isEmpty(files) ? { files } : {}),
+            files: !isEmpty(files) ? files : submission.files,
           },
           AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])])
         )

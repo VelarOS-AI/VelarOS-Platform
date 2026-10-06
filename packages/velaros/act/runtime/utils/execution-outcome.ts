@@ -3,8 +3,10 @@ import {
   isEmpty,
   isFalse,
   isFiniteNumber,
+  isNull,
   isPlainObject,
   isString,
+  isTrue,
   toNullable,
 } from '@velaros-ai/core'
 
@@ -14,7 +16,7 @@ const CancelledCodes = ['CANCELLED', 'ABORTED']
 
 /** 已退出且回收完成的普通程序错误；取消、限额、宿主故障与未落定调用继续中止后续派发。 */
 export function isCompletedProcessFailure(result: unknown): boolean {
-  if (!isPlainObject(result) || result.checked !== true || !isPlainObject(result.result))
+  if (!isPlainObject(result) || !isTrue(result.checked) || !isPlainObject(result.result))
     return false
   const value = result.result
   const process = value.process
@@ -22,14 +24,14 @@ export function isCompletedProcessFailure(result: unknown): boolean {
     isPlainObject(value.failed) &&
     value.failed.code === 'PROGRAM_ERROR' &&
     isPlainObject(process) &&
-    process.launched === true &&
+    isTrue(process.launched) &&
     Number.isInteger(process.exitCode) &&
     process.exitCode !== 0 &&
-    process.signal === null &&
+    isNull(process.signal) &&
     !process.timedOut &&
     !process.aborted &&
     !process.cleanupIncomplete &&
-    process.logTruncated === false &&
+    isFalse(process.logTruncated) &&
     (!value.unsettled || (isArray(value.unsettled) && isEmpty(value.unsettled)))
   )
 }

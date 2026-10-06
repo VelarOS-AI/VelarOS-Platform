@@ -1,27 +1,23 @@
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { AppError } from '@velaros-ai/core/error'
 import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime, createShellCapabilityModule } from '../../../dist/act/runtime/index.js'
+import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   allocateProgramResultBudgets,
   programCoveredOutputs,
   programOutputViews,
 } from '../../../dist/act/runtime/utils/program-context.js'
-import { createLocalShellHost } from '../../../dist/shell/local.js'
 
-import { modelText, runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, runtimeFrame, turn } from './support/model-turn.mjs'
 
 const stop = async function* (request) {
   yield* done(request)
@@ -555,300 +551,6 @@ test('ordered observe then execute sees the committed value next round, with one
   assert.equal(f.frames[1].results[0].remainingTurns, 'segment')
 })
 
-test(
-  'real observation command supports arbitrary Node logic, confines writes and exposes partial protection',
-  { skip: process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec') },
-  async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'observe-shell-'))
-    const file = join(root, 'value.txt')
-    await writeFile(file, 'readable')
-    const host = createLocalShellHost({ cwd: root })
-    const shell = {
-      resolveCwd: async () => root,
-      commandPolicy: () => ({ scopeLabel: 'test', riskScope: 'test' }),
-      runObservationCommand: host.runObservationCommand.bind(host),
-      runCommand: host.runCommand.bind(host),
-      listBackgroundTasks: host.listBackgroundTasks.bind(host),
-      refreshShellEnvironment: host.refreshShellEnvironment.bind(host),
-      terminateBackgroundTask: host.terminateBackgroundTask.bind(host),
-    }
-    const module = createShellCapabilityModule({
-      instanceId: 'shell-test',
-      shell,
-      approval: {
-        awaitConfirmation: async () => {
-          throw Error('unexpected approval')
-        },
-      },
-    })
-    const f = await fixture(t, stop, { modules: [module] })
-    t.after(async () => {
-      await host.dispose()
-      await rm(root, { recursive: true, force: true })
-    })
-    const cmd = (source) =>
-      `${JSON.stringify(process.execPath)} -e '${source.replaceAll("'", "'\\''")}'`
-    const code = (command) =>
-      `import {output} from 'velaros';import {run} from 'velaros:shell';output(await run({command:${JSON.stringify(command)}}));`
-    await f.session.observe({
-      source: code(
-        cmd(`console.log(require('fs').readFileSync(${JSON.stringify(file)},'utf8').toUpperCase())`)
-      ),
-    })
-    success(await submit(f))
-    const result = JSON.parse(f.frames[0].observation.text).value.default
-    assert.match(result.stdout, /READABLE/)
-    assert.equal(result.confinement.enforcement, 'partial')
-    assert.match(result.note, /不能保证/)
-    assert(
-      f.frames[0].observation.safety.some(
-        (item) => item.operation === 'velaros:shell.run' && item.effect === 'unknown'
-      )
-    )
-    const forbidden = join(root, 'forbidden.txt')
-    const child = `require('fs').writeFileSync(${JSON.stringify(forbidden)},'unsafe')`
-    await f.session.observe({
-      source: code(
-        cmd(
-          `require('child_process').execFileSync(${JSON.stringify(process.execPath)},['-e',${JSON.stringify(child)}])`
-        )
-      ),
-    })
-    success(await submit(f))
-    assert(!existsSync(forbidden))
-    assert.notEqual(JSON.parse(f.frames[1].observation.text).value.default.exitCode, 0)
-    ok(await f.session.execute({ source: code(cmd(child)) }))
-    assert.equal(await readFile(forbidden, 'utf8'), 'unsafe')
-  }
-)
-
-test('an unavailable observation command backend never falls back to ordinary execution', async (t) => {
-  let executed = 0
-  const shell = {
-    resolveCwd: async () => '/test',
-    runCommand: async () => {
-      executed++
-      return { stdout: 'unsafe' }
-    },
-  }
-  const module = createShellCapabilityModule({
-    instanceId: 'missing-observer',
-    shell,
-    approval: {},
-  })
-  const f = await fixture(t, stop, { modules: [module] })
-  await f.session.observe({
-    source: "import {run} from 'velaros:shell';await run({command:'echo data'});",
-  })
-  success(await submit(f))
-  assert.equal(executed, 0)
-  assert.match(f.frames[0].observation.text, /宿主没有提供受限/)
-})
-
-test('INV-61 stderr survives stdout-only scripts, receipt grouping and restart without repeating commands', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'shell-feedback-'))
-  const host = createLocalShellHost({ cwd: root })
-  let calls = 0
-  const missing = `scriptact_missing_${crypto.randomUUID().replaceAll('-', '')}`
-  const requests = []
-  const module = createShellCapabilityModule({
-    instanceId: 'feedback-shell',
-    approval: {},
-    shell: {
-      resolveCwd: async () => root,
-      runCommand: (...args) => {
-        calls++
-        return host.runCommand(...args)
-      },
-    },
-  })
-  const f = await fixture(
-    t,
-    async function* (request) {
-      requests.push(request)
-      assert(
-        new RegExp(`(?:${missing}: (?:command )?not found|command not found: ${missing})`).test(
-          modelText(request)
-        ),
-        'missing-command diagnostic must reach the model request'
-      )
-      yield* done(request)
-    },
-    { modules: [module] }
-  )
-  t.after(async () => {
-    await host.dispose()
-    await rm(root, { recursive: true, force: true })
-  })
-  const command = `${missing}; printf 'stdout-kept'`
-  ok(
-    await f.session.execute(
-      {
-        source: `import {run} from 'velaros:shell';import {output} from 'velaros';for(let i=0;i<10;i++){const r=await run({command:${JSON.stringify(command)}});output(r.stdout);}`,
-      },
-      4
-    )
-  )
-  await f.restart()
-  success(await submit(f))
-  assert.equal(calls, 10)
-  const feedback = f.frames[0].mandatory.filter((item) => item.operation === 'velaros:shell.run')
-  assert.equal(feedback.length, 10, 'diagnostic receipts cannot be collapsed into a count')
-  for (const item of feedback) {
-    assert.equal(item.outcome, 'succeeded')
-    assert.equal(item.effect, 'committed')
-    assert.equal(item.code, 'SHELL_STDERR')
-    assert.match(item.detail, /exitCode=0/)
-    assert.match(item.detail, new RegExp(missing))
-    assert(item.detailInHistory, 'complete diagnostics must enter stable history')
-  }
-  assert(
-    !requests[0].compiledPrompt.includes(missing),
-    'dynamic frame keeps state without repeating diagnostic bodies'
-  )
-  const body = requests[0].history.find((item) => item.content.includes('origin=runtime-receipt'))
-  assert(body && body.content.includes(missing))
-  await f.restart()
-  success(await submit(f))
-  assert(
-    requests[1].history.some((item) => item.content === body.content),
-    'reopen preserves exact delivered diagnostics'
-  )
-  assert(!requests[1].compiledPrompt.includes(missing))
-  assert.equal(calls, 10)
-})
-
-test('INV-61 observation diagnostics reach the model independently of selected output and preserve observation health', async (t) => {
-  let calls = 0
-  const module = createShellCapabilityModule({
-    instanceId: 'observe-feedback',
-    approval: {},
-    shell: {
-      resolveCwd: async () => '/test',
-      runObservationCommand: async (command) => {
-        calls++
-        return {
-          command,
-          cwd: '/test',
-          success: true,
-          exitCode: 0,
-          signal: null,
-          stdout: 'selected output',
-          stderr: 'normal progress on stderr',
-          timedOut: false,
-          aborted: false,
-          truncated: false,
-          durationMs: 1,
-          confinement: {
-            mode: 'read-only',
-            enforcement: 'full',
-            backend: 'host',
-            reason: 'test host',
-            writableRoots: [],
-          },
-        }
-      },
-    },
-  })
-  const f = await fixture(
-    t,
-    async function* (request) {
-      assert.match(modelText(request), /normal progress on stderr/)
-      const feedback = runtimeFrame(request).observation.safety[0]
-      assert.equal(feedback.code, 'SHELL_STDERR')
-      assert.equal(feedback.outcome, 'succeeded')
-      assert.equal(feedback.effect, 'unknown')
-      assert.equal(feedback.completed, true)
-      yield* done(request)
-    },
-    { modules: [module] }
-  )
-  await f.session.observe({
-    source:
-      "import {run} from 'velaros:shell';import {output} from 'velaros';const r=await run({command:'fixture'});output(r.stdout);",
-  })
-  success(await submit(f))
-  assert.equal(calls, 1)
-  assert.equal(f.frames[0].observation.collection, 'complete')
-  assert(!f.frames[0].observation.health?.paused)
-})
-
-test('a dangerous command the user rejects records no effect, so the run needs no reconcile', async (t) => {
-  let executed = 0
-  const shell = {
-    resolveCwd: async () => '/test',
-    commandPolicy: () => ({ scopeLabel: 'test', riskScope: 'test' }),
-    runCommand: async () => {
-      executed++
-      return { command: 'rm -rf dist', cwd: '/test', success: true, exitCode: 0 }
-    },
-  }
-  const module = createShellCapabilityModule({
-    instanceId: 'rejecting-shell',
-    shell,
-    approval: {
-      awaitConfirmation: async () => {
-        throw new AppError('PERMISSION', '用户拒绝了此操作：先别删')
-      },
-    },
-  })
-  const f = await fixture(t, stop, { modules: [module] })
-  const receipt = await f.session.execute({
-    source: "import {run} from 'velaros:shell';await run({command:'rm -rf dist'});",
-  })
-  assert.equal(executed, 0)
-  assert.match(receipt.result.failed.message, /先别删/)
-  assert.equal((await submit(f)).at(-1).status, 'completed')
-  assert(!f.frames[0].mandatory.some((item) => item.effect === 'unknown'))
-})
-
-test('a running shell call hands its output to the host with the execution and call it belongs to', async (t) => {
-  const outputs = []
-  const shell = {
-    resolveCwd: async () => '/test',
-    commandPolicy: () => ({ scopeLabel: 'test', riskScope: 'test' }),
-    runCommand: async (command, options) => {
-      options.onOutput?.(`${command} 1\n`)
-      options.onOutput?.(`${command} 2\n`)
-      return {
-        command,
-        cwd: '/test',
-        success: true,
-        exitCode: 0,
-        signal: null,
-        timedOut: false,
-        aborted: false,
-        durationMs: 1,
-        stdout: '',
-        stderr: '',
-        truncated: false,
-      }
-    },
-  }
-  const module = createShellCapabilityModule({
-    instanceId: 'live-shell',
-    shell,
-    approval: {},
-    output: (output) => outputs.push(output),
-  })
-  const f = await fixture(t, stop, { modules: [module] })
-  ok(
-    await f.session.execute({
-      source:
-        "import {run} from 'velaros:shell';await run({command:'build'});await run({command:'test'});",
-    })
-  )
-  assert.deepEqual(
-    outputs.map((output) => output.text),
-    ['build 1\n', 'build 2\n', 'test 1\n', 'test 2\n']
-  )
-  const [build, , check] = outputs
-  assert.equal(build.sessionId, 's')
-  assert.equal(build.executionId, check.executionId)
-  assert.notEqual(build.invocationId, check.invocationId)
-  assert.ok(build.invocationId.startsWith(`${build.executionId}:`))
-})
-
 test('an unknown world outcome survives expiration of its ordinary result body', async (t) => {
   let calls = 0
   const module = {
@@ -928,7 +630,7 @@ test('compiler budget recovery counts history and reduces excerpts without rerun
   assert.equal((await f.state()).completedTurns, 1)
 })
 
-test('caught observation denials remain visible independently of model-selected output', async (t) => {
+test('INV-61 caught observation denials remain visible independently of model-selected output', async (t) => {
   const f = await fixture(t)
   await f.session.observe({
     source:

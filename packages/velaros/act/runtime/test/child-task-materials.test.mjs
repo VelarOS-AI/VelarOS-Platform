@@ -9,9 +9,9 @@ import { ContextLimits, createContextRuntime, createContextView } from '@velaros
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ChildTaskMaterials } from '../../../dist/act/runtime/impl/ChildTaskMaterials.js'
-import { createRuntime, createShellNodeEnvironment } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
 import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
-import { createLocalShellHost } from '../../../dist/shell/local.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 import { modelText } from './support/model-turn.mjs'
 
@@ -24,7 +24,7 @@ const model = (stream) => ({
 })
 const call = (code, id = 'execute') => ({
   type: 'tool-call',
-  value: { id, name: 'node', input: { code } },
+  value: { id, name: 'exec', input: { code } },
 })
 const environment = (request) =>
   JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text).partitions
@@ -174,10 +174,10 @@ test('Node child reads original parent inputs and attachments from ordinary file
     cwd: join(root, 'workspace'),
     processConfinement: { mode: 'workspace-write', workspaceRoot: join(root, 'workspace') },
   })
-  const node = createShellNodeEnvironment({
+  const node = createNodeExecutionEnvironment({
     cwd: join(root, 'workspace'),
     directory: join(root, 'runs'),
-    shell,
+    host: shell,
   })
   const storage = localContextStorage({ path: ':memory:' })
   const manifests = []

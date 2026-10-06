@@ -68,7 +68,7 @@
       "directory": "packages/script",
       "name": "@velaros-ai/script",
       "version": "0.2.0",
-      "description": "Shell and native Node.js execution with on-demand capability packages, bounded output and host-owned process permissions.",
+      "description": "Native Node.js execution with Execa, ripgrep, globby, diff, YAML, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
         "./contracts"
@@ -80,7 +80,7 @@
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
       "version": "0.6.0",
-      "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses), browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath), web (web search and pages read as text in a hidden browser page the host provides, falling back from Google to Bing) and sessions (sessions in one conversation hand each other work and pass messages: the model-facing surface and input checks, with the host behind a port). One plain directory per unit, one convention for all.",
+      "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
         "./act/agents",
@@ -93,9 +93,9 @@
         "./computer",
         "./computer/contracts",
         "./contracts",
-        "./files",
-        "./files/contracts",
-        "./files/local",
+        "./execution",
+        "./execution/contracts",
+        "./execution/local",
         "./images",
         "./images/contracts",
         "./images/local",
@@ -112,9 +112,6 @@
         "./sandbox/local",
         "./sessions",
         "./sessions/contracts",
-        "./shell",
-        "./shell/contracts",
-        "./shell/local",
         "./web",
         "./web/contracts"
       ],
