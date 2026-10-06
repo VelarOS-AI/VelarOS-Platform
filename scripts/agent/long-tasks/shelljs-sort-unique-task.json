@@ -1,0 +1,23 @@
+{
+  "id": "shelljs-sort-exact-unique",
+  "split": "holdout",
+  "repository": "https://github.com/shelljs/shelljs.git",
+  "commit": "4580c00398982618ff075dd4354b0234a1d679dc",
+  "environment": {
+    "runtime": "node",
+    "project": "shelljs",
+    "acceptance": "test_shelljs_sort_unique_acceptance.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": [
+      "test/*.js"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      ".eslintrc.json"
+    ],
+    "baselineFailure": "sort unique must remove exact duplicate lines"
+  },
+  "prompt": "Add a maintained -u option to ShellJS sort that removes exact duplicate lines after the existing sorting step. The equality rule is exact original string equality (case and whitespace matter), even when -n or -r is combined. Existing comparison rules and all behavior without -u stay unchanged. Support file arguments, file arrays, and ShellString pipelines, including multiple input files and ordinary missing-file diagnostics. Nonempty successful output keeps one trailing newline. Do not modify caller input files or pipe values. Add focused permanent AVA regressions, update the source command documentation and generated public README, and add a runnable example combining unique and numeric sorting. Run the original AVA suite, JavaScript lint, and your example, and report what passed or failed. Make routine implementation choices autonomously."
+}

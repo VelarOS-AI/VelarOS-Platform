@@ -31,6 +31,14 @@ export async function createTaskRoot(prefix = '/private/tmp/vlr-') {
   }
 }
 
+// 原项目可能在系统临时目录使用固定名称；每次尝试及其派生进程共享自己的临时根。
+export async function taskTemporaryEnvironment(taskRoot) {
+  const directory = join(taskRoot, 'tmp')
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  assert((await lstat(directory)).isDirectory(), 'Task temporary directory must not be a symlink')
+  return { TMPDIR: directory, TMP: directory, TEMP: directory }
+}
+
 // 评测项目、依赖环境和验收命令在请求模型之前固定；这里只接受工作区内相对路径。
 export function taskEnvironment(task) {
   const value = task.environment

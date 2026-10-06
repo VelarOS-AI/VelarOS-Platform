@@ -20,7 +20,7 @@ import type {
  * 可读本次整理请求原文和授权的父快照；读取额度用完后不能再读，直接交付已有结论。
  */
 export interface ContextMaterialsOperationsApi {
-  /** @AgentView 按工作材料分页列用户输入、回复、源码、结果、笔记和历史卷的元数据，不读正文。
+  /** @AgentView 按当前整理范围分页列用户输入、回复、源码、结果、笔记和历史卷的元数据，不读正文；自动卷整理的目录截至 runtime.modelTool.volume.through。
    * @OperationEffect none
    * @OperationModes execute
    */

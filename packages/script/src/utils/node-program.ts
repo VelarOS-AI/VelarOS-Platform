@@ -42,6 +42,37 @@ export const output = collector.output;
 `
 }
 
+/** 在实际执行进程内刷新包目录，避免宿主的 package.json 缓存跨执行污染工作区解析。 */
+function packageCatalogModule(): string {
+  return `import {findPackageJSON} from 'node:module';
+import {readFileSync,realpathSync,readdirSync} from 'node:fs';
+import {dirname,join} from 'node:path';
+export function discoverPackages(index, importer) {
+  const catalog = JSON.parse(readFileSync(index,'utf8'));
+  return catalog.packages.map(installed => {
+    let packageJson;
+    try { packageJson = findPackageJSON(installed.name,importer); }
+    catch (error) {
+      if(error.code === 'ERR_MODULE_NOT_FOUND') return installed;
+      return {name:installed.name,source:'workspace',error:{code:error.code ?? 'UNAVAILABLE',message:String(error.message ?? error)}};
+    }
+    const reference = {name:installed.name,source:'workspace',packageJson};
+    try {
+      reference.root = realpathSync(dirname(packageJson));
+      reference.packageJson = join(reference.root,'package.json');
+      const manifest = JSON.parse(readFileSync(reference.packageJson,'utf8'));
+      if(typeof manifest?.version === 'string') reference.version = manifest.version;
+      const readme = readdirSync(reference.root,{withFileTypes:true})
+        .filter(entry => entry.isFile() && /^readme(?:\\.(?:md|markdown|txt|rst))?$/iu.test(entry.name))
+        .map(entry => entry.name).sort()[0];
+      if(readme) reference.readme = join(reference.root,readme);
+    } catch (error) { reference.error = {code:error.code ?? 'VALIDATION',message:String(error.message ?? error)}; }
+    return reference;
+  });
+}
+`
+}
+
 /** 授权能力与预装 npm 包共用加载入口，工作区依赖优先交给 Node 正常解析。 */
 export async function nodeProgramSource(
   request: CodeRunRequest,
@@ -180,15 +211,19 @@ export function load(url, context, nextLoad) {
     { mode: 0o600 }
   )
   const wrapper = join(catalog, 'entry.mjs')
+  const packageCatalog = join(catalog, 'packages.mjs')
+  await writeFile(packageCatalog, packageCatalogModule(), { mode: 0o600 })
   await writeFile(wrapper, `import * as exports from ${JSON.stringify(entry)}; export {exports};`, {
     mode: 0o600,
   })
   const bootstrap = `import {registerHooks} from 'node:module';
+import {discoverPackages} from ${JSON.stringify(url(packageCatalog))};
 import ${JSON.stringify(preload)};
 import {send,releaseCalls} from ${JSON.stringify(url(join(catalog, 'bridge.mjs')))};
 import {resolve,load} from ${JSON.stringify(url(programLoader))};
 registerHooks({resolve,load});
 try {
+  await send('/packages',{packages:discoverPackages(${JSON.stringify(join(catalog, 'index.json'))},${JSON.stringify(entry)})});
   const {exports} = await import(${JSON.stringify(url(wrapper))});
   const names = Object.keys(exports);
   const value = names.length === 1 && names[0] === 'default' ? exports.default : names.length ? exports : undefined;

@@ -3,9 +3,10 @@ import { closeSync, openSync, writeSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import {
+  isArray,
   isEmpty,
   isPlainObject,
   isString,
@@ -86,6 +87,8 @@ class NodeCodeRunner implements CodeRunnerApi {
     let value: unknown
     let programError: CodeRunOutcome['error']
     let outputFile: string | undefined
+    let packageCatalog: string | undefined
+    let packagesPublished = false
     const outputIssues: string[] = []
     const collectOutput = async () => {
       if (!outputFile) return
@@ -142,13 +145,15 @@ class NodeCodeRunner implements CodeRunnerApi {
         stopping ||
         controller.signal.aborted ||
         incoming.method !== 'POST' ||
-        !['/', '/result'].includes(incoming.url ?? '') ||
+        !['/', '/result', '/packages'].includes(incoming.url ?? '') ||
+        (incoming.url === '/packages' && packagesPublished) ||
         incoming.headers.authorization !== `Bearer ${token}`
       ) {
         reply(403, { error: { code: 'PERMISSION', message: '当前执行没有此能力桥授权。' } })
         incoming.resume()
         return
       }
+      if (incoming.url === '/packages') packagesPublished = true
       if (incoming.url === '/' && (++calls > NodeExecutionLimits.calls || pending.size >= 32)) {
         reply(429, { error: { code: 'LIMIT', message: '能力调用超过本次预算。' } })
         incoming.resume()
@@ -176,6 +181,26 @@ class NodeCodeRunner implements CodeRunnerApi {
           return
         }
         if (incoming.url !== '/' && isPlainObject(input)) {
+          if (incoming.url === '/packages' && packageCatalog) {
+            const path = packageCatalog
+            // 子进程只发现实际依赖；内部目录由宿主写入，观察进程仍保持只读权限。
+            void readFile(path, 'utf8')
+              .then(async (body) => {
+                const catalog = JSON.parse(body)
+                if (
+                  !isArray(input.packages) ||
+                  input.packages.length !== catalog.packages.length ||
+                  input.packages.some(
+                    (pkg, index) => !isPlainObject(pkg) || pkg.name !== catalog.packages[index].name
+                  )
+                )
+                  throw new AppError('VALIDATION', '依赖发现目录与本次运行环境不匹配')
+                await writeFile(path, stringifyPretty({ ...catalog, packages: input.packages }))
+                reply(200, {})
+              })
+              .catch((cause: unknown) => reply(400, { error: shapeOperationFailure(cause) }))
+            return
+          }
           try {
             if (incoming.url === '/result') {
               if (JSON.stringify(input).length > ScriptOutputLimits.rawChars)
@@ -228,6 +253,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
       directory = await realpath(await mkdtemp(join(this.options.directory, 'node-')))
       const catalog = join(directory, 'host')
+      packageCatalog = join(catalog, 'index.json')
       await mkdir(catalog, { mode: 0o700 })
       await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), { mode: 0o600 })
       const index: Array<{
@@ -286,6 +312,7 @@ class NodeCodeRunner implements CodeRunnerApi {
         join(catalog, 'index.json'),
         stringifyPretty({
           environment: this.options.runtime?.id ?? 'base',
+          importer: resolve(this.options.cwd, request.path ?? '__velaros_program__.mjs'),
           packages: nodeRuntimePackages.references([
             ...new Map(
               [

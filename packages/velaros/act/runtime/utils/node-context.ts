@@ -67,6 +67,7 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
     isPlainObject(progress) &&
     (progress.stalled ||
       Number(progress.repeatedSteps) > 0 ||
+      isPlainObject(progress.feedback) ||
       (isArray(progress.evidence) && !isEmpty(progress.evidence)) ||
       (isPlainObject(progress.script) && progress.script.changed) ||
       (isPlainObject(progress.observation) && progress.observation.changed))

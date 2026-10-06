@@ -1,0 +1,30 @@
+{
+  "id": "commander-option-value-source-snapshots",
+  "split": "development",
+  "repository": "https://github.com/tj/commander.js.git",
+  "commit": "395cf7145fe28122f5a69026b310e02df114f907",
+  "environment": {
+    "runtime": "node",
+    "project": "commander",
+    "acceptance": "test_commander_option_snapshot_acceptance.mjs",
+    "regressionRunner": "jest-json",
+    "regressionEntry": "node_modules/jest/build/index.js",
+    "regression": [
+      "tests"
+    ],
+    "preserve": [
+      "tests",
+      "typings/index.test-d.ts",
+      "package.json",
+      "package-lock.json",
+      "jest.config.js",
+      "tsconfig.js.json",
+      "tsconfig.ts.json"
+    ],
+    "processEnvironment": {
+      "NO_COLOR": null
+    },
+    "baselineFailure": "option snapshots must be available"
+  },
+  "prompt": "Add Command.optsWithSources() and Command.optsWithGlobalsAndSources() as maintained public APIs. Each returns a fresh object, and each key maps to a fresh { value, source } record. The local form includes exactly the own enumerable keys of opts(); the global form includes the union of those keys from the command and its ancestors. value is the existing option value without cloning it, and source is that same owning command's getOptionValueSource(key), including undefined. For the global form use the same ancestor precedence as optsWithGlobals(): an ancestor's own key wins even if its value or source is undefined; do not pair a winning ancestor value with a local source. Work with ordinary options, values assigned by setOptionValue()/setOptionValueWithSource(), and storeOptionsAsProperties(). Mutating returned containers or records must not mutate parser state, and later calls must reflect later configuration/parse changes. Preserve falsy values, own enumerable keys such as __proto__ supplied as option values, and existing APIs. Include accurate generic TypeScript declarations preserving the relationship between each option key and its value type, public documentation, permanent Jest and TypeScript coverage, and a runnable example. Run the existing Jest suite, ESM smoke checks, relevant type/style checks, and the example. Finish with accurate validation results. Make routine implementation choices autonomously."
+}

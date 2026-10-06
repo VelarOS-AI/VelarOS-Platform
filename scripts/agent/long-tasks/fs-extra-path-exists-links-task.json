@@ -1,0 +1,35 @@
+{
+  "id": "fs-extra-path-exists-link-policy",
+  "split": "holdout",
+  "repository": "https://github.com/jprichardson/node-fs-extra.git",
+  "commit": "1e223d3b1e26b7ebef7f402acf0e3b5533cc5833",
+  "environment": {
+    "runtime": "node",
+    "project": "fs-extra",
+    "acceptance": "test_fs_extra_path_exists_links_acceptance.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "test.js",
+    "regression": [
+      "lib"
+    ],
+    "preserve": [
+      "package.json",
+      "test.js",
+      "test.mjs",
+      "lib/__tests__",
+      "lib/copy/__tests__",
+      "lib/empty/__tests__",
+      "lib/ensure/__tests__",
+      "lib/fs/__tests__",
+      "lib/json/__tests__",
+      "lib/mkdirs/__tests__",
+      "lib/move/__tests__",
+      "lib/output-file/__tests__",
+      "lib/path-exists/__tests__",
+      "lib/remove/__tests__",
+      "lib/util/__tests__"
+    ],
+    "baselineFailure": "non-following checks must recognize dangling symlinks"
+  },
+  "prompt": "Add an optional followSymlinks policy to fs-extra pathExists and pathExistsSync as maintained public APIs. pathExists(path, options?, callback?) must keep both Promise and Node-style callback forms, including the original pathExists(path, callback) signature. pathExistsSync(path, options?) returns a boolean. Missing options, an undefined followSymlinks property, or followSymlinks: true keep the established target-existence behavior. With followSymlinks: false, an existing final symbolic link counts as present even when its target is missing; missing entries and paths below a regular file still return false. Keep the original error-to-false behavior. The option is a read-only input object; support frozen options. Preserve the normal Node path forms already accepted, including strings, Buffers and file URLs. Keep calls without options and other existing APIs compatible, and do not modify files or links while checking them. Expose the behavior consistently from the CommonJS and ESM entry points. Add maintained Promise, callback and synchronous regression tests including dangling links, real files/directories, missing paths, path forms, defaults and input immutability. Update public API documentation with runnable examples. Run the original unit tests, ESM tests and lint, and accurately report validation results. Make routine implementation choices autonomously."
+}

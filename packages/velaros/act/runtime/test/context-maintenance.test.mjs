@@ -701,6 +701,18 @@ test('automatic narration preloads the sealed interval and rejects evidence from
     [first.ref.id, last.ref.id]
   )
   assert.equal(snapshot.volume.ref.id, volume.id)
+  assert.deepEqual(facts.volume, {
+    ref: volume,
+    from: first.sequence - 1,
+    through: last.sequence,
+  })
+  const directory = await state.list(snapshot, 0, 64, signal)
+  assert(directory.items.some((item) => item.ref.id === last.ref.id))
+  assert(directory.items.every((item) => item.sequence <= facts.volume.through))
+  assert.equal(directory.nextAfter, null)
+  const small = state.material(snapshot, 750)
+  assert.deepEqual(small.volume, facts.volume)
+  assert(JSON.stringify(small).length <= 750)
   const narrative = {
     summary: 'Implementation is planned',
     evidence: [next.ref],
@@ -725,6 +737,11 @@ test('automatic narration preloads the sealed interval and rejects evidence from
   const current = new ContextMaintenanceState('root', f.storage)
   const currentSnapshot = await current.snapshot(8000, signal)
   assert(current.material(currentSnapshot, 8000).recent.some((page) => page.ref.id === next.ref.id))
+  assert(
+    (await current.list(currentSnapshot, 0, 64, signal)).items.some(
+      (item) => item.ref.id === next.ref.id
+    )
+  )
 })
 
 test('small maintenance facts deliver readable recent pages and advance only accepted ranges', async (t) => {

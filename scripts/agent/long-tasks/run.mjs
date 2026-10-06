@@ -35,6 +35,7 @@ import {
   regressionEnvironment,
   restoreTaskPaths,
   taskEnvironment,
+  taskTemporaryEnvironment,
 } from './task-environment.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
 
@@ -47,6 +48,11 @@ const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
 assert.deepEqual(environment, manifest.environment)
 applyTaskEnvironment(environment)
+if (manifest.temporaryEnvironment) {
+  const temporaryEnvironment = await taskTemporaryEnvironment(manifest.taskRoot)
+  assert.deepEqual(temporaryEnvironment, manifest.temporaryEnvironment)
+  Object.assign(process.env, temporaryEnvironment)
+}
 assert.equal(
   import.meta.filename,
   manifest.controller ?? import.meta.filename,

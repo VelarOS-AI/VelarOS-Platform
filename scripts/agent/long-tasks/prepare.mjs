@@ -31,6 +31,7 @@ import {
   regressionEnvironment,
   taskEnvironment,
   taskPrompt,
+  taskTemporaryEnvironment,
 } from './task-environment.mjs'
 
 const execute = promisify(execFile)
@@ -60,6 +61,8 @@ const node = environment.runtime === 'node' ? process.execPath : undefined
 const output = join(campaign, attemptId)
 await mkdir(output)
 const taskRoot = await createTaskRoot()
+const temporaryEnvironment = await taskTemporaryEnvironment(taskRoot)
+Object.assign(process.env, temporaryEnvironment)
 const source = join(taskRoot, 'source', environment.project)
 await execute('git', [
   'clone',
@@ -186,25 +189,34 @@ const pricing = JSON.parse(
 const files = {}
 const hash = (value) => createHash('sha256').update(value).digest('hex')
 const harness = join(output, 'harness/agent')
-async function collect(directory) {
+async function collect(directory, sourceRoot, destinationRoot) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
     if (entry.isDirectory() && !['__pycache__', 'node_modules'].includes(entry.name))
-      await collect(path)
+      await collect(path, sourceRoot, destinationRoot)
     else if (entry.isFile() && /\.(mjs|py|json)$/u.test(path)) {
-      const destination = join(harness, relative(resolve(import.meta.dirname, '..'), path))
+      const destination = join(destinationRoot, relative(sourceRoot, path))
       await mkdir(dirname(destination), { recursive: true })
       await cp(path, destination)
       files[destination] = hash(await readFile(destination))
     }
   }
 }
-await collect(resolve(import.meta.dirname, '..'))
-// 独立包验收复用仓库的受控打包器；与评分器一起复制并登记哈希，冻结后不读取工作树。
-const packHelper = join(output, 'harness/release/safe-package-pack.mjs')
-await mkdir(dirname(packHelper), { recursive: true })
-await cp(join(root, 'scripts/release/safe-package-pack.mjs'), packHelper)
-files[packHelper] = hash(await readFile(packHelper))
+const agentScripts = resolve(import.meta.dirname, '..')
+await collect(agentScripts, agentScripts, harness)
+// 受控进程与打包器的所属脚本一起冻结，包含它们的本地依赖。
+const releaseScripts = join(root, 'scripts/release')
+await collect(releaseScripts, releaseScripts, join(output, 'harness/release'))
+// 从冻结副本验证真实执行链；缺少依赖时在任何模型请求之前失败。
+const frozenCommands = await import(pathToFileURL(join(harness, 'long-tasks/command-output.mjs')))
+const harnessPreflight = await frozenCommands.runCapturedCommand(
+  process.execPath,
+  ['-e', 'process.stdout.write("frozen-harness-ready")'],
+  { cwd: output }
+)
+await writeFile(join(output, 'harness-preflight.json'), JSON.stringify(harnessPreflight, null, 2))
+assert.equal(harnessPreflight.exitCode, 0, harnessPreflight.error)
+assert.equal(harnessPreflight.stdout, 'frozen-harness-ready')
 files[codex] = hash(await readFile(codex))
 const candidate = join(campaign, candidateName)
 // 本 campaign 的兼容供应商在 rich-06 首次请求明确拒绝显式断点；会话键继续使用。
@@ -240,6 +252,7 @@ const manifest = {
   task,
   environment,
   taskRoot,
+  temporaryEnvironment,
   source,
   python,
   node,
@@ -257,6 +270,7 @@ const manifest = {
   scriptactCapabilities,
   scriptactTaskMode,
   modelWirePreflight,
+  harnessPreflight,
   providerCapabilities,
   model: 'gpt-5.6-sol',
   contextTokens: 65536,

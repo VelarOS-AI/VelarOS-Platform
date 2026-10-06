@@ -1,0 +1,23 @@
+{
+  "id": "shelljs-uniq-singleton-groups",
+  "split": "holdout",
+  "repository": "https://github.com/shelljs/shelljs.git",
+  "commit": "4580c00398982618ff075dd4354b0234a1d679dc",
+  "environment": {
+    "runtime": "node",
+    "project": "shelljs",
+    "acceptance": "test_shelljs_uniq_singletons_acceptance.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": [
+      "test/*.js"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      ".eslintrc.json"
+    ],
+    "baselineFailure": "unique-only option must be accepted"
+  },
+  "prompt": "Add a maintained -u option to ShellJS uniq which outputs only adjacent groups containing exactly one line. Keep the established adjacent-group comparison rules; -i applies before group counting, and non-adjacent occurrences are separate groups. With -c, retain the existing padded count format for the surviving groups. With -d and -u together, both filters apply, so no group survives; use the existing empty-output convention. All behavior without -u remains compatible. Support input files, ShellString pipelines and the existing output-file argument, keeping ordinary missing-file diagnostics and input immutability. Preserve the original representative text, ordering and newline conventions. Add permanent AVA tests for grouped duplicates, non-adjacent repetition, -i/-c/-d combinations, file and pipeline inputs, output files and unchanged existing behavior. Update source command documentation and generated public README, and add a runnable example. Run the original AVA suite, JavaScript lint and the example; report actual results accurately. Make routine implementation choices autonomously."
+}

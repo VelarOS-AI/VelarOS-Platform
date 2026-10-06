@@ -266,7 +266,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             skeleton: latest.volume.skeleton,
           }
         : undefined,
-      // 最新叙事里的未解事项原样给出，写新叙事时照抄还没解决的；否定尝试只供参照，按卷累积
+      // 当前事项由 ActiveContext 持久保留；既有事项与失败尝试只供核对，新卷记录新增事实。
       ledgers: {
         negativeAttempts: ledgers.negativeAttempts.items,
         unresolved: active.items
@@ -310,6 +310,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const result = {
       kind: 'context-maintenance',
       baseRevision: snapshot.baseRevision,
+      // 卷边界属于当前控制状态，不能只寄存在可能被裁剪的初始请求正文中。
+      volume: snapshot.volume
+        ? { ref: snapshot.volume.ref, from: snapshot.volume.from, through: snapshot.volume.through }
+        : undefined,
       inputs,
       recent,
     }
@@ -465,7 +469,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       signal.throwIfAborted()
       if (
         record.sequence <= after ||
-        record.sequence > snapshot.through ||
+        record.sequence >
+          (this.scope === 'volume' && snapshot.volume
+            ? snapshot.volume.through
+            : snapshot.through) ||
         (record.sequence <= reset &&
           !reattached.has(JSON.stringify([record.ref.sessionId, record.ref.id]))) ||
         (!memoryMaterialKind(record, record.sequence <= reset) &&

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -1041,6 +1041,20 @@ test('runtime delivers native output to the next model turn with a small standar
   state.jobs = [{ executionId: 'pending-job', status: 'running' }]
   state.goal = { status: 'blocked', objective: 'goal-must-remain', revision: 0 }
   state.progress.stalled = true
+  state.progress.feedback = {
+    ref: 'failed-program',
+    sourceRef: 'failed-source',
+    failure: { code: 'PROGRAM_ERROR', message: 'recover-without-replaying-effects' },
+    recovery: {
+      index: { ref: 'failed-program', pointer: '/recovery/calls' },
+      selector: 'invocation',
+    },
+  }
+  const feedbackOnly = structuredClone(originalFrame)
+  feedbackOnly.partitions.runtime.progress.feedback = state.progress.feedback
+  const feedbackPrompt = memoryPrompt(JSON.stringify(feedbackOnly))
+  assert.match(feedbackPrompt, /recover-without-replaying-effects/)
+  assert.match(feedbackPrompt, /\/recovery\/calls/)
   state.decision.missing = [{ ref: 'missing-page', reason: 'required-body-unavailable' }]
   state.children = [
     { id: 'child', done: false },
@@ -1643,6 +1657,160 @@ test('standard package references expose installed versions, original docs and d
   )
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.deepEqual(result.value.sort(), [...NodeDefaultPackages].sort())
+})
+
+test('package discovery follows workspace versions, aliases and hidden package manifests', async (t) => {
+  const f = await fixture(t)
+  for (const name of ['execa', '@vscode/ripgrep']) {
+    const root = join(f.cwd, 'node_modules', name)
+    await mkdir(root, { recursive: true })
+    await writeFile(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'aliased-original',
+        version: '1.2.3',
+        type: 'module',
+        exports: './index.js',
+      })
+    )
+    await writeFile(join(root, 'index.js'), 'export const version="1.2.3";')
+    await writeFile(join(root, 'README.md'), `Local documentation for ${name}`)
+  }
+  const result = await createNodeCodeRunner(f.node).run(
+    request(`
+      import {version} from 'execa';
+      import {version as scopedVersion} from '@vscode/ripgrep';
+      import {readFileSync} from 'node:fs';
+      const catalog=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));
+      export default {version,scopedVersion,catalog};
+    `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  const { version, scopedVersion, catalog } = result.value
+  assert.equal(version, '1.2.3')
+  assert.equal(scopedVersion, version)
+  assert.equal(catalog.importer, join(f.cwd, '__velaros_program__.mjs'))
+  for (const name of ['execa', '@vscode/ripgrep']) {
+    const reference = catalog.packages.find((pkg) => pkg.name === name)
+    assert.equal(reference.source, 'workspace')
+    assert.equal(reference.version, version)
+    assert.equal(reference.root, await realpath(join(f.cwd, 'node_modules', name)))
+    assert.equal(await readFile(reference.readme, 'utf8'), `Local documentation for ${name}`)
+  }
+  assert.equal(catalog.packages.find((pkg) => pkg.name === 'yaml').source, 'runtime')
+})
+
+test('package discovery uses the exact nested entrypoint, package self-reference and symlinks', async (t) => {
+  const f = await fixture(t)
+  const nested = join(f.cwd, 'tools')
+  const dependency = join(f.root, 'linked-yaml')
+  await mkdir(join(nested, 'node_modules'), { recursive: true })
+  await mkdir(dependency)
+  await writeFile(
+    join(dependency, 'package.json'),
+    JSON.stringify({ name: 'yaml', version: '7.8.9', main: 'index.cjs' })
+  )
+  await writeFile(join(dependency, 'index.cjs'), 'module.exports={version:"7.8.9"};')
+  await symlink(dependency, join(nested, 'node_modules', 'yaml'), 'dir')
+  await writeFile(
+    join(nested, 'package.json'),
+    JSON.stringify({ name: 'diff', version: '0.0.1', type: 'module', exports: './self.js' })
+  )
+  await writeFile(join(nested, 'self.js'), 'export const version="0.0.1";')
+  const result = await createNodeCodeRunner(f.node).run(
+    {
+      ...request(`
+      import yaml from 'yaml';
+      import {version} from 'diff';
+      import {readFileSync} from 'node:fs';
+      export default {yaml:yaml.version,diff:version,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
+    `),
+      path: 'tools/entry.mjs',
+    },
+    noCalls,
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  for (const [name, root] of [
+    ['yaml', dependency],
+    ['diff', nested],
+  ]) {
+    const reference = result.value.catalog.packages.find((pkg) => pkg.name === name)
+    assert.equal(reference.version, result.value[name])
+    assert.equal(reference.root, await realpath(root))
+    assert.equal(reference.source, 'workspace')
+  }
+})
+
+test('invalid or versionless workspace manifests do not borrow fallback identities or block unrelated code', async (t) => {
+  const f = await fixture(t)
+  for (const [name, manifest] of [
+    ['diff', '{broken'],
+    ['yaml', '{}'],
+  ]) {
+    const root = join(f.cwd, 'node_modules', name)
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, 'package.json'), manifest)
+    await writeFile(join(root, 'index.js'), 'module.exports={local:true};')
+  }
+  const runner = createNodeCodeRunner(f.node)
+  const result = await runner.run(
+    request(`
+    import yaml from 'yaml';
+    import {readFileSync} from 'node:fs';
+    export default {local:yaml.local,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
+  `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.equal(result.value.local, true)
+  const diff = result.value.catalog.packages.find((pkg) => pkg.name === 'diff')
+  assert.equal(diff.source, 'workspace')
+  assert.equal(diff.version, undefined)
+  assert.ok(diff.error.message)
+  assert.equal(
+    diff.packageJson,
+    join(await realpath(join(f.cwd, 'node_modules', 'diff')), 'package.json')
+  )
+  const yaml = result.value.catalog.packages.find((pkg) => pkg.name === 'yaml')
+  assert.equal(yaml.version, undefined)
+  assert.equal(yaml.error, undefined)
+  const broken = await runner.run(request("import 'diff';"), noCalls, () => {})
+  assert.equal(broken.ok, false)
+  assert.equal(broken.error.code, 'ERR_INVALID_PACKAGE_CONFIG')
+})
+
+test('each execution discovers newly edited self references without a stale host manifest cache', async (t) => {
+  const f = await fixture(t)
+  const runner = createNodeCodeRunner(f.node)
+  const catalog =
+    "import {readFileSync} from 'node:fs';const catalog=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));export default catalog.packages.find(pkg=>pkg.name==='diff');"
+  await writeFile(
+    join(f.cwd, 'package.json'),
+    JSON.stringify({ name: 'initial', type: 'module', exports: './self.js' })
+  )
+  const initial = await runner.run(request(catalog), noCalls, () => {})
+  assert.equal(initial.ok, true, JSON.stringify(initial))
+  assert.equal(initial.value.source, 'runtime')
+  await writeFile(
+    join(f.cwd, 'package.json'),
+    JSON.stringify({ name: 'diff', version: '0.0.2', type: 'module', exports: './self.js' })
+  )
+  await writeFile(join(f.cwd, 'self.js'), "export const version='0.0.2';")
+  const edited = await runner.run(
+    request(
+      `import {version} from 'diff';${catalog}if(version!==catalog.packages.find(pkg=>pkg.name==='diff').version) throw Error('stale identity');`
+    ),
+    noCalls,
+    () => {}
+  )
+  assert.equal(edited.ok, true, JSON.stringify(edited))
+  assert.equal(edited.value.source, 'workspace')
+  assert.equal(edited.value.version, '0.0.2')
+  assert.equal(edited.value.root, await realpath(f.cwd))
 })
 
 test('capabilities cannot shadow default npm packages through either registration path', async (t) => {

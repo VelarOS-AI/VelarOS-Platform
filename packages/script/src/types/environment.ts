@@ -10,14 +10,24 @@ export interface NodeRuntimePackage {
   readonly skill?: string
 }
 
-/** 标准包的按需查询入口；原包清单包含 exports 和类型声明位置。 */
-export interface NodeRuntimePackageReference extends NodeRuntimePackage {
+/** 本次程序入口可发现的包；工作区解析优先，查询失败只影响对应条目。 */
+export interface NodeRuntimePackageReference {
+  /** 程序使用的导入名，可能与 npm alias 对应的原包名不同。 */
+  readonly name: string
+  /** 当前入口解析的来源；runtime 表示使用运行环境的后备安装。 */
+  readonly source: 'workspace' | 'runtime'
+  /** 实际包清单的版本；清单未声明或无法读取时省略。 */
+  readonly version?: string
+  /** 提供后备安装的 Skill；工作区依赖及基础包省略。 */
+  readonly skill?: string
   /** 实际包目录，可读取随版本安装的文档、声明和实现。 */
-  readonly root: string
+  readonly root?: string
   /** 当前安装包的原始 package.json，包含 API 导出与类型入口。 */
-  readonly packageJson: string
+  readonly packageJson?: string
   /** 包自带 README 的绝对路径；没有提供时省略。 */
   readonly readme?: string
+  /** 查询失败的原始诊断；不替换成其他版本，也不阻止无关程序执行。 */
+  readonly error?: { readonly code: string; readonly message: string }
 }
 
 /** Skill 的发现卡片；说明正文和资源保留在安装目录，按需读取。 */

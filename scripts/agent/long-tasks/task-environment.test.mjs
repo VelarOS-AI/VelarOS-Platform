@@ -25,6 +25,7 @@ import {
   regressionArguments,
   restoreTaskPaths,
   taskEnvironment,
+  taskTemporaryEnvironment,
 } from './task-environment.mjs'
 
 const environment = {
@@ -35,6 +36,39 @@ const environment = {
   preserve: ['tests', 'pyproject.toml'],
   baselineFailure: 'Feature is not implemented',
 }
+
+test('concurrent attempts isolate fixed temporary names in real child processes', async () => {
+  const roots = await Promise.all([createTaskRoot(), createTaskRoot()])
+  const source = `const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
+const file=path.join(os.tmpdir(),'shared-upstream-test-name');
+fs.writeFileSync(file,process.argv[1],{flag:'wx'});
+setTimeout(()=>{if(fs.readFileSync(file,'utf8')!==process.argv[1])process.exit(1);console.log(file)},100);`
+  try {
+    const environments = await Promise.all(roots.map(taskTemporaryEnvironment))
+    const results = await Promise.all(
+      environments.map((env, i) =>
+        promisify(execFile)(process.execPath, ['-e', source, String(i)], {
+          env: { ...process.env, ...env },
+        })
+      )
+    )
+    assert.notEqual(results[0].stdout, results[1].stdout)
+    for (const [i, root] of roots.entries())
+      assert.equal(await readFile(join(root, 'tmp/shared-upstream-test-name'), 'utf8'), String(i))
+  } finally {
+    await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })))
+  }
+})
+
+test('attempt temporary roots reject links into another attempt', async () => {
+  const roots = await Promise.all([createTaskRoot(), createTaskRoot()])
+  try {
+    await symlink(roots[1], join(roots[0], 'tmp'))
+    await assert.rejects(taskTemporaryEnvironment(roots[0]), /must not be a symlink/)
+  } finally {
+    await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })))
+  }
+})
 
 test('workspace copies preserve relative and dangling links without writing back into earlier copies', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'velaros-copy-isolation-'))
