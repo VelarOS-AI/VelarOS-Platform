@@ -15,6 +15,8 @@ export {
 } from './contract/constants.js'
 export type { KernelScriptSessionApi } from './contract/provides.js'
 export type { ScriptPackageCompilerApi } from './contract/provides.js'
+export type { ScriptContractCompilerApi } from './contract/provides.js'
+export type { NodeRuntimePackagesApi } from './contract/provides.js'
 export type {
   CodeCapabilityCall,
   CodeCapabilityOutcome,
@@ -33,13 +35,22 @@ export { createKernelScriptSession } from './impl/KernelScriptSession.js'
 export { createNodeCodeRunner } from './impl/NodeCodeRunner.js'
 export type { NodeExecutableApi } from './impl/NodeExecutable.js'
 export { nodeExecutable } from './impl/NodeExecutable.js'
+export { nodeRuntimePackages } from './impl/NodeRuntimePackages.js'
 export {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
 } from './impl/NodeSubprocessCodeRunner.js'
+export { scriptContractCompiler } from './impl/ScriptContractCompiler.js'
 export type { ScriptOutputsApi } from './impl/ScriptOutputs.js'
 export { scriptOutputs } from './impl/ScriptOutputs.js'
 export { scriptPackageCompiler } from './impl/ScriptPackageCompiler.js'
+export type { ScriptCompiledContract } from './types/compiler.js'
+export type {
+  NodeRuntimeEnvironment,
+  NodeRuntimePackage,
+  NodeRuntimePackageReference,
+  NodeRuntimeSkill,
+} from './types/environment.js'
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,

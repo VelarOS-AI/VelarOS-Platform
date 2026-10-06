@@ -1,0 +1,49 @@
+/** 运行环境公开的标准 npm 包；directory 是拥有 node_modules 的安装根。 */
+export interface NodeRuntimePackage {
+  /** npm 或 Skill 的公开身份。 */
+  readonly name: string
+  /** 锁定的实际安装版本。 */
+  readonly version: string
+  /** 资源和依赖所在的绝对目录。 */
+  readonly directory: string
+  /** 提供此包的 Skill；基础包省略。 */
+  readonly skill?: string
+}
+
+/** 标准包的按需查询入口；原包清单包含 exports 和类型声明位置。 */
+export interface NodeRuntimePackageReference extends NodeRuntimePackage {
+  /** 实际包目录，可读取随版本安装的文档、声明和实现。 */
+  readonly root: string
+  /** 当前安装包的原始 package.json，包含 API 导出与类型入口。 */
+  readonly packageJson: string
+  /** 包自带 README 的绝对路径；没有提供时省略。 */
+  readonly readme?: string
+}
+
+/** Skill 的发现卡片；说明正文和资源保留在安装目录，按需读取。 */
+export interface NodeRuntimeSkill {
+  /** npm 或 Skill 的公开身份。 */
+  readonly name: string
+  /** 锁定的实际安装版本。 */
+  readonly version: string
+  /** 用于按需发现的简短用途。 */
+  readonly description: string
+  /** 资源和依赖所在的绝对目录。 */
+  readonly directory: string
+  /** 包内说明入口的相对路径。 */
+  readonly instructions?: string
+  /** Agent 可直接导入的标准 npm 包。 */
+  readonly packages: readonly string[]
+  /** 当前授权的宿主能力模块。 */
+  readonly capabilities: readonly string[]
+}
+
+/** 会话固定的运行环境；新安装和升级只影响后续装配。 */
+export interface NodeRuntimeEnvironment {
+  /** 固定本次依赖和授权集合的环境身份。 */
+  readonly id: string
+  /** Agent 可直接导入的标准 npm 包。 */
+  readonly packages: readonly NodeRuntimePackage[]
+  /** 按需加载说明与资源的 Skill 卡片。 */
+  readonly skills: readonly NodeRuntimeSkill[]
+}

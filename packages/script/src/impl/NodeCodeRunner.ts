@@ -31,6 +31,8 @@ import { nodeProgramSource } from '../utils/node-program.js'
 import { createOutputCollector, validateOutputOptions } from '../utils/output-capture.js'
 import { describeChildExit } from '../utils/process-error.js'
 
+import { nodeRuntimePackages } from './NodeRuntimePackages.js'
+
 /** 一次标准 Node 程序；宿主端口承担操作系统权限与进程树所有权。 */
 class NodeCodeRunner implements CodeRunnerApi {
   public readonly environment = 'node' as const
@@ -280,7 +282,28 @@ class NodeCodeRunner implements CodeRunnerApi {
           ),
         })
       }
-      await writeFile(join(catalog, 'index.json'), stringifyPretty(index), { mode: 0o600 })
+      await writeFile(
+        join(catalog, 'index.json'),
+        stringifyPretty({
+          environment: this.options.runtime?.id ?? 'base',
+          packages: nodeRuntimePackages.references([
+            ...new Map(
+              [
+                ...nodeRuntimePackages.defaults(this.options.packageDirectory),
+                ...(this.options.runtime?.packages ?? []),
+              ].map((pkg) => [pkg.name, pkg])
+            ).values(),
+          ]),
+          skills: (this.options.runtime?.skills ?? []).map((skill) => ({
+            ...skill,
+            capabilities: skill.capabilities.filter((module) =>
+              Object.hasOwn(request.operations, module)
+            ),
+          })),
+          capabilities: index,
+        }),
+        { mode: 0o600 }
+      )
       const socket =
         process.platform === 'win32'
           ? `\\\\.\\pipe\\velaros-node-${randomUUID()}`
@@ -306,7 +329,8 @@ class NodeCodeRunner implements CodeRunnerApi {
         catalog,
         this.options.cwd,
         clients,
-        this.options.packageDirectory
+        this.options.packageDirectory,
+        this.options.runtime
       )
       const processRequest = {
         source: request.source,

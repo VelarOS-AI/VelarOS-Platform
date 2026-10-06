@@ -1,0 +1,16 @@
+{
+  "name": "semver-tools",
+  "version": "1.0.0",
+  "description": "提供标准 semver 模块。",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "dependencies": {
+    "semver": "7.8.5"
+  },
+  "agentSkill": {
+    "packages": [
+      "semver"
+    ]
+  }
+}

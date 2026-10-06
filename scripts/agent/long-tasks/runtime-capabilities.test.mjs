@@ -58,7 +58,7 @@ for (const mode of ['on-demand', 'node'])
       await session.context.append({ kind: 'user', body: 'Check the available capabilities.' })
       const result = await session.execute({
         source:
-          "import {readFile} from 'node:fs/promises'; const entries=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); console.log(JSON.stringify(entries.map(item=>item.module)));",
+          "import {readFile} from 'node:fs/promises'; const entries=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); console.log(JSON.stringify(entries.capabilities.map(item=>item.module)));",
       })
       assert.equal(result.result.failed, undefined)
       const modules = JSON.parse(result.result.process.stdout)

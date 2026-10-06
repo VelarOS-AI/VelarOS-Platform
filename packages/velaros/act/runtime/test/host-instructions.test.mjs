@@ -52,7 +52,7 @@ test('base instructions stay small while authorized packages are discoverable on
     assert.match(instructions, /index.json/)
     assert(instructions.length < 1800)
     const result = await f.session.execute({
-      source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.some(item=>item.module==='velaros:project');`,
+      source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.capabilities.some(item=>item.module==='velaros:project');`,
     })
     assert.equal(result.result.value, project)
   }
@@ -343,7 +343,7 @@ test('INV-57 the on-demand catalog contains every authorized package and complet
     import {readFile} from 'node:fs/promises'; import {join} from 'node:path';
     const dir=process.env.VELAROS_HOST_DIR; const entries=JSON.parse(await readFile(join(dir,'index.json'),'utf8'));
     export default await Promise.all(['velaros:project','velaros:code','velaros:images'].map(async name=>{
-      const entry=entries.find(item=>item.module===name);
+      const entry=entries.capabilities.find(item=>item.module===name);
       const types=await readFile(join(dir,entry.documentation),'utf8');
       return {name,summary:entry.summary,types:types.includes('export function')};
     }));`,

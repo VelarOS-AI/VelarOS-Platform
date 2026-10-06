@@ -107,6 +107,7 @@
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+    "@velaros-ai/script": "workspace:*",
     "@velaros-ai/velaros": "workspace:*",
     "brace-expansion": "1.1.21",
     "chrome-devtools-frontend": "1.0.1652307",

@@ -877,7 +877,7 @@ test('capability discovery uses normal files and dispatch preserves caught host 
     import {readFile} from 'node:fs/promises'; import {join} from 'node:path'; import {pathToFileURL} from 'node:url';
     const dir = process.env.VELAROS_HOST_DIR;
     const catalog = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8'));
-    const host = await import(pathToFileURL(join(dir,catalog[0].client)));
+    const host = await import(pathToFileURL(join(dir,catalog.capabilities[0].client)));
     console.log(await host.read({id:7}));
     try { await host.write({id:8}) } catch (error) { console.log(error.code) }
   `,
@@ -1173,7 +1173,7 @@ test('host filenames remain stable across catalog order and declarations are ord
     const root=process.env.VELAROS_HOST_DIR;
     const files=await readdir(root);
     const docs=await readFile(join(root,files.find(name=>name.includes('example')&&name.endsWith('.d.ts'))),'utf8');
-    const index=JSON.parse(await readFile(join(root,'index.json'),'utf8'));
+    const index=JSON.parse(await readFile(join(root,'index.json'),'utf8')).capabilities;
     const client=await readFile(join(root,index.find(item=>item.module==='example:host').client),'utf8');
     console.log(JSON.stringify({index,docs,client}));
   `
@@ -1332,7 +1332,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'child.sqlite') }),
     model: driver(
-      `import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const index=JSON.parse(await readFile(dir+'/index.json','utf8'));const api=await import(pathToFileURL(dir+'/'+index.find(item=>item.module==='velaros:agents').client));const job=await api.start({task:'write child proof',profile:'worker'});console.log(await api.wait({id:job.id}));`,
+      `import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const index=JSON.parse(await readFile(dir+'/index.json','utf8')).capabilities;const api=await import(pathToFileURL(dir+'/'+index.find(item=>item.module==='velaros:agents').client));const job=await api.start({task:'write child proof',profile:'worker'});console.log(await api.wait({id:job.id}));`,
       (req) => {
         const frame = JSON.parse(req.materials.find((item) => item.origin === 'runtime-view').text)
         const delivery = frame.partitions.runtime.children?.[0]?.delivery
@@ -1620,6 +1620,31 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })
 
+test('standard package references expose installed versions, original docs and declarations on demand', async (t) => {
+  const f = await fixture(t, {}, 'workspace-write')
+  const result = await createNodeCodeRunner(f.node).run(
+    request(`
+    import {readFile} from 'node:fs/promises';
+    import {join} from 'node:path';
+    const catalog=JSON.parse(await readFile(join(process.env.VELAROS_HOST_DIR,'index.json'),'utf8'));
+    const refs=await Promise.all(catalog.packages.map(async pkg=>{
+      const manifest=JSON.parse(await readFile(pkg.packageJson,'utf8'));
+      if(manifest.name!==pkg.name || manifest.version!==pkg.version) throw Error('package identity mismatch');
+      if(!(await readFile(pkg.readme,'utf8')).trim()) throw Error('missing package documentation');
+      return pkg.name;
+    }));
+    const execa=catalog.packages.find(pkg=>pkg.name==='execa');
+    const manifest=JSON.parse(await readFile(execa.packageJson,'utf8'));
+    if(!(await readFile(join(execa.root,manifest.exports.types),'utf8')).includes('execa')) throw Error('missing declaration');
+    export default refs;
+  `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.deepEqual(result.value.sort(), [...NodeDefaultPackages].sort())
+})
+
 test('capabilities cannot shadow default npm packages through either registration path', async (t) => {
   const f = await fixture(t)
   const execute = t.mock.method(f.node, 'execute', async () => {
@@ -1700,7 +1725,7 @@ test('only project workspaces receive project transaction capabilities', async (
       })
       const receipt = await session.execute({
         source:
-          "import {readFile} from 'node:fs/promises';console.log(JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')).map(entry=>entry.module));",
+          "import {readFile} from 'node:fs/promises';console.log(JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')).capabilities.map(entry=>entry.module));",
       })
       assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
       assert.equal(receipt.result.process.stdout.includes('velaros:project'), project)

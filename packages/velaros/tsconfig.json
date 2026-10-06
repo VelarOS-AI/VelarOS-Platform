@@ -40,7 +40,9 @@
       "@velaros-ai/velaros": ["packages/velaros/act/runtime/index.ts"],
       "@velaros-ai/velaros/act/system": ["packages/velaros/act/system/index.ts"],
       "@velaros-ai/velaros/act/search": ["packages/velaros/act/search/index.ts"],
-      "@velaros-ai/velaros/act/agents": ["packages/velaros/act/agents/index.ts"]
+      "@velaros-ai/velaros/act/agents": ["packages/velaros/act/agents/index.ts"],
+      "@velaros-ai/velaros/skills": ["packages/velaros/skills/index.ts"],
+      "@velaros-ai/velaros/skills/contracts": ["packages/velaros/skills/contracts.ts"]
     }
   },
   "include": [
@@ -57,7 +59,8 @@
     "sessions/**/*.ts",
     "act/**/*.ts",
     "script/**/*.ts",
-    "act/runtime/test/capability-contracts.types.ts"
+    "act/runtime/test/capability-contracts.types.ts",
+    "skills/**/*.ts"
   ],
   "exclude": [
     "**/spec/**",
@@ -74,6 +77,7 @@
     "act/runtime/test/provider.test.ts",
     "act/runtime/test/McpClientConnection.test.ts",
     "dist",
-    "node_modules"
+    "node_modules",
+    "skills/test"
   ]
 }

@@ -44,6 +44,22 @@
 export const GovernedModules = [
   {
     directory: 'velaros',
+    unit: 'skills',
+    name: '@velaros-ai/velaros/skills',
+    contract: 'skills/contract',
+    types: 'skills/types',
+    impl: 'skills/impl',
+    utils: 'skills/utils',
+    layers: [
+      ['SkillRegistry.ts', 'SkillCapabilityModules.ts', 'NpmSkillInstaller.ts'],
+      ['SkillPackageFiles.ts'],
+    ],
+    browserSafeEntries: ['contracts.ts'],
+    invariants: 'skills/spec/invariants.md',
+    acceptance: 'skills/spec/acceptance.test.ts',
+  },
+  {
+    directory: 'velaros',
     unit: 'act/runtime',
     name: '@velaros-ai/velaros/act/runtime',
     contract: 'act/runtime/contract',
@@ -595,7 +611,12 @@ export const GovernedModules = [
     browserSafeEntries: ['contracts.ts'],
     layers: [
       // Kernel 会话编排检查与一次执行
-      ['KernelScriptSession.ts', 'ScriptPackageCompiler.ts', 'ScriptOutputs.ts'],
+      [
+        'KernelScriptSession.ts',
+        'ScriptPackageCompiler.ts',
+        'ScriptOutputs.ts',
+        'ScriptContractCompiler.ts',
+      ],
       ['CodeSurfaceSession.ts'],
       // 执行前的检查与隔离运行器
       [
@@ -606,7 +627,7 @@ export const GovernedModules = [
         'NodeSubprocessCodeRunner.ts',
       ],
       // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
-      ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],
+      ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts', 'NodeRuntimePackages.ts'],
     ],
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

@@ -18,6 +18,7 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+        "@velaros-ai/script": "workspace:*",
         "@velaros-ai/velaros": "workspace:*",
         "brace-expansion": "1.1.21",
         "chrome-devtools-frontend": "1.0.1652307",
@@ -167,12 +168,15 @@
         "parse5": "^7.3.0",
         "pdf-lib": "1.17.1",
         "pdfjs-dist": "6.2.108",
+        "semver": "7.8.5",
         "typescript": "^5.7.0",
+        "yaml": "2.9.1",
         "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
         "@types/react": "^19.0.0",
+        "@types/semver": "^7.8.0",
         "ai": "^6.0.168",
         "electron": "^41.10.2",
       },
@@ -373,6 +377,8 @@
     "@types/picomatch": ["@types/picomatch@3.0.2", "", {}, "sha512-n0i8TD3UDB7paoMMxA3Y65vUncFJXjcUf7lQY7YyKGl6031FNjfsLs6pdLFCy2GNFxItPJG8GvvpbZc2skH7WA=="],
 
     "@types/react": ["@types/react@19.2.18", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w=="],
+
+    "@types/semver": ["@types/semver@7.8.0", "", {}, "sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ=="],
 
     "@types/ws": ["@types/ws@8.18.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg=="],
 

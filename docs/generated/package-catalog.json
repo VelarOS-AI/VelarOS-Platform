@@ -112,6 +112,8 @@
         "./sandbox/local",
         "./sessions",
         "./sessions/contracts",
+        "./skills",
+        "./skills/contracts",
         "./web",
         "./web/contracts"
       ],

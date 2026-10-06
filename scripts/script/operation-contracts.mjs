@@ -1,84 +1,10 @@
 import ts from 'typescript'
 
-/** 同一 TypeScript 类型生成 draft-07 数据校验，递归数据使用局部 definitions。 */
+import { scriptContractCompiler } from '@velaros-ai/script'
+
+/** 内置与 Skill 能力使用同一 TypeScript 类型转换。 */
 export function operationSchema(checker, root) {
-  const definitions = {}
-  const names = new Map()
-  const encode = (type) => {
-    const flags = type.flags
-    if (flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return {}
-    if (flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined | ts.TypeFlags.Null))
-      return { type: 'null' }
-    if (flags & (ts.TypeFlags.BigIntLike | ts.TypeFlags.ESSymbolLike | ts.TypeFlags.TypeParameter))
-      throw new Error(`模型契约不是具体 JSON 类型：${checker.typeToString(type)}`)
-    if (flags & ts.TypeFlags.Never) return { not: {} }
-    if (type.isStringLiteral?.() || type.isNumberLiteral?.()) return { const: type.value }
-    if (flags & ts.TypeFlags.BooleanLiteral) return { const: type.intrinsicName === 'true' }
-    if (flags & ts.TypeFlags.StringLike) return { type: 'string' }
-    if (flags & ts.TypeFlags.NumberLike) return { type: 'number' }
-    if (flags & ts.TypeFlags.Boolean) return { type: 'boolean' }
-    if (type.isUnion?.()) {
-      const branches = type.types
-        .filter((item) => !(item.flags & ts.TypeFlags.Undefined))
-        .map(encode)
-      return branches.length === 1
-        ? branches[0]
-        : branches.length
-          ? { anyOf: branches }
-          : { type: 'null' }
-    }
-    if (names.has(type)) return { $ref: `#/definitions/${names.get(type)}` }
-    const name = `T${names.size + 1}`
-    names.set(type, name)
-    definitions[name] = {}
-    let schema
-    if (checker.isTupleType(type)) {
-      const args = checker.getTypeArguments(type)
-      const flags = type.target.elementFlags
-      if (flags.some((flag) => flag & ts.ElementFlags.Rest))
-        throw new Error(`模型契约暂不支持 rest tuple：${checker.typeToString(type)}`)
-      const required = flags.filter((flag) => flag & ts.ElementFlags.Required).length
-      const shapes = Array.from({ length: args.length - required + 1 }, (_, index) => {
-        const length = required + index
-        return length
-          ? {
-              type: 'array',
-              items: args.slice(0, length).map(encode),
-              minItems: length,
-              maxItems: length,
-              additionalItems: false,
-            }
-          : { type: 'array', maxItems: 0 }
-      })
-      schema = shapes.length === 1 ? shapes[0] : { anyOf: shapes }
-    } else if (checker.isArrayType(type) || type.symbol?.name === 'ReadonlyArray') {
-      schema = { type: 'array', items: encode(checker.getTypeArguments(type)[0]) }
-    } else {
-      if (type.getCallSignatures().length || type.getConstructSignatures().length)
-        throw new Error(`模型数据含函数：${checker.typeToString(type)}`)
-      const properties = {},
-        required = []
-      for (const property of checker.getPropertiesOfType(type)) {
-        const declaration = property.valueDeclaration ?? property.declarations?.[0]
-        if (!declaration) throw new Error(`模型字段缺少类型位置：${property.name}`)
-        properties[property.name] = encode(checker.getTypeOfSymbolAtLocation(property, declaration))
-        if (!(property.flags & ts.SymbolFlags.Optional)) required.push(property.name)
-      }
-      const index =
-        checker.getIndexTypeOfType(type, ts.IndexKind.String) ??
-        checker.getIndexTypeOfType(type, ts.IndexKind.Number)
-      schema = {
-        type: 'object',
-        properties,
-        required,
-        additionalProperties: index ? encode(index) : false,
-      }
-    }
-    definitions[name] = schema
-    return { $ref: `#/definitions/${name}` }
-  }
-  const schema = encode(root)
-  return Object.keys(definitions).length ? { ...schema, definitions } : schema
+  return scriptContractCompiler.schema(checker, root)
 }
 
 /**
@@ -106,14 +32,7 @@ function operationSummary(docs) {
  * 递归类型的 definitions 留在根上，`$ref` 才找得到。
  */
 function inputSchema(checker, parameter) {
-  const type = checker.getTypeAtLocation(parameter)
-  const schema = operationSchema(checker, type)
-  if (!type.isUnion?.() || !type.types.some((member) => member.flags & ts.TypeFlags.Undefined))
-    return schema
-  const { definitions, ...value } = schema
-  return definitions
-    ? { anyOf: [{ type: 'null' }, value], definitions }
-    : { anyOf: [{ type: 'null' }, value] }
+  return scriptContractCompiler.inputSchema(checker, parameter)
 }
 
 /**

@@ -20,6 +20,8 @@ export interface NodeExecutionEnvironmentApi {
   readonly directory: string
   /** 独立 Node 可读取的默认 npm 依赖根目录。 */
   readonly packageDirectory?: string
+  /** 会话使用的不可变依赖环境。 */
+  readonly runtime?: NodeCodeRunnerOptions['runtime']
   /** 宿主在进程计时开始前审批。 */
   readonly authorize: NodeCodeRunnerOptions['authorize']
   /** 经命令宿主派发并等待完整的进程收束。 */
@@ -35,12 +37,14 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
   public readonly cwd: string
   public readonly directory: string
   public readonly packageDirectory?: string
+  public readonly runtime?: NodeCodeRunnerOptions['runtime']
   public readonly authorize: NodeCodeRunnerOptions['authorize']
 
   public constructor(private readonly options: NodeExecutionEnvironmentOptions) {
     this.cwd = options.cwd
     this.directory = options.directory
     this.packageDirectory = options.packageDirectory
+    this.runtime = options.runtime
     this.authorize = options.authorize
   }
 

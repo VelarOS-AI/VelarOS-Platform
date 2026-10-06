@@ -7,6 +7,7 @@
 
 import type { OperationRuntimeApi } from '@velaros-ai/kernel'
 
+import type { NodeRuntimeEnvironment } from '../types/environment.js'
 import type { CodeAttachment } from '../types/outcome.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, ScriptPackageDefinition } from '../types/script.js'
@@ -20,6 +21,8 @@ export interface NodeCodeRunnerOptions {
   readonly directory: string
   /** 默认 npm 环境的绝对根目录（含 node_modules）；省略时使用 Script 包的生产依赖。 */
   readonly packageDirectory?: string
+  /** 当前会话锁定的 Skill 与标准依赖环境。 */
+  readonly runtime?: NodeRuntimeEnvironment
   /** 在计时与启动前完成本次源码的宿主审批；拒绝时不得启动进程。 */
   authorize?(request: NodeProcessRequest, signal: AbortSignal): Promise<void>
   /** 启动真实 Node，将 source 作为 ESM 标准输入；signal 必须终止并回收进程树。 */

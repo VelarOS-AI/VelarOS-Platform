@@ -14,11 +14,11 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     .filter(([module]) => modules.includes(module!))
     .map(([module, purpose]) => `${module}（${purpose}）`)
   return [
-    `统一执行环境是 Node.js ESM，支持顶层 await。预装 ${NodeDefaultPackages.join('、')}，按官方 API 直接 import；命令用 execa，文件读写用 node:fs/promises，数据处理用 JavaScript。`,
+    `执行环境是 Node.js ESM，支持顶层 await。基础包：${NodeDefaultPackages.join('、')}。`,
     `工作目录：${JSON.stringify(cwd)}。支持 fetch 和工作区已有依赖。每次执行是新进程，跨轮状态和复用脚本保存为普通文件。`,
     'console.log 自动成为执行结果；宿主返回 stdout、stderr、退出码和完整输出日志路径。输出片段会标明缺口，按需继续读取完整日志再判断结果。根据实际结果继续工作并验证任务。',
     '持续完成用户请求的全部范围；阶段成果之后继续处理剩余事项。结束前按原始需求核对交付与验证，明确仍未完成或受阻的部分。',
-    `应用能力通过普通文件发现：$${NodeEnvironmentVariables.directory.name}/index.json 提供包名、用途、operations 和 operationDirectory；按需读取该目录下的 <操作名>.d.ts（签名、相关类型和示例）。用普通 import 按包名导入，例如 import * as sessions from "velaros:sessions"；保存的脚本与 Node 子进程同样可用。`,
+    `运行时目录：$${NodeEnvironmentVariables.directory.name}/index.json。packages 提供标准包版本与原包查询入口；skills 提供用途、安装目录和可选 instructions 路径，相关任务按需读取；capabilities 是已授权的宿主模块，operationDirectory 下的 <操作名>.d.ts 提供接口与示例。保存脚本和 Node 子进程共用当前环境。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes('velaros:project')
       ? [

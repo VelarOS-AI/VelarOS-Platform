@@ -272,6 +272,8 @@ export interface NodeExecutionEnvironmentOptions {
   readonly directory: string
   /** 默认 npm 环境的绝对根目录；发行宿主提供可由独立 Node 读取的实际文件。 */
   readonly packageDirectory?: string
+  /** 会话固定的标准依赖与 Skill 发现目录。 */
+  readonly runtime?: NodeCodeRunnerOptions['runtime']
   /** 沿用当前工作区授权与约束的命令宿主。 */
   readonly host: ShellHostPort
   /** 真实 Node 可执行文件；Electron 宿主提供随产品分发的独立 Node 路径。 */

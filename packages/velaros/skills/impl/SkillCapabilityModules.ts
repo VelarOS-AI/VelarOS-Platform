@@ -1,0 +1,110 @@
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+import { toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai/kernel'
+import { createNodeCodeRunner, scriptContractCompiler } from '@velaros-ai/script'
+
+import { SkillLimits } from '../contract/constants.js'
+import type { SkillCapabilityModuleOptions } from '../contract/requires.js'
+import { containedSkillPath, readSkillText } from '../utils/package-io.js'
+
+/** 将已授权的 Skill 能力绑定到同一个 Kernel，第三方入口只在受控 Node 中求值。 */
+export interface SkillCapabilityModulesApi {
+  /** 读取静态声明并生成代理，安装代码不会进入调用宿主进程。 */
+  create(options: SkillCapabilityModuleOptions): Promise<readonly OperationModuleDefinition[]>
+}
+
+/** 静态合同负责发现和校验，每次调用固定版本并重新核对授权。 */
+class SkillCapabilityModules implements SkillCapabilityModulesApi {
+  public async create(
+    options: SkillCapabilityModuleOptions
+  ): Promise<readonly OperationModuleDefinition[]> {
+    const modules: OperationModuleDefinition[] = []
+    for (const skill of options.lease.skills) {
+      for (const capability of skill.manifest.contribution.capabilities) {
+        if (!skill.grants.includes(capability.module)) continue
+        const entry = await containedSkillPath(
+          skill.directory,
+          join(skill.directory, capability.entry)
+        )
+        const source = await readSkillText(
+          await containedSkillPath(skill.directory, join(skill.directory, capability.contract))
+        )
+        const { optionalInputs, ...surface } = scriptContractCompiler.compile(
+          source,
+          capability.module
+        )
+        const runner = createNodeCodeRunner({
+          ...options.node,
+          runtime: options.lease.environment,
+          execute: (request, output, signal) => options.node.execute(request, output, signal),
+        })
+        const operations: Record<string, OperationDefinition> = Object.create(null)
+        for (const name of surface.methods) {
+          const { hasInput, ...descriptor } = surface.operations[name]!
+          operations[name] = {
+            ...descriptor,
+            run: async (input, context) => {
+              context.signal.throwIfAborted()
+              try {
+                await options.registry.assertGranted(
+                  skill.manifest.name,
+                  skill.generation,
+                  capability.module
+                )
+              } catch (error) {
+                context.recordEffect('none')
+                throw error
+              }
+              const result = await runner.run(
+                {
+                  source: `import * as provider from ${JSON.stringify(pathToFileURL(entry).href)};\nimport {input} from 'velaros:program';\nexport default await provider[${JSON.stringify(name)}](${hasInput ? (optionalInputs.includes(name) ? 'input === null ? undefined : input' : 'input') : ''});`,
+                  input,
+                  modules: {},
+                  blobs: {},
+                  operations: {},
+                  mode: context.invocation.mode,
+                  host: {
+                    sessionId: context.invocation.sessionId,
+                    executionId: context.invocation.executionId,
+                    modules: {},
+                  },
+                  timeoutMs: SkillLimits.providerTimeoutMs,
+                },
+                async () => ({
+                  error: { code: 'PERMISSION', message: '此能力进程没有其他宿主能力授权' },
+                }),
+                () => {},
+                context.signal
+              )
+              if (!result.ok)
+                throw new AppError(
+                  'UNAVAILABLE',
+                  result.error?.message ?? 'Skill 能力进程未正常完成'
+                )
+              context.recordEffect(descriptor.effects === 'none' ? 'none' : 'committed')
+              return toNullable(result.value)
+            },
+          }
+        }
+        modules.push({
+          surface,
+          operations,
+          summary: skill.manifest.description,
+          binding: {
+            moduleId: capability.module,
+            instanceId: skill.generation,
+            generation: 1,
+            schemaRevision: surface.revision,
+          },
+        })
+      }
+    }
+    return modules
+  }
+}
+
+/** 安装生命周期与能力装配共享同一份环境租约。 */
+export const skillCapabilityModules: SkillCapabilityModulesApi = new SkillCapabilityModules()

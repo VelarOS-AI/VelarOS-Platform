@@ -336,6 +336,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             cwd: observationNode.cwd,
             directory: observationNode.directory,
             packageDirectory: observationNode.packageDirectory,
+            runtime: observationNode.runtime,
             execute: (request, output, signal) =>
               observationNode.execute({ ...request, mode: 'observe' }, output, signal),
           })

@@ -11,6 +11,7 @@ import {
   NodeDefaultPackages,
   ScriptOutputLimits,
 } from '../contract/constants.js'
+import type { NodeRuntimeEnvironment } from '../types/environment.js'
 import type { CodeRunRequest } from '../types/runner.js'
 
 import { createOutputCollector, validateOutputOptions } from './output-capture.js'
@@ -47,16 +48,29 @@ export async function nodeProgramSource(
   catalog: string,
   cwd: string,
   capabilities: Readonly<Record<string, string>>,
-  packageDirectory?: string
+  packageDirectory?: string,
+  runtime?: NodeRuntimeEnvironment
 ): Promise<{ bootstrap: string; preload: string; entrypoint: string }> {
   const specifiers: Record<string, string> = Object.create(null)
   const sources: Record<string, string> = Object.create(null)
   const url = (path: string) => pathToFileURL(path).href
+  const packageParents: Record<string, string> = Object.create(null)
+  for (const name of NodeDefaultPackages)
+    packageParents[name] = packageDirectory
+      ? url(join(packageDirectory, 'package.json'))
+      : import.meta.url
+  for (const pkg of runtime?.packages ?? []) {
+    if (Object.hasOwn(packageParents, pkg.name) && !isDefaultPackage(pkg.name))
+      throw new AppError('CONFLICT', `运行环境包名重复：${pkg.name}`)
+    packageParents[pkg.name] = url(join(pkg.directory, 'package.json'))
+  }
+  const isRuntimePackage = (name: string) =>
+    Object.keys(packageParents).some((pkg) => name === pkg || name.startsWith(`${pkg}/`))
   for (const [name, file] of Object.entries(capabilities)) {
     if (
       isBuiltin(name) ||
       ['velaros', 'velaros:program'].includes(name) ||
-      isDefaultPackage(name) ||
+      isRuntimePackage(name) ||
       Object.hasOwn(specifiers, name)
     )
       throw new AppError('CONFLICT', `能力包导入名冲突：${name}`)
@@ -87,7 +101,7 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
     if (
       packages.has(pkg.specifier) ||
       isBuiltin(pkg.specifier) ||
-      isDefaultPackage(pkg.specifier) ||
+      isRuntimePackage(pkg.specifier) ||
       (Object.hasOwn(specifiers, pkg.specifier) && pkg.specifier !== 'velaros')
     )
       throw new AppError('CONFLICT', `能力包导入名冲突：${pkg.specifier}`)
@@ -111,16 +125,22 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
   const loader = join(catalog, 'loader.mjs')
   await writeFile(
     loader,
-    `const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
-const defaults = ${JSON.stringify(NodeDefaultPackages)};
-const packageParentURL = ${JSON.stringify(packageDirectory ? url(join(packageDirectory, 'package.json')) : import.meta.url)};
-export async function resolve(specifier, context, nextResolve) {
+    `import {createRequire} from 'node:module';
+import {existsSync} from 'node:fs';
+import {join} from 'node:path';
+const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
+const packages = JSON.parse(${JSON.stringify(JSON.stringify(packageParents))});
+export function resolve(specifier, context, nextResolve) {
   if (Object.hasOwn(specifiers, specifier)) return {url:specifiers[specifier], shortCircuit:true};
-  if (specifier.startsWith('velaros:')) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
-  try { return await nextResolve(specifier, context); }
+  if ((specifier.startsWith('velaros:') || specifier.startsWith('skill:'))) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
+  try { return nextResolve(specifier, context); }
   catch (error) {
-    if (error.code !== 'ERR_MODULE_NOT_FOUND' || error.url || !defaults.some(name => specifier === name || specifier.startsWith(name+'/'))) throw error;
-    return nextResolve(specifier, {...context, parentURL:packageParentURL});
+    const name = Object.keys(packages).find(name => specifier === name || specifier.startsWith(name+'/'));
+    if (!name || !['ERR_MODULE_NOT_FOUND','MODULE_NOT_FOUND'].includes(error.code) || error.url) throw error;
+    const parent = context.parentURL ?? ${JSON.stringify(url(join(cwd, 'package.json')))};
+    if (parent.startsWith('file:') && createRequire(parent).resolve.paths(name)?.some(root => existsSync(join(root,name)))) throw error;
+    if (context.conditions.includes('require')) return nextResolve(createRequire(packages[name]).resolve(specifier),context);
+    return nextResolve(specifier, {...context, parentURL:packages[name]});
   }
 }
 `,
@@ -129,7 +149,7 @@ export async function resolve(specifier, context, nextResolve) {
   const preload = url(join(catalog, 'preload.mjs'))
   await writeFile(
     join(catalog, 'preload.mjs'),
-    `import {register} from 'node:module'; register(${JSON.stringify(url(loader))}, import.meta.url);\n`,
+    `import {registerHooks} from 'node:module'; import {resolve} from ${JSON.stringify(url(loader))}; registerHooks({resolve});\n`,
     { mode: 0o600 }
   )
   // 子进程只继承能力解析；本轮虚拟源码不遮蔽磁盘上同路径的普通脚本。
@@ -145,14 +165,14 @@ export async function resolve(specifier, context, nextResolve) {
     programLoader,
     `
 const sources = JSON.parse(${JSON.stringify(JSON.stringify(sources))});
-export async function resolve(specifier, context, nextResolve) {
+export function resolve(specifier, context, nextResolve) {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
     const target = new URL(specifier, context.parentURL).href;
     if (Object.hasOwn(sources, target)) return {url:target, shortCircuit:true};
   }
   return nextResolve(specifier, context);
 }
-export async function load(url, context, nextLoad) {
+export function load(url, context, nextLoad) {
   if (Object.hasOwn(sources, url)) return {format:'module', source:sources[url], shortCircuit:true};
   return nextLoad(url, context);
 }
@@ -163,10 +183,11 @@ export async function load(url, context, nextLoad) {
   await writeFile(wrapper, `import * as exports from ${JSON.stringify(entry)}; export {exports};`, {
     mode: 0o600,
   })
-  const bootstrap = `import {register} from 'node:module';
+  const bootstrap = `import {registerHooks} from 'node:module';
 import ${JSON.stringify(preload)};
 import {send,releaseCalls} from ${JSON.stringify(url(join(catalog, 'bridge.mjs')))};
-register(${JSON.stringify(url(programLoader))}, import.meta.url);
+import {resolve,load} from ${JSON.stringify(url(programLoader))};
+registerHooks({resolve,load});
 try {
   const {exports} = await import(${JSON.stringify(url(wrapper))});
   const names = Object.keys(exports);

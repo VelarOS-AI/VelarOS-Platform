@@ -1,0 +1,16 @@
+{
+  "name": "team-directory",
+  "version": "1.0.0",
+  "description": "查询组织自己的成员目录服务。",
+  "type": "module",
+  "agentSkill": {
+    "instructions": "SKILL.md",
+    "capabilities": [
+      {
+        "module": "skill:team-directory",
+        "entry": "provider.mjs",
+        "contract": "provider.d.ts"
+      }
+    ]
+  }
+}
