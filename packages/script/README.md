@@ -26,6 +26,8 @@ if (result.checked) console.log(result.result.process)
 
 目录的 `importer` 标明本次程序入口；`packages` 的版本、`packageJson`、README 与实际入口的工作区依赖对应，`source` 区分工作区解析和运行环境后备安装。包清单缺失或损坏时保留该条目的诊断，不借用其他版本的身份，也不影响无关程序。发现由本次 Node 进程读取，宿主在执行用户源码前一次发布；保存脚本中的其他入口仍按各自位置解析依赖。
 
+同一目录的 `execution` 记录本次子进程实际的 `node` 版本、`executable`、`platform`、`arch`、`cwd` 和有序 `path`。它是启动时的环境事实，标准命令按该 PATH 和调用时的实际文件解析；宿主可通过 `environment.PATH` 指定命令搜索范围。目录只发布这些字段，其他环境变量与能力凭据保持私有。
+
 宿主 `execute(request, onOutput, signal)` 执行 `request.entrypoint`；未提供入口文件的兼容宿主可将 `request.bootstrap ?? request.source` 作为 ESM 标准输入。`source` 始终保留审批原文。进程环境将所选 Node 的目录置于 PATH 首位，并在保留原 NODE_OPTIONS 的基础上追加 `--import request.preload`；Execa 启动的 Node 子进程、`execFile` 与 `fork` 因而继承本次能力包解析。入口与预加载只写入子进程环境，能力凭据的作用域和取消边界仍是本次执行。`mode: 'observe'` 需要实际只读进程口；不可用时拒绝启动。Platform 的 `createNodeExecutionEnvironment` 复用 execution 宿主的跨平台约束、输出与进程树回收，Desktop 提供随产品分发的真实 Node。
 
 需要结构化归档时，按需导入 `velaros` 的 `output`；内部参数可从 `velaros:program` 的 `input`、`blobs` 读取。`output` 同步保存有界 JSON 快照，在异常、取消和超时后保留已经完成的输出。宿主观察进程只额外获得本次输出文件和本机会话桥的访问权限。每次执行使用独立目录与凭据。

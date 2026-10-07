@@ -105,5 +105,6 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 
 - `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。请求快照与指纹包含工具定义。
 - 历史正文的 `toolResult` 标记将已展示文本直接绑定到前一条 assistant 的调用。标准驱动将原样正文放入对应工具回包，保留缓存断点并只发送一次；没有绑定正文的调用继续使用归档回执。逻辑历史、原文与容量编译仍由宿主维护。
+- 启用 OpenAI 显式缓存的线路按 SDK 的实际落点传递工具结果断点：Responses 放在 output 内容块，Chat 放在结果 part；文本及 JSON 编码正文保持原字节。调用方在工具输出中的显式断点计入共用额度，禁用显式断点时仍保留已支持的会话缓存键。实际命中由供应商 usage 确认。
 - `ModelInputEstimate.composition` 给出估算编码文本的 UTF-8 字节分项：系统指令、工具、assistant 历史、user 历史、工具回执、当前材料和包装；各项相加等于 total。图片和不透明推理另外预留容量，费用继续使用供应商真实用量。
 - 已知 OpenAI Chat/Responses 型号按公开编码映射延迟加载 `gpt-tokenizer`。同一驱动收到无图请求的真实输入用量后，以 BPE 文本和最近 32 份样本校准后续请求：在已见输入长度范围内，比较覆盖全部样本的线性增长上界与最大固定开销，选择较小值且不低于 BPE 文本计数；范围外或趋势不可用时沿用固定开销，统一保留 10% 余量；主线与借用该驱动的专项会话共用这些数字。冷启动、未知路由或未知型号沿用字节估算；供应商超窗后重置，旧代迟到响应不恢复旧校准。图片请求不参与取样，不透明状态独立预留，估算不充当账单。

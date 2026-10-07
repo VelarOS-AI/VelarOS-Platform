@@ -42,10 +42,10 @@ export class PromptCacheLanguageModel implements PromptCacheLanguageModelApi {
   public doGenerate(
     options: LanguageModelV3CallOptions
   ): PromiseLike<LanguageModelV3GenerateResult> {
-    return this.model.doGenerate(applyCallOptions(options, this.wire))
+    return this.model.doGenerate(applyCallOptions(options, this.wire, this.model.provider))
   }
 
   public doStream(options: LanguageModelV3CallOptions): PromiseLike<LanguageModelV3StreamResult> {
-    return this.model.doStream(applyCallOptions(options, this.wire))
+    return this.model.doStream(applyCallOptions(options, this.wire, this.model.provider))
   }
 }

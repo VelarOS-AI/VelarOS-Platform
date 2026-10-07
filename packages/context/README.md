@@ -94,6 +94,7 @@ await view.end()
 - 领域验收器可返回有界 `report`，逐项声明核查范围、时间、通过/失败/未知、证据引用与实际产物版本；`ContextVerificationLimits` 规定上限。报告归档后由 `readCompletion()` 读取当前任务的最近 `ContextCompletionRecord`，`readCompletion(ref)` 按 `inspect().completionRef` 等引用回看历史报告；失败报告也保留原任务与宿主对象身份，不把模型的完成主张当作核查。产物变化后旧报告保持原时刻的事实。
 - 宿主验收器可使用 `verify(view, signal, checks)` 的可选第三参数，按 `checks.check(spec, execute)` 复用完整通过的单项检查。`spec` 声明精确判据范围、核查器身份/版本，并原子探测完整产物指纹、授权与能识别 ABA 的变化代次；前后匹配才复用。未知探测仍实际核查，失败或部分覆盖不缓存。缓存属于当前视图实例，重开需实际核查；旧两参数验收器保持可用。
 - `completionApplicability(ref)` 重新使用已登记的可信探测解释原报告，返回 current、historical 或 unknown；这会产生真实探测，历史 passed 不能替代当前判断。核查与适用性探测的开始、结算和迟到费用归档到原任务，收费身份跨尝试去重；零费用需明确报告完整空清单，未知费用保留覆盖缺口。复用保留原 `checkedAt`、`proofRef` 和 `reusedFrom`。
+- 验收器报告成功时，完成发布前再次探测报告中由 helper 签发的 current 证明；后续构建使产物变化或探测失去覆盖时，该项成为 unknown，返回 `VERIFICATION_ARTIFACT_CHANGED` 并要求补验。原单项检查和费用仍保留，最终探测独立记账；宿主继续负责完整依赖范围、原子探测及发布期间的写入协调。
 - `complete(verifier, signal, commit)` 的可选宿主提交口只准备同一存储版本上的不可变记录。领域验收通过后，任务完成、报告和这些记录在同次 CAS 发布；竞争只重新准备记录，不重跑验收或外部操作。取消、验收失败或宿主对象变更均不提前发布完成记录。
 - 独立使用时存储由宿主创建与 `close()`；交给 `createRuntime({ storage })` 并创建成功后由 Runtime 关闭；`close()` 幂等，只释放连接与等待，不删数据。
 - `localContextStorage` 在创建时才加载 `node:sqlite`；注入别的 `ContextStorage` 的进程不需要 SQLite。

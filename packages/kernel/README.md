@@ -152,3 +152,4 @@ await client.dispose()
 - `ModelUserMessage.toolResult` 可将宿主展示的纯文本绑定到前一条 assistant 原生调用；编码器核对调用身份、名称和唯一性，标准模型驱动将正文放入工具回包，原逻辑历史仍可用于容量和交付核验。
 - `ModelInputEstimate.calibration: 'provider-usage'` 表示驱动已用同一路由的真实用量校准估算，调用者保留该数值；它仍是容量估算，真实费用继续按供应商用量记录。
 - 宿主提供自动历史封段时，用 `ModelContextStatus.automaticHistory` 声明；完整容量、预测余量和缓存诊断保留在请求对象中，模型正文只显示当前阶段、自动归档说明及实际过载或停滞。声明缺省时按原报告编码。
+- `ModelContextStatus.cache` 的读取和写入分项分别可选，只有供应商实际报告的值才出现；缺项表示未知，明确的零仍是零。摘要描述上一次请求，计费使用独立的模型用量事实。

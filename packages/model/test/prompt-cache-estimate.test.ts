@@ -1,8 +1,11 @@
+import { createOpenAI } from '@ai-sdk/openai'
+import type { LanguageModelV3CallOptions } from '@ai-sdk/provider'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { expect, test } from 'bun:test'
 
 import type { ModelInputEstimate, ModelTurnRequest } from '@velaros-ai/kernel'
 
+import { PromptCacheLanguageModel } from '../src/impl/adapters/PromptCacheLanguageModel.js'
 import {
   createAiSdkModelDriver,
   createModelRuntimeComposition,
@@ -41,6 +44,118 @@ const base: ModelTurnRequest = {
   mode: 'work',
   outputTokens: 100,
 }
+
+test.each(['responses', 'chat'] as const)(
+  'native %s tool result breakpoints reach the wire and preserve output bytes',
+  async (protocol) => {
+    const bodies: any[] = []
+    const provider = createOpenAI({
+      apiKey: 'offline',
+      fetch: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)))
+        return Response.json({ error: { message: 'fixture stop' } }, { status: 400 })
+      },
+    })
+    const model = provider[protocol]('fixture')
+    const cached = new PromptCacheLanguageModel(model, {
+      sessionKey: true,
+      openaiBreakpoints: true,
+    })
+    for (const output of [
+      { type: 'text' as const, value: '真实结果\nwith "quotes"' },
+      { type: 'json' as const, value: { answer: 42, text: '结果' } },
+    ]) {
+      const options: LanguageModelV3CallOptions = {
+        providerOptions: { velaros: { promptCacheKey: 'stable-session' } },
+        prompt: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'exec',
+                input: { code: 'fixture' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'exec', output }],
+            providerOptions: { velaros: { promptCacheBreakpoint: true } },
+          },
+          { role: 'user', content: [{ type: 'text', text: 'changing frame' }] },
+        ],
+      }
+      const before = structuredClone(options)
+      await expect(cached.doGenerate(options)).rejects.toThrow('fixture stop')
+      expect(options).toEqual(before)
+      const body = bodies.at(-1)
+      const parts =
+        protocol === 'responses'
+          ? body.input.find((item: any) => item.type === 'function_call_output').output
+          : body.messages.find((item: any) => item.role === 'tool').content
+      expect(parts).toEqual([
+        {
+          type: protocol === 'responses' ? 'input_text' : 'text',
+          text: output.type === 'json' ? JSON.stringify(output.value) : output.value,
+          prompt_cache_breakpoint: { mode: 'explicit' },
+        },
+      ])
+      expect(body.prompt_cache_key).toBe('stable-session')
+      expect(JSON.stringify(body)).not.toContain('velaros')
+      expect(JSON.stringify(body).match(/prompt_cache_breakpoint/gu)).toHaveLength(1)
+      const disabled = new PromptCacheLanguageModel(model, {
+        sessionKey: true,
+        openaiBreakpoints: false,
+      })
+      await expect(disabled.doGenerate(options)).rejects.toThrow('fixture stop')
+      expect(JSON.stringify(bodies.at(-1))).not.toContain('prompt_cache_breakpoint')
+      expect(bodies.at(-1).prompt_cache_key).toBe('stable-session')
+    }
+  }
+)
+
+test.each(['responses', 'chat'] as const)(
+  'native %s explicit tool output points consume the shared cache budget',
+  async (protocol) => {
+    const explicit = { openai: { promptCacheBreakpoint: { mode: 'explicit' } } }
+    const result = (id: string, marked: boolean) => ({
+      role: 'tool' as const,
+      content: [
+        {
+          type: 'tool-result' as const,
+          toolCallId: id,
+          toolName: 'exec',
+          output: {
+            type: 'content' as const,
+            value: [
+              { type: 'text' as const, text: id, ...(marked ? { providerOptions: explicit } : {}) },
+            ],
+          },
+        },
+      ],
+      providerOptions: { velaros: { promptCacheBreakpoint: true } },
+    })
+    const options: LanguageModelV3CallOptions = {
+      prompt: [result('a', true), result('b', true), result('c', true), result('d', false)],
+    }
+    const translated = applyPromptCacheCallOptions(
+      options,
+      { sessionKey: true, openaiBreakpoints: true },
+      `openai.${protocol}`
+    )
+    expect(JSON.stringify(translated.prompt).match(/promptCacheBreakpoint/gu)).toHaveLength(3)
+    expect(translated.prompt[3]).toEqual({ ...options.prompt[3], providerOptions: undefined })
+    expect(() =>
+      applyPromptCacheCallOptions(
+        options,
+        { sessionKey: true, openaiBreakpoints: false },
+        `openai.${protocol}`
+      )
+    ).toThrow('禁用')
+  }
+)
 
 test('images count a fixed amount each instead of their base64 bytes', () => {
   const plain = estimateRequestInput(base)

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { DefaultContextViewLimits } from '@velaros-ai/context'
@@ -46,6 +46,127 @@ const commandProgram = (command) =>
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+for (const explicit of [true, false])
+  test(`real Node requests keep the prompt prefix and route tool cache points (explicit=${explicit})`, async (t) => {
+    const f = await fixture(t)
+    const bodies = []
+    t.mock.method(globalThis, 'fetch', async (_url, init) => {
+      const index = bodies.push(JSON.parse(init.body))
+      assert(index <= 2)
+      const item =
+        index === 1
+          ? {
+              type: 'function_call',
+              id: 'fc_node',
+              call_id: 'call_node',
+              name: 'exec',
+              arguments: JSON.stringify({ code: "console.log('observed-native-output')" }),
+              status: 'completed',
+            }
+          : { type: 'message', id: 'msg_final' }
+      const chunks = [
+        {
+          type: 'response.created',
+          response: { id: `resp_${index}`, created_at: index, model: 'gpt-5.6-sol' },
+        },
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: index === 1 ? { ...item, arguments: '' } : item,
+        },
+        index === 1
+          ? {
+              type: 'response.function_call_arguments.delta',
+              item_id: item.id,
+              delta: item.arguments,
+            }
+          : { type: 'response.output_text.delta', item_id: item.id, delta: 'Done.' },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: index === 1 ? item : { ...item, status: 'completed' },
+        },
+        {
+          type: 'response.completed',
+          response: {
+            usage: {
+              input_tokens: 1000,
+              output_tokens: 20,
+              input_tokens_details: { cached_tokens: index === 1 ? 0 : 500 },
+            },
+          },
+        },
+      ]
+      return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(''), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    })
+    const composition = createModelRuntimeComposition({
+      environment: {},
+      providerScripts: { configPaths: [] },
+    })
+    const provider = composition.agentModelRuntime.createAgentProvider({
+      provider: 'openai',
+      apiKey: 'offline',
+      baseURL: 'https://offline.invalid/v1',
+      openaiExplicitCacheBreakpoints: explicit,
+    })
+    const model = createAiSdkModelDriver({
+      id: 'fixture',
+      model: provider('gpt-5.6-sol'),
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+    })
+    let revision = 0
+    const runtime = await createRuntime({
+      node: f.node,
+      model,
+      project: false,
+      search: false,
+      agents: false,
+      memory: false,
+      context: { maintenance: false },
+      storage: localContextStorage({ path: join(f.root, 'prompt-cache.sqlite') }),
+      environment: () => ({ changingState: `revision-${++revision}` }),
+    })
+    t.after(() => runtime.close())
+    const session = await runtime.openSession('prompt-cache')
+    const events = []
+    for await (const event of session.submit('Print the requested result and finish.'))
+      events.push(event)
+    assert.equal(events.at(-1).status, 'completed')
+    assert.equal(bodies.length, 2)
+    const [first, second] = bodies
+    assert.equal(first.prompt_cache_key, second.prompt_cache_key)
+    assert.match(first.prompt_cache_key, /^[a-f0-9]{32}$/u)
+    assert.deepEqual(first.tools, second.tools)
+    const withoutMarks = (value) =>
+      JSON.parse(
+        JSON.stringify(value, (key, item) => (key === 'prompt_cache_breakpoint' ? undefined : item))
+      )
+    assert.deepEqual(
+      withoutMarks(second.input.slice(0, first.input.length)),
+      withoutMarks(first.input)
+    )
+    const system = JSON.stringify(
+      first.input.filter((item) => ['system', 'developer'].includes(item.role))
+    )
+    assert(system.includes('Node.js ESM'))
+    assert(system.includes('execution'))
+    assert(!system.includes('revision-'))
+    assert(!system.includes('apply_patch'))
+    assert(!system.includes('declare module'))
+    assert(JSON.stringify(second.input.at(-1)).includes(`revision-${revision}`))
+    const result = second.input.find((item) => item.type === 'function_call_output')
+    assert(JSON.stringify(result.output).includes('observed-native-output'))
+    assert.equal(JSON.stringify(result.output).includes('prompt_cache_breakpoint'), explicit)
+    if (!explicit) assert(!JSON.stringify(second).includes('prompt_cache_breakpoint'))
+    assert((JSON.stringify(second).match(/prompt_cache_breakpoint/gu) ?? []).length <= 3)
+    assert(!JSON.stringify(second).includes('promptCacheBreakpoint'))
+    const usage = events.filter((event) => event.type === 'usage').at(-1)
+    assert.equal(usage.cacheReadTokens, 500)
+    assert.equal(usage.cacheWriteTokens, undefined)
+  })
 
 test('provider code-only stream failures retry through the real SDK without repeating native Node effects', async (t) => {
   const f = await fixture(t)
@@ -1657,6 +1778,38 @@ test('standard package references expose installed versions, original docs and d
   )
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.deepEqual(result.value.sort(), [...NodeDefaultPackages].sort())
+})
+
+test('execution discovery records the real child environment without exposing unrelated variables', async (t) => {
+  const hostPath = process.env.PATH
+  const selected = join(tmpdir(), 'host commands with spaces')
+  const f = await fixture(t, {
+    environment: { PATH: selected, PRIVATE_TEST_VALUE: 'private-fixture' },
+  })
+  const run = await createNodeCodeRunner(f.node).run(
+    request(`
+    import {readFileSync} from 'node:fs';
+    import {execa} from 'execa';
+    const catalog=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));
+    const child=JSON.parse((await execa('node',['--input-type=module','-e','console.log(JSON.stringify({node:process.version,executable:process.execPath,cwd:process.cwd(),path:process.env.PATH}))'])).stdout);
+    export default {execution:catalog.execution,child};
+  `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(run.ok, true, JSON.stringify(run))
+  const { execution, child } = run.value
+  assert.deepEqual(execution, {
+    node: child.node,
+    executable: child.executable,
+    platform: process.platform,
+    arch: process.arch,
+    cwd: await realpath(f.cwd),
+    path: [dirname(child.executable), selected],
+  })
+  assert.equal(execution.path.join(delimiter), child.path)
+  assert(!JSON.stringify(execution).includes('private-fixture'))
+  assert.equal(process.env.PATH, hostPath)
 })
 
 test('package discovery follows workspace versions, aliases and hidden package manifests', async (t) => {

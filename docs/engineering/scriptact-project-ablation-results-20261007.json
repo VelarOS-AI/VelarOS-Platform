@@ -1,0 +1,1597 @@
+{
+  "schema": 1,
+  "createdAt": "2026-10-06T19:42:00.274104+00:00",
+  "campaign": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007",
+  "plan": {
+    "schema": 1,
+    "createdAt": "2026-10-06T17:56:18.439624+00:00",
+    "candidate": "runtime",
+    "candidateManifestSha256": "0e8c9a7330eebc70d8f2e6dc87fff3c2e4fb3faed473dff3a38dd5967467b69f",
+    "tasks": [
+      {
+        "file": "commander-option-snapshot-task.json",
+        "id": "commander-option-value-source-snapshots",
+        "split": "development-replay; previously used tasks; no production tuning in this campaign"
+      },
+      {
+        "file": "fs-extra-esm-task.json",
+        "id": "fs-extra-maintained-esm-migration",
+        "split": "development-replay; previously used tasks; no production tuning in this campaign"
+      }
+    ],
+    "conditions": {
+      "node": {
+        "mode": "node",
+        "strategy": "adaptive"
+      },
+      "optional": {
+        "mode": "project",
+        "strategy": "adaptive"
+      },
+      "required": {
+        "mode": "project",
+        "strategy": "project"
+      }
+    },
+    "replicates": 1,
+    "paidRuns": 6,
+    "model": "gpt-5.6-sol",
+    "reasoning": "high",
+    "taskMode": "request",
+    "order": {
+      "commander": [
+        "node",
+        "optional",
+        "required"
+      ],
+      "esm": [
+        "required",
+        "optional",
+        "node"
+      ]
+    },
+    "primaryOutcome": "Independent feature acceptance and original regression, supplemented by static review of source, maintained tests and requested artifacts",
+    "metrics": [
+      "actual capability usage",
+      "request count including maintenance",
+      "solve wall time",
+      "known reference cost",
+      "missing usage",
+      "provider failures",
+      "final scope"
+    ],
+    "interpretation": "Node vs optional changes only project availability and its built-in context/instructions. Required is a separate editing-strategy intervention. No inference of actual project use from availability alone. Single runs cannot establish broad superiority.",
+    "hashes": {
+      "scripts/agent/long-tasks/commander-option-snapshot-task.json": "194f047fe3ae122a75c83ab06a418e1ed466c8d3546f3833200700b819d5a467",
+      "scripts/agent/long-tasks/fs-extra-esm-task.json": "18f1d30bae8629ecf9e2b1d8f51bdb34ac61d67b8c9c2aa86f3f41953da05e55",
+      "scripts/agent/long-tasks/test_commander_option_snapshot_acceptance.mjs": "0698a58509658b105ca6cf83a19c120f85b5f41a00df000ef9037965db0bc6ce",
+      "scripts/agent/long-tasks/test_fs_extra_esm_acceptance.mjs": "3142c00becd232dd877522ad7b38554dda3fe50b1d8d3f150d117d05f74bd2cb",
+      "scripts/agent/long-tasks/fs-extra-esm-contract.json": "e39e9cb89b5b13d052f22cd384b953d9876cfe480e1aa11c75419942048c62eb",
+      "scripts/agent/long-tasks/runtime-capabilities.mjs": "2f5c006649f88c45894cbd2757c2ecc9915a1bec0d5f04fb069cfdc99608262d",
+      "scripts/agent/long-tasks/prepare.mjs": "552717e52486e8efb0185c6ffc371647a54d27d799c4c060b66d893c607dcfb7",
+      "scripts/agent/long-tasks/run.mjs": "00081166261bb4c30b929b40757fb3524edfb7447f7af2f1df06e55678a9ee09",
+      "scripts/agent/long-tasks/analyze.mjs": "5507deff43c7729e4ad833a78e9cba8e9b420a9541becd75fc3c8d297939f52b"
+    }
+  },
+  "runs": [
+    {
+      "taskId": "commander-option-value-source-snapshots",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "node",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "commander-node",
+      "condition": "node",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 19,
+        "startedAt": 1791309432774,
+        "solveMs": 186477
+      },
+      "accounting": {
+        "requests": 19,
+        "requestStatuses": {
+          "http-200": 19
+        },
+        "measuredRequests": 19,
+        "missingUsageRequests": 0,
+        "tokenCoverage": "complete",
+        "knownInputTokens": 352132,
+        "knownOutputTokens": 7005,
+        "knownCachedInputTokens": 207360,
+        "knownCacheRatio": 0.5888700828098554,
+        "pricedRequests": 19,
+        "knownReferenceUsd": 0.8021320000000001,
+        "totalReferenceUsd": 0.8021320000000001,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 7,
+        "failed": 2,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "7 passed, 2 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 6 - existing setters preserve writable non-configurable properties",
+          "not ok 7 - existing setters continue invoking accessor setters without replacing them"
+        ]
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 1365,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 19,
+        "branchRequests": 0,
+        "requestOwners": {
+          "scriptact-f488cc4b-6078-461d-b752-78e1b5ef0dcb": 19
+        },
+        "contextSegments": 5,
+        "nativeRequests": 19,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 0,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 19,
+        "branchTurns": 0,
+        "uniqueCalls": 0,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": []
+      },
+      "changedFiles": 5,
+      "createdFiles": 1,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0007",
+        "0010",
+        "0011",
+        "0018"
+      ],
+      "evidence": {
+        "freeze.json": "024633248f336923835ea864f32690a87787c47a4975ddabbea59a7301a044b9",
+        "metrics.json": "7a238a163083c62f4741899de8780e1c517808020bc13950c38b9774ba2b6156",
+        "changes.diff": "69e5bdf80ca961c01d2a381a6963af9257debc7553e2dfb0bfa89a8349eeff52",
+        "program-audit.json": "ba728f7db9a813d9be2e03881c565e4c88d3c6cd76ff22835becc39403258203"
+      }
+    },
+    {
+      "taskId": "commander-option-value-source-snapshots",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "project",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "commander-optional",
+      "condition": "optional",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 25,
+        "startedAt": 1791309432697,
+        "solveMs": 282636
+      },
+      "accounting": {
+        "requests": 25,
+        "requestStatuses": {
+          "http-200": 25
+        },
+        "measuredRequests": 25,
+        "missingUsageRequests": 0,
+        "tokenCoverage": "complete",
+        "knownInputTokens": 501391,
+        "knownOutputTokens": 9562,
+        "knownCachedInputTokens": 220928,
+        "knownCacheRatio": 0.4406301668757517,
+        "pricedRequests": 25,
+        "knownReferenceUsd": 1.4014632000000002,
+        "totalReferenceUsd": 1.4014632000000002,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 7,
+        "failed": 2,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "7 passed, 2 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 6 - existing setters preserve writable non-configurable properties",
+          "not ok 7 - existing setters continue invoking accessor setters without replacing them"
+        ]
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 1365,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 22,
+        "branchRequests": 3,
+        "requestOwners": {
+          "scriptact-236e167c-d866-4357-95ab-2afabdf8f043": 22,
+          "context:77beb9b5-4e36-4704-bd95-40e3f9e9fa60": 3
+        },
+        "contextSegments": 5,
+        "nativeRequests": 25,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 0,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 22,
+        "branchTurns": 3,
+        "uniqueCalls": 8,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "list",
+            "status": "succeeded",
+            "count": 1
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "read",
+            "status": "succeeded",
+            "count": 6
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "succeeded",
+            "count": 1
+          }
+        ]
+      },
+      "changedFiles": 4,
+      "createdFiles": 2,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0007",
+        "0010",
+        "0017",
+        "0018",
+        "0023"
+      ],
+      "evidence": {
+        "freeze.json": "7f0bd9dea0868b72684e52b1760ff2e1e7c5638fc64a460fdde1fe778ed33b4e",
+        "metrics.json": "9bc72b33815f462d0c5f6c7d9bd84b9383ae1f46784c5ada34bdf0f4c440fdaf",
+        "changes.diff": "9f667c3e750160164e3597f1bdce24ab5398f843c9b74ec3196b6c506652e630",
+        "program-audit.json": "a190eb5b0bc7d1a7b5e89a368812f3649c804f41989b4c2a1bd5e27e3d6d92af"
+      }
+    },
+    {
+      "taskId": "commander-option-value-source-snapshots",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "project",
+      "scriptactEditingStrategy": "project",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "commander-required-retry",
+      "condition": "required",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 36,
+        "startedAt": 1791310387069,
+        "solveMs": 368590
+      },
+      "accounting": {
+        "requests": 36,
+        "requestStatuses": {
+          "http-200": 36
+        },
+        "measuredRequests": 36,
+        "missingUsageRequests": 0,
+        "tokenCoverage": "complete",
+        "knownInputTokens": 737163,
+        "knownOutputTokens": 13177,
+        "knownCachedInputTokens": 331264,
+        "knownCacheRatio": 0.44937686780264335,
+        "pricedRequests": 36,
+        "knownReferenceUsd": 2.0196416000000004,
+        "totalReferenceUsd": 2.0196416000000004,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 7,
+        "failed": 2,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "7 passed, 2 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 6 - existing setters preserve writable non-configurable properties",
+          "not ok 7 - existing setters continue invoking accessor setters without replacing them"
+        ]
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 1365,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 35,
+        "branchRequests": 1,
+        "requestOwners": {
+          "scriptact-6efe1856-643a-48ee-aff8-267553ce58ba": 35,
+          "context:edd852ac-5e38-4dd2-9139-75fe7015f114": 1
+        },
+        "contextSegments": 12,
+        "nativeRequests": 35,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 1,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 35,
+        "branchTurns": 1,
+        "uniqueCalls": 3,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:project",
+            "operation": "edit",
+            "status": "succeeded",
+            "count": 3
+          }
+        ]
+      },
+      "changedFiles": 4,
+      "createdFiles": 2,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "projectCalls": [
+        {
+          "moduleId": "velaros:project",
+          "operation": "edit",
+          "status": "succeeded",
+          "count": 3
+        }
+      ],
+      "programsMentioningApplyPatch": [],
+      "evidence": {
+        "freeze.json": "945b64448c7ce89518c875344a48a66addf52f4ab0f33ebdd7123fd4657c087b",
+        "metrics.json": "b910c0dd46dc036e79abbc35dc218bc7b7ed03c4d08c7725b5f30954eeee4d0a",
+        "changes.diff": "40fbd236c0555135c34362c9cb9658dc63decff4dbce308e356bb10b34fbba44",
+        "program-audit.json": "59c1b29429e72840eea97ba0fcd62e94bd083051065338be66787cfc71aad205"
+      }
+    },
+    {
+      "taskId": "fs-extra-maintained-esm-migration",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "node",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "esm-node",
+      "condition": "node",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 45,
+        "startedAt": 1791313367963,
+        "solveMs": 668848
+      },
+      "accounting": {
+        "requests": 45,
+        "requestStatuses": {
+          "http-200": 44,
+          "http-200-interrupted": 1
+        },
+        "measuredRequests": 44,
+        "missingUsageRequests": 1,
+        "tokenCoverage": "partial",
+        "knownInputTokens": 938047,
+        "knownOutputTokens": 21808,
+        "knownCachedInputTokens": 485248,
+        "knownCacheRatio": 0.5172960416695539,
+        "pricedRequests": 44,
+        "knownReferenceUsd": 2.4414552,
+        "totalReferenceUsd": null,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 54,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "54 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 745,
+        "failed": 0,
+        "skipped": 8,
+        "errors": 0,
+        "summary": "745 passed, 0 failed, 8 skipped",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": true,
+      "featureCompleteWithoutNewRegressions": true,
+      "execution": {
+        "mainRequests": 43,
+        "branchRequests": 2,
+        "requestOwners": {
+          "scriptact-5de80bac-b4e6-4dee-975d-416e0c11e673": 43,
+          "context:dcf1559b-ec10-4ee5-9341-b0cf3a48262e": 1,
+          "context:c4d1fb29-ec57-48f6-9936-0c75ec3a476b": 1
+        },
+        "contextSegments": 11,
+        "nativeRequests": 43,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 2,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 43,
+        "branchTurns": 2,
+        "uniqueCalls": 0,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": []
+      },
+      "changedFiles": 31,
+      "createdFiles": 34,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0009",
+        "0022",
+        "0023",
+        "0026",
+        "0028",
+        "0031",
+        "0033",
+        "0034",
+        "0036",
+        "0042"
+      ],
+      "evidence": {
+        "freeze.json": "7016089bdd4170da6c1467bbc0bf4ec85c4b9133a7ce21d1ba35df2feda4cac4",
+        "metrics.json": "286a76a6a38c3fc18a996a4e6a4f17db7e0dec664da3ff50293b538423d3d3ba",
+        "changes.diff": "d1dc16c95dcc376c2a3a9853f69429a2693b4407988374565e260480ebe9fb12",
+        "program-audit.json": "d2f6d8eb9dea6472778c0f1eac9fef95fd890bed3bc0a791e51570cb76e3aaf6"
+      },
+      "originalTestPreservation": {
+        "attempt": "esm-node",
+        "checkedOriginalFiles": 147,
+        "differences": [],
+        "preserved": true
+      },
+      "supplementaryBuildPaths": {
+        "attempt": "esm-node",
+        "classification": "post-hoc supplementary probe",
+        "at": "2026-10-06T19:14:59.187758+00:00",
+        "cases": [
+          {
+            "case": "ordinary-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 802.3090000000001,
+            "log": "supplementary-build-ordinary-path.log"
+          },
+          {
+            "case": "space-in-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 176.10700000000003,
+            "log": "supplementary-build-space-in-path.log"
+          }
+        ],
+        "buildSha256": "338489519f14c945cb87e3cefb07645ec9ea0541e4399b1af4e267924bd054b5",
+        "esbuildVersion": "0.19.10",
+        "nodeVersion": "v24.15.0",
+        "controlledReproduction": false
+      }
+    },
+    {
+      "taskId": "fs-extra-maintained-esm-migration",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "project",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "esm-optional",
+      "condition": "optional",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 66,
+        "startedAt": 1791312349979,
+        "solveMs": 795124
+      },
+      "accounting": {
+        "requests": 66,
+        "requestStatuses": {
+          "http-200": 64,
+          "http-200-interrupted": 2
+        },
+        "measuredRequests": 64,
+        "missingUsageRequests": 2,
+        "tokenCoverage": "partial",
+        "knownInputTokens": 1360373,
+        "knownOutputTokens": 23589,
+        "knownCachedInputTokens": 678400,
+        "knownCacheRatio": 0.49868675723496425,
+        "pricedRequests": 64,
+        "knownReferenceUsd": 3.4710320000000006,
+        "totalReferenceUsd": null,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 47,
+        "failed": 7,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "47 passed, 7 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 32 - require-root: Promise filesystem workflow",
+          "not ok 33 - require-root: callback and synchronous filesystem workflow",
+          "not ok 36 - import-root: Promise filesystem workflow",
+          "not ok 37 - import-root: callback and synchronous filesystem workflow",
+          "not ok 40 - published-esm: Promise filesystem workflow",
+          "not ok 41 - published-esm: callback and synchronous filesystem workflow",
+          "not ok 54 - packed artifact is complete and works in an independent consumer without build dependencies"
+        ]
+      },
+      "regression": {
+        "exitCode": null,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 1,
+        "summary": "AssertionError [ERR_ASSERTION]: Expected one complete Mocha JSON report\n\n0 !== 1\n",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": false,
+          "suitePassed": false,
+          "knownFailures": [],
+          "unexpected": [
+            "AssertionError [ERR_ASSERTION]: Expected one complete Mocha JSON report\n\n0 !== 1\n"
+          ]
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 50,
+        "branchRequests": 16,
+        "requestOwners": {
+          "scriptact-5b48e6e3-13d4-4a04-ad6e-81ccfbcc8457": 50,
+          "context:26448b1e-4e68-408e-87ab-b4e0cad1f1ca": 4,
+          "context:47643017-4caf-4543-9764-176b2a753cef": 5,
+          "context:469fd5e2-828f-4f5e-8cbf-5caca0eb0a8a": 4,
+          "context:9416f995-f6d0-4086-a453-96c5c5b72f49": 3
+        },
+        "contextSegments": 7,
+        "nativeRequests": 66,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 0,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 50,
+        "branchTurns": 16,
+        "uniqueCalls": 71,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "list",
+            "status": "succeeded",
+            "count": 18
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "read",
+            "status": "succeeded",
+            "count": 49
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "succeeded",
+            "count": 4
+          }
+        ]
+      },
+      "changedFiles": 31,
+      "createdFiles": 34,
+      "regressionProcess": {
+        "exitCode": null,
+        "signal": null,
+        "timedOut": true,
+        "error": "Error: /usr/local/bin/node timed out after 180000 ms; process group 28221 was stopped with SIGTERM"
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0003",
+        "0004",
+        "0009",
+        "0012",
+        "0013",
+        "0021",
+        "0024",
+        "0027",
+        "0028",
+        "0036",
+        "0041",
+        "0042",
+        "0043",
+        "0049",
+        "0052",
+        "0053",
+        "0061",
+        "0062",
+        "0064"
+      ],
+      "evidence": {
+        "freeze.json": "08a38f1cfc158d51500ec5c13b2b4ce82de400efa7bb61343b1b7e6b964e87bf",
+        "metrics.json": "80b768fd7677f042df02f0025d52455b79a7139d37061d8338002dfca6a455a9",
+        "changes.diff": "8935195a5c1df05bb24200f5983f19929ee016e89a86430c1c1a79b9c98faad2",
+        "program-audit.json": "2a3ef580c7048fbf762cfc7dcee5a5bb8e8918bd611805619657d5aba690ba60"
+      },
+      "originalTestPreservation": {
+        "attempt": "esm-optional",
+        "checkedOriginalFiles": 147,
+        "differences": [],
+        "preserved": true
+      },
+      "supplementaryBuildPaths": {
+        "attempt": "esm-optional",
+        "classification": "post-hoc supplementary probe",
+        "at": "2026-10-06T19:03:38.092146+00:00",
+        "cases": [
+          {
+            "case": "ordinary-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 1093.722,
+            "log": "supplementary-build-ordinary-path.log"
+          },
+          {
+            "case": "space-in-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 163.51,
+            "log": "supplementary-build-space-in-path.log"
+          }
+        ],
+        "buildSha256": "2c7efc4d3991967eeeb9dbc961165f16c5d7566414bcca22f40083562fff4777",
+        "esbuildVersion": "0.19.10",
+        "nodeVersion": "v24.15.0",
+        "controlledReproduction": false
+      }
+    },
+    {
+      "taskId": "fs-extra-maintained-esm-migration",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "project",
+      "scriptactEditingStrategy": "project",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "esm-required",
+      "condition": "required",
+      "study": "primary",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 118,
+        "startedAt": 1791310862100,
+        "solveMs": 1436290
+      },
+      "accounting": {
+        "requests": 118,
+        "requestStatuses": {
+          "http-200": 116,
+          "http-200-interrupted": 1,
+          "unknown": 1
+        },
+        "measuredRequests": 116,
+        "missingUsageRequests": 2,
+        "tokenCoverage": "partial",
+        "knownInputTokens": 2627794,
+        "knownOutputTokens": 45845,
+        "knownCachedInputTokens": 1237120,
+        "knownCacheRatio": 0.4707827173667342,
+        "pricedRequests": 116,
+        "knownReferenceUsd": 6.974444000000003,
+        "totalReferenceUsd": null,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 54,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "54 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 745,
+        "failed": 0,
+        "skipped": 8,
+        "errors": 0,
+        "summary": "745 passed, 0 failed, 8 skipped",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": true,
+      "featureCompleteWithoutNewRegressions": true,
+      "execution": {
+        "mainRequests": 102,
+        "branchRequests": 16,
+        "requestOwners": {
+          "scriptact-82f94abb-9765-455f-85f7-99350c005cde": 102,
+          "context:f22d946a-36ee-45a7-87d7-ece9cc571ae4": 3,
+          "context:f74b58bd-f4c6-4858-a4fa-945f9755bfbc": 3,
+          "context:1ba065e0-6723-45e4-8aae-1e042376e9e0": 1,
+          "context:0db17caa-b272-4ae5-99a7-2a4ece37e833": 1,
+          "context:23e83e76-22dd-47f2-8065-d2f01ca2ba52": 1,
+          "context:77cb16ad-b868-4517-8846-fb84761ad7a6": 1,
+          "context:27e61444-2e33-430f-8897-8a2d2ca55e9f": 1,
+          "context:568ded7d-b0e6-4dcf-995e-8255bb5fe702": 1,
+          "context:df2c2901-d8d5-4186-ad0d-44ee6bb4e0a0": 1,
+          "context:f4d5711c-e7e6-4e46-9ab6-bd46396b83eb": 1,
+          "context:afe38046-c931-4d9e-974f-022c83fc11b4": 1,
+          "context:c5735eff-f101-4364-b363-e180e6b3191d": 1
+        },
+        "contextSegments": 18,
+        "nativeRequests": 108,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 10,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 102,
+        "branchTurns": 16,
+        "uniqueCalls": 43,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "list",
+            "status": "succeeded",
+            "count": 2
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "read",
+            "status": "succeeded",
+            "count": 11
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "failed",
+            "count": 1
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "succeeded",
+            "count": 2
+          },
+          {
+            "moduleId": "velaros:project",
+            "operation": "edit",
+            "status": "failed",
+            "count": 3
+          },
+          {
+            "moduleId": "velaros:project",
+            "operation": "edit",
+            "status": "succeeded",
+            "count": 24
+          }
+        ]
+      },
+      "changedFiles": 31,
+      "createdFiles": 35,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "projectCalls": [
+        {
+          "moduleId": "velaros:project",
+          "operation": "edit",
+          "status": "failed",
+          "count": 3
+        },
+        {
+          "moduleId": "velaros:project",
+          "operation": "edit",
+          "status": "succeeded",
+          "count": 24
+        }
+      ],
+      "programsMentioningApplyPatch": [],
+      "evidence": {
+        "freeze.json": "c79630f28c376d34e0c457c33014f5ff78165d155172738941b398c69e3da94c",
+        "metrics.json": "fc5ec5a7f2d6b2c55a1070bbdb562c380118a4c736094837a06fd2dc244cdae5",
+        "changes.diff": "d617721f54718e736bfdff6261fdda550dd954f8d07f6d25bea49bfc0eb20d3e",
+        "program-audit.json": "5713158c979b6484db2c18d58bbeb2d72e35c237daa623f250a9b9073d83505c"
+      },
+      "originalTestPreservation": {
+        "attempt": "esm-required",
+        "checkedOriginalFiles": 147,
+        "differences": [],
+        "preserved": true
+      },
+      "supplementaryBuildPaths": {
+        "attempt": "esm-required",
+        "classification": "post-hoc supplementary probe",
+        "at": "2026-10-06T18:50:39.190624+00:00",
+        "cases": [
+          {
+            "case": "ordinary-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 1084.0510000000002,
+            "log": "supplementary-build-ordinary-path.log"
+          },
+          {
+            "case": "space-in-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 1,
+            "elapsedMs": 100.748,
+            "log": "supplementary-build-space-in-path.log"
+          }
+        ],
+        "buildSha256": "37ed8fbdc464162a5dafaa30b817ec4f2669d4e3fbce900077e5786010476605",
+        "esbuildVersion": "0.19.10",
+        "nodeVersion": "v24.15.0",
+        "controlledReproduction": true
+      }
+    }
+  ],
+  "supplementaryRuns": [
+    {
+      "taskId": "fs-extra-maintained-esm-migration",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "node",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "esm-node-isolated",
+      "condition": "node-isolated",
+      "study": "supplementary-host-isolation",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 57,
+        "startedAt": 1791314327395,
+        "solveMs": 597546
+      },
+      "accounting": {
+        "requests": 57,
+        "requestStatuses": {
+          "http-200": 55,
+          "http-200-interrupted": 2
+        },
+        "measuredRequests": 55,
+        "missingUsageRequests": 2,
+        "tokenCoverage": "partial",
+        "knownInputTokens": 1152467,
+        "knownOutputTokens": 21206,
+        "knownCachedInputTokens": 570240,
+        "knownCacheRatio": 0.49479941725012516,
+        "pricedRequests": 55,
+        "knownReferenceUsd": 2.981124,
+        "totalReferenceUsd": null,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 53,
+        "failed": 1,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "53 passed, 1 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 53 - clean deterministic rebuild regenerates every module and propagates actual source edits"
+        ]
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 745,
+        "failed": 0,
+        "skipped": 8,
+        "errors": 0,
+        "summary": "745 passed, 0 failed, 8 skipped",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 48,
+        "branchRequests": 9,
+        "requestOwners": {
+          "scriptact-931e0510-90f5-40f8-afe8-218989015691": 48,
+          "context:4d478a0a-6b64-437a-af90-2cc83ac0fd5f": 3,
+          "context:5f84088d-dc17-4fce-b39a-2de5be23ee00": 5,
+          "context:ab030517-bb13-466e-9dd2-7a8b3c03e9c9": 1
+        },
+        "contextSegments": 10,
+        "nativeRequests": 56,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 1,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 48,
+        "branchTurns": 9,
+        "uniqueCalls": 27,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "list",
+            "status": "succeeded",
+            "count": 3
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "read",
+            "status": "succeeded",
+            "count": 22
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "succeeded",
+            "count": 2
+          }
+        ]
+      },
+      "changedFiles": 31,
+      "createdFiles": 34,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "hostIsolation": {
+        "at": "2026-10-06T19:18:25.099881+00:00",
+        "kind": "Post-hoc clean-PATH validation; reported separately from the original six-run comparison",
+        "reason": "Both original ESM adaptive conditions later used apply_patch inherited from the Codex host. Verify the no-project task with that auxiliary command unavailable.",
+        "attempt": "esm-node-isolated",
+        "paidRuns": 1,
+        "retryPolicy": "No quality-based retry; preserve the result",
+        "removedPathEntries": [
+          "/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path",
+          "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU",
+          "/Applications/ChatGPT.app/Contents/Resources",
+          "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
+        ],
+        "executionPath": "/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/mac/.bun/bin:/Users/mac/.local/bin:/Users/mac/.dotnet:/Users/mac/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:/Users/mac/.bun/bin:/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "executionPathSha256": "b7e389717a3a30641aff77b633fab99c07906fdc00ef1ce977ed9d5ec9b246b7",
+        "availableCommands": {
+          "node": "/usr/local/bin/node",
+          "npm": "/Users/mac/.local/bin/npm",
+          "git": "/opt/homebrew/bin/git",
+          "rg": "/opt/homebrew/bin/rg",
+          "apply_patch": null
+        },
+        "unchanged": "Task, candidate, dependencies, grader, model, limits and prompt match esm-node. Only inherited Codex helper PATH entries are removed.",
+        "limitations": "PATH isolation, not an OS security sandbox. Existing workspace npm dependencies and ordinary host commands remain available.",
+        "identityVerified": [
+          "task",
+          "environment",
+          "candidateId",
+          "dependencyLock",
+          "model",
+          "contextTokens",
+          "inputWindowTokens",
+          "outputTokens",
+          "timeoutMs",
+          "maxRequests",
+          "concurrency",
+          "prompt",
+          "generationPolicy",
+          "providerCapabilities",
+          "scriptactCapabilities",
+          "scriptactTaskMode",
+          "scriptactEditingStrategy",
+          "executionEnvironments.scriptact.prompt"
+        ]
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0008",
+        "0019"
+      ],
+      "evidence": {
+        "freeze.json": "345d6de209c1a39262d8739457ba8557ae0589fffac7207a6836ead82b299f62",
+        "metrics.json": "eab37e366bdee2e4aa9d04a5273f7c823c8ee3846f82a8bc44b12dbffa91eb45",
+        "changes.diff": "398453154de75c6289b1c050c0229199586c8ff9aa86c3588c930d080d83a2b1",
+        "program-audit.json": "c77079ee553a1716191676a7c4f0a70f55d8df4d98b8a52c268165ed52e4f454"
+      },
+      "originalTestPreservation": {
+        "attempt": "esm-node-isolated",
+        "checkedOriginalFiles": 147,
+        "differences": [],
+        "preserved": true
+      },
+      "supplementaryBuildPaths": {
+        "attempt": "esm-node-isolated",
+        "classification": "post-hoc supplementary probe",
+        "at": "2026-10-06T19:32:38.374887+00:00",
+        "cases": [
+          {
+            "case": "ordinary-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 1165.4279999999999,
+            "log": "supplementary-build-ordinary-path.log"
+          },
+          {
+            "case": "space-in-path",
+            "command": [
+              "npm",
+              "run",
+              "build"
+            ],
+            "exitCode": 0,
+            "elapsedMs": 129.12699999999998,
+            "log": "supplementary-build-space-in-path.log"
+          }
+        ],
+        "buildSha256": "260c57171aec2ad49ef3af58311698d095a0847abc437d079f335c1d15a81d2e",
+        "esbuildVersion": "0.19.10",
+        "nodeVersion": "v24.15.0",
+        "controlledReproduction": false
+      }
+    },
+    {
+      "taskId": "commander-option-value-source-snapshots",
+      "candidateId": "runtime-0e8c9a7330ee",
+      "scriptactCapabilities": "node",
+      "scriptactEditingStrategy": "adaptive",
+      "model": "gpt-5.6-sol",
+      "scriptactTaskMode": "request",
+      "attempt": "commander-node-isolated",
+      "condition": "node-isolated",
+      "study": "supplementary-host-isolation",
+      "solve": {
+        "status": "completed",
+        "failure": null,
+        "requestCount": 38,
+        "startedAt": 1791314979126,
+        "solveMs": 476783
+      },
+      "accounting": {
+        "requests": 38,
+        "requestStatuses": {
+          "http-200": 37,
+          "http-200-interrupted": 1
+        },
+        "measuredRequests": 37,
+        "missingUsageRequests": 1,
+        "tokenCoverage": "partial",
+        "knownInputTokens": 760656,
+        "knownOutputTokens": 15829,
+        "knownCachedInputTokens": 361984,
+        "knownCacheRatio": 0.4758839738331125,
+        "pricedRequests": 37,
+        "knownReferenceUsd": 2.0560616,
+        "totalReferenceUsd": null,
+        "costBasis": "frozen-reference-pricing; not a provider invoice"
+      },
+      "acceptance": {
+        "exitCode": 1,
+        "passed": 6,
+        "failed": 3,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "6 passed, 3 failed, 0 skipped, 0 errors",
+        "failures": [
+          "not ok 4 - enumerable prototype-like keys are ordinary own records",
+          "not ok 6 - existing setters preserve writable non-configurable properties",
+          "not ok 7 - existing setters continue invoking accessor setters without replacing them"
+        ]
+      },
+      "regression": {
+        "exitCode": 0,
+        "passed": 1365,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": [],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "passed": false,
+      "featureCompleteWithoutNewRegressions": false,
+      "execution": {
+        "mainRequests": 28,
+        "branchRequests": 10,
+        "requestOwners": {
+          "scriptact-1b44217a-220e-4a08-959c-556d3448c0c5": 28,
+          "context:1d980ba9-a363-4eb0-8e9e-bd3a393627ca": 5,
+          "context:943edc91-ab77-43ba-9e68-0a4ac75ee955": 5
+        },
+        "contextSegments": 5,
+        "nativeRequests": 38,
+        "textProtocolRequests": 0,
+        "structuredNarrationRequests": 0,
+        "originalPromptInFinalRequest": true
+      },
+      "capabilityUsage": {
+        "available": true,
+        "complete": true,
+        "rootTurns": 28,
+        "branchTurns": 10,
+        "uniqueCalls": 45,
+        "traceGaps": 0,
+        "missingSummaries": 0,
+        "operations": [
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "list",
+            "status": "succeeded",
+            "count": 4
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "read",
+            "status": "succeeded",
+            "count": 39
+          },
+          {
+            "moduleId": "velaros:context-materials",
+            "operation": "submit",
+            "status": "succeeded",
+            "count": 2
+          }
+        ]
+      },
+      "changedFiles": 4,
+      "createdFiles": 2,
+      "regressionProcess": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null
+      },
+      "hostIsolation": {
+        "at": "2026-10-06T19:23:02.709589+00:00",
+        "kind": "Post-hoc clean-PATH validation; reported separately from the original six-run comparison",
+        "reason": "All four original adaptive conditions used apply_patch inherited from the Codex host. Verify the no-project task with that auxiliary command unavailable.",
+        "attempt": "commander-node-isolated",
+        "paidRuns": 1,
+        "retryPolicy": "No quality-based retry; preserve the result",
+        "removedPathEntries": [
+          "/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path",
+          "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU",
+          "/Applications/ChatGPT.app/Contents/Resources",
+          "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
+        ],
+        "executionPath": "/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/mac/.bun/bin:/Users/mac/.local/bin:/Users/mac/.dotnet:/Users/mac/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:/Users/mac/.bun/bin:/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "executionPathSha256": "b7e389717a3a30641aff77b633fab99c07906fdc00ef1ce977ed9d5ec9b246b7",
+        "availableCommands": {
+          "node": "/usr/local/bin/node",
+          "npm": "/Users/mac/.local/bin/npm",
+          "git": "/opt/homebrew/bin/git",
+          "rg": "/opt/homebrew/bin/rg",
+          "apply_patch": null
+        },
+        "unchanged": "Task, candidate, dependencies, grader, model, limits and prompt match commander-node. Only inherited Codex helper PATH entries are removed.",
+        "limitations": "PATH isolation, not an OS security sandbox. Existing workspace npm dependencies and ordinary host commands remain available.",
+        "identityVerified": [
+          "task",
+          "environment",
+          "candidateId",
+          "dependencyLock",
+          "model",
+          "contextTokens",
+          "inputWindowTokens",
+          "outputTokens",
+          "timeoutMs",
+          "maxRequests",
+          "concurrency",
+          "prompt",
+          "generationPolicy",
+          "providerCapabilities",
+          "scriptactCapabilities",
+          "scriptactTaskMode",
+          "scriptactEditingStrategy",
+          "executionEnvironments.scriptact.prompt"
+        ]
+      },
+      "projectCalls": [],
+      "programsMentioningApplyPatch": [
+        "0008",
+        "0010",
+        "0011",
+        "0023"
+      ],
+      "evidence": {
+        "freeze.json": "f9c03e645796ac65e164cfb37173d0629db534486ef38504f528aab98d62bc5e",
+        "metrics.json": "91df3cbe39769dfed141d8c760ac0df1b5b81ecb0453793426740dee5043ca40",
+        "changes.diff": "5bb4e2894191691d3f4fe6e125f44b13be5491670d8309667d18d3b874120750",
+        "program-audit.json": "1b3d962e2aed71b7312fdfc8015bdd256461e52e01ceffc7d8f264adb179deba"
+      }
+    }
+  ],
+  "isolatedValidationPlan": {
+    "at": "2026-10-06T19:23:02.673845+00:00",
+    "reason": "Final full program audit found inherited Codex apply_patch usage in every adaptive primary run. Validate both real tasks with that command absent.",
+    "classification": "Two supplementary development replays, separate from the original six-condition experiment",
+    "attempts": [
+      "esm-node-isolated",
+      "commander-node-isolated"
+    ],
+    "modelFeedback": "No prior result or solution supplied to the model",
+    "retryPolicy": "Exactly one isolated run per task, regardless of quality outcome",
+    "ordering": "Serial model execution; Commander waits for ESM completion and verified workspace archiving."
+  },
+  "infrastructureIncident": {
+    "at": "2026-10-06T18:13:00.233785+00:00",
+    "cause": "Concurrent scratch copies exhausted available filesystem space. ENOSPC affected post-run grading of commander-optional and execution/trace export of commander-required.",
+    "optionalRecovery": "same completed artifact graded again; original grading retained; zero additional model requests",
+    "requiredRecovery": "fresh frozen retry with identical candidate, task, dependencies, grader, model, budget and editing policy; interrupted run excluded from winner comparison, incurred costs retained",
+    "remainingSchedule": "serial model runs, archive and verify each finished scratch workspace before the next run",
+    "retryIdentityVerified": true,
+    "freeBytesBeforeRetry": 2541690880
+  },
+  "excludedAttempt": {
+    "attempt": "commander-required",
+    "scope": "infrastructure-interrupted, excluded from performance comparison; incurred cost retained",
+    "modelDispatchAttempts": 32,
+    "accountedUpstreamRequests": 31,
+    "accounting": {
+      "requests": 31,
+      "requestStatuses": {
+        "http-200": 31
+      },
+      "measuredRequests": 31,
+      "missingUsageRequests": 0,
+      "tokenCoverage": "complete",
+      "knownInputTokens": 621357,
+      "knownOutputTokens": 9125,
+      "knownCachedInputTokens": 324480,
+      "knownCacheRatio": 0.5222118685393421,
+      "pricedRequests": 31,
+      "knownReferenceUsd": 1.4998,
+      "totalReferenceUsd": 1.4998,
+      "costBasis": "frozen-reference-pricing; not a provider invoice"
+    }
+  },
+  "ambientTools": {
+    "at": "2026-10-06T18:56:11.944489+00:00",
+    "applyPatchExecutable": "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
+    "resolvedTarget": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "origin": "Inherited Codex host command on PATH; not a Node built-in or project capability",
+    "observedUse": "All adaptive primary runs use the inherited apply_patch command: commander-node 4 programs, commander-optional 5, esm-node 10, esm-optional 19. Required runs use project for edits and have zero apply_patch programs.",
+    "interpretation": "All frozen conditions share host process environment. This remains a project-availability ablation on this host, but is not evidence for a hermetic environment containing only Node and the five default npm packages.",
+    "modelFeedback": "None; frozen paid runs continue unchanged."
+  },
+  "supplementaryCheckPlan": {
+    "createdAt": "2026-10-06T18:48:32.285031+00:00",
+    "classification": "post-hoc artifact robustness probe; separate from frozen 54-case acceptance and paid-run selection",
+    "trigger": "Static review of esm-required scripts/build.mjs found URL.pathname passed as filesystem paths, which may retain percent encoding.",
+    "attempts": [
+      "esm-required",
+      "esm-optional",
+      "esm-node"
+    ],
+    "procedure": "After each complete artifact is archived, reproduce npm run build in two private extracted copies: ordinary path and a path containing a space. Use the artifact source/build and its frozen esbuild dependency. No model feedback or reruns and no changes to frozen graders. Record all outcomes including any control failures.",
+    "resultUse": "Report separate dynamic corroboration of static findings. Do not change or replace frozen pass/fail outcomes.",
+    "extension": "The same already-defined build path probe was also applied to esm-node-isolated after its completion; no model feedback or grader changes."
+  },
+  "staticReview": {
+    "scope": "All six primary runs and both clean-PATH supplementary runs complete",
+    "projectMeans": "velaros:project file and transaction capability; Node runtime and core controls identical",
+    "commander": {
+      "node": {
+        "instructionsChars": 592,
+        "firstMaterialsChars": 5251,
+        "projectOperations": 0,
+        "semanticRegression": "all setter assignments redefined with configurable true; existing own writable and accessor descriptors break"
+      },
+      "optional": {
+        "instructionsChars": 677,
+        "firstMaterialsChars": 5251,
+        "projectOperations": 0,
+        "semanticRegression": "setter compatibility failures confirmed by frozen tests"
+      },
+      "required": {
+        "attempt": "commander-required-retry",
+        "instructionsChars": 677,
+        "firstMaterialsChars": 5861,
+        "committedProjectEdits": 3,
+        "semanticRegression": "special-key setter unconditionally redefines existing __proto__ descriptor",
+        "policyAudit": "Deliberate file and formatting edits performed through project.edit; standard filesystem used for reads and computation. No direct source-write programs observed."
+      }
+    },
+    "interpretation": "One run per condition; conditional model path and cache differ. Fixed availability adds 85 instruction characters in first Commander request, not the entire observed cost delta.",
+    "esmRequired": {
+      "acceptance": "54/54",
+      "regression": "745 passed; 8 baseline skips",
+      "sourceModules": "28 JavaScript production modules and one ESM facade (29 production files total)",
+      "committedProjectEdits": 24,
+      "failedProjectEdits": 3,
+      "failures": [
+        "27-file batch rejected for invalid import alias syntax; effect none",
+        "102-file original-test restoration batch exceeded 100-file transaction limit; effect none",
+        "Empty steps array rejected; effect none"
+      ],
+      "policyAudit": "Reviewed full emitted programs and final diff. Deliberate repository source and formatting edits use project.edit; direct writes observed in generated archives and isolated test-consumer directories. No direct intentional source-write bypass observed.",
+      "originalTestPreservation": "Archive byte/type/mode comparison: 147 original test and fixture files unchanged",
+      "intermediateRecovery": "The initial model-written build script recursively removed lib, including original tests. Model restored original tests through project and changed build behavior before final completion. Project validates edits, not later arbitrary build subprocess effects.",
+      "supplementaryBuildPaths": "Ordinary path passes; same artifact with a space in checkout path fails. URL.pathname is passed to esbuild as a filesystem path. This is a separate post-hoc diagnostic, not a changed 54-case grade.",
+      "usageCompleteness": "116/118 upstream requests report usage; full cost unknown; known frozen reference cost is $6.974444"
+    },
+    "ambientToolLimitation": "Every primary adaptive condition used inherited Codex apply_patch. Two separately recorded clean-PATH replays remove it. Required-editing conditions used no apply_patch; their original host PATH was retained, so the clean-PATH comparisons are supplementary observations, not a newly matched factorial study.",
+    "updatedAt": "2026-10-06T19:42:00.227305+00:00",
+    "esmOptional": {
+      "acceptance": "47/54",
+      "regression": "180000 ms timeout; no complete Mocha report; counts unknown",
+      "actualProjectOperations": 0,
+      "semanticFailure": "Build unconditionally appends module.exports = module.exports.default to every CommonJS output. src/mkdirs/utils.js has only named checkPath export, so generated lib/mkdirs/utils.js exports undefined; reconstructed and packed filesystem operations fail.",
+      "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+      "supplementaryBuildPaths": "Both ordinary and space-containing paths build successfully; build success alone does not repair the seven semantic acceptance failures.",
+      "usageCompleteness": "64/66 requests report usage; full cost unknown; known frozen reference cost $3.471032",
+      "reportingFinding": "Final model message cites original suite success during migration; final rebuilt independent regression times out. Judge final artifact, not intermediate success.",
+      "programsMentioningApplyPatch": 19,
+      "applyPatchCountMeaning": "Textual program mentions, including context-maintenance narratives; not a count of successful CLI commands"
+    },
+    "esmNode": {
+      "acceptance": "54/54",
+      "regression": "745 passed; 8 baseline skips",
+      "actualProjectOperations": 0,
+      "applyPatchPrograms": 10,
+      "implementation": "Initial standard Node filesystem and Babel conversion; later patches through the inherited apply_patch executable. Build unwraps CommonJS default exports only for source modules with a default export.",
+      "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+      "supplementaryBuildPaths": "Ordinary and space-containing checkout paths both build successfully",
+      "usageCompleteness": "44/45 requests report usage; full cost unknown; known frozen reference cost $2.4414552"
+    },
+    "esmNodeIsolated": {
+      "acceptance": "53/54",
+      "regression": "745 passed; 8 baseline skips",
+      "actualProjectOperations": 0,
+      "hostIsolation": "Real runtime preflight confirms apply_patch ENOENT. One emitted command attempt fails; model falls back to standard Node filesystem writes. A second program mention is a context narrative, not another command.",
+      "semanticFailure": "scripts/build.mjs regenerates lib/esm.mjs from extracted export names and root fsExtra properties. It does not compile or preserve the actual src/esm.js implementation, so changes to maintained source behavior do not propagate.",
+      "interpretation": "Retained as a separate failed supplementary replay; no model repair or quality-based retry.",
+      "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+      "supplementaryBuildPaths": "Both ordinary and space-containing checkout paths build successfully"
+    },
+    "commanderNodeIsolated": {
+      "acceptance": "6/9",
+      "regression": "1365/1365",
+      "actualProjectOperations": 0,
+      "semanticFailure": "optsWithSources adds an own-property guard before getOptionValueSource. For __proto__ this changes the required existing getter result to undefined. One source-projection mismatch triggers three cases; the original setters themselves remain unchanged, unlike the primary runs.",
+      "hostIsolation": "Runtime preflight confirms apply_patch ENOENT; final implementation uses Node filesystem editing after unavailable helper/default-import attempts.",
+      "interpretation": "Case pass counts reflect correlated checks, not three independent bugs. No quality-based retry."
+    },
+    "recommendation": "Keep standard Node and familiar tools as the default execution surface, retain project as an on-demand transaction capability, and judge final artifacts independently. These runs show quality/efficiency tradeoffs, not uniform dominance or proof that project causes the observed semantic score differences."
+  },
+  "verification": {
+    "harnessTests": {
+      "passed": 21,
+      "failed": 0
+    },
+    "lint": "passed",
+    "format": "passed",
+    "moduleOwnership": "passed"
+  },
+  "accountingIncludingInfrastructureFailure": {
+    "requests": 435,
+    "measuredRequests": 427,
+    "missingUsageRequests": 8,
+    "knownReferenceUsd": 23.647153600000003,
+    "totalReferenceUsd": null,
+    "costBasis": "frozen reference pricing; not a provider invoice"
+  },
+  "limitations": [
+    "Two previously used development replay tasks; one run per condition; one model.",
+    "Required project editing is a separate prompt policy intervention.",
+    "Host command environment includes Codex apply_patch; this is not a hermetic Node-only study.",
+    "Solve time includes model execution and its checks; independent grading time is excluded.",
+    "Provider cleanup interruptions and context maintenance remain in valid run accounting.",
+    "Commander node/optional started concurrently; remaining attempts ran serially after an ENOSPC incident.",
+    "The source/transaction syntax protection was observed; concurrent human edits and rollback were not tested.",
+    "Runtime host exercised on Node 24.15.0; Desktop renderer and older supported Node versions were not exercised."
+  ],
+  "finalInputIntegrity": {
+    "at": "2026-10-06T19:43:10.651086+00:00",
+    "runtimeFilesVerified": 5386,
+    "runtimeManifestSha256": "0e8c9a7330eebc70d8f2e6dc87fff3c2e4fb3faed473dff3a38dd5967467b69f",
+    "attempts": {
+      "commander-node": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "commander-node-isolated": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "commander-optional": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "commander-required": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "commander-required-retry": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "esm-node": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "esm-node-isolated": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "esm-optional": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      },
+      "esm-required": {
+        "frozenFilesVerified": 234,
+        "candidateId": "runtime-0e8c9a7330ee",
+        "scratchArchivedAndRemoved": true
+      }
+    },
+    "result": "all hashes match; all owned attempt roots archived and removed"
+  }
+}

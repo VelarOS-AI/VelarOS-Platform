@@ -195,7 +195,31 @@ class NodeCodeRunner implements CodeRunnerApi {
                   )
                 )
                   throw new AppError('VALIDATION', '依赖发现目录与本次运行环境不匹配')
-                await writeFile(path, stringifyPretty({ ...catalog, packages: input.packages }))
+                const execution = input.execution
+                if (
+                  !isPlainObject(execution) ||
+                  !['node', 'executable', 'platform', 'arch', 'cwd'].every((key) =>
+                    isString(execution[key])
+                  ) ||
+                  !isArray(execution.path) ||
+                  !execution.path.every(isString)
+                )
+                  throw new AppError('VALIDATION', '执行环境发现缺少实际 Node 身份或命令路径')
+                await writeFile(
+                  path,
+                  stringifyPretty({
+                    ...catalog,
+                    packages: input.packages,
+                    execution: {
+                      node: execution.node,
+                      executable: execution.executable,
+                      platform: execution.platform,
+                      arch: execution.arch,
+                      cwd: execution.cwd,
+                      path: execution.path,
+                    },
+                  })
+                )
                 reply(200, {})
               })
               .catch((cause: unknown) => reply(400, { error: shapeOperationFailure(cause) }))

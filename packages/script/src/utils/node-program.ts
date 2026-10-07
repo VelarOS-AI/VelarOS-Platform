@@ -46,7 +46,11 @@ export const output = collector.output;
 function packageCatalogModule(): string {
   return `import {findPackageJSON} from 'node:module';
 import {readFileSync,realpathSync,readdirSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {dirname,join,delimiter} from 'node:path';
+export function discoverExecution() {
+  const pathKey = Object.keys(process.env).find(key => process.platform === 'win32' ? key.toLowerCase() === 'path' : key === 'PATH');
+  return {node:process.version,executable:process.execPath,platform:process.platform,arch:process.arch,cwd:process.cwd(),path:(process.env[pathKey] ?? '').split(delimiter)};
+}
 export function discoverPackages(index, importer) {
   const catalog = JSON.parse(readFileSync(index,'utf8'));
   return catalog.packages.map(installed => {
@@ -217,13 +221,13 @@ export function load(url, context, nextLoad) {
     mode: 0o600,
   })
   const bootstrap = `import {registerHooks} from 'node:module';
-import {discoverPackages} from ${JSON.stringify(url(packageCatalog))};
+import {discoverPackages,discoverExecution} from ${JSON.stringify(url(packageCatalog))};
 import ${JSON.stringify(preload)};
 import {send,releaseCalls} from ${JSON.stringify(url(join(catalog, 'bridge.mjs')))};
 import {resolve,load} from ${JSON.stringify(url(programLoader))};
 registerHooks({resolve,load});
 try {
-  await send('/packages',{packages:discoverPackages(${JSON.stringify(join(catalog, 'index.json'))},${JSON.stringify(entry)})});
+  await send('/packages',{packages:discoverPackages(${JSON.stringify(join(catalog, 'index.json'))},${JSON.stringify(entry)}),execution:discoverExecution()});
   const {exports} = await import(${JSON.stringify(url(wrapper))});
   const names = Object.keys(exports);
   const value = names.length === 1 && names[0] === 'default' ? exports.default : names.length ? exports : undefined;

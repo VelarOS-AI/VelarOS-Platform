@@ -6,6 +6,7 @@ import { isEmpty, isObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import {
+  type ModelContextStatus,
   type ModelHistoryMessage,
   modelRequestEncoder,
   type ModelToolCall,
@@ -43,7 +44,7 @@ export class ActLoop implements ActLoopApi {
   private readonly policy
   private readonly compiler = createProviderRequestCompiler()
   private readonly planner
-  private cache?: { readonly readTokens: number; readonly writeTokens: number }
+  private cache: ModelContextStatus['cache']
   private stallBase?: number
   /**
    * 上一次被接受请求的实际出线。下一帧的逻辑历史以它的逻辑历史开头时只在其后追加，
@@ -332,6 +333,8 @@ export class ActLoop implements ActLoopApi {
           const modelStarted = performance.now()
           let firstTextMs: Nullable<number> = null
           let modelMs: Nullable<number> = null
+          // 当前请求没有回报时保持未知，不能把更早请求的缓存用量投影成上次事实。
+          this.cache = undefined
           try {
             for await (const delta of boundedModelStream(
               this.options.model,
@@ -350,11 +353,14 @@ export class ActLoop implements ActLoopApi {
                 if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
                 measured = true
                 this.planner.measure(compiled.measured, delta.inputTokens)
-                if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens))
-                  this.cache = {
-                    readTokens: delta.cacheReadTokens ?? 0,
-                    writeTokens: delta.cacheWriteTokens ?? 0,
-                  }
+                if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens)) {
+                  const summary: { readTokens?: number; writeTokens?: number } = {}
+                  if (!isUndefined(delta.cacheReadTokens))
+                    summary.readTokens = delta.cacheReadTokens
+                  if (!isUndefined(delta.cacheWriteTokens))
+                    summary.writeTokens = delta.cacheWriteTokens
+                  this.cache = summary
+                }
                 // 供应商报告了前缀缓存的读写才带上，宿主据此按缓存价算钱
                 const cache: { cacheReadTokens?: number; cacheWriteTokens?: number } = {}
                 if (!isUndefined(delta.cacheReadTokens))

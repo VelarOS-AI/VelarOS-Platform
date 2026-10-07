@@ -281,6 +281,7 @@ async function main() {
     candidateSourceDirty: manifest.candidateSourceDirty ?? null,
     scriptactCapabilities: manifest.scriptactCapabilities ?? 'on-demand',
     scriptactTaskMode: manifest.scriptactTaskMode ?? 'request',
+    scriptactEditingStrategy: manifest.scriptactEditingStrategy ?? 'adaptive',
     split: manifest.task.split,
     model: manifest.model,
     contextTokens: manifest.contextTokens,

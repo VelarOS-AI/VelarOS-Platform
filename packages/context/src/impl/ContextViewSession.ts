@@ -666,12 +666,49 @@ export class ContextViewSession implements ContextViewApi {
     let validation = verifier
       ? await awaitContextOperation(verifier.verify(task.view, signal, checks), signal)
       : { verified: false, reason: '未配置领域验收器，结果为未验证交付' }
+    let completionRef: Optional<ContextRef>
     if (validation.report) {
       checkVerificationReport(validation.report)
       validation = { ...validation, report: JSON.parse(JSON.stringify(validation.report)) }
       for (const check of validation.report!.checks)
         for (const ref of check.evidenceRefs ?? [])
           await awaitContextOperation(this.options.context.read(ref, { limit: 1 }), signal)
+      completionRef = await createContextReference(this.options.storage, this.options.sessionId)
+      // 全部核查结束后重新探测，后面的构建或安装不能沿用早先产物的当前证明。
+      if (
+        validation.verified &&
+        validation.report!.checks.some(
+          (check) => check.proofRef && check.applicability === 'current'
+        )
+      ) {
+        const applicability = await this.verification.applicability(
+          completionRef,
+          {
+            taskId: task.id ?? 'legacy',
+            taskRevision: task.revision,
+            viewId: task.view.id,
+            binding: commit?.binding,
+            result: { completed: false, ...validation },
+          },
+          signal
+        )
+        let stale = false
+        const finalChecks = validation.report!.checks.map((check, index) => {
+          const current = applicability.checks[index]!.status
+          if (!check.proofRef || check.applicability !== 'current' || current === 'current')
+            return check
+          stale = true
+          return { ...check, status: 'unknown' as const, complete: false, applicability: current }
+        })
+        if (stale)
+          validation = {
+            ...validation,
+            verified: false,
+            reason: 'VERIFICATION_ARTIFACT_CHANGED',
+            recovery: 'repair',
+            report: { ...validation.report!, checks: finalChecks },
+          }
+      }
     }
     if (!(await this.validate(task.view, signal)))
       return { completed: false, verified: false, reason: 'STALE_VIEW', recovery: 'refresh' }
@@ -694,7 +731,7 @@ export class ContextViewSession implements ContextViewApi {
         signal
       )
       record = {
-        ref: await createContextReference(this.options.storage, this.options.sessionId),
+        ref: completionRef!,
         kind: 'audit',
         title: `task:completion:${task.id ?? 'legacy'}`,
         objectId,

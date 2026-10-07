@@ -82,8 +82,8 @@ export interface ModelContextStatus {
   readonly runway?: { readonly turns: number; readonly growthPerTurn: number }
   /** 当前段：段号、段内响应数、底座里的卷数。 */
   readonly segment?: { readonly index: number; readonly turns: number; readonly volumes: number }
-  /** 上一次请求供应商报告的缓存读取与写入 token。 */
-  readonly cache?: { readonly readTokens: number; readonly writeTokens: number }
+  /** 上一次请求供应商实际报告的缓存 token；缺项保持未知，完全没有缓存用量时省略。 */
+  readonly cache?: { readonly readTokens?: number; readonly writeTokens?: number }
   /** 工作集本身快装不下时的说明；由模型下一轮用代码收紧。 */
   readonly overload?: string
   /** 本次运行连续没有进展的步数与建议；达到暂停阈值时运行暂停等用户。 */

@@ -42,6 +42,14 @@ import { workspaceChanges } from './workspace-changes.mjs'
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
 const manifest = JSON.parse(await readFile(join(directory, 'freeze.json'), 'utf8'))
+if (manifest.commandEnvironment) {
+  const expected = manifest.commandEnvironment
+  assert.equal(process.execPath, expected.node, 'Run the frozen Node executable')
+  assert.equal(process.version, expected.nodeVersion)
+  assert.equal(process.platform, expected.platform)
+  assert.equal(process.arch, expected.arch)
+  process.env.PATH = expected.path
+}
 const capabilities = runtimeCapabilityOptions(manifest.scriptactCapabilities)
 const submission = runtimeSubmissionOptions(manifest.scriptactTaskMode, manifest.task.prompt)
 const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
@@ -290,6 +298,10 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
         cwd: workspace,
         directory: join(output, 'node'),
         host,
+        executable: manifest.commandEnvironment?.node,
+        environment: manifest.commandEnvironment
+          ? { PATH: manifest.commandEnvironment.path }
+          : undefined,
       }),
       modelTools: { concurrency: manifest.concurrency },
       context: { policy: { windowTokens: manifest.inputWindowTokens } },

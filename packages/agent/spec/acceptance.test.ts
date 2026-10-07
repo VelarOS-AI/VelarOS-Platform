@@ -75,6 +75,52 @@ function runFixture() {
   return { store, context, view, options }
 }
 
+test('INV-45 cache context preserves unknown fields and clears measurements after a request without cache usage', async () => {
+  const f = runFixture()
+  const requests: ModelTurnRequest[] = []
+  const measurements = [{ cacheReadTokens: 60 }, {}, { cacheWriteTokens: 0 }, undefined, {}]
+  f.options.limits = { ...f.options.limits, turns: 6 }
+  f.options.model.stream = async function* (request) {
+    const usage = measurements[requests.length]
+    requests.push(request)
+    if (usage) yield { type: 'usage', inputTokens: 100, outputTokens: 1, ...usage }
+    yield { type: 'text', text: 'accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push() {
+      return []
+    },
+    finish() {
+      return requests.length >= measurements.length
+        ? { message: 'done', done: true, events: [] }
+        : {
+            message: 'work',
+            done: false,
+            submission: { code: `work-${requests.length}` },
+            events: [],
+          }
+    },
+  })
+  const service = createActRunService(f.options)
+  try {
+    const events = []
+    for await (const event of service.submit('complete the steps')) events.push(event)
+    expect(requests.map((request) => request.contextStatus?.cache)).toEqual([
+      undefined,
+      { readTokens: 60 },
+      undefined,
+      { writeTokens: 0 },
+      undefined,
+    ])
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  } finally {
+    await service.close()
+  }
+})
+
 test('INV-40 accepted provider usage drives growth while calibrated admission remains independent', async () => {
   const f = runFixture()
   const requests: ModelTurnRequest[] = []

@@ -195,6 +195,49 @@ describe('INV-16 领域逐项核查复用和不可变尝试账', () => {
     expect((await f.attempts()).at(-1)!.applicability).toBe('historical')
   })
 
+  test.each(['unchanged', 'rebuilt', 'unknown'] as const)(
+    '最终交付再次核对早先通过的产物：%s',
+    async (variant) => {
+      const f = await fixture()
+      const result = await f.view.complete({
+        verify: async (_view, _signal, checks) => {
+          const first = await checks!.check(f.spec, async () => ({
+            label: '原产物通过',
+            status: 'passed',
+            complete: true,
+            cost: zero,
+          }))
+          // 模拟后续构建替换先前已验证的产物，以及最后探测失去覆盖的情况。
+          if (variant === 'rebuilt') {
+            f.domain.token = '2'
+            f.domain.artifact.contentHash = 'rebuilt-v2'
+          } else if (variant === 'unknown') f.domain.unknown = true
+          return {
+            verified: true,
+            report: { scope: '交付', checkedAt: new Date().toISOString(), checks: [first] },
+          }
+        },
+      })
+      expect(result.completed).toBe(variant === 'unchanged')
+      expect(result.verified).toBe(variant === 'unchanged')
+      const check = result.report!.checks[0]
+      expect(check.status).toBe(variant === 'unchanged' ? 'passed' : 'unknown')
+      expect(check.applicability).toBe(
+        variant === 'unchanged' ? 'current' : variant === 'rebuilt' ? 'historical' : 'unknown'
+      )
+      const original = (await f.attempts()).find(
+        (attempt) => attempt.mode === 'executed' && attempt.phase === 'settled'
+      )!
+      expect(original.check!.status).toBe('passed')
+      expect(original.check!.artifacts![0].contentHash).toBe('exact-bytes-v1')
+      if (variant !== 'unchanged') {
+        expect(result.reason).toBe('VERIFICATION_ARTIFACT_CHANGED')
+        expect(check.complete).toBe(false)
+        expect((await f.view.inspect())!.status).not.toBe('completed')
+      }
+    }
+  )
+
   test('任务/权限水位改变与取消不发布可复用证明，尝试仍归原task', async () => {
     for (const variant of ['reset', 'cancel']) {
       const f = await fixture()

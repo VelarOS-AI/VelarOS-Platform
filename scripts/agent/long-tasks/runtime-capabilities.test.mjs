@@ -9,9 +9,13 @@ import {
   createNodeExecutionEnvironment,
 } from '../../../packages/velaros/dist/act/runtime/index.js'
 import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
-import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
+import {
+  runtimeCapabilityOptions,
+  runtimeEditingPrompt,
+  runtimeSubmissionOptions,
+} from './runtime-capabilities.mjs'
 
-for (const mode of ['on-demand', 'node'])
+for (const mode of ['on-demand', 'node', 'project'])
   for (const taskMode of ['request', 'goal'])
     test(`capability and task modes reach the real Node catalog and lifecycle: ${mode}/${taskMode}`, async (t) => {
       const root = await mkdtemp(join(tmpdir(), 'velaros-capability-mode-'))
@@ -63,7 +67,11 @@ for (const mode of ['on-demand', 'node'])
       assert.equal(result.result.failed, undefined)
       const modules = JSON.parse(result.result.process.stdout)
       for (const name of ['velaros:project', 'velaros:code', 'velaros:agents', 'velaros:search'])
-        assert.equal(modules.includes(name), mode === 'on-demand', name)
+        assert.equal(
+          modules.includes(name),
+          name === 'velaros:project' ? mode !== 'node' : mode === 'on-demand',
+          name
+        )
       const command = await session.execute({
         source:
           "import {execa} from 'execa';console.log((await execa(process.execPath,['-p','21*2'])).stdout)",
@@ -89,7 +97,21 @@ for (const mode of ['on-demand', 'node'])
       )
       assert.equal(requests[0].instructions.includes('velaros:agents'), mode === 'on-demand')
       assert.equal(requests[0].instructions.includes('velaros:search'), mode === 'on-demand')
+      assert.equal(requests[0].instructions.includes('velaros:project'), mode !== 'node')
     })
+
+test('editing policies preserve the task and reject impossible project conditions before dispatch', () => {
+  const prompt = 'Preserve existing APIs and implement the complete requested feature.'
+  for (const mode of ['node', 'project', 'on-demand'])
+    assert.equal(runtimeEditingPrompt(mode, 'adaptive', prompt), prompt)
+  const guided = runtimeEditingPrompt('project', 'project', prompt)
+  assert(guided.startsWith(prompt + '\n\n'))
+  assert(guided.includes('velaros:project'))
+  assert(guided.includes('generated build outputs may use standard Node.js and Execa'))
+  assert.throws(() => runtimeEditingPrompt('node', 'project', prompt), /requires/)
+  assert.throws(() => runtimeEditingPrompt('project', 'unknown', prompt), /Unknown/)
+  assert.throws(() => runtimeEditingPrompt('unknown', 'adaptive', prompt), /Unknown/)
+})
 
 test('task submission defaults to ordinary requests and rejects unknown modes', () => {
   assert.deepEqual(runtimeSubmissionOptions(undefined, 'User task'), {})

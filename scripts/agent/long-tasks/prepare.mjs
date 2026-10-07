@@ -19,7 +19,11 @@ import {
   nodeTestSummary,
 } from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
-import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
+import {
+  runtimeCapabilityOptions,
+  runtimeEditingPrompt,
+  runtimeSubmissionOptions,
+} from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
   createTaskRoot,
@@ -44,6 +48,17 @@ const taskFile = process.argv[6] ?? 'rich-ascii-task.json'
 const scriptactCapabilities = process.argv[8] ?? 'on-demand'
 runtimeCapabilityOptions(scriptactCapabilities)
 const scriptactTaskMode = process.argv[9] ?? 'request'
+const scriptactEditingStrategy = process.argv[10] ?? 'adaptive'
+runtimeEditingPrompt(scriptactCapabilities, scriptactEditingStrategy, '')
+// 命令路径由准备时显式选定；原样冻结，运行时不继承启动控制器的偶然 PATH。
+const commandEnvironment = {
+  path: process.argv[11] ?? process.env.PATH ?? '',
+  node: process.execPath,
+  nodeVersion: process.version,
+  platform: process.platform,
+  arch: process.arch,
+}
+process.env.PATH = commandEnvironment.path
 assert.match(attemptId, /^[a-zA-Z0-9-]+$/u)
 assert.match(candidateName, /^[a-zA-Z0-9-]+$/u)
 assert.ok(!process.argv[5] || ['scriptact', 'paired'].includes(process.argv[5]))
@@ -180,6 +195,11 @@ const executionEnvironments = node
       participants,
       task,
     })
+executionEnvironments.scriptact.prompt = runtimeEditingPrompt(
+  scriptactCapabilities,
+  scriptactEditingStrategy,
+  executionEnvironments.scriptact.prompt
+)
 const pricing = JSON.parse(
   await readFile(
     join(root, '.velaros-workspace/bench/parallel-54/model-pricing-hedgeho9-sol-reference.json'),
@@ -218,6 +238,7 @@ await writeFile(join(output, 'harness-preflight.json'), JSON.stringify(harnessPr
 assert.equal(harnessPreflight.exitCode, 0, harnessPreflight.error)
 assert.equal(harnessPreflight.stdout, 'frozen-harness-ready')
 files[codex] = hash(await readFile(codex))
+files[commandEnvironment.node] = hash(await readFile(commandEnvironment.node))
 const candidate = join(campaign, candidateName)
 // 本 campaign 的兼容供应商在 rich-06 首次请求明确拒绝显式断点；会话键继续使用。
 const providerCapabilities = { openaiExplicitCacheBreakpoints: false }
@@ -253,6 +274,7 @@ const manifest = {
   environment,
   taskRoot,
   temporaryEnvironment,
+  commandEnvironment,
   source,
   python,
   node,
@@ -269,6 +291,7 @@ const manifest = {
   scriptactSessionId: `scriptact-${randomUUID()}`,
   scriptactCapabilities,
   scriptactTaskMode,
+  scriptactEditingStrategy,
   modelWirePreflight,
   harnessPreflight,
   providerCapabilities,
@@ -282,10 +305,13 @@ const manifest = {
   qualifications: {
     kind: task.split,
     longRunRequiresObservedCompaction: true,
-    source:
-      scriptactCapabilities === 'on-demand'
-        ? 'formal Runtime and model provider composition with Node.js and Execa, on-demand project code, search, child agents, default context maintenance'
-        : 'formal Runtime and model provider composition with Node.js and Execa, core runtime controls and default context maintenance',
+    source: {
+      'on-demand':
+        'formal Runtime and model provider composition with Node.js and Execa, on-demand project code, search, child agents, default context maintenance',
+      node: 'formal Runtime and model provider composition with Node.js and Execa, core runtime controls and default context maintenance',
+      project:
+        'formal Runtime and model provider composition with Node.js and Execa, only velaros:project added to core runtime controls and default context maintenance',
+    }[scriptactCapabilities],
     limitations: [
       'Task is newly authored and frozen on a real upstream project; model training exposure is unknown',
       'Runtime host comparison; this attempt does not exercise Desktop renderer integration',

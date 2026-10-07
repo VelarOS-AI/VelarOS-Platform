@@ -74,6 +74,7 @@ await session.close()
 - 执行端口要问用户时调 `request(kind, message, signal)`，它发出 `interaction` 事件并等 `answer`；回答只认当前运行的那一次交互，重复或过期抛 `CONFLICT`，运行结束时没回答的一律拒绝。
 - 效果不明的操作不挡运行：它照实留在结算事实里给模型看，运行照常推进、照常收尾，不等宿主核对。
 - `verification` 事件的可选 `report` 是领域真实核查的范围与依据，包含通过、失败或未知项及检查时刻；宿主按 `verified` 和报告范围展示结果，不能把单项通过解释成整题证明。原事件持久化并可重放。
+- `contextStatus.cache` 只投影上一次请求实际报告的缓存分项；readTokens、writeTokens 缺项表示未知。请求没有缓存用量时清除旧摘要，明确报告的零仍为零；账单继续使用独立的 usage 事件与审计。
 - 完成失败后的恢复提示列出状态、原因、恢复动作与 `reportAvailable`；完整报告由领域事件与任务归档保留，当前视图按实际预算提供有来源的报告目录。
 - `task: 'new'` 开新的逻辑任务与总预算（旧任务归档保留），缺省 `continue` 沿用原任务。
 - `inputId` 只是宿主的消息身份，原样回到 `input`、`input-applied`、`input-retained` 回执里，不做重复提交去重；`input-applied` 只说明输入进了某次已归档的模型请求，不证明供应商已经收到。

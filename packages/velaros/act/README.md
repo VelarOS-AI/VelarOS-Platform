@@ -71,7 +71,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.programs.publish` | `execute` | `write` | 检查并发布不可变程序，baseRevision 控制同名更新；语法、import 或版本失败不改变已发布名称。 |
 | `system.programs.list` | `observe`、`execute` | `none` | 列当前会话授权范围内的程序；重置前的程序不因目录查询恢复可见性。 |
 | `system.programs.describe` | `observe`、`execute` | `none` | 读稳定名称的当前版本，或仍可访问的 sourceRef 原版本；只是目录，不重新执行。 |
-| `velaros:context-materials.list` | `execute` | `none` | 按工作材料分页列用户输入、回复、源码、结果、笔记和历史卷的元数据，不读正文。 |
+| `velaros:context-materials.list` | `execute` | `none` | 按当前整理范围分页列用户输入、回复、源码、结果、笔记和历史卷的元数据，不读正文；自动卷整理的目录截至 runtime.modelTool.volume.through。 |
 | `velaros:context-materials.read` | `execute` | `none` | 按引用读取本次整理请求或父快照原文的一页，正文在 text。 |
 | `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；原生调用成功后宿主完成交付，文本协议继续声明完成。 |
 | `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |

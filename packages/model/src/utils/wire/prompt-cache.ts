@@ -77,10 +77,15 @@ export function withPromptCacheKey(
 /** 出线前把内部缓存标记整体翻译成各家的线上字段；会话缓存键只在线路认它时出线。 */
 export function applyPromptCacheCallOptions(
   options: LanguageModelV3CallOptions,
-  wire: PromptCacheWireOptions
+  wire: PromptCacheWireOptions,
+  provider?: string
 ): LanguageModelV3CallOptions {
   const providerOptions = applyTopLevelPromptCacheProviderOptions(options.providerOptions, wire)
-  const prompt = applyPromptPromptCacheProviderOptions(options, wire)
+  const prompt = applyPromptPromptCacheProviderOptions(
+    options,
+    wire,
+    provider === 'openai.responses'
+  )
   if (providerOptions === options.providerOptions && prompt === options.prompt) return options
 
   return {
@@ -113,7 +118,8 @@ function applyTopLevelPromptCacheProviderOptions(
 /** 逐条消息翻译；一条都没变时原样返回，别让上游白白复制一遍 prompt。 */
 function applyPromptPromptCacheProviderOptions(
   options: LanguageModelV3CallOptions,
-  wire: PromptCacheWireOptions
+  wire: PromptCacheWireOptions,
+  responses: boolean
 ): LanguageModelV3CallOptions['prompt'] {
   const prompt = options.prompt
   if (!isArray(prompt)) return prompt
@@ -125,7 +131,7 @@ function applyPromptPromptCacheProviderOptions(
     (count, message) =>
       count +
       (isArray(message.content)
-        ? message.content.filter((part) => hasOpenAiBreakpoint(part.providerOptions)).length
+        ? message.content.reduce((sum, part) => sum + openAiPartBreakpoints(part, responses), 0)
         : Number(hasOpenAiBreakpoint(message.providerOptions))),
     0
   )
@@ -139,7 +145,7 @@ function applyPromptPromptCacheProviderOptions(
       ? prompt
           .flatMap((message, index) =>
             hasProviderPromptCacheBreakpoint(message.providerOptions) &&
-            canAddOpenAiBreakpoint(message)
+            canAddOpenAiBreakpoint(message, responses)
               ? [index]
               : []
           )
@@ -153,7 +159,9 @@ function applyPromptPromptCacheProviderOptions(
       wire,
       anthropicBoundaries?.has(index)
     )
-    const nextMessage = boundaries.has(index) ? withOpenAiBreakpoint(translated) : translated
+    const nextMessage = boundaries.has(index)
+      ? withOpenAiBreakpoint(translated, responses)
+      : translated
     changed ||= nextMessage !== message
     return nextMessage
   })
@@ -196,7 +204,7 @@ function applyMessagePromptCacheProviderOptions(
 }
 
 /** SDK 对 user/assistant 读取内容块选项，对 system 读取消息选项；两者都保留显式意图。 */
-function withOpenAiBreakpoint(message: unknown): unknown {
+function withOpenAiBreakpoint(message: unknown, responses: boolean): unknown {
   if (!isPlainObject(message)) return message
   const options = (existing: unknown) =>
     hasOpenAiBreakpoint(existing)
@@ -207,6 +215,49 @@ function withOpenAiBreakpoint(message: unknown): unknown {
   if (message.role === 'system')
     return { ...message, providerOptions: options(message.providerOptions) }
   if (!isArray(message.content)) return message
+  if (message.role === 'tool') {
+    const index = message.content.reduce<number>(
+      (last, part, i) => (canCacheOpenAiToolResult(part) ? i : last),
+      -1
+    )
+    if (index < 0) return message
+    return {
+      ...message,
+      content: message.content.map((part, i) => {
+        if (i !== index || !isPlainObject(part) || !isPlainObject(part.output)) return part
+        if (!responses) return { ...part, providerOptions: options(part.providerOptions) }
+        // Responses 只读取 output 的内容块；Chat 保持原始输出表示，在结果 part 上挂点。
+        const output = part.output
+        const content =
+          output.type === 'content' && isArray(output.value)
+            ? output.value
+            : [
+                {
+                  type: 'text',
+                  text: ['json', 'error-json'].includes(String(output.type))
+                    ? JSON.stringify(output.value)
+                    : output.value,
+                },
+              ]
+        const last = content.reduce<number>(
+          (found, item, i) => (isPlainObject(item) && item.type === 'text' ? i : found),
+          -1
+        )
+        return {
+          ...part,
+          output: {
+            ...output,
+            type: 'content',
+            value: content.map((item, j) =>
+              j === last && isPlainObject(item)
+                ? { ...item, providerOptions: options(item.providerOptions) }
+                : item
+            ),
+          },
+        }
+      }),
+    }
+  }
   const index = message.content.reduce<number>(
     (last, part, i) => (isPlainObject(part) && part.type === 'text' ? i : last),
     -1
@@ -223,14 +274,57 @@ function withOpenAiBreakpoint(message: unknown): unknown {
 }
 
 /** 已有断点或没有文本落点的消息不再消耗自动选择余量。 */
-function canAddOpenAiBreakpoint(message: LanguageModelV3CallOptions['prompt'][number]): boolean {
+function canAddOpenAiBreakpoint(
+  message: LanguageModelV3CallOptions['prompt'][number],
+  responses: boolean
+): boolean {
   if (message.role === 'system') return !hasOpenAiBreakpoint(message.providerOptions)
   if (!isArray(message.content)) return false
+  if (message.role === 'tool') {
+    const index = message.content.reduce<number>(
+      (last, part, i) => (canCacheOpenAiToolResult(part) ? i : last),
+      -1
+    )
+    const part = message.content[index]
+    return Boolean(part) && openAiPartBreakpoints(part, responses) === 0
+  }
   for (let index = message.content.length - 1; index >= 0; index--) {
     const part = message.content[index]
     if (part?.type === 'text') return !hasOpenAiBreakpoint(part.providerOptions)
   }
   return false
+}
+
+/** 只给有原始结果正文的块增加断点；批准回执和拒绝执行保持原表示。 */
+function canCacheOpenAiToolResult(part: unknown): boolean {
+  if (!isPlainObject(part) || part.type !== 'tool-result' || !isPlainObject(part.output))
+    return false
+  const output = part.output
+  return (
+    ['text', 'error-text', 'json', 'error-json'].includes(String(output.type)) ||
+    (output.type === 'content' &&
+      isArray(output.value) &&
+      output.value.some((item) => isPlainObject(item) && item.type === 'text'))
+  )
+}
+
+/** 统计 SDK 真正发出的结果断点，显式落点与自动落点共用同一预算。 */
+function openAiPartBreakpoints(part: unknown, responses: boolean): number {
+  if (!isPlainObject(part)) return 0
+  if (part.type !== 'tool-result' || !isPlainObject(part.output))
+    return Number(hasOpenAiBreakpoint(part.providerOptions))
+  const output = part.output
+  if (output.type === 'content' && isArray(output.value)) {
+    const count = output.value.filter(
+      (item) => isPlainObject(item) && hasOpenAiBreakpoint(item.providerOptions)
+    ).length
+    return responses ? count : Number(count > 0 || hasOpenAiBreakpoint(part.providerOptions))
+  }
+  return responses
+    ? 0
+    : Number(
+        hasOpenAiBreakpoint(output.providerOptions) || hasOpenAiBreakpoint(part.providerOptions)
+      )
 }
 
 /** 原生线路先保留显式落点；不足时让调用方处理，不能交给 SDK 从前向后静默截掉。 */
