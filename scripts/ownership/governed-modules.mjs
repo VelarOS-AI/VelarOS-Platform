@@ -44,6 +44,19 @@
 export const GovernedModules = [
   {
     directory: 'velaros',
+    unit: 'act/bridge',
+    name: '@velaros-ai/velaros/act/bridge',
+    contract: 'act/bridge/contract',
+    types: 'act/bridge/types.ts',
+    impl: 'act/bridge/impl',
+    utils: 'act/bridge/utils',
+    layers: [['ExternalModelDriver.ts', 'BridgeProtocol.ts']],
+    browserSafeEntries: ['contracts.ts'],
+    invariants: 'act/bridge/spec/invariants.md',
+    acceptance: 'act/bridge/spec/acceptance.test.mjs',
+  },
+  {
+    directory: 'velaros',
     unit: 'skills',
     name: '@velaros-ai/velaros/skills',
     contract: 'skills/contract',

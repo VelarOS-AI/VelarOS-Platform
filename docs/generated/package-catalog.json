@@ -84,6 +84,8 @@
       "exportSubpaths": [
         ".",
         "./act/agents",
+        "./act/bridge",
+        "./act/bridge/contracts",
         "./act/search",
         "./act/system",
         "./browser",

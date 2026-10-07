@@ -10,6 +10,7 @@ This directory is the authoritative documentation entry point for VelarOS Platfo
 | [Repository topology](architecture/repository-topology.md) | Adding a package, changing a dependency direction, or working across domains |
 | [Module ownership](architecture/module-ownership.md) | Using the unified contract/types/impl/utils layout, class APIs, injection ports, model operation definitions, templates, implementation layers and export checks |
 | [Act runtime](architecture/platform-runtime.md) | Following session input, ScriptAct execution, context assembly and model requests |
+| [Browser ScriptAct Bridge design](engineering/browser-scriptact-bridge-design-20261007.md) | Current daily-task CLI Host, external web ModelDriver, approval UI and durable recovery |
 | [Long-running context](architecture/long-running-context.md) | Keeping one session running indefinitely: cache-stable request layout, segments, folding by remaining turns |
 | [System space](architecture/act-system-space.md) | Using modules, memory, shared stores and durable messages |
 | [Observation output](architecture/script-output-observation.md) | Controlling recurring script output, budgets and derived presentations |
