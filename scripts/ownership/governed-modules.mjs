@@ -66,10 +66,12 @@ export const GovernedModules = [
     layers: [
       [
         'SkillRegistry.ts',
+        'SkillComposition.ts',
         'SkillCapabilityModules.ts',
         'NpmSkillInstaller.ts',
         'SkillsOperations.ts',
       ],
+      ['BuiltinSkills.ts'],
       ['SkillPackageFiles.ts'],
     ],
     browserSafeEntries: ['contracts.ts'],
@@ -131,6 +133,7 @@ export const GovernedModules = [
     impl: 'act/system/impl',
     utils: 'act/system/utils',
     surfaceFile: [
+      'act/system/impl/EnvironmentOperations.ts',
       'act/system/impl/GoalOperations.ts',
       'act/system/impl/ModulesOperations.ts',
       'act/system/impl/ProgramsOperations.ts',
@@ -141,6 +144,7 @@ export const GovernedModules = [
     layers: [
       ['SystemModules.ts'],
       [
+        'EnvironmentModule.ts',
         'GoalModule.ts',
         'ModulesModule.ts',
         'ProgramsModule.ts',
@@ -149,6 +153,8 @@ export const GovernedModules = [
         'StoreModule.ts',
       ],
       [
+        'EnvironmentOperations.ts',
+        'EnvironmentRegistry.ts',
         'GoalOperations.ts',
         'ModulesOperations.ts',
         'ProgramsOperations.ts',
@@ -159,6 +165,7 @@ export const GovernedModules = [
         'ContextMaintenanceState.ts',
         'StoreSession.ts',
       ],
+      ['EnvironmentFiles.ts'],
     ],
     invariants: 'act/system/spec/invariants.md',
     acceptance: 'act/system/spec/acceptance.test.mjs',

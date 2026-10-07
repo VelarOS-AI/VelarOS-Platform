@@ -23,7 +23,11 @@ export interface SkillPackageFilesApi {
   /** 当前内容必须逐项匹配安装收据。 */
   verify(directory: string, receipt: SkillReceipt): Promise<void>
   /** 按 Node 的依赖目录查找公开包并核对安装范围。 */
-  packagePath(directory: string, name: string): Promise<{ directory: string; version: string }>
+  packagePath(
+    directory: string,
+    name: string,
+    contained?: boolean
+  ): Promise<{ directory: string; version: string }>
 }
 
 /** 暂存、校验和散列处理共享同一条真实路径边界。 */
@@ -102,7 +106,8 @@ export class SkillPackageFiles implements SkillPackageFilesApi {
 
   public async packagePath(
     directory: string,
-    name: string
+    name: string,
+    contained = true
   ): Promise<{ directory: string; version: string }> {
     const own = JSON.parse(await readSkillText(join(directory, 'package.json')))
     const paths =
@@ -122,7 +127,10 @@ export class SkillPackageFiles implements SkillPackageFilesApi {
       const pkg = JSON.parse(content)
       if (pkg.name !== name || !isString(pkg.version))
         throw new AppError('VALIDATION', `依赖身份无效：${name}`)
-      return { directory: await containedSkillPath(directory, path), version: pkg.version }
+      return {
+        directory: contained ? await containedSkillPath(directory, path) : await realpath(path),
+        version: pkg.version,
+      }
     }
     throw new AppError('NOT_FOUND', `Skill 缺少依赖：${name}`)
   }

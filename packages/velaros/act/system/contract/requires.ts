@@ -1,5 +1,8 @@
 import type { ContextContent, ContextRef, ContextViewApi } from '@velaros-ai/context'
+import type { ExclusiveSqliteLockApi } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
 import type { ModelHistoryMessage, ModelImage, OperationRuntimeApi } from '@velaros-ai/kernel'
+import type { NodeRuntimeEnvironment } from '@velaros-ai/script'
+import type { NpmClientApi } from '@velaros-ai/velaros/execution'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 
 import type { StoreSessionApi } from '../impl/StoreSession.js'
@@ -34,6 +37,8 @@ import type {
 } from '../types/programs.js'
 import type { ScriptRetention } from '../types/results.js'
 import type { WorkspaceEntry, WorkspaceUpdate } from '../types/workspace.js'
+
+import type { EnvironmentRegistryApi } from './provides.js'
 
 /** 模型记忆使用现有会话存储和任务控制面。 */
 export interface MemoryHost {
@@ -89,8 +94,44 @@ export interface ModulesHost {
 }
 /** 系统包共用宿主的两个窄端口。 */
 export interface SystemHost extends GoalHost, ModulesHost, ProgramsHost {
+  /** 当前运行时固定的 npm 环境。 */
+  readonly packageEnvironment?: EnvironmentRegistryApi
   /** 持久状态存储可用时装配的共享能力。 */
   readonly stores?: StoreHost
+}
+
+/** 宿主指定的持久 npm 环境，模型不能改变存储作用域。 */
+export interface EnvironmentRegistryOptions {
+  /** 独立于业务工作区的绝对根目录，每个 agent 使用稳定目录。 */
+  readonly directory: string
+  /** 标准 npm 的受控进程口。 */
+  readonly npm: NpmClientApi
+  /** 自定义宿主可提供跨进程锁，默认使用独立 node:sqlite 连接。 */
+  readonly lock?: ExclusiveSqliteLockApi
+  /** Skill 等固定导入名，冲突时要求使用 npm alias。 */
+  readonly reservedPackages?: readonly string[]
+}
+
+/** 一次执行持有的依赖快照；只有进程树收束后才能释放。 */
+export interface EnvironmentLease {
+  /** 进程树回收不完整时保留文件，等待宿主核对后释放。 */
+  retain(): Promise<void>
+  /** 安装完成且不会原地修改的运行依赖。 */
+  readonly environment: NodeRuntimeEnvironment
+  /** 本快照的命令搜索目录。 */
+  readonly binDirectories: readonly string[]
+  /** 幂等释放磁盘租约。 */
+  release(): Promise<void>
+}
+
+/** npm 环境每次调用的固定宿主上下文。 */
+export interface EnvironmentOperationContext {
+  /** 宿主为本 agent 绑定的环境。 */
+  readonly registry: EnvironmentRegistryApi
+  /** 当前调用的取消信号。 */
+  readonly abortSignal: AbortSignal
+  /** 按实际执行与发布时间记录效果。 */
+  recordEffect(effect: 'none' | 'committed' | 'unknown'): void
 }
 /** 程序复用只接当前会话的原有归档与权限边界。 */
 export interface ProgramsHost {

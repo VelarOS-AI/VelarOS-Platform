@@ -21,7 +21,9 @@ export function executeNativeNode(
   if (!node || process.platform === 'win32' || request.mode === 'observe')
     throw new AppError('UNAVAILABLE', '此执行需要宿主提供支持当前平台和权限范围的 Node 进程端口')
   const environment = { ...process.env, ...request.environment }
-  environment.PATH = [dirname(node), environment.PATH].filter(Boolean).join(delimiter)
+  environment.PATH = [dirname(node), ...(request.binDirectories ?? []), environment.PATH]
+    .filter(Boolean)
+    .join(delimiter)
   if (request.preload)
     environment.NODE_OPTIONS =
       `${environment.NODE_OPTIONS ?? ''} --import ${JSON.stringify(request.preload)}`.trim()

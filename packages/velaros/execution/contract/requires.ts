@@ -164,3 +164,18 @@ export interface ShellProcessConfinementProvider {
   /** 把一条命令的启动规格包进约束里，返回约束后的启动规格和如实的约束证据；做不到时抛错，不许返回未约束的规格。 */
   confine(request: ShellProcessConfinementRequest): ShellProcessConfinementResult
 }
+/** 标准 npm 安装器沿用宿主命令执行策略。 */
+export interface NpmClientOptions {
+  /** Agent 实际使用的独立 Node 可执行文件。 */
+  readonly executable: string
+  /** npm-cli.js 的绝对路径；省略时从 Node 安装及宿主 PATH 查找。 */
+  readonly npmCli?: string
+  /** 应用私有缓存，宿主须允许此目录写入。 */
+  readonly cacheDirectory: string
+  /** 安装与查询共用的受控进程口。 */
+  readonly host: ShellHostPort
+  /** 宿主提供的网络、registry 与进程环境。 */
+  readonly environment?: Readonly<Record<string, string | undefined>>
+  /** 安装输出流；沿用宿主日志策略。 */
+  readonly output?: (text: string) => void
+}

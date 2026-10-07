@@ -24,6 +24,16 @@ if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(directoryName)) {
 const packageDirectory = path.join(repositoryRoot, 'packages', directoryName)
 const manifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'))
 const destination = await mkdtemp(path.join(tmpdir(), 'velaros-package-pack-check-'))
+const skillResources = path.join(repositoryRoot, 'packages/velaros/skills/resources')
+const skillResourceFiles = (
+  await Promise.all(
+    (await readdir(skillResources, { recursive: true })).map(async (file) =>
+      (await stat(path.join(skillResources, file))).isFile()
+        ? `package/dist/skills/resources/${file.split(path.sep).join('/')}`
+        : null
+    )
+  )
+).filter(Boolean)
 // 运行时要用的 vendor 产物必须进包；许可证文件不进包（只有仓根一份 LICENSE）。
 const requiredPackageFiles = new Map([
   [
@@ -37,9 +47,7 @@ const requiredPackageFiles = new Map([
           [surface.templates].flat().map((file) => `package/dist/${surface.unit}/${file}`)
         )
       ),
-      ...(await readdir(path.join(repositoryRoot, 'packages/velaros/skills/resources'))).map(
-        (file) => `package/dist/skills/resources/${file}`
-      ),
+      ...skillResourceFiles,
       'package/dist/skills/contract/surface.js',
       'package/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
     ],

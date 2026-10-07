@@ -41,6 +41,21 @@ import {
 const execute = promisify(execFile)
 const root = resolve(import.meta.dirname, '../../..')
 const campaign = resolve(process.argv[2])
+const configPath = resolve(process.argv[12] ?? join(campaign, 'config.json'))
+const config = JSON.parse(await readFile(configPath, 'utf8'))
+assert.equal(typeof config.model, 'string')
+assert.equal(typeof config.credentials, 'string')
+assert.equal(config.pricing.model, config.model)
+for (const key of [
+  'contextTokens',
+  'inputWindowTokens',
+  'outputTokens',
+  'timeoutMs',
+  'maxRequests',
+  'budgetUsd',
+])
+  assert(Number.isSafeInteger(config[key]) && config[key] > 0, `Missing positive campaign ${key}`)
+assert(config.inputWindowTokens + config.outputTokens < config.contextTokens)
 const attemptId = process.argv[3] ?? 'rich-01'
 const candidateName = process.argv[4] ?? 'candidate-v1'
 const participants = process.argv[5] === 'scriptact' ? ['scriptact'] : ['scriptact', 'codex']
@@ -200,12 +215,7 @@ executionEnvironments.scriptact.prompt = runtimeEditingPrompt(
   scriptactEditingStrategy,
   executionEnvironments.scriptact.prompt
 )
-const pricing = JSON.parse(
-  await readFile(
-    join(root, '.velaros-workspace/bench/parallel-54/model-pricing-hedgeho9-sol-reference.json'),
-    'utf8'
-  )
-)
+const pricing = config.pricing
 const files = {}
 const hash = (value) => createHash('sha256').update(value).digest('hex')
 const harness = join(output, 'harness/agent')
@@ -240,8 +250,8 @@ assert.equal(harnessPreflight.stdout, 'frozen-harness-ready')
 files[codex] = hash(await readFile(codex))
 files[commandEnvironment.node] = hash(await readFile(commandEnvironment.node))
 const candidate = join(campaign, candidateName)
-// 本 campaign 的兼容供应商在 rich-06 首次请求明确拒绝显式断点；会话键继续使用。
-const providerCapabilities = { openaiExplicitCacheBreakpoints: false }
+// 能力由本次配置冻结，不继承历史供应商假设。
+const providerCapabilities = config.providerCapabilities ?? {}
 const modelWirePreflight = await verifyCampaignDriver(
   await import(pathToFileURL(join(candidate, 'packages/model/dist/index.js'))),
   providerCapabilities
@@ -258,7 +268,7 @@ assert.equal(
     instruction: task.prompt,
     traces: [],
     identity: { sourceCommit: candidateSourceCommit, bundleFingerprint: candidateId },
-    model: 'gpt-5.6-sol',
+    model: config.model,
   }).schema_version,
   'ATIF-v1.8'
 )
@@ -295,12 +305,13 @@ const manifest = {
   modelWirePreflight,
   harnessPreflight,
   providerCapabilities,
-  model: 'gpt-5.6-sol',
-  contextTokens: 65536,
-  inputWindowTokens: 32768,
-  outputTokens: 12000,
-  timeoutMs: 2700000,
-  maxRequests: null,
+  model: config.model,
+  contextTokens: config.contextTokens,
+  inputWindowTokens: config.inputWindowTokens,
+  outputTokens: config.outputTokens,
+  timeoutMs: config.timeoutMs,
+  maxRequests: config.maxRequests,
+  budgetUsd: config.budgetUsd,
   concurrency: 4,
   qualifications: {
     kind: task.split,
@@ -318,8 +329,10 @@ const manifest = {
     ],
   },
   prompt: taskPrompt(task, executable),
-  credentials: join(root, '.velaros-workspace/bench/parallel-54/provider-hedgeho9-private.json'),
+  credentials: config.credentials,
   accounting: {
+    maxRequestsPerAttempt: config.maxRequests,
+    perAttemptBudgetUsd: config.perAttemptBudgetUsd ?? null,
     model: pricing.model,
     reasoningEffort: 'high',
     pricingRef: `${pricing.source}#sha256=${hash(JSON.stringify(pricing))}`,
@@ -335,7 +348,7 @@ const manifest = {
     },
   },
   generationPolicy: {
-    maxOutputTokens: 12000,
+    maxOutputTokens: config.outputTokens,
     reasoningContext: 'all_turns',
     reasoningSummary: 'auto',
     textVerbosity: 'medium',

@@ -20,7 +20,7 @@ const result = await session.run({
 if (result.checked) console.log(result.result.process)
 ```
 
-每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`、`ts-morph`、`prettier`，直接按包名 import；工作区自己的 npm 依赖优先，损坏的项目依赖保留原错误。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
+每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`，直接按包名 import；工作区自己的 npm 依赖优先，损坏的项目依赖保留原错误。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
 
 `VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 
@@ -51,3 +51,5 @@ if (result.checked) console.log(result.result.process)
 - 展示目录的 `totalChars` 与字段引用的 `chars` 按 JSON Pointer 召回正文的 UTF-16 长度计算：字符串为解码原文，其他值为紧凑 JSON。采集计量 `block.chars` 仍按原 JSON 编码大小计算；分页使用读取回执的 `offset + text.length`，到该页 `totalChars` 停止。
 - 输出展示按实际交付编码把正文、目录、问题与省略说明计入整体预算；默认 JSON 保持结构化表示，text 对所有类型独立选择能完整放下的正文。未配置整体上限时，显式 `view.mode: 'full'` 且无数字块上限，按完整选中表示的有界编码申请份额，再由宿主分配；放不下仍交引用。`required` 的自动视图、数字块上限（含零）、整体配置、引用、摘要及选择视图保持原语义。text 在共享份额中先分配 required 和 high，再分配普通块；超出时在该预算内选择完整行或完整条目；短块用不完的份额按既定优先级返还给尚未完整展示的块。结构化结果保留短字段，长文本字段共享剩余预算，片段标明完整行范围与原值 JSON Pointer。块优先级、显式展示上限与原值归档保持各自语义。
 - `nodeSubprocessCodeRunner` 是 POSIX Node 宿主的便利入口，使用当前目录和本机 Node；Electron、Windows 以及受限权限执行通过 `NodeCodeRunnerOptions` 注入实际进程端口。`NodeSubprocessRunnerIsReleaseReady` 保持 false，部署权限仍由宿主验收。
+
+`NodeCodeRunnerOptions.acquireRuntime` 可在每次执行前获取 `NodeRuntimeLease`，其不可变环境优先于静态 `runtime`。租约的命令目录随 `NodeProcessRequest.binDirectories` 交给进程宿主；内置宿主会将其加入本次 PATH。进程树完整结束后释放，回收不完整时调用可选 retain 保留文件。

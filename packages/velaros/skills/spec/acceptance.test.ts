@@ -9,7 +9,11 @@ import { afterEach, expect, test } from 'bun:test'
 import { execa } from 'execa'
 
 import { createExclusiveSqliteLock } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
-import { createOperationRuntime, type InvocationRecord } from '@velaros-ai/kernel'
+import {
+  createOperationRuntime,
+  type InvocationRecord,
+  type OperationContext,
+} from '@velaros-ai/kernel'
 import type { NodeCodeRunnerOptions } from '@velaros-ai/script'
 import {
   createKernelScriptSession,
@@ -20,8 +24,11 @@ import {
 
 import type { SkillDependencyInstaller } from '../contract/requires'
 import {
+  builtinSkillDirectories,
+  BuiltinSkillNames,
   createSkillRegistry,
   skillCapabilityModules,
+  skillComposition,
   type SkillRegistryApi,
   type SkillsOperationContext,
   skillsOperations,
@@ -32,7 +39,10 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
 })
 
-async function fixture(installer: SkillDependencyInstaller = { install: async () => {} }) {
+async function fixture(
+  installer: SkillDependencyInstaller = { install: async () => {} },
+  builtins = false
+) {
   const root = await mkdtemp(join(tmpdir(), 'velaros-skills-'))
   roots.push(root)
   const store = join(root, 'store')
@@ -41,6 +51,7 @@ async function fixture(installer: SkillDependencyInstaller = { install: async ()
     createSkillRegistry({
       directory: store,
       nodeVersion: '24.15.0',
+      builtins: builtins ? builtinSkillDirectories() : undefined,
       installer,
       lock: createExclusiveSqliteLock(() => new Database(join(store, 'lock.sqlite'))),
     })
@@ -670,4 +681,215 @@ test('INV-6 v1 安装索引迁移保留包内容，默认环境为空', async ()
   const empty = await f.registry.acquire()
   expect(empty.environment.skills).toEqual([])
   await empty.release()
+})
+
+test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公开', async () => {
+  const f = await fixture(undefined, true)
+  const installed = await f.registry.list()
+  expect(installed.map((item) => item.manifest.name).sort()).toEqual(
+    Object.values(BuiltinSkillNames).sort()
+  )
+  expect(installed.every((item) => item.builtin)).toBe(true)
+  const base = await f.registry.acquire()
+  expect(base.environment.packages).toHaveLength(0)
+  await base.release()
+  const selected = skillComposition.select(installed, [], [BuiltinSkillNames.jsts])
+  const lease = await f.registry.acquire(selected)
+  expect(lease.skills[0]!.grants).toEqual(['project:language:jsts'])
+  await f.registry.assertGranted(
+    BuiltinSkillNames.jsts,
+    lease.skills[0]!.generation,
+    'project:language:jsts'
+  )
+  expect(lease.environment.packages.map((pkg) => pkg.name).sort()).toEqual([
+    '@ast-grep/napi',
+    '@playwright/test',
+    'jsonc-parser',
+    'prettier',
+    'ts-morph',
+  ])
+  const runner = createNodeCodeRunner({
+    ...(await nodeOptions(f.root)),
+    runtime: lease.environment,
+  })
+  const result = await runner.run(
+    {
+      source: `
+    import {Project} from 'ts-morph'; import {format} from 'prettier';
+    import {modify,applyEdits} from 'jsonc-parser'; import {parse,Lang} from '@ast-grep/napi';
+    import {test} from '@playwright/test';
+    const project = new Project({useInMemoryFileSystem:true});
+    const a=project.createSourceFile('/a.ts','export const answer = 42');
+    const b=project.createSourceFile('/b.ts',"import {answer} from './a'; console.log(answer)");
+    a.getVariableDeclarationOrThrow('answer').rename('total');
+    const config='{// keep\\n"value":1}';
+    export default { code:b.getFullText(), formatted:await format('const n:number=42',{parser:'typescript',semi:false}), config:applyEdits(config,modify(config,['value'],2,{})), matches:parse(Lang.TypeScript,'call(42)').root().findAll('call($A)').length, playwright:typeof test};
+  `,
+      modules: {},
+      blobs: {},
+      operations: {},
+      input: null,
+      mode: 'execute',
+      timeoutMs: 10000,
+    },
+    async () => {
+      throw new Error('unexpected call')
+    },
+    () => {}
+  )
+  expect(result.ok).toBe(true)
+  expect(result.value).toMatchObject({
+    code: "import {total} from './a'; console.log(total)",
+    formatted: 'const n: number = 42\n',
+    matches: 1,
+    playwright: 'function',
+  })
+  expect(JSON.stringify(result.value)).toContain('keep')
+  await lease.release()
+})
+
+test('INV-7 内置身份不能被安装替换或删除，缺失宿主绑定显式失败', async () => {
+  const f = await fixture(undefined, true)
+  const records = await f.registry.list()
+  await expect(f.registry.remove(BuiltinSkillNames.browser)).rejects.toMatchObject({
+    code: 'PERMISSION',
+  })
+  const directory = await source(f.root, BuiltinSkillNames.browser)
+  await expect(
+    f.registry.install({ directory }, new AbortController().signal)
+  ).rejects.toMatchObject({ code: 'PERMISSION' })
+  const lease = await f.registry.acquire(
+    skillComposition.select(records, [], [BuiltinSkillNames.browser])
+  )
+  await expect(
+    skillCapabilityModules.create({ registry: f.registry, lease, node: await nodeOptions(f.root) })
+  ).rejects.toMatchObject({ code: 'UNAVAILABLE' })
+  await lease.release()
+  expect(
+    skillComposition.select(records, [], [BuiltinSkillNames.browser, BuiltinSkillNames.browser])
+  ).toHaveLength(1)
+})
+
+test('INV-7 多个 Skill 共用宿主绑定，一份撤销后另一份仍可授权', async () => {
+  const f = await fixture()
+  for (const name of ['one', 'two'])
+    await f.registry.install(
+      { directory: await source(f.root, name, '1.0.0', { hostCapabilities: ['velaros:browser'] }) },
+      new AbortController().signal
+    )
+  let lastContext: OperationContext | undefined
+  const records = await f.registry.list()
+  const lease = await f.registry.acquire(skillComposition.select(records, [], ['one', 'two']))
+  const modules = await skillCapabilityModules.create({
+    registry: f.registry,
+    lease,
+    node: await nodeOptions(f.root),
+    hostModules: {
+      'velaros:browser': {
+        binding: {
+          moduleId: 'velaros:browser',
+          instanceId: 'page',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'fixture',
+        operations: {
+          identity: {
+            summary: 'fixture',
+            input: { type: 'object' },
+            output: { type: 'string' },
+            effects: 'none',
+            prepare: async (input) => input,
+            observe: async () => 'bound-page',
+            run: async (_input, context) => {
+              lastContext = context
+              return 'bound-page'
+            },
+          },
+        },
+      },
+    },
+  })
+  expect(modules).toHaveLength(1)
+  const journal = new Map<string, InvocationRecord>()
+  const kernel = createOperationRuntime({
+    modules,
+    journal: {
+      read: async (_session, id) => journal.get(id) ?? null,
+      claim: async (prepared) => {
+        const previous = journal.get(prepared.id)
+        if (previous) return previous
+        journal.set(prepared.id, { phase: 'reserved', prepared })
+        return null
+      },
+      prepare: async (prepared) => {
+        journal.set(prepared.id, { phase: 'prepared', prepared })
+      },
+      settle: async (receipt) => {
+        journal.set(receipt.invocation.id, {
+          phase: 'settled',
+          prepared: receipt.invocation,
+          receipt,
+        })
+      },
+    },
+  })
+  const node = await nodeOptions(f.root)
+  const invoke = (id: string) =>
+    createKernelScriptSession({
+      runtime: kernel,
+      runner: createNodeCodeRunner({ ...node, runtime: lease.environment }),
+      sessionId: 'shared',
+      executionId: id,
+      allowedModules: ['velaros:browser'],
+    }).run({
+      source: "import {identity} from 'velaros:browser';export default await identity({});",
+    })
+  try {
+    const first = await invoke('first')
+    expect(first.checked && first.rawValue).toBe('bound-page')
+    await f.registry.remove('one')
+    const second = await invoke('second')
+    expect(second.checked && second.rawValue).toBe('bound-page')
+    await f.registry.remove('two')
+    const third = await invoke('third')
+    expect(third.checked && third.result.failed?.code).toBe('PERMISSION')
+    if (!lastContext) throw new Error('host context missing')
+    await expect(
+      modules[0]!.operations.identity!.observe!({}, { ...lastContext, recordEffect: () => {} })
+    ).rejects.toMatchObject({ code: 'PERMISSION' })
+    await expect(
+      modules[0]!.operations.identity!.prepare!({}, { signal: new AbortController().signal })
+    ).rejects.toMatchObject({ code: 'PERMISSION' })
+  } finally {
+    await kernel.dispose()
+  }
+  await lease.release()
+})
+
+test('INV-7 未选择的专项包缺少依赖时基础环境仍可使用', async () => {
+  const f = await fixture()
+  const directory = await source(f.root, 'optional-language', '1.0.0', {
+    packages: ['missing-dependency'],
+  })
+  const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
+  manifest.dependencies = { 'missing-dependency': '1.0.0' }
+  await writeFile(join(directory, 'package.json'), JSON.stringify(manifest))
+  const registry = createSkillRegistry({
+    directory: f.store,
+    nodeVersion: process.versions.node,
+    builtins: [directory],
+    lock: createExclusiveSqliteLock(() => new Database(join(f.store, 'lock.sqlite'))),
+    installer: {
+      install: async () => {
+        throw new Error('unexpected install')
+      },
+    },
+  })
+  const base = await registry.acquire()
+  expect(base.environment.packages).toHaveLength(0)
+  await base.release()
+  await expect(
+    registry.acquire(skillComposition.select(await registry.list(), [], ['optional-language']))
+  ).rejects.toMatchObject({ code: 'NOT_FOUND' })
 })

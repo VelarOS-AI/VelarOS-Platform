@@ -177,3 +177,34 @@ test('permanent provider codes take precedence over transient hints and generic 
     )
   ).toBeNull()
 })
+
+test('SDK JSON response bodies override transient HTTP status with permanent provider facts', () => {
+  for (const detail of [
+    { code: 'insufficient_quota', message: 'Account credits exhausted' },
+    { type: 'invalid_request_error', message: 'Unsupported generation parameter' },
+    { code: 'VALIDATION_FAILED', message: 'Request cannot be accepted' },
+  ]) {
+    expect(
+      modelProviderRetry.plan(
+        {
+          statusCode: 429,
+          isRetryable: true,
+          message: 'Too Many Requests',
+          responseBody: JSON.stringify({ error: detail }),
+        },
+        { retryIndex: 1 }
+      )
+    ).toBeNull()
+  }
+  expect(
+    modelProviderRetry.plan(
+      {
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          error: { type: 'rate_limit_exceeded', message: 'Try again later' },
+        }),
+      },
+      { retryIndex: 1 }
+    )?.kind
+  ).toBe('rate-limit')
+})

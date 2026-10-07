@@ -15,3 +15,5 @@ export interface SkillEnvironmentLease {
   /** 执行与所有子进程收束后幂等释放租约。 */
   release(): Promise<void>
 }
+
+export type { SkillCompositionApi } from '../impl/SkillComposition.js'

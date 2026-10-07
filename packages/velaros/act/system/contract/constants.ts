@@ -1,3 +1,5 @@
+/** Agent 自管 npm 环境身份。 */
+export const EnvironmentModuleId = 'velaros:system-environment' as const
 /** 会话目标能力身份。 */
 export const GoalModuleId = 'velaros:system-goal' as const
 /** 可写已有对象、不能创建空间的合同投影。 */
@@ -93,9 +95,10 @@ export const SystemPackageSpecifier = 'velaros:system' as const
  * 这些身份都不作为业务能力单独列出。
  */
 export const SystemMembers: Readonly<
-  Record<'modules' | 'goal' | 'memory' | 'store' | 'programs', readonly string[]>
+  Record<'modules' | 'goal' | 'memory' | 'store' | 'programs' | 'environment', readonly string[]>
 > = Object.freeze({
   modules: Object.freeze([ModulesModuleId]),
+  environment: Object.freeze([EnvironmentModuleId]),
   programs: Object.freeze([ProgramsModuleId]),
   goal: Object.freeze([GoalModuleId]),
   memory: Object.freeze([
@@ -163,4 +166,23 @@ export const ActiveContextLimits = Object.freeze({
   textChars: 1000,
   /** 每段逐字证据的 UTF-16 字符上限。 */
   quoteChars: 4000,
+})
+/** npm 环境的模型入参与持久保留预算。 */
+export const EnvironmentLimits = Object.freeze({
+  /** 单次安装与删除列表各自的包数。 */
+  changes: 32,
+  /** 包名最大字符数。 */
+  nameChars: 214,
+  /** 版本规格和搜索关键词最大字符数。 */
+  specChars: 256,
+  /** 当前环境直接依赖数上限。 */
+  packages: 128,
+  /** 默认搜索条数。 */
+  searchDefault: 10,
+  /** 搜索或版本说明最多返回条数。 */
+  searchResults: 20,
+  /** 第三方说明的字符上限。 */
+  descriptionChars: 2000,
+  /** 保留包含当前版本的最近发布记录。 */
+  history: 16,
 })

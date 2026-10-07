@@ -48,9 +48,9 @@ export interface NodeRuntimeSkill {
   readonly capabilities: readonly string[]
 }
 
-/** 会话固定的运行环境；新安装和升级只影响后续装配。 */
+/** 不可变的运行环境快照；宿主可在每次执行时获取新的依赖版本。 */
 export interface NodeRuntimeEnvironment {
-  /** 固定本次依赖和授权集合的环境身份。 */
+  /** 固定本次依赖与所选 Skill 的环境身份。 */
   readonly id: string
   /** Agent 可直接导入的标准 npm 包。 */
   readonly packages: readonly NodeRuntimePackage[]

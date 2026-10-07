@@ -1,4 +1,4 @@
-import { isEmpty, isFunction, isTrue, optionalWhen } from '@velaros-ai/core'
+import { AppError, isEmpty, isFunction, isTrue, optionalWhen } from '@velaros-ai/core'
 
 import { CodeQuerySources } from '../../contract/constants.js'
 import type { LanguageToolContext } from '../../contract/requires.js'
@@ -24,13 +24,13 @@ import {
 } from '../../utils/language/language-queries.js'
 import { limitOf } from '../../utils/language/source-files.js'
 
-import { languageServiceRegistry } from './LanguageServiceRegistry.js'
+import { LanguageServiceRegistry } from './LanguageServiceRegistry.js'
 
 /**
  * 语言查询的唯一入口：把 project 的 `ProjectCodeLanguageQuery` 分派到选中的语言服务，再把多份结果合成一份。
  *
- * 实例是 `languageQueries`。只借 `LanguageToolContext` 里的读源码端口，不需要审批、执行或修改能力——
- * 只给得起读端口的宿主（Termel）也能直接用它。
+ * 会话按所选语言创建独立实例，SDK 可使用默认的 `languageQueries`。
+ * 只借 `LanguageToolContext` 里的读源码端口，只提供读端口的宿主也能直接使用。
  */
 export interface LanguageQueriesApi {
   /**
@@ -44,14 +44,20 @@ export interface LanguageQueriesApi {
 }
 
 /** 语言查询的分派与结果合并，见接口说明。 */
-class LanguageQueries implements LanguageQueriesApi {
-  private readonly registry = languageServiceRegistry
+export class LanguageQueries implements LanguageQueriesApi {
+  private readonly registry: LanguageServiceRegistry
+
+  public constructor(languages?: readonly string[]) {
+    this.registry = new LanguageServiceRegistry(languages)
+  }
 
   public async run(
     input: ProjectCodeLanguageQuery,
     context: LanguageToolContext
   ): Promise<unknown> {
     context.abortSignal.throwIfAborted()
+    if (isEmpty(this.registry.listServices()))
+      throw new AppError('UNAVAILABLE', '当前项目需要选择对应语言 Skill 后查询代码')
     this.registry.assertKnownLanguage(input.language)
     return withCodeQuerySource(
       CodeQuerySources.languageService,

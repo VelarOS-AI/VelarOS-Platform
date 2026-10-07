@@ -30,7 +30,9 @@ export type {
 } from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
+export type { NpmClientApi } from './contract/provides.js'
 export type { ShellEnvironmentOptions } from './contract/requires.js'
+export type { NpmClientOptions } from './contract/requires.js'
 export type { ShellEnvironmentApi } from './impl/local/ShellEnvironment.js'
 export type { ShellCommandApprovalInput, ShellCommandApprovalRequest } from './types/approval.js'
 export type {

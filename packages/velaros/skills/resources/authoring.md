@@ -1,7 +1,7 @@
 # VelarOS Skill 开发规范
 
 Skill 是 Node Agent Runtime 的可安装扩展包，可以组合按需说明、资源文件、标准 npm 依赖与外部能力。
-基础环境提供 Node.js、execa、@vscode/ripgrep、globby、diff、yaml、ts-morph、prettier。标准库与 npm 包直接按原始 API 使用，版本、README 和类型声明可从运行环境目录按需查询。
+基础环境提供 Node.js、execa、@vscode/ripgrep、globby、diff、yaml。标准库与 npm 包直接按原始 API 使用，版本、README 和类型声明可从运行环境目录按需查询。
 标准 npm 包沿用自身 API；只有系统特有的安装、权限、资源生命周期和外部能力接入才使用自定义接口。
 
 ## 选择最小包结构
@@ -87,3 +87,12 @@ provider.mjs 导出同名实现，可以使用 Node、fetch 和自己的私有�
 
 安装加入本机库。会话选择决定加载的版本和能力，升级后重新选择新版本。依赖生命周期脚本默认关闭，确需脚本时显式传 allowDependencyScripts: true，由宿主确认。
 查询管理、生效时机与卸载方式用 guide({topic:'management'})。
+
+
+## 内置 Skill 与专项 Skill
+
+project、browser 是内置 Skill。工作区绑定项目根或浏览器会话，并选择默认 Skill。jsts 提供 ts-morph、prettier、jsonc-parser、@ast-grep/napi 和 @playwright/test；选择后直接 import 原包。
+
+`agentSkill.hostCapabilities` 可以声明需要宿主绑定的能力，例如 `velaros:browser`；标准依赖仍写在 dependencies。声明是需求，宿主根据当前资源与会话授权决定是否提供。语言扩展身份 `project:language:jsts` 将宿主的 JS/TS 语言服务加入该轮项目查询。
+
+内置身份由宿主注册处提供，package.json 字段不能将普通安装包提升为内置来源。开发者继续使用普通 npm 包清单、可选 SKILL.md 和原有外部能力入口。

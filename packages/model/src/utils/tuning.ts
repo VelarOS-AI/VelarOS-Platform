@@ -113,6 +113,8 @@ export const ModelTuning = Object.freeze({
     maxDelayMs: 30_000,
     /** 重试提示里带上的原始错误文字最多几个字符。 */
     messageChars: 180,
+    /** 提供方错误响应正文的诊断解析上限，字符。 */
+    errorBodyChars: 65_536,
   }),
   /** 产品的连接探测。 */
   profiles: Object.freeze({

@@ -1,6 +1,7 @@
 export type { MemoryModuleApi, ModulesModuleApi, SystemModulesApi } from './contract/provides.js'
 export type { StoreModuleApi, StoreSessionApi } from './contract/provides.js'
 export type { ProgramsModuleApi } from './contract/provides.js'
+export type { EnvironmentModuleApi, EnvironmentRegistryApi } from './contract/provides.js'
 export type {
   ContextCandidateValidator,
   ContextMaintenanceHost,
@@ -27,11 +28,28 @@ export type {
   SystemMemoryOperationContext,
 } from './contract/requires.js'
 export type { GoalHost } from './contract/requires.js'
+export type {
+  EnvironmentLease,
+  EnvironmentOperationContext,
+  EnvironmentRegistryOptions,
+} from './contract/requires.js'
+export { environmentModule } from './impl/EnvironmentModule.js'
+export { createEnvironmentRegistry } from './impl/EnvironmentRegistry.js'
 export { memoryModule } from './impl/MemoryModule.js'
 export { modulesModule } from './impl/ModulesModule.js'
 export { programsModule } from './impl/ProgramsModule.js'
 export { storeModule } from './impl/StoreModule.js'
 export { systemModules } from './impl/SystemModules.js'
+export type {
+  EnvironmentApply,
+  EnvironmentDescribe,
+  EnvironmentHistoryEntry,
+  EnvironmentPackage,
+  EnvironmentPackageDescription,
+  EnvironmentRollback,
+  EnvironmentSearch,
+  EnvironmentState,
+} from './types/environment.js'
 export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
 export type { VolumeNarrative } from './types/history.js'
 export type {

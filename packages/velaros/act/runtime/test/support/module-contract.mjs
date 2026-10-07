@@ -6,6 +6,8 @@ import ts from 'typescript'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 import { codeProgramChecker, scriptPackageCompiler } from '@velaros-ai/script'
 
+import { SystemMembers } from '../../../../dist/act/system/contract/constants.js'
+
 // 装配时唯一会读取的宿主信息是搜索档位；调用处理器不在这里执行。
 export const definitionHost = { agentProfiles: () => [], search: { profiles: () => ['example'] } }
 
@@ -58,13 +60,9 @@ export async function verifyModule(factory, templateUrl) {
             {
               specifier: 'velaros:system',
               exports: {
-                [definition.binding.moduleId === 'velaros:system-goal'
-                  ? 'goal'
-                  : definition.binding.moduleId.startsWith('velaros:system-memory')
-                    ? 'memory'
-                    : definition.binding.moduleId.startsWith('velaros:system-store')
-                      ? 'store'
-                      : definition.binding.moduleId.split(':')[1]]: definition.binding.moduleId,
+                [Object.entries(SystemMembers).find(([, members]) =>
+                  members.includes(definition.binding.moduleId)
+                )?.[0]]: definition.binding.moduleId,
               },
             },
           ],

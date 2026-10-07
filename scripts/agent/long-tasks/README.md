@@ -18,6 +18,10 @@
 
 使用准备结果中的 `controller` 路径执行 `node <controller> <attempt-directory>`。控制器从尝试独立副本导入评测依赖，运行前后核对文件哈希和 Python 依赖。`analyze.mjs <attempt-directory>` 汇总最终验收、请求、上下文和费用覆盖率。
 
+模型、凭据来源、上下文容量、输出上限、超时、请求数和参考价格从 campaign 的 `config.json` 读取，也可在 `command-path` 之后传配置路径。参数在派发前验证并写入冻结清单。`accounting.maxRequestsPerAttempt` 与 `accounting.perAttemptBudgetUsd` 分别限制参与者的上游请求与预占金额；配对共享总额度应能容纳双方的独立额度。用量缺失的请求仍保留预占，不按零费用计算。账本重开时核对独立额度，超额通过永久错误返回，避免把额度耗尽当作临时限流重试。
+
+每个参与者评分前保存 `source-evidence/manifest.json`、从冻结基线到当前工作区的二进制补丁及全部未忽略的新文件。范围包含已提交、已暂存和未暂存改动，不按源文件扩展名筛选；符号链接记录链接原文，不跟随复制。清理执行副本前核验清单与内容哈希，评测失败同样保留证据。
+
 能力使用由完整主线与支线 trace 汇总，按会话和调用身份去重，分别记录模块、操作和最终记录的状态。读取器兼容内联历史与带哈希的引用产物，引用身份或正文校验失败时拒绝汇总；缺失文件、缺失摘要与轨迹缺口保持未知或不完整。`capabilityUsage` 计数只表示真实模块调用，不与 Shell/Node 执行次数相加，也不把可用接口或替身模型测试算作自然使用收益。
 
 Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"`、`"jest-json"` 或 `"ava-tap"` 和项目自身的 `regressionEntry`，回归路径可包含项目测试器支持的 glob；独立验收使用本目录中的 `test_*.mjs` 与 Node 自带测试器。Mocha 与 AVA 指向项目自身 CLI 文件，AVA 保留普通参数并提供 npm 风格的本地工具路径；Jest 指向提供 runCLI 的包入口（如 `node_modules/jest/build/index.js`），冻结适配脚本调用 API 并保留普通 Node 进程 argv，避免测试器参数被应用解析。campaign/sources 中先安装完整依赖，准备、执行、评分分别复制 node_modules 实体目录，参与者可以在自己的副本安装工具。冻结身份包含 Node 二进制与版本、依赖文件内容和权限、相对链接；链接限于任务副本内部。评分恢复冻结依赖及原测试。Mocha/Jest JSON 与 AVA 官方 TAP 的逐例结果用于检查原测试清单与新增跳过。AVA 核对逐项编号、尾部计划和所有计数，缺失报告、矛盾统计、worker 崩溃或异常进程退出不能通过。收集和 hook 失败同样计入；Node TAP 的测试总数、失败和取消分别记录，空套件不能通过。原 Python 任务清单和运行语义兼容。
@@ -25,6 +29,8 @@ Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"`、`"jest-
 `environment.processEnvironment` 可显式冻结终端颜色和区域变量，值为字符串或 null（清除该变量），准备与执行控制器在启动参与者及评分进程前应用相同设置。可配置 NO_COLOR、FORCE_COLOR、CLICOLOR、CLICOLOR_FORCE、TERM、TZ、LANG 与 LC_ALL；省略时保留原环境。它用于记录项目基线所需条件，不能在付费之后调整以放行失败。
 
 Node 任务还可冻结相对各自工作区的 `NODE_PATH`，用于原项目的模块夹具，路径不接受绝对位置或父目录跳转。Node 回归入口同时支持普通脚本和没有扩展名的 Node CLI。
+
+旧版 node-tap 项目可使用 `regressionRunner: "tap-json"`。适配器调用冻结项目自己的 TAP parser，以 `--no-esm --no-coverage --jobs=1 --reporter=tap` 运行原测试，核验完整计划并记录所有层级的断言。用例身份只移除测试器附加在名称末尾的 `# time=...ms`，保留原始日志；兼容启动参数与覆盖率关闭必须作为环境适配披露，不能据此声称验证了旧版覆盖率工具链。构建进程使用同一冻结 PATH，并前置当前副本的 `node_modules/.bin` 以支持项目构建工具的子命令。
 
 Vitest 项目使用 `regressionRunner: "vitest-json"`，`regressionEntry` 指向项目中提供 startVitest 的入口，例如 `node_modules/vitest/dist/node.js`。冻结适配器以单 worker 执行项目配置，通过官方 API 记录完整任务树、完成次数、取消状态及未处理异常。逐例计算通过、失败和跳过，套件收集/钩子错误独立保留；父套件错误导致未执行的测试也保留身份与错误。普通运行中状态、不完整报告、重复文件和矛盾结果均拒绝，测试器诊断与结构报告分开保存。
 
@@ -72,3 +78,5 @@ Mocha/Jest 的用例身份使用真实工作区与测试文件路径，目录别
 基线、构建和评分命令通过独占临时文件的描述符采集 stdout/stderr，避免程序主动退出时截断尚未排空的管道。单流记录上限为 8,000,000 字节，执行上限为 180 秒；文件增长越界时通过同一守护器终止进程组，超限、超时、信号和非零退出保留为失败。记录读取及临时文件清理在进程组回收之后进行。采集器和守护器一起计入新尝试的冻结清单。
 
 fs-extra 维护源码迁移任务要求将二十九个生产模块移到原生 ESM 的 src，同时维持 CommonJS 与 ESM 发布接口、函数身份和原测试。独立验收检查逐模块源码、入口行为、源码编辑传播、清空产物后重建、确定性与独立打包消费。打包沿用仓库受控工具；准备器将该工具与评分器一起复制并登记哈希。原实现的 API 清单作为合同夹具冻结，正向迁移控制及十种故障控制在任何付费执行前核验。完整交付仍须复核模型新增的测试、文档和示例，不能仅按有限功能得分认定。
+
+2026-10-07 的 jsdiff 原子补丁任务评分审计保留在官网证据包和本机 followup 归档中。仓库评分器已修正为固定上游真实的 `lib/index.mjs` 入口，并使用原 `applyPatch` 可得到空字符串的标准删除夹具。原冻结文件和双方原分不改写；同一产物统一重判记录同时保留。YAML 后置 NUL 错误的补充检查属于运行后审查，与原冻结验收分开报告。

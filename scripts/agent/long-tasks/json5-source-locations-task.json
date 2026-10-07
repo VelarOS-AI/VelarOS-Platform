@@ -1,0 +1,29 @@
+{
+  "id": "json5-source-locations",
+  "split": "development",
+  "repository": "https://github.com/json5/json5.git",
+  "commit": "b935d4a280eafa8835e6182551b63809e61243b0",
+  "environment": {
+    "runtime": "node",
+    "project": "json5",
+    "acceptance": "test_json5_source_locations.mjs",
+    "regressionRunner": "tap-json",
+    "regressionEntry": "node_modules/tap/bin/run.js",
+    "regression": [
+      "test"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      "package-lock.json"
+    ],
+    "build": {
+      "entry": "node_modules/rollup/bin/rollup",
+      "args": [
+        "-c"
+      ]
+    },
+    "baselineFailure": "new public API must be exported"
+  },
+  "prompt": "Add JSON5.parseWithLocations(text, reviver?) as a maintained public API. It returns {value, nodes}; value must be exactly the ordinary JSON5.parse(text, reviver) result. Each syntactic value has one node {path, kind, start, end}: path is an RFC 6901 JSON Pointer (root is the empty string, array indices are decimal, escape ~ as ~0 and / as ~1); kind is object, array, string, number, boolean, or null; start/end are zero-based UTF-16 offsets in the original input, end exclusive, spanning the complete value literal including container delimiters or string quotes, excluding surrounding whitespace and comments. Object keys are not values. Nodes are in source opening order with containers before their descendants. Duplicate key occurrences each retain their own nodes, even when the resulting value is overwritten. Nodes describe syntax before reviver processing, including entries removed by the reviver. Reviver behavior, this binding, traversal order, exceptions, and parse errors must match the existing parse API. Support every existing JSON5 lexical form, escaped keys, Unicode, surrogate pairs, comments, trailing commas, signed/hex/Infinity/NaN numbers, empty containers, and __proto__ keys without prototype pollution. Calls must be independent, including a nested parseWithLocations call from a reviver and calls following a syntax error. Integrate source tracking into the existing parser rather than reparsing substrings, copying a second parser, or finding values with regex. Ordinary parse must not allocate the location tree. Expose it through CommonJS, the ESM and browser bundles, and maintained TypeScript declarations. Add CLI --locations (stdin or file, compatible with --space and --out-file) that prints the JSON serialization of {value,nodes}; --validate still only validates. Add permanent regression tests, API/CLI documentation, and a runnable example. Run original tests and lint, rebuild bundles from maintained sources, check a TypeScript consumer, and execute the example. Report actual validation results and remaining limitations; make routine choices autonomously."
+}

@@ -233,6 +233,8 @@ export type CodeProgramEditResult =
 
 /** 标准 Node 子进程的宿主请求。 */
 export interface NodeProcessRequest {
+  /** 宿主固定的依赖命令目录，前置到该进程及后代的 PATH。 */
+  readonly binDirectories?: readonly string[]
   /** 宿主生成的 Node 启动正文；source 保持原文用于审批与归档。 */
   readonly bootstrap?: string
   /** 能力加载器的 file URL；宿主追加到 NODE_OPTIONS 的 --import，供普通 Node 后代继承。 */

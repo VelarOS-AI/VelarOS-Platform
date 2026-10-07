@@ -2,35 +2,67 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 
 import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { createExclusiveSqliteLock } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
-import { createNodeCodeRunner, NodeDefaultPackages } from '@velaros-ai/script'
+import { createNodeCodeRunner, NodeDefaultPackages, nodeRuntimePackages } from '@velaros-ai/script'
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
 import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
+import {
+  builtinSkillDirectories,
+  BuiltinSkillNames,
+  createSkillRegistry,
+  skillComposition,
+} from '../../../dist/skills/index.js'
 
 async function fixture(t, extra = {}, mode = 'danger-full-access') {
   const root = await mkdtemp(join(tmpdir(), 'velaros-native-'))
   const cwd = join(root, 'workspace')
   await mkdir(cwd)
   const shell = createLocalShellHost({ cwd, processConfinement: { mode, workspaceRoot: cwd } })
+  const { selectedSkills, ...nodeExtra } = extra
+  let lease
+  let registry
+  if (selectedSkills) {
+    const store = join(root, 'skills')
+    await mkdir(store)
+    registry = createSkillRegistry({
+      directory: store,
+      nodeVersion: process.versions.node,
+      builtins: builtinSkillDirectories(),
+      packages: nodeRuntimePackages.defaults(),
+      lock: createExclusiveSqliteLock(() => new DatabaseSync(join(store, 'lock.sqlite'))),
+      installer: {
+        install: async () => {
+          throw Error('unexpected install')
+        },
+      },
+    })
+    lease = await registry.acquire(
+      skillComposition.select(await registry.list(), [], selectedSkills)
+    )
+  }
   const node = createNodeExecutionEnvironment({
     cwd,
     directory: join(root, 'runs'),
     host: shell,
-    ...extra,
+    ...nodeExtra,
+    ...(lease ? { runtime: lease.environment } : {}),
   })
   t.after(async () => {
     await shell.dispose()
+    await lease?.release()
     await rm(root, { recursive: true, force: true })
   })
-  return { root, cwd, shell, node }
+  return { root, cwd, shell, node, registry, lease }
 }
 
 const request = (source, timeoutMs = 10_000, operations = {}) => ({
@@ -1767,8 +1799,8 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })
 
-test('default development packages refactor TypeScript and format TSX in entrypoints and child Node processes', async (t) => {
-  const f = await fixture(t)
+test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints and child Node processes', async (t) => {
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] })
   const original = {
     'package.json': JSON.stringify({ type: 'module' }),
     'tsconfig.json': JSON.stringify({
@@ -1835,7 +1867,7 @@ test('default development packages refactor TypeScript and format TSX in entrypo
 })
 
 test('standard package references expose installed versions, original docs and declarations on demand', async (t) => {
-  const f = await fixture(t, {}, 'workspace-write')
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] }, 'workspace-write')
   const result = await createNodeCodeRunner(f.node).run(
     request(`
     import {readFile} from 'node:fs/promises';
@@ -1862,7 +1894,17 @@ test('standard package references expose installed versions, original docs and d
     () => {}
   )
   assert.equal(result.ok, true, JSON.stringify(result))
-  assert.deepEqual(result.value.sort(), [...NodeDefaultPackages].sort())
+  assert.deepEqual(
+    result.value.sort(),
+    [
+      ...NodeDefaultPackages,
+      'ts-morph',
+      'prettier',
+      'jsonc-parser',
+      '@ast-grep/napi',
+      '@playwright/test',
+    ].sort()
+  )
 })
 
 test('execution discovery records the real child environment without exposing unrelated variables', async (t) => {
@@ -1898,7 +1940,7 @@ test('execution discovery records the real child environment without exposing un
 })
 
 test('package discovery follows workspace versions, aliases and hidden package manifests', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] })
   for (const name of ['execa', '@vscode/ripgrep', 'ts-morph', 'prettier']) {
     const root = join(f.cwd, 'node_modules', name)
     await mkdir(root, { recursive: true })
@@ -2144,4 +2186,133 @@ test('only project workspaces receive project transaction capabilities', async (
       await runtime.close()
     }
   }
+})
+
+test('host project bindings compose independently with selected Skills', async (t) => {
+  for (const { names, project } of [
+    { names: [], project: false },
+    { names: [], project: true },
+    { names: [BuiltinSkillNames.browser], project: false },
+    { names: [BuiltinSkillNames.jsts], project: false },
+    { names: [BuiltinSkillNames.jsts], project: true },
+    { names: [BuiltinSkillNames.jsts, BuiltinSkillNames.browser], project: true },
+  ]) {
+    const f = await fixture(t, { selectedSkills: names })
+    await writeFile(join(f.cwd, 'answer.ts'), 'export const answer: number = "wrong";')
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII=',
+      'base64'
+    )
+    await writeFile(join(f.cwd, 'tiny.png'), png)
+    await writeFile(join(f.root, 'outside.png'), png)
+    const runtime = await createRuntime({
+      workspace: f.cwd,
+      node: f.node,
+      project: project
+        ? {
+            images: true,
+            code: {
+              isAvailable: () => true,
+              query: async (input) => ({ action: input.action, revision: 'bound-code-index' }),
+            },
+          }
+        : false,
+      dataDir: join(f.root, 'state'),
+      skills: {
+        registry: f.registry,
+        lease: f.lease,
+        hostModules: Object.fromEntries(
+          ['velaros:browser', 'velaros:devtools', 'velaros:cdp'].map((name) => [
+            name,
+            {
+              binding: {
+                moduleId: name,
+                instanceId: 'bound-page',
+                generation: 1,
+                schemaRevision: '1',
+              },
+              summary: 'bound fixture',
+              operations: {
+                identity: {
+                  summary: 'current binding',
+                  input: { type: 'object' },
+                  output: { type: 'string' },
+                  effects: 'none',
+                  run: async () => 'bound-page',
+                },
+              },
+            },
+          ])
+        ),
+      },
+      agents: false,
+      search: false,
+    })
+    t.after(() => runtime.close())
+    const modules = runtime.modules().items.map((item) => item.binding.moduleId)
+    assert.equal(modules.includes('velaros:project'), project)
+    assert.equal(modules.includes('velaros:code'), project)
+    assert.equal(modules.includes('velaros:browser'), names.includes(BuiltinSkillNames.browser))
+    assert.equal(modules.filter((name) => name === 'velaros:images').length, project ? 1 : 0)
+    const session = await runtime.openSession('composition')
+    await session.context.append({ kind: 'user', body: 'Verify selected workspace capabilities' })
+    if (project) {
+      const image = await session.execute({
+        source:
+          "import {view} from 'velaros:images';export default await view({files:[{path:'tiny.png'},{path:'../outside.png'}]});",
+      })
+      assert.equal(image.result.failed, undefined, JSON.stringify(image))
+      assert.equal(image.rawValue.files[0].width, 1)
+      assert.deepEqual(image.rawValue.files[0].sent, { width: 1, height: 1 })
+      assert.equal(image.rawValue.files[1].error.code, 'PERMISSION')
+      const read = await session.execute({
+        source:
+          "import {read} from 'velaros:project';export default await read({files:[{path:'answer.ts'}]});",
+      })
+      assert.equal(read.result.failed, undefined, JSON.stringify(read))
+      assert.match(read.rawValue.files[0].text, /export const answer/)
+    }
+    if (names.includes(BuiltinSkillNames.browser)) {
+      const page = await session.execute({
+        source: "import {identity} from 'velaros:browser';export default await identity({});",
+      })
+      assert.equal(page.rawValue, 'bound-page')
+    }
+    if (project) {
+      const graph = await session.execute({
+        source: `import {analyze} from 'velaros:code';export default await analyze({intent:'cycles'});`,
+      })
+      assert.equal(graph.result.failed, undefined, JSON.stringify(graph))
+      assert.equal(graph.rawValue.action, 'find_cycles')
+      assert.equal(graph.rawValue.revision, 'bound-code-index')
+      const result = await session.execute({
+        source: `import {query} from 'velaros:code';export default await query({intent:'diagnostics',path:'answer.ts'});`,
+      })
+      if (names.includes(BuiltinSkillNames.jsts)) {
+        assert.equal(result.result.failed, undefined, JSON.stringify(result))
+        assert.match(JSON.stringify(result), /2322/)
+      } else {
+        assert.equal(result.result.failed.code, 'UNAVAILABLE')
+        assert.match(JSON.stringify(result), /语言 Skill/)
+      }
+    }
+    if (!names.includes(BuiltinSkillNames.jsts)) {
+      const result = await session.execute({
+        source: `import {readFile} from 'node:fs/promises';const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));const unavailable=[];for(const name of ['ts-morph','prettier','jsonc-parser','@ast-grep/napi','@playwright/test']) {try {await import(name)} catch(error) {if(error.code==='ERR_MODULE_NOT_FOUND') unavailable.push(name);else throw error}}export default {packages:catalog.packages.map(p=>p.name),unavailable};`,
+      })
+      assert.equal(result.result.failed, undefined, JSON.stringify(result))
+      assert.deepEqual(result.rawValue.packages.sort(), [...NodeDefaultPackages].sort())
+      assert.equal(result.rawValue.unavailable.length, 5)
+    }
+  }
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.browser] })
+  await assert.rejects(
+    createRuntime({
+      node: f.node,
+      project: false,
+      dataDir: join(f.root, 'state'),
+      skills: { registry: f.registry, lease: f.lease },
+    }),
+    /未绑定/
+  )
 })

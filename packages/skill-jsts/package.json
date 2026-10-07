@@ -1,0 +1,54 @@
+{
+  "name": "@velaros-ai/skill-jsts",
+  "version": "0.1.0",
+  "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "files": [
+    "SKILL.md"
+  ],
+  "dependencies": {
+    "ts-morph": "28.0.0",
+    "prettier": "3.9.9",
+    "jsonc-parser": "3.3.1",
+    "@ast-grep/napi": "0.45.3",
+    "@playwright/test": "1.63.0"
+  },
+  "agentSkill": {
+    "instructions": "SKILL.md",
+    "packages": [
+      "ts-morph",
+      "prettier",
+      "jsonc-parser",
+      "@ast-grep/napi",
+      "@playwright/test"
+    ],
+    "hostCapabilities": [
+      "project:language:jsts"
+    ]
+  },
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/skill-jsts#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/skill-jsts"
+  },
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./SKILL.md": "./SKILL.md"
+  }
+}

@@ -1,6 +1,6 @@
 # @velaros-ai/velaros/act/system
 
-模型的自管理系统包 `velaros:system`：`modules` 发现能力与定向合同，`programs` 发布和发现参数化程序，`goal` 管目标，`memory` 管笔记与材料，`store` 管共享状态。`createRuntime` 按会话装配；宿主固定记忆、空间、程序与来源权限。
+模型的自管理系统包 `velaros:system`：`modules` 发现能力与定向合同，`programs` 发布和发现参数化程序，`goal` 管目标，`memory` 管笔记与材料，`store` 管共享状态，`environment` 管持久 npm 依赖。`createRuntime` 按会话装配；宿主固定记忆、空间、程序与来源权限。
 
 ## 用法
 
@@ -70,3 +70,10 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 可以在同一段 execute 中输出多页，展示预算仍按原合同分配。仅调用 read、只输出 page.text、把 page 嵌套到其他对象、改写页对象、召回局部字段、页再次截断或所需页已退出当前历史，都不产生完整交付证明。初始摘录不参与分页覆盖，释放仍需显式 release。
 
 脚本失败后，`runtime.progress.feedback.recovery.index` 给出该结果的调用索引入口。先 `memory.read(index)`，按索引的 `id` 调用 `memory.read({ref: index.ref, invocation: id})`，即可在同一次 execute 中收集已落定的原始调用回执；大索引与回执均按 offset/limit 分页。`pointer` 此时相对回执根，含 `outcome`、`effect`、`value`、`error`，失败或未知状态保持原样。调用召回不会重新执行，不签发必需输出块的 delivery；未落定回执返回明确不可用。release 和封段不删除召回权，任务授权重置及跨会话限制沿用原文规则。
+
+
+`createRuntime` 在提供 `dataDir` 和带 npm 客户端的 Node 执行口时，默认绑定 `dataDir/environments/default`。`createNodeExecutionEnvironment` 自动提供共用宿主策略的 npm 客户端；`npmCli` 可指定随产品分发的 CLI。自定义运行器通过 `packageEnvironment` 注入 `createEnvironmentRegistry` 创建的环境，使用稳定目录区分 agent；`packageEnvironment: false` 关闭。环境目录必须在业务工作区之外，受约束宿主须把安装根和 npm 缓存加入已授权写根。
+
+模型从 `velaros:system` 导入 `environment`，用 `list/search/describe` 查询，再用 `apply({baseRevision,install,remove,allowScripts})` 一次变更依赖。同名包指定新版本即升级或降级；安装和删除可同时完成替换。支持 registry 版本范围、标签和 npm alias；锁文件与安装收据保留具体版本。生命周期脚本默认关闭，需要时可显式开启并沿用宿主权限。
+
+安装成功后，当前已打开会话的下一次 Node 或 Shell 执行自动获取新快照，直接 import 和包命令都可用。工作区依赖按原生 Node 规则优先，Skill 的固定包名冲突时使用 alias。包目录提供实际版本、README、package.json 和命令名，模型需验证目标功能。`rollback` 将保留历史发布成新版本；正在运行的进程及其后代保留原快照。进程回收不完整时保留文件供宿主核对；正常结束后释放租约并回收超出保留历史的版本。

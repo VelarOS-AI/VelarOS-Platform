@@ -1,0 +1,13 @@
+{
+  "name": "@velaros-ai/skill-browser",
+  "version": "0.1.0",
+  "description": "通用网页操作、开发者工具与 CDP，适用于各类工作区。",
+  "agentSkill": {
+    "instructions": "SKILL.md",
+    "hostCapabilities": [
+      "velaros:browser",
+      "velaros:devtools",
+      "velaros:cdp"
+    ]
+  }
+}

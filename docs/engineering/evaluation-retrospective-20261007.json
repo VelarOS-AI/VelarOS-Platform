@@ -1,0 +1,4625 @@
+{
+  "createdAt": "2026-10-07T16:57:09+08:00",
+  "studies": {
+    "scriptact-long-runtime-results-20261004.json": {
+      "source": "scriptact-long-runtime-results-20261004.json",
+      "sha256": "3677beef92aa9f01838a032617d01b0f422f149bc85568759da5f43bc134fead",
+      "qualifications": {
+        "evidence": "Development attempts and frozen independent holdouts; per-attempt qualifications apply.",
+        "evaluationAudits": [
+          {
+            "at": "2026-10-05T16:43:11.317Z",
+            "kind": "workspace-copy-symlink-fidelity",
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/workspace-symlink-audit.json",
+            "auditedAttempts": 46,
+            "rewrittenLinks": [
+              {
+                "attempt": "commander-01",
+                "participants": {
+                  "scriptact": 3,
+                  "codex": 3
+                },
+                "sourceModified": false
+              },
+              {
+                "attempt": "shelljs-01",
+                "participants": {
+                  "scriptact": 8
+                },
+                "sourceModified": true
+              }
+            ],
+            "comparisonExcludedAttempts": [
+              "commander-01",
+              "shelljs-01"
+            ],
+            "reason": "The initial participant copy rewrote tracked relative symlinks, unlike the original baseline clone. Preserve all raw results and known costs; exclude these attempts from effective quality/time/cost parity claims until correctly isolated evaluation."
+          },
+          {
+            "at": "2026-10-05T21:15:43.585Z",
+            "kind": "document-mutation-temporal-ownership",
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/cheerio-boundary-oracle-proof.json",
+            "evidenceSha256": "2cde235738201548a961a05e364b287828f7ba6d41b36d3be33b773ff4bc2cfa",
+            "comparisonExcludedAttempts": [
+              "cheerio-02"
+            ],
+            "rawResultsPreserved": true,
+            "disputedFrozenChecksPerParticipant": 12,
+            "reason": "The boundary-intersection oracle omits parents mutated while connected if absent at either outer boundary. Original-project wrapAll/unwrap probes confirm this temporal behavior; the prompt does not specify the intersection rule. An independent detach-edit-reattach probe also demonstrates that this algorithm can include detached-only attribute edits. Preserve raw scores; do not equate disputed failures with agent defects or retroactively declare success.",
+            "distinctConfirmedScriptActDefects": [
+              "Falsy exception propagation",
+              "Unrelated subtree capture on getters and after unsubscribe"
+            ],
+            "nextPaidCapabilityReplay": {
+              "attempt": "cheerio-shell-node-02",
+              "state": "unstarted-deferred",
+              "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-shell-node-02/scheduling-note-oracle-audit.json"
+            }
+          },
+          {
+            "at": "2026-10-05T21:15:43.585Z",
+            "kind": "added-passing-regression-tests",
+            "auditedParticipantsWithFrozenCases": 62,
+            "historicalParticipantsWithoutFrozenCases": 17,
+            "affectedAttempts": [
+              "cheerio-02"
+            ],
+            "affectedParticipants": [
+              "scriptact",
+              "codex"
+            ],
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-02/evaluation-corrections/regression-added-tests/report.json",
+            "evidenceSha256": "c20ef8e949c9f8dfe73f06fd01e414266028c59b49cc10ec33205072023bc677",
+            "originalRecordsUnchanged": true,
+            "reason": "The task requires added tests. File-level preservation leaves these tests in Vitest discovery. The original exact-inventory check rejected passing additions despite every original frozen case still passing. Accept passing added cases while rejecting missing, renamed, duplicate, failed, errored or newly skipped cases.",
+            "effect": "Both original regression suites are compatible under corrected inventory semantics. Raw scores remain stored and the attempt remains excluded due to its separate behavioral oracle audit."
+          }
+        ],
+        "transportDiagnostics": {
+          "scope": "controlled transport diagnosis only; no task implementation or product benefit measurement",
+          "runs": [
+            {
+              "run": "probe-6304ce75-4def-4107-91c3-d77f7c7a904f",
+              "requests": 10,
+              "rows": [
+                {
+                  "arm": "tool-payload",
+                  "round": 1,
+                  "input": 7302,
+                  "output": 136,
+                  "cached": 0,
+                  "written": 0,
+                  "referenceUsd": 0.031928
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 2,
+                  "input": 10163,
+                  "output": 40,
+                  "cached": 7040,
+                  "written": 0,
+                  "referenceUsd": 0.016108
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 3,
+                  "input": 12933,
+                  "output": 37,
+                  "cached": 9856,
+                  "written": 0,
+                  "referenceUsd": 0.016990400000000003
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 4,
+                  "input": 15695,
+                  "output": 36,
+                  "cached": 12672,
+                  "written": 0,
+                  "referenceUsd": 0.0178808
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 5,
+                  "input": 18435,
+                  "output": 40,
+                  "cached": 15488,
+                  "written": 0,
+                  "referenceUsd": 0.0187832
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 1,
+                  "input": 7288,
+                  "output": 127,
+                  "cached": 0,
+                  "written": 0,
+                  "referenceUsd": 0.031692
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 2,
+                  "input": 10143,
+                  "output": 40,
+                  "cached": 7040,
+                  "written": 0,
+                  "referenceUsd": 0.016028
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 3,
+                  "input": 12926,
+                  "output": 36,
+                  "cached": 9856,
+                  "written": 0,
+                  "referenceUsd": 0.0169424
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 4,
+                  "input": 15726,
+                  "output": 37,
+                  "cached": 12672,
+                  "written": 0,
+                  "referenceUsd": 0.0180248
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 5,
+                  "input": 18474,
+                  "output": 36,
+                  "cached": 15488,
+                  "written": 0,
+                  "referenceUsd": 0.0188592
+                }
+              ]
+            },
+            {
+              "run": "probe-97aa6849-d9ca-4ccd-8910-0d36798845fb",
+              "requests": 12,
+              "rows": [
+                {
+                  "arm": "tool-payload",
+                  "round": 1,
+                  "input": 7247,
+                  "output": 18,
+                  "cached": 0,
+                  "written": 0,
+                  "referenceUsd": 0.029348
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 2,
+                  "input": 9965,
+                  "output": 18,
+                  "cached": 7040,
+                  "written": 0,
+                  "referenceUsd": 0.014876
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 3,
+                  "input": 12716,
+                  "output": 18,
+                  "cached": 9728,
+                  "written": 0,
+                  "referenceUsd": 0.0162032
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 4,
+                  "input": 15452,
+                  "output": 18,
+                  "cached": 12416,
+                  "written": 0,
+                  "referenceUsd": 0.0174704
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 5,
+                  "input": 18181,
+                  "output": 18,
+                  "cached": 15232,
+                  "written": 0,
+                  "referenceUsd": 0.0182488
+                },
+                {
+                  "arm": "tool-payload",
+                  "round": 6,
+                  "input": 20890,
+                  "output": 18,
+                  "cached": 17920,
+                  "written": 0,
+                  "referenceUsd": 0.019408
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 1,
+                  "input": 7221,
+                  "output": 18,
+                  "cached": 4096,
+                  "written": 0,
+                  "referenceUsd": 0.0144984
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 2,
+                  "input": 9968,
+                  "output": 18,
+                  "cached": 6912,
+                  "written": 0,
+                  "referenceUsd": 0.0153488
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 3,
+                  "input": 12693,
+                  "output": 18,
+                  "cached": 9728,
+                  "written": 0,
+                  "referenceUsd": 0.0161112
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 4,
+                  "input": 15400,
+                  "output": 18,
+                  "cached": 12416,
+                  "written": 0,
+                  "referenceUsd": 0.0172624
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 5,
+                  "input": 18147,
+                  "output": 18,
+                  "cached": 15104,
+                  "written": 0,
+                  "referenceUsd": 0.0185736
+                },
+                {
+                  "arm": "user-payload",
+                  "round": 6,
+                  "input": 20896,
+                  "output": 18,
+                  "cached": 17920,
+                  "written": 0,
+                  "referenceUsd": 0.019432
+                }
+              ]
+            },
+            {
+              "run": "replay-9d9b8e36-92c0-429e-b8fc-df2e2fd52f94",
+              "requests": 4,
+              "rows": [
+                {
+                  "arm": null,
+                  "round": "1-1",
+                  "input": 18726,
+                  "output": 309,
+                  "cached": 4352,
+                  "written": 0,
+                  "referenceUsd": 0.0654168
+                },
+                {
+                  "arm": null,
+                  "round": "1-2",
+                  "input": 18726,
+                  "output": 240,
+                  "cached": 0,
+                  "written": 0,
+                  "referenceUsd": 0.079704
+                },
+                {
+                  "arm": null,
+                  "round": "2-1",
+                  "input": 26530,
+                  "output": 235,
+                  "cached": 18560,
+                  "written": 0,
+                  "referenceUsd": 0.044004
+                },
+                {
+                  "arm": null,
+                  "round": "2-2",
+                  "input": 26530,
+                  "output": 210,
+                  "cached": 26368,
+                  "written": 0,
+                  "referenceUsd": 0.015395200000000001
+                }
+              ]
+            }
+          ],
+          "requests": 26,
+          "knownReferenceUsd": 0.6245376,
+          "unknownUsage": 0,
+          "finding": "Both synthetic message layouts retained prefix reuse, including opaque reasoning. Replayed real inputs also eventually hit, after misses of undetermined cause. These probes do not establish the cause of the low cache ratio in real tasks."
+        }
+      },
+      "attempts": 59,
+      "recordedSplits": {
+        "development": 41,
+        "holdout": 18
+      }
+    },
+    "scriptact-standard-runtime-results-20261004.json": {
+      "source": "scriptact-standard-runtime-results-20261004.json",
+      "sha256": "51fcfd0b81ef021a9f63059b86482da3905c20d68e66bde315354c622207ce11",
+      "qualifications": {
+        "missingUsagePolicy": "No zero imputation; cost/input/output comparisons use only pairs with complete usage on both sides. Full run count, pass, request and latency statistics include every attempt.",
+        "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded",
+        "model": "gpt-5.6-sol",
+        "environment": {
+          "platform": "Darwin",
+          "architecture": "arm64",
+          "node": "24.15.0"
+        },
+        "pairedUsageCases": [
+          {
+            "case": "acceptance-ledger",
+            "repetition": 0
+          },
+          {
+            "case": "acceptance-package",
+            "repetition": 0
+          },
+          {
+            "case": "acceptance-host",
+            "repetition": 0
+          },
+          {
+            "case": "acceptance-memo",
+            "repetition": 1
+          },
+          {
+            "case": "acceptance-host",
+            "repetition": 1
+          }
+        ],
+        "summary": {
+          "baseline": {
+            "runs": 8,
+            "artifactPasses": 8,
+            "verifiedCompletions": 8,
+            "requests": 35,
+            "elapsedMs": 533279,
+            "usageCompleteRuns": 6,
+            "pairedInputTokens": 438394,
+            "pairedOutputTokens": 9337,
+            "pairedReferenceCostUncachedUSD": 1.940316,
+            "systemCharsRange": [
+              29225,
+              29371
+            ]
+          },
+          "standard": {
+            "runs": 8,
+            "artifactPasses": 8,
+            "verifiedCompletions": 7,
+            "requests": 35,
+            "elapsedMs": 605328,
+            "usageCompleteRuns": 7,
+            "pairedInputTokens": 219074,
+            "pairedOutputTokens": 9883,
+            "pairedReferenceCostUncachedUSD": 1.073956,
+            "systemCharsRange": [
+              687,
+              690
+            ]
+          }
+        }
+      }
+    },
+    "scriptact-standard-runtime-v2-results-20261004.json": {
+      "source": "scriptact-standard-runtime-v2-results-20261004.json",
+      "sha256": "cec2a835c36b7e4ab9fd803d69ca02142470434c056182199bfe963061ee09c9",
+      "qualifications": {
+        "limitations": [
+          "One model configuration on macOS arm64; six tasks and two repeats per variant.",
+          "Service stream interruptions and standard API misuse are included in requests and elapsed time.",
+          "Same-frame projection replay measures frame characters, not end-to-end token use or latency.",
+          "This suite is now observed; later optimization claims need new independent tasks."
+        ],
+        "acceptance": "Independent artifact grading and completed runtime status must both pass; all 36 attempts retained.",
+        "usagePolicy": "Unknown usage stays null. Token and reference-cost comparisons use only pairs with complete usage on both sides. Reference prices exclude cache discounts and do not represent billed cost.",
+        "configuration": {
+          "model": "gpt-5.6-sol",
+          "reasoning": "high",
+          "maxOutputTokens": 12000,
+          "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded"
+        },
+        "environment": {
+          "node": "v24.15.0",
+          "platform": "darwin",
+          "arch": "arm64"
+        },
+        "freeze": {
+          "suite": "scripts/agent/standard-runtime-v2-validation-cases.json",
+          "suiteSha256": "7ded63a11335e6b6513d05ac144ada6189de7d51ed2e74588c592b490cf3d678",
+          "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+          "split": "validation",
+          "repetitions": 2,
+          "variants": [
+            {
+              "id": "baseline",
+              "node": false,
+              "manifestSha256": "3bb55af9839267f5982414b6fe5cebb75693550becbf11aee5b0471c7a4f7557",
+              "files": 5350
+            },
+            {
+              "id": "previous",
+              "node": true,
+              "manifestSha256": "71cd005bc90785720d56c332c51b3c2e7c9cd4bfde7db2a0efd96ef29ca09b0a",
+              "files": 5375
+            },
+            {
+              "id": "standard",
+              "node": true,
+              "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+              "files": 5380
+            }
+          ]
+        },
+        "pairedComparisons": {
+          "baselineToStandard": {
+            "allPairs": 12,
+            "completeUsagePairs": 6,
+            "completeUsageKeys": [
+              {
+                "case": "content-manifest",
+                "repetition": 0
+              },
+              {
+                "case": "content-manifest",
+                "repetition": 1
+              },
+              {
+                "case": "host-availability",
+                "repetition": 0
+              },
+              {
+                "case": "immutable-migration",
+                "repetition": 1
+              },
+              {
+                "case": "installed-statistics",
+                "repetition": 1
+              },
+              {
+                "case": "stdin-cli",
+                "repetition": 0
+              }
+            ],
+            "missingUsageKeys": [
+              {
+                "case": "bounded-async",
+                "repetition": 0
+              },
+              {
+                "case": "bounded-async",
+                "repetition": 1
+              },
+              {
+                "case": "host-availability",
+                "repetition": 1
+              },
+              {
+                "case": "immutable-migration",
+                "repetition": 0
+              },
+              {
+                "case": "installed-statistics",
+                "repetition": 0
+              },
+              {
+                "case": "stdin-cli",
+                "repetition": 1
+              }
+            ],
+            "before": {
+              "inputTokens": 589751,
+              "outputTokens": 14647,
+              "referenceCostUncachedUSD": 2.651944
+            },
+            "after": {
+              "inputTokens": 183321,
+              "outputTokens": 10823,
+              "referenceCostUncachedUSD": 0.949744
+            },
+            "changePercent": {
+              "inputTokens": -68.9155,
+              "outputTokens": -26.1077,
+              "referenceCostUncachedUSD": -64.1869
+            },
+            "elapsedMsChangePercent": -1.9692,
+            "requestsChangePercent": -4.0,
+            "elapsedPairsFaster": 7
+          },
+          "previousToStandard": {
+            "allPairs": 12,
+            "completeUsagePairs": 9,
+            "completeUsageKeys": [
+              {
+                "case": "bounded-async",
+                "repetition": 0
+              },
+              {
+                "case": "bounded-async",
+                "repetition": 1
+              },
+              {
+                "case": "content-manifest",
+                "repetition": 0
+              },
+              {
+                "case": "content-manifest",
+                "repetition": 1
+              },
+              {
+                "case": "host-availability",
+                "repetition": 0
+              },
+              {
+                "case": "host-availability",
+                "repetition": 1
+              },
+              {
+                "case": "immutable-migration",
+                "repetition": 0
+              },
+              {
+                "case": "immutable-migration",
+                "repetition": 1
+              },
+              {
+                "case": "installed-statistics",
+                "repetition": 1
+              }
+            ],
+            "missingUsageKeys": [
+              {
+                "case": "installed-statistics",
+                "repetition": 0
+              },
+              {
+                "case": "stdin-cli",
+                "repetition": 0
+              },
+              {
+                "case": "stdin-cli",
+                "repetition": 1
+              }
+            ],
+            "before": {
+              "inputTokens": 375877,
+              "outputTokens": 20752,
+              "referenceCostUncachedUSD": 1.918548
+            },
+            "after": {
+              "inputTokens": 340528,
+              "outputTokens": 21149,
+              "referenceCostUncachedUSD": 1.785092
+            },
+            "changePercent": {
+              "inputTokens": -9.4044,
+              "outputTokens": 1.9131,
+              "referenceCostUncachedUSD": -6.9561
+            },
+            "elapsedMsChangePercent": 30.8008,
+            "requestsChangePercent": 2.1277,
+            "elapsedPairsFaster": 5
+          }
+        },
+        "aggregates": {
+          "baseline": {
+            "runs": 12,
+            "artifactPassed": 12,
+            "completed": 12,
+            "accepted": 12,
+            "requests": 50,
+            "elapsedMs": 1000644,
+            "medianElapsedMs": 75792.0,
+            "completeUsageRuns": 8,
+            "systemCharsRange": [
+              29225,
+              29371
+            ],
+            "meanRequests": 4.1667,
+            "meanElapsedMs": 83387.0
+          },
+          "previous": {
+            "runs": 12,
+            "artifactPassed": 12,
+            "completed": 12,
+            "accepted": 12,
+            "requests": 47,
+            "elapsedMs": 749949,
+            "medianElapsedMs": 52672.5,
+            "completeUsageRuns": 11,
+            "systemCharsRange": [
+              674,
+              685
+            ],
+            "meanRequests": 3.9167,
+            "meanElapsedMs": 62495.75
+          },
+          "standard": {
+            "runs": 12,
+            "artifactPassed": 12,
+            "completed": 12,
+            "accepted": 12,
+            "requests": 48,
+            "elapsedMs": 980939,
+            "medianElapsedMs": 54063.0,
+            "completeUsageRuns": 10,
+            "systemCharsRange": [
+              649,
+              660
+            ],
+            "meanRequests": 4.0,
+            "meanElapsedMs": 81744.92
+          }
+        }
+      }
+    },
+    "scriptact-native-tools-results-20261004.json": {
+      "source": "scriptact-native-tools-results-20261004.json",
+      "sha256": "f4f11d7b09e1e86cc334c49c4bd2973d7221a25abeede856913465cc17dd87a6",
+      "qualifications": {
+        "limitations": [
+          "One model and six tasks, each repeated twice; no cross-model generalization.",
+          "Elapsed times are observations; the first four attempts overlapped local regression checks.",
+          "Reference cost uses only matched attempts with complete provider usage and excludes cache discounts; not an actual invoice.",
+          "Single-operation documentation comparison assumes one operation is needed per lookup."
+        ],
+        "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded",
+        "model": "gpt-5.6-sol",
+        "freeze": {
+          "createdAt": "2026-10-04T12:52:17.179411+00:00",
+          "purpose": "Independent validation of native Shell/Node tools, inherited imports, operation docs and bounded context",
+          "suiteSha256": "9ee06050a0ab95b9056b9819666528e9de1c9b4f70f0ee3fd73b226d79d28f84",
+          "evaluatorSha256": "f33a360d13636077cd922c9fc1cb48f4ea4838f1bcab8522a6d7b8527a541551",
+          "footprintSha256": "643b903b7d4d8d8c6ae375f03eeaf1d20db4ecb8a975fcb4fca569367412cc0d",
+          "repetitions": 2,
+          "variants": [
+            {
+              "id": "previous",
+              "node": true,
+              "manifestSha256": "460336564f8f09ffe7d5042d11e99c51f994862f3e606c3ba71cba1b091ecd7b"
+            },
+            {
+              "id": "standard",
+              "node": true,
+              "manifestSha256": "5a99169986163ffa47b08a3268ed2298c305f0509ee2814555fdf7e0bab05d98"
+            }
+          ]
+        },
+        "totals": {
+          "previous": {
+            "attempts": 12,
+            "passedAndCompleted": 12,
+            "artifactPassed": 12,
+            "completed": 12,
+            "firstTurnExecuted": 0,
+            "requests": 71,
+            "elapsedMs": 1029350,
+            "medianElapsedMs": 74454.5,
+            "completeUsageAttempts": 8,
+            "pairedUsageCases": 8,
+            "pairedInputTokens": 469303,
+            "pairedOutputTokens": 18187,
+            "pairedReferenceCostUncachedUSD": 2.240952,
+            "systemCharsRange": [
+              707,
+              717
+            ]
+          },
+          "standard": {
+            "attempts": 12,
+            "passedAndCompleted": 12,
+            "artifactPassed": 12,
+            "completed": 12,
+            "firstTurnExecuted": 12,
+            "requests": 59,
+            "elapsedMs": 628656,
+            "medianElapsedMs": 55613.0,
+            "completeUsageAttempts": 12,
+            "pairedUsageCases": 8,
+            "pairedInputTokens": 392526,
+            "pairedOutputTokens": 14947,
+            "pairedReferenceCostUncachedUSD": 1.8690440000000001,
+            "systemCharsRange": [
+              578,
+              588
+            ]
+          }
+        }
+      }
+    },
+    "scriptact-shell-node-runtime-results-20261004.json": {
+      "source": "scriptact-shell-node-runtime-results-20261004.json",
+      "sha256": "46bbe0f6a63d09d78c926538fc68225f2e6ea05a5854c2da2a8437c12f8a50d5",
+      "qualifications": {
+        "acceptance": "Independent artifact grading and completed runtime status must both pass. All 14 attempts retained; the two host-priorities attempts are invalid due to a SessionPeer fixture schema error.",
+        "usagePolicy": "Unknown usage remains null; token and reference cost comparisons use only valid cases with complete usage on both sides. Fixed prices exclude cache discounts and are not actual billed cost.",
+        "invalidCases": [
+          {
+            "case": "host-priorities",
+            "variants": [
+              "previous",
+              "standard"
+            ],
+            "reason": "Fixture supplied status and omitted required SessionPeer workspace/root/site/running/self fields; actual Kernel rejected OUTPUT_SCHEMA in both variants. Original record and hashes preserved.",
+            "replacement": "host-workspace-queue uses independent data and predicate, passed actual Kernel SessionPeer checks on both frozen variants and reference grading before model dispatch."
+          }
+        ],
+        "configuration": {
+          "model": "gpt-5.6-sol",
+          "reasoning": "high",
+          "maxOutputTokens": 12000,
+          "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded"
+        },
+        "environment": {
+          "node": "v24.15.0",
+          "platform": "darwin",
+          "arch": "arm64"
+        },
+        "freezes": [
+          {
+            "evidenceDirectory": ".velaros-workspace/bench/standard-runtime-v3-20261004",
+            "freeze": {
+              "createdAt": "2026-10-04T11:31:17.446898+00:00",
+              "suite": "scripts/agent/standard-runtime-v3-validation-cases.json",
+              "suiteSha256": "0299f7d81608a2d8109051e9882dc3ab501b6682c79d1e2de0a2f0eb1fd6588a",
+              "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+              "variants": [
+                {
+                  "id": "previous",
+                  "node": true,
+                  "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+                  "files": 5380
+                },
+                {
+                  "id": "standard",
+                  "node": true,
+                  "manifestSha256": "ae25d74f9202b4fe8851de6f261af76ca5909db460d6a196c4be34d419b9fd4f",
+                  "files": 5735
+                }
+              ],
+              "referenceGradesPassed": 6,
+              "repetitions": 1,
+              "description": "Fresh 6-case paired comparison, rotated order, old frozen v2 Node vs Shell + Node v3. Each case run once per variant; no optimization on measured outcomes."
+            },
+            "suiteAndEvaluatorUnchanged": true
+          },
+          {
+            "evidenceDirectory": ".velaros-workspace/bench/standard-runtime-v3-host-20261004",
+            "freeze": {
+              "createdAt": "2026-10-04T11:44:06.682914+00:00",
+              "suite": "scripts/agent/standard-runtime-v3-host-validation-cases.json",
+              "suiteSha256": "4b21c1edd7fe3abe80c8c53f35579fca169075c2b51225002819880c055148e7",
+              "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+              "variants": [
+                {
+                  "id": "previous",
+                  "node": true,
+                  "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+                  "files": 5380
+                },
+                {
+                  "id": "standard",
+                  "node": true,
+                  "manifestSha256": "ae25d74f9202b4fe8851de6f261af76ca5909db460d6a196c4be34d419b9fd4f",
+                  "files": 5735
+                }
+              ],
+              "repetitions": 1,
+              "referenceGradesPassed": 1,
+              "hostPreflightPassed": [
+                "previous",
+                "standard"
+              ],
+              "description": "Fresh independent host task after invalid fixture diagnosis; same frozen product candidate and evaluator; invalid original results remain archived."
+            },
+            "suiteAndEvaluatorUnchanged": true
+          }
+        ],
+        "validComparison": {
+          "cases": [
+            "exit-capture",
+            "module-repair",
+            "literal-delivery",
+            "host-workspace-queue"
+          ],
+          "inputTokens": {
+            "previous": 109390,
+            "standard": 120867,
+            "deltaPercent": 10.491818264923669
+          },
+          "outputTokens": {
+            "previous": 5785,
+            "standard": 3969,
+            "deltaPercent": -31.39152981849611
+          },
+          "referenceCostUncachedUSD": {
+            "previous": 0.55326,
+            "standard": 0.562848,
+            "deltaPercent": 1.7330007591367602
+          },
+          "requests": {
+            "previous": 25,
+            "standard": 26,
+            "deltaPercent": 4.0000000000000036
+          },
+          "elapsedMs": {
+            "previous": 547350,
+            "standard": 204381,
+            "deltaPercent": -62.65990682378734
+          }
+        }
+      }
+    },
+    "scriptact-project-ablation-results-20261007.json": {
+      "source": "scriptact-project-ablation-results-20261007.json",
+      "sha256": "d954e3fd9f0d3953ecc808fa639c152019d6f67a1b3e76de8cee8723d0e7c6b0",
+      "qualifications": {
+        "limitations": [
+          "Two previously used development replay tasks; one run per condition; one model.",
+          "Required project editing is a separate prompt policy intervention.",
+          "Host command environment includes Codex apply_patch; this is not a hermetic Node-only study.",
+          "Solve time includes model execution and its checks; independent grading time is excluded.",
+          "Provider cleanup interruptions and context maintenance remain in valid run accounting.",
+          "Commander node/optional started concurrently; remaining attempts ran serially after an ENOSPC incident.",
+          "The source/transaction syntax protection was observed; concurrent human edits and rollback were not tested.",
+          "Runtime host exercised on Node 24.15.0; Desktop renderer and older supported Node versions were not exercised."
+        ],
+        "accountingIncludingInfrastructureFailure": {
+          "requests": 435,
+          "measuredRequests": 427,
+          "missingUsageRequests": 8,
+          "knownReferenceUsd": 23.647153600000003,
+          "totalReferenceUsd": null,
+          "costBasis": "frozen reference pricing; not a provider invoice"
+        },
+        "infrastructureIncident": {
+          "at": "2026-10-06T18:13:00.233785+00:00",
+          "cause": "Concurrent scratch copies exhausted available filesystem space. ENOSPC affected post-run grading of commander-optional and execution/trace export of commander-required.",
+          "optionalRecovery": "same completed artifact graded again; original grading retained; zero additional model requests",
+          "requiredRecovery": "fresh frozen retry with identical candidate, task, dependencies, grader, model, budget and editing policy; interrupted run excluded from winner comparison, incurred costs retained",
+          "remainingSchedule": "serial model runs, archive and verify each finished scratch workspace before the next run",
+          "retryIdentityVerified": true,
+          "freeBytesBeforeRetry": 2541690880
+        },
+        "excludedAttempt": {
+          "attempt": "commander-required",
+          "scope": "infrastructure-interrupted, excluded from performance comparison; incurred cost retained",
+          "modelDispatchAttempts": 32,
+          "accountedUpstreamRequests": 31,
+          "accounting": {
+            "requests": 31,
+            "requestStatuses": {
+              "http-200": 31
+            },
+            "measuredRequests": 31,
+            "missingUsageRequests": 0,
+            "tokenCoverage": "complete",
+            "knownInputTokens": 621357,
+            "knownOutputTokens": 9125,
+            "knownCachedInputTokens": 324480,
+            "knownCacheRatio": 0.5222118685393421,
+            "pricedRequests": 31,
+            "knownReferenceUsd": 1.4998,
+            "totalReferenceUsd": 1.4998,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          }
+        },
+        "finalInputIntegrity": {
+          "at": "2026-10-06T19:43:10.651086+00:00",
+          "runtimeFilesVerified": 5386,
+          "runtimeManifestSha256": "0e8c9a7330eebc70d8f2e6dc87fff3c2e4fb3faed473dff3a38dd5967467b69f",
+          "attempts": {
+            "commander-node": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "commander-node-isolated": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "commander-optional": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "commander-required": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "commander-required-retry": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "esm-node": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "esm-node-isolated": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "esm-optional": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            },
+            "esm-required": {
+              "frozenFilesVerified": 234,
+              "candidateId": "runtime-0e8c9a7330ee",
+              "scratchArchivedAndRemoved": true
+            }
+          },
+          "result": "all hashes match; all owned attempt roots archived and removed"
+        }
+      },
+      "plan": {
+        "schema": 1,
+        "createdAt": "2026-10-06T17:56:18.439624+00:00",
+        "candidate": "runtime",
+        "candidateManifestSha256": "0e8c9a7330eebc70d8f2e6dc87fff3c2e4fb3faed473dff3a38dd5967467b69f",
+        "tasks": [
+          {
+            "file": "commander-option-snapshot-task.json",
+            "id": "commander-option-value-source-snapshots",
+            "split": "development-replay; previously used tasks; no production tuning in this campaign"
+          },
+          {
+            "file": "fs-extra-esm-task.json",
+            "id": "fs-extra-maintained-esm-migration",
+            "split": "development-replay; previously used tasks; no production tuning in this campaign"
+          }
+        ],
+        "conditions": {
+          "node": {
+            "mode": "node",
+            "strategy": "adaptive"
+          },
+          "optional": {
+            "mode": "project",
+            "strategy": "adaptive"
+          },
+          "required": {
+            "mode": "project",
+            "strategy": "project"
+          }
+        },
+        "replicates": 1,
+        "paidRuns": 6,
+        "model": "gpt-5.6-sol",
+        "reasoning": "high",
+        "taskMode": "request",
+        "order": {
+          "commander": [
+            "node",
+            "optional",
+            "required"
+          ],
+          "esm": [
+            "required",
+            "optional",
+            "node"
+          ]
+        },
+        "primaryOutcome": "Independent feature acceptance and original regression, supplemented by static review of source, maintained tests and requested artifacts",
+        "metrics": [
+          "actual capability usage",
+          "request count including maintenance",
+          "solve wall time",
+          "known reference cost",
+          "missing usage",
+          "provider failures",
+          "final scope"
+        ],
+        "interpretation": "Node vs optional changes only project availability and its built-in context/instructions. Required is a separate editing-strategy intervention. No inference of actual project use from availability alone. Single runs cannot establish broad superiority.",
+        "hashes": {
+          "scripts/agent/long-tasks/commander-option-snapshot-task.json": "194f047fe3ae122a75c83ab06a418e1ed466c8d3546f3833200700b819d5a467",
+          "scripts/agent/long-tasks/fs-extra-esm-task.json": "18f1d30bae8629ecf9e2b1d8f51bdb34ac61d67b8c9c2aa86f3f41953da05e55",
+          "scripts/agent/long-tasks/test_commander_option_snapshot_acceptance.mjs": "0698a58509658b105ca6cf83a19c120f85b5f41a00df000ef9037965db0bc6ce",
+          "scripts/agent/long-tasks/test_fs_extra_esm_acceptance.mjs": "3142c00becd232dd877522ad7b38554dda3fe50b1d8d3f150d117d05f74bd2cb",
+          "scripts/agent/long-tasks/fs-extra-esm-contract.json": "e39e9cb89b5b13d052f22cd384b953d9876cfe480e1aa11c75419942048c62eb",
+          "scripts/agent/long-tasks/runtime-capabilities.mjs": "2f5c006649f88c45894cbd2757c2ecc9915a1bec0d5f04fb069cfdc99608262d",
+          "scripts/agent/long-tasks/prepare.mjs": "552717e52486e8efb0185c6ffc371647a54d27d799c4c060b66d893c607dcfb7",
+          "scripts/agent/long-tasks/run.mjs": "00081166261bb4c30b929b40757fb3524edfb7447f7af2f1df06e55678a9ee09",
+          "scripts/agent/long-tasks/analyze.mjs": "5507deff43c7729e4ad833a78e9cba8e9b420a9541becd75fc3c8d297939f52b"
+        }
+      },
+      "runKeys": [
+        "taskId",
+        "candidateId",
+        "scriptactCapabilities",
+        "scriptactEditingStrategy",
+        "model",
+        "scriptactTaskMode",
+        "attempt",
+        "condition",
+        "study",
+        "solve",
+        "accounting",
+        "acceptance",
+        "regression",
+        "passed",
+        "featureCompleteWithoutNewRegressions",
+        "execution",
+        "capabilityUsage",
+        "changedFiles",
+        "createdFiles",
+        "regressionProcess",
+        "projectCalls",
+        "programsMentioningApplyPatch",
+        "evidence"
+      ],
+      "staticReview": {
+        "scope": "All six primary runs and both clean-PATH supplementary runs complete",
+        "projectMeans": "velaros:project file and transaction capability; Node runtime and core controls identical",
+        "commander": {
+          "node": {
+            "instructionsChars": 592,
+            "firstMaterialsChars": 5251,
+            "projectOperations": 0,
+            "semanticRegression": "all setter assignments redefined with configurable true; existing own writable and accessor descriptors break"
+          },
+          "optional": {
+            "instructionsChars": 677,
+            "firstMaterialsChars": 5251,
+            "projectOperations": 0,
+            "semanticRegression": "setter compatibility failures confirmed by frozen tests"
+          },
+          "required": {
+            "attempt": "commander-required-retry",
+            "instructionsChars": 677,
+            "firstMaterialsChars": 5861,
+            "committedProjectEdits": 3,
+            "semanticRegression": "special-key setter unconditionally redefines existing __proto__ descriptor",
+            "policyAudit": "Deliberate file and formatting edits performed through project.edit; standard filesystem used for reads and computation. No direct source-write programs observed."
+          }
+        },
+        "interpretation": "One run per condition; conditional model path and cache differ. Fixed availability adds 85 instruction characters in first Commander request, not the entire observed cost delta.",
+        "esmRequired": {
+          "acceptance": "54/54",
+          "regression": "745 passed; 8 baseline skips",
+          "sourceModules": "28 JavaScript production modules and one ESM facade (29 production files total)",
+          "committedProjectEdits": 24,
+          "failedProjectEdits": 3,
+          "failures": [
+            "27-file batch rejected for invalid import alias syntax; effect none",
+            "102-file original-test restoration batch exceeded 100-file transaction limit; effect none",
+            "Empty steps array rejected; effect none"
+          ],
+          "policyAudit": "Reviewed full emitted programs and final diff. Deliberate repository source and formatting edits use project.edit; direct writes observed in generated archives and isolated test-consumer directories. No direct intentional source-write bypass observed.",
+          "originalTestPreservation": "Archive byte/type/mode comparison: 147 original test and fixture files unchanged",
+          "intermediateRecovery": "The initial model-written build script recursively removed lib, including original tests. Model restored original tests through project and changed build behavior before final completion. Project validates edits, not later arbitrary build subprocess effects.",
+          "supplementaryBuildPaths": "Ordinary path passes; same artifact with a space in checkout path fails. URL.pathname is passed to esbuild as a filesystem path. This is a separate post-hoc diagnostic, not a changed 54-case grade.",
+          "usageCompleteness": "116/118 upstream requests report usage; full cost unknown; known frozen reference cost is $6.974444"
+        },
+        "ambientToolLimitation": "Every primary adaptive condition used inherited Codex apply_patch. Two separately recorded clean-PATH replays remove it. Required-editing conditions used no apply_patch; their original host PATH was retained, so the clean-PATH comparisons are supplementary observations, not a newly matched factorial study.",
+        "updatedAt": "2026-10-06T19:42:00.227305+00:00",
+        "esmOptional": {
+          "acceptance": "47/54",
+          "regression": "180000 ms timeout; no complete Mocha report; counts unknown",
+          "actualProjectOperations": 0,
+          "semanticFailure": "Build unconditionally appends module.exports = module.exports.default to every CommonJS output. src/mkdirs/utils.js has only named checkPath export, so generated lib/mkdirs/utils.js exports undefined; reconstructed and packed filesystem operations fail.",
+          "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+          "supplementaryBuildPaths": "Both ordinary and space-containing paths build successfully; build success alone does not repair the seven semantic acceptance failures.",
+          "usageCompleteness": "64/66 requests report usage; full cost unknown; known frozen reference cost $3.471032",
+          "reportingFinding": "Final model message cites original suite success during migration; final rebuilt independent regression times out. Judge final artifact, not intermediate success.",
+          "programsMentioningApplyPatch": 19,
+          "applyPatchCountMeaning": "Textual program mentions, including context-maintenance narratives; not a count of successful CLI commands"
+        },
+        "esmNode": {
+          "acceptance": "54/54",
+          "regression": "745 passed; 8 baseline skips",
+          "actualProjectOperations": 0,
+          "applyPatchPrograms": 10,
+          "implementation": "Initial standard Node filesystem and Babel conversion; later patches through the inherited apply_patch executable. Build unwraps CommonJS default exports only for source modules with a default export.",
+          "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+          "supplementaryBuildPaths": "Ordinary and space-containing checkout paths both build successfully",
+          "usageCompleteness": "44/45 requests report usage; full cost unknown; known frozen reference cost $2.4414552"
+        },
+        "esmNodeIsolated": {
+          "acceptance": "53/54",
+          "regression": "745 passed; 8 baseline skips",
+          "actualProjectOperations": 0,
+          "hostIsolation": "Real runtime preflight confirms apply_patch ENOENT. One emitted command attempt fails; model falls back to standard Node filesystem writes. A second program mention is a context narrative, not another command.",
+          "semanticFailure": "scripts/build.mjs regenerates lib/esm.mjs from extracted export names and root fsExtra properties. It does not compile or preserve the actual src/esm.js implementation, so changes to maintained source behavior do not propagate.",
+          "interpretation": "Retained as a separate failed supplementary replay; no model repair or quality-based retry.",
+          "originalTestPreservation": "147 original test and fixture files byte/type/mode identical",
+          "supplementaryBuildPaths": "Both ordinary and space-containing checkout paths build successfully"
+        },
+        "commanderNodeIsolated": {
+          "acceptance": "6/9",
+          "regression": "1365/1365",
+          "actualProjectOperations": 0,
+          "semanticFailure": "optsWithSources adds an own-property guard before getOptionValueSource. For __proto__ this changes the required existing getter result to undefined. One source-projection mismatch triggers three cases; the original setters themselves remain unchanged, unlike the primary runs.",
+          "hostIsolation": "Runtime preflight confirms apply_patch ENOENT; final implementation uses Node filesystem editing after unavailable helper/default-import attempts.",
+          "interpretation": "Case pass counts reflect correlated checks, not three independent bugs. No quality-based retry."
+        },
+        "recommendation": "Keep standard Node and familiar tools as the default execution surface, retain project as an on-demand transaction capability, and judge final artifacts independently. These runs show quality/efficiency tradeoffs, not uniform dominance or proof that project causes the observed semantic score differences."
+      },
+      "ambientTools": {
+        "at": "2026-10-06T18:56:11.944489+00:00",
+        "applyPatchExecutable": "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
+        "resolvedTarget": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+        "origin": "Inherited Codex host command on PATH; not a Node built-in or project capability",
+        "observedUse": "All adaptive primary runs use the inherited apply_patch command: commander-node 4 programs, commander-optional 5, esm-node 10, esm-optional 19. Required runs use project for edits and have zero apply_patch programs.",
+        "interpretation": "All frozen conditions share host process environment. This remains a project-availability ablation on this host, but is not evidence for a hermetic environment containing only Node and the five default npm packages.",
+        "modelFeedback": "None; frozen paid runs continue unchanged."
+      },
+      "isolatedValidationPlan": {
+        "at": "2026-10-06T19:23:02.673845+00:00",
+        "reason": "Final full program audit found inherited Codex apply_patch usage in every adaptive primary run. Validate both real tasks with that command absent.",
+        "classification": "Two supplementary development replays, separate from the original six-condition experiment",
+        "attempts": [
+          "esm-node-isolated",
+          "commander-node-isolated"
+        ],
+        "modelFeedback": "No prior result or solution supplied to the model",
+        "retryPolicy": "Exactly one isolated run per task, regardless of quality outcome",
+        "ordering": "Serial model execution; Commander waits for ESM completion and verified workspace archiving."
+      }
+    },
+    "scriptact-live-cache-validation-20261007.json": {
+      "source": "scriptact-live-cache-validation-20261007.json",
+      "sha256": "480b96d40cbab2efcd09529d92ccfad13e561e545ad746aa01f1a1c1e6bc541b",
+      "qualifications": {
+        "evidence": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
+        "pricing": {
+          "kind": "frozen reference only; not provider billing",
+          "capturedDate": "2026-09-30",
+          "inputPerMillion": 4,
+          "cachedInputPerMillion": 0.4,
+          "cacheWritePerMillion": 5,
+          "outputPerMillion": 20
+        },
+        "excludedInitialRun": {
+          "exclusion": "workspace initially inherited parent repository Git status; diagnostic only",
+          "startedRequests": 16,
+          "captured": [
+            {
+              "sequence": 1,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5731,
+                "outputTokens": 211,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 2,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 7000,
+                "outputTokens": 84,
+                "cacheReadTokens": 5632,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 3,
+              "usage": null,
+              "http": [
+                null
+              ]
+            },
+            {
+              "sequence": 4,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 10934,
+                "outputTokens": 1794,
+                "cacheReadTokens": 10752,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 5,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 14872,
+                "outputTokens": 1670,
+                "cacheReadTokens": 10752,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 6,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17737,
+                "outputTokens": 407,
+                "cacheReadTokens": 14720,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 7,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19717,
+                "outputTokens": 561,
+                "cacheReadTokens": 17536,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 8,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 21814,
+                "outputTokens": 477,
+                "cacheReadTokens": 19584,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 9,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17650,
+                "outputTokens": 236,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 10,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20271,
+                "outputTokens": 492,
+                "cacheReadTokens": 17536,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 11,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22114,
+                "outputTokens": 1128,
+                "cacheReadTokens": 20096,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 12,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 24334,
+                "outputTokens": 711,
+                "cacheReadTokens": 22016,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 13,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13470,
+                "outputTokens": 169,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 14,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 15125,
+                "outputTokens": 316,
+                "cacheReadTokens": 13312,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            },
+            {
+              "sequence": 15,
+              "usage": {
+                "type": "usage",
+                "inputTokens": 14139,
+                "outputTokens": 151,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "http": [
+                200
+              ]
+            }
+          ],
+          "missingRequests": [
+            16
+          ]
+        }
+      },
+      "comparison": [
+        {
+          "id": "ledger-key",
+          "completed": true,
+          "requestCount": 15,
+          "wireCount": 15,
+          "knownInput": 220697,
+          "knownOutput": 9309,
+          "knownCacheRead": 160768,
+          "cacheReadRatio": 0.7284557560818679,
+          "missingUsage": 1,
+          "knownReferenceUsd": 0.49020320000000006,
+          "modelMs": 210926,
+          "solveMs": 216412,
+          "prefixChecks": 14,
+          "prefixPreserved": 12,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                }
+              ],
+              "ms": 101980
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 72928
+            },
+            {
+              "stage": 2,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                },
+                {
+                  "name": "cli",
+                  "passed": true
+                }
+              ],
+              "ms": 41271
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 6202,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5733,
+                "outputTokens": 187,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.026672,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 3645,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 6842,
+                "outputTokens": 131,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.029988,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 3,
+              "ms": 34823,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 10817,
+                "outputTokens": 1751,
+                "cacheReadTokens": 6656,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.054326400000000004,
+              "previousItems": 8,
+              "commonItems": 8,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 32347,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17739,
+                "outputTokens": 1566,
+                "cacheReadTokens": 10624,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.06402959999999999,
+              "previousItems": 13,
+              "commonItems": 13,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 5,
+              "ms": 10823,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20471,
+                "outputTokens": 526,
+                "cacheReadTokens": 17536,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.029274400000000003,
+              "previousItems": 19,
+              "commonItems": 19,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 12752,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22601,
+                "outputTokens": 427,
+                "cacheReadTokens": 20352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0256768,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 7,
+              "ms": 8283,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16422,
+                "outputTokens": 236,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.054740800000000006,
+              "previousItems": 29,
+              "commonItems": 3,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 8,
+              "ms": 24327,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19062,
+                "outputTokens": 1035,
+                "cacheReadTokens": 16256,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0384264,
+              "previousItems": 27,
+              "commonItems": 27,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 9,
+              "ms": 18085,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 21084,
+                "outputTokens": 796,
+                "cacheReadTokens": 18944,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0320576,
+              "previousItems": 32,
+              "commonItems": 32,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 10,
+              "ms": 7579,
+              "http": [
+                200
+              ],
+              "usage": null,
+              "previousItems": 37,
+              "commonItems": 37,
+              "prefixPreserved": true,
+              "error": "terminated",
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 11,
+              "ms": 11703,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 23499,
+                "outputTokens": 416,
+                "cacheReadTokens": 23296,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.018450400000000002,
+              "previousItems": 42,
+              "commonItems": 42,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 12,
+              "ms": 6015,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 10424,
+                "outputTokens": 211,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0302488,
+              "previousItems": 42,
+              "commonItems": 1,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 13,
+              "ms": 17178,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13150,
+                "outputTokens": 1140,
+                "cacheReadTokens": 10240,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.038536,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 14,
+              "ms": 11326,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 15287,
+                "outputTokens": 613,
+                "cacheReadTokens": 13056,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0264064,
+              "previousItems": 29,
+              "commonItems": 29,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 15,
+              "ms": 5838,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17566,
+                "outputTokens": 274,
+                "cacheReadTokens": 15104,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0213696,
+              "previousItems": 34,
+              "commonItems": 34,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            }
+          ]
+        },
+        {
+          "id": "ledger-none",
+          "completed": true,
+          "requestCount": 17,
+          "wireCount": 17,
+          "knownInput": 305642,
+          "knownOutput": 9476,
+          "knownCacheRead": 58880,
+          "cacheReadRatio": 0.19264368116947278,
+          "missingUsage": 0,
+          "knownReferenceUsd": 1.2001200000000003,
+          "modelMs": 243780,
+          "solveMs": 247217,
+          "prefixChecks": 16,
+          "prefixPreserved": 12,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                }
+              ],
+              "ms": 117677
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 70269
+            },
+            {
+              "stage": 2,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "empty",
+                  "passed": true
+                },
+                {
+                  "name": "primary",
+                  "passed": true
+                },
+                {
+                  "name": "summary artifact",
+                  "passed": true
+                },
+                {
+                  "name": "edge-0",
+                  "passed": true
+                },
+                {
+                  "name": "edge-1",
+                  "passed": true
+                },
+                {
+                  "name": "edge-2",
+                  "passed": true
+                },
+                {
+                  "name": "edge-3",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                },
+                {
+                  "name": "cli",
+                  "passed": true
+                }
+              ],
+              "ms": 58983
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 5506,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5740,
+                "outputTokens": 201,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.02698,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 12986,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 9039,
+                "outputTokens": 397,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.044096,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 3,
+              "ms": 33604,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 14038,
+                "outputTokens": 1569,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.087532,
+              "previousItems": 8,
+              "commonItems": 8,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 34147,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 18015,
+                "outputTokens": 1555,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.10316,
+              "previousItems": 13,
+              "commonItems": 13,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 5,
+              "ms": 8647,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20853,
+                "outputTokens": 227,
+                "cacheReadTokens": 5632,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.06767680000000001,
+              "previousItems": 18,
+              "commonItems": 18,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 14773,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22707,
+                "outputTokens": 415,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.099128,
+              "previousItems": 23,
+              "commonItems": 23,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 7,
+              "ms": 6800,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 21389,
+                "outputTokens": 387,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0776288,
+              "previousItems": 28,
+              "commonItems": 3,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 8,
+              "ms": 5970,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 18234,
+                "outputTokens": 220,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0616688,
+              "previousItems": 26,
+              "commonItems": 25,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 9,
+              "ms": 21327,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20997,
+                "outputTokens": 946,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.08724080000000001,
+              "previousItems": 28,
+              "commonItems": 28,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 10,
+              "ms": 15353,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22928,
+                "outputTokens": 430,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0846448,
+              "previousItems": 32,
+              "commonItems": 32,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 11,
+              "ms": 11253,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 25625,
+                "outputTokens": 369,
+                "cacheReadTokens": 22784,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0278576,
+              "previousItems": 37,
+              "commonItems": 37,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 12,
+              "ms": 15407,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13493,
+                "outputTokens": 317,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.044644800000000005,
+              "previousItems": 42,
+              "commonItems": 1,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 13,
+              "ms": 5413,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13500,
+                "outputTokens": 154,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0414128,
+              "previousItems": 19,
+              "commonItems": 1,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 14,
+              "ms": 26123,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16349,
+                "outputTokens": 1249,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.090376,
+              "previousItems": 20,
+              "commonItems": 20,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 15,
+              "ms": 9614,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 18591,
+                "outputTokens": 460,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.06789680000000001,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 16,
+              "ms": 8036,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20762,
+                "outputTokens": 309,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.089228,
+              "previousItems": 29,
+              "commonItems": 29,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 17,
+              "ms": 8821,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 23382,
+                "outputTokens": 271,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.098948,
+              "previousItems": 34,
+              "commonItems": 34,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            }
+          ]
+        },
+        {
+          "id": "catalog-none",
+          "completed": true,
+          "requestCount": 18,
+          "wireCount": 18,
+          "knownInput": 311196,
+          "knownOutput": 9022,
+          "knownCacheRead": 50176,
+          "cacheReadRatio": 0.16123600560418513,
+          "missingUsage": 0,
+          "knownReferenceUsd": 1.2445904,
+          "modelMs": 228506,
+          "solveMs": 233899,
+          "prefixChecks": 17,
+          "prefixPreserved": 14,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 75852
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 54876
+            },
+            {
+              "stage": 2,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                },
+                {
+                  "name": "cli",
+                  "passed": true
+                }
+              ],
+              "ms": 102808
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 6089,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5714,
+                "outputTokens": 182,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0108288,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 8192,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 6813,
+                "outputTokens": 220,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0159848,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 4
+            },
+            {
+              "sequence": 3,
+              "ms": 8975,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 12022,
+                "outputTokens": 338,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.054848,
+              "previousItems": 8,
+              "commonItems": 8,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 9367,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17237,
+                "outputTokens": 204,
+                "cacheReadTokens": 6656,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0490664,
+              "previousItems": 19,
+              "commonItems": 19,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 5,
+              "ms": 15848,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19100,
+                "outputTokens": 1299,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0867128,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 10163,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 23063,
+                "outputTokens": 405,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.100352,
+              "previousItems": 28,
+              "commonItems": 28,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 7,
+              "ms": 7453,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19628,
+                "outputTokens": 226,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.083032,
+              "previousItems": 33,
+              "commonItems": 3,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 8,
+              "ms": 7584,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22084,
+                "outputTokens": 308,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.094496,
+              "previousItems": 32,
+              "commonItems": 32,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 9,
+              "ms": 21866,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16881,
+                "outputTokens": 1001,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.087544,
+              "previousItems": 37,
+              "commonItems": 31,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 10,
+              "ms": 13822,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 18748,
+                "outputTokens": 549,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0703048,
+              "previousItems": 38,
+              "commonItems": 38,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 11,
+              "ms": 7579,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20604,
+                "outputTokens": 211,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.086636,
+              "previousItems": 44,
+              "commonItems": 44,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 12,
+              "ms": 10316,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 21997,
+                "outputTokens": 375,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0798208,
+              "previousItems": 49,
+              "commonItems": 49,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 13,
+              "ms": 8207,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 10253,
+                "outputTokens": 251,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0303648,
+              "previousItems": 54,
+              "commonItems": 1,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 4
+            },
+            {
+              "sequence": 14,
+              "ms": 14546,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13905,
+                "outputTokens": 1103,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.07768,
+              "previousItems": 23,
+              "commonItems": 23,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 15,
+              "ms": 16169,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16887,
+                "outputTokens": 1162,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0751208,
+              "previousItems": 33,
+              "commonItems": 33,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 16,
+              "ms": 14629,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19664,
+                "outputTokens": 539,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.07376880000000001,
+              "previousItems": 38,
+              "commonItems": 38,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 17,
+              "ms": 11711,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22175,
+                "outputTokens": 352,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0800728,
+              "previousItems": 43,
+              "commonItems": 43,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 18,
+              "ms": 35990,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 24421,
+                "outputTokens": 297,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0879568,
+              "previousItems": 48,
+              "commonItems": 48,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            }
+          ]
+        },
+        {
+          "id": "catalog-key",
+          "completed": true,
+          "requestCount": 18,
+          "wireCount": 18,
+          "knownInput": 257046,
+          "knownOutput": 8483,
+          "knownCacheRead": 198656,
+          "cacheReadRatio": 0.772842215012099,
+          "missingUsage": 1,
+          "knownReferenceUsd": 0.48268240000000007,
+          "modelMs": 214733,
+          "solveMs": 222482,
+          "prefixChecks": 17,
+          "prefixPreserved": 15,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 81987
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                }
+              ],
+              "ms": 76600
+            },
+            {
+              "stage": 2,
+              "status": "failed",
+              "checks": [
+                {
+                  "name": "vector-0",
+                  "passed": true
+                },
+                {
+                  "name": "vector-1",
+                  "passed": true
+                },
+                {
+                  "name": "vector-2",
+                  "passed": true
+                },
+                {
+                  "name": "vector-3",
+                  "passed": true
+                },
+                {
+                  "name": "vector-4",
+                  "passed": true
+                },
+                {
+                  "name": "manifest artifact",
+                  "passed": true
+                },
+                {
+                  "name": "updated artifact",
+                  "passed": true
+                },
+                {
+                  "name": "cli",
+                  "passed": true
+                }
+              ],
+              "ms": 63580
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 6388,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5714,
+                "outputTokens": 185,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.010888799999999999,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 5754,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 6811,
+                "outputTokens": 136,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0142968,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 3,
+              "ms": 22778,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 11062,
+                "outputTokens": 360,
+                "cacheReadTokens": 5632,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0311728,
+              "previousItems": 8,
+              "commonItems": 8,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 18584,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 12521,
+                "outputTokens": 1409,
+                "cacheReadTokens": 10880,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.039096,
+              "previousItems": 13,
+              "commonItems": 13,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 5,
+              "ms": 6631,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 15151,
+                "outputTokens": 228,
+                "cacheReadTokens": 12416,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.020466400000000003,
+              "previousItems": 18,
+              "commonItems": 18,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 11762,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16900,
+                "outputTokens": 608,
+                "cacheReadTokens": 6656,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0557984,
+              "previousItems": 23,
+              "commonItems": 23,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 7,
+              "ms": 7911,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19200,
+                "outputTokens": 372,
+                "cacheReadTokens": 16768,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0238752,
+              "previousItems": 28,
+              "commonItems": 28,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 8,
+              "ms": 6315,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 15036,
+                "outputTokens": 190,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0482768,
+              "previousItems": 33,
+              "commonItems": 3,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 9,
+              "ms": 9245,
+              "http": [
+                200
+              ],
+              "usage": null,
+              "previousItems": 29,
+              "commonItems": 29,
+              "prefixPreserved": true,
+              "error": "terminated",
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 10,
+              "ms": 23300,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17266,
+                "outputTokens": 1064,
+                "cacheReadTokens": 17152,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0285968,
+              "previousItems": 33,
+              "commonItems": 33,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 11,
+              "ms": 12161,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19322,
+                "outputTokens": 308,
+                "cacheReadTokens": 17152,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0217008,
+              "previousItems": 33,
+              "commonItems": 33,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 12,
+              "ms": 10960,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 20964,
+                "outputTokens": 543,
+                "cacheReadTokens": 19200,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.025596,
+              "previousItems": 38,
+              "commonItems": 38,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 13,
+              "ms": 10934,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 22819,
+                "outputTokens": 353,
+                "cacheReadTokens": 20864,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0232256,
+              "previousItems": 43,
+              "commonItems": 43,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 14,
+              "ms": 5565,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 10074,
+                "outputTokens": 170,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0280288,
+              "previousItems": 48,
+              "commonItems": 1,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 15,
+              "ms": 18988,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 12383,
+                "outputTokens": 1297,
+                "cacheReadTokens": 9984,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0395296,
+              "previousItems": 21,
+              "commonItems": 21,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 16,
+              "ms": 10009,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 14672,
+                "outputTokens": 414,
+                "cacheReadTokens": 12288,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0227312,
+              "previousItems": 25,
+              "commonItems": 25,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 17,
+              "ms": 9347,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 17772,
+                "outputTokens": 282,
+                "cacheReadTokens": 14592,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0241968,
+              "previousItems": 30,
+              "commonItems": 30,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 18,
+              "ms": 18101,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 19379,
+                "outputTokens": 564,
+                "cacheReadTokens": 17664,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.025205599999999998,
+              "previousItems": 35,
+              "commonItems": 35,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            }
+          ]
+        }
+      ],
+      "heldout": {
+        "before": {
+          "id": "checksums-key",
+          "completed": true,
+          "requestCount": 8,
+          "wireCount": 8,
+          "knownInput": 76005,
+          "knownOutput": 2867,
+          "knownCacheRead": 43392,
+          "cacheReadRatio": 0.570909808565226,
+          "missingUsage": 0,
+          "knownReferenceUsd": 0.2051488,
+          "modelMs": 69098,
+          "solveMs": 70036,
+          "prefixChecks": 7,
+          "prefixPreserved": 4,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 16408
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 15282
+            },
+            {
+              "stage": 2,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 19354
+            },
+            {
+              "stage": 3,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                },
+                {
+                  "name": "totals",
+                  "passed": true
+                }
+              ],
+              "ms": 18847
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 10867,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5677,
+                "outputTokens": 678,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.036268,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 5276,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 8091,
+                "outputTokens": 141,
+                "cacheReadTokens": 5504,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0153696,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 3,
+              "ms": 8845,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 8039,
+                "outputTokens": 559,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0276688,
+              "previousItems": 7,
+              "commonItems": 3,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 6261,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 9775,
+                "outputTokens": 137,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0261728,
+              "previousItems": 8,
+              "commonItems": 8,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 5,
+              "ms": 12723,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 9695,
+                "outputTokens": 532,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0337528,
+              "previousItems": 12,
+              "commonItems": 7,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 6468,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 11143,
+                "outputTokens": 157,
+                "cacheReadTokens": 9600,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.013152,
+              "previousItems": 13,
+              "commonItems": 13,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 7,
+              "ms": 13840,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 11085,
+                "outputTokens": 533,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0393328,
+              "previousItems": 17,
+              "commonItems": 12,
+              "prefixPreserved": false,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 8,
+              "ms": 4818,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 12500,
+                "outputTokens": 130,
+                "cacheReadTokens": 10880,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.013432,
+              "previousItems": 18,
+              "commonItems": 18,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            }
+          ]
+        },
+        "after": {
+          "id": "checksums-key",
+          "completed": true,
+          "requestCount": 9,
+          "wireCount": 9,
+          "knownInput": 90928,
+          "knownOutput": 2982,
+          "knownCacheRead": 78976,
+          "cacheReadRatio": 0.8685553404891783,
+          "missingUsage": 1,
+          "knownReferenceUsd": 0.1390384,
+          "modelMs": 94797,
+          "solveMs": 97877,
+          "prefixChecks": 8,
+          "prefixPreserved": 8,
+          "systemVariants": 1,
+          "toolVariants": 1,
+          "stages": [
+            {
+              "stage": 0,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 30540
+            },
+            {
+              "stage": 1,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 16220
+            },
+            {
+              "stage": 2,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                }
+              ],
+              "ms": 18560
+            },
+            {
+              "stage": 3,
+              "status": "completed",
+              "checks": [
+                {
+                  "name": "current bytes and hashes",
+                  "passed": true
+                },
+                {
+                  "name": "totals",
+                  "passed": true
+                }
+              ],
+              "ms": 32410
+            }
+          ],
+          "rows": [
+            {
+              "sequence": 1,
+              "ms": 24006,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 5688,
+                "outputTokens": 614,
+                "cacheReadTokens": 4352,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.019364799999999998,
+              "commonItems": 0,
+              "prefixPreserved": null,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 2,
+              "ms": 6273,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 8116,
+                "outputTokens": 118,
+                "cacheReadTokens": 5504,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0150096,
+              "previousItems": 4,
+              "commonItems": 4,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 3,
+              "ms": 9639,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 9054,
+                "outputTokens": 646,
+                "cacheReadTokens": 7936,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.020566400000000002,
+              "previousItems": 7,
+              "commonItems": 7,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 4,
+              "ms": 6352,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 11001,
+                "outputTokens": 135,
+                "cacheReadTokens": 8960,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.014448,
+              "previousItems": 10,
+              "commonItems": 10,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 5,
+              "ms": 12241,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 12055,
+                "outputTokens": 649,
+                "cacheReadTokens": 10880,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.022032,
+              "previousItems": 14,
+              "commonItems": 14,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 6,
+              "ms": 6111,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 13724,
+                "outputTokens": 157,
+                "cacheReadTokens": 11904,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.0151816,
+              "previousItems": 17,
+              "commonItems": 17,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 7,
+              "ms": 10091,
+              "http": [
+                200
+              ],
+              "usage": null,
+              "previousItems": 21,
+              "commonItems": 21,
+              "prefixPreserved": true,
+              "error": "terminated",
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            },
+            {
+              "sequence": 8,
+              "ms": 15476,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 14912,
+                "outputTokens": 545,
+                "cacheReadTokens": 14720,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.017556,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 1
+            },
+            {
+              "sequence": 9,
+              "ms": 4608,
+              "http": [
+                200
+              ],
+              "usage": {
+                "type": "usage",
+                "inputTokens": 16378,
+                "outputTokens": 118,
+                "cacheReadTokens": 14720,
+                "cacheWriteTokens": 0
+              },
+              "referenceCost": 0.01488,
+              "previousItems": 24,
+              "commonItems": 24,
+              "prefixPreserved": true,
+              "explicitPoints": 0,
+              "nodeCalls": 0
+            }
+          ]
+        },
+        "freeze": {
+          "createdAt": "2026-10-07T03:28:40.423Z",
+          "purpose": "Frozen unseen checksum task comparing cross-submission prefix continuity with stable session keys.",
+          "order": [
+            "baseline",
+            "fixed"
+          ],
+          "files": {
+            "holdout.mjs": "7433c7a552c07ae904b56a04d369e92753699eee9ee9b2fee49a095a13972cae",
+            "checksum-cases.mjs": "f7b73f175543a3955a695d4269c05cc00f78ab4b9e7a002ff56a6f584041ee51",
+            "runtime/manifest.json": "e4203cc97cfc80857da527c8253329d29e22d9c274989dd1fbfd95da642857b0",
+            "runtime-verified/manifest.json": "78a63554b1732e99659cf93e407ad36456ac494d2edb50e17aca511efbb9e12b"
+          }
+        }
+      },
+      "capability": {
+        "before": [
+          {
+            "mode": "default",
+            "passed": false,
+            "http": [
+              400
+            ],
+            "errors": [
+              {
+                "type": "error",
+                "code": "provider",
+                "message": "prompt_cache_breakpoint is not supported on this model"
+              }
+            ]
+          },
+          {
+            "mode": "enabled",
+            "passed": false,
+            "http": [
+              400
+            ],
+            "errors": [
+              {
+                "type": "error",
+                "code": "provider",
+                "message": "prompt_cache_breakpoint is not supported on this model"
+              }
+            ]
+          },
+          {
+            "mode": "disabled",
+            "passed": true,
+            "http": [
+              200
+            ],
+            "errors": []
+          }
+        ],
+        "after": [
+          {
+            "mode": "default",
+            "passed": true,
+            "http": [
+              200
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "normalizedRows": 190,
+  "failureRows": 531,
+  "ledger": {
+    "sourceLedgers": [
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-failure-54f/original/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
+        "requests": 31,
+        "mtime": 1790753442.6928022
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger/budget.json",
+        "requests": 0,
+        "mtime": 1790762504.6774728
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger-v2/budget.json",
+        "requests": 1,
+        "mtime": 1790762588.1730695
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/branch-smoke-v1/synthetic-ledger/budget.json",
+        "requests": 3,
+        "mtime": 1790987209.751246
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/execution-67s-v1/synthetic-ledger/budget.json",
+        "requests": 3,
+        "mtime": 1790987304.0397818
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54j/budget.json",
+        "requests": 3289,
+        "mtime": 1790993542.1372645
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ceY1Ix/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1044009
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hbtpYX/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.100514
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-9B5yqI/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.0998664
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-mO1UR4/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.0976818
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-4fvuRS/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1017542
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-G6GWti/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.103622
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-NtzJYR/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1062396
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-T45EjN/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.0932713
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ICUxCZ/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1055274
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ykgagj/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1058795
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-oIb5DU/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1031013
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-xvLacO/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1051223
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hg90LH/budget.json",
+        "requests": 0,
+        "mtime": 1790763065.1022096
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/branch-smoke-v1/synthetic-ledger/budget.json",
+        "requests": 3,
+        "mtime": 1790973989.1897125
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/execution-67s-v1/synthetic-ledger/budget.json",
+        "requests": 3,
+        "mtime": 1790974273.7698073
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-54h/original-54g/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
+        "requests": 37,
+        "mtime": 1790756537.940004
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
+        "requests": 37,
+        "mtime": 1790756216.3074567
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54h/budget.json",
+        "requests": 27,
+        "mtime": 1790761427.3886528
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-ai-sdk-openai-CBMVde/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.3683548
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-raw-fetch-Kn6osY/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.4035993
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-ai-sdk-openai-W8sHaW/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.2306554
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-raw-fetch-snTU4u/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.471571
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-ai-sdk-openai-YEN17Z/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.5060618
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-raw-fetch-Ejwbaz/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.266112
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-ai-sdk-openai-P0yW5N/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.301539
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-ai-sdk-openai-Auqj5Y/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.4373846
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-raw-fetch-aiauTG/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.3349452
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-raw-fetch-lrenZd/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.5425112
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-raw-fetch-RaRuyF/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.1936896
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-ai-sdk-openai-T8s1zU/budget.json",
+        "requests": 1,
+        "mtime": 1790754088.5782187
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
+        "requests": 31,
+        "mtime": 1790753442.6928022
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-runtime-integration/green-built/ledger/budget.json",
+        "requests": 4,
+        "mtime": 1790754201.750218
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v4/synthetic-ledger/budget.json",
+        "requests": 1,
+        "mtime": 1790858215.4633734
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v3/synthetic-ledger/budget.json",
+        "requests": 0,
+        "mtime": 1790858036.5902596
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v1/synthetic-ledger/budget.json",
+        "requests": 4,
+        "mtime": 1790856108.123568
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v2/synthetic-ledger/budget.json",
+        "requests": 5,
+        "mtime": 1790857859.5251312
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway/budget.json",
+        "requests": 53,
+        "mtime": 1790748354.261376
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-gpt6-sol/budget.json",
+        "requests": 7,
+        "mtime": 1790750546.9560325
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-required/gateway/budget.json",
+        "requests": 118,
+        "mtime": 1791312297.5095625
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required/gateway/budget.json",
+        "requests": 31,
+        "mtime": 1791309722.0533805
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node-isolated/gateway/budget.json",
+        "requests": 38,
+        "mtime": 1791315455.6890757
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required-retry/gateway/budget.json",
+        "requests": 36,
+        "mtime": 1791310755.4378748
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node-isolated/gateway/budget.json",
+        "requests": 57,
+        "mtime": 1791314924.6076934
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node/gateway/budget.json",
+        "requests": 19,
+        "mtime": 1791309619.1250944
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node/gateway/budget.json",
+        "requests": 45,
+        "mtime": 1791314036.510947
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-optional/gateway/budget.json",
+        "requests": 25,
+        "mtime": 1791309715.249052
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-optional/gateway/budget.json",
+        "requests": 66,
+        "mtime": 1791313144.6752925
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/chai-baseline-03/gateway/budget.json",
+        "requests": 71,
+        "mtime": 1791295590.5932167
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-candidate/gateway/budget.json",
+        "requests": 9,
+        "mtime": 1791297606.3170228
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-candidate/gateway/budget.json",
+        "requests": 16,
+        "mtime": 1791297680.2983556
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-baseline/gateway/budget.json",
+        "requests": 12,
+        "mtime": 1791296358.0406294
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-baseline/gateway/budget.json",
+        "requests": 18,
+        "mtime": 1791296595.6635675
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/budget.json",
+        "requests": 1620,
+        "mtime": 1790731163.5403745
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-04/gateway/budget.json",
+        "requests": 4,
+        "mtime": 1791021663.6507938
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-03/gateway/budget.json",
+        "requests": 2,
+        "mtime": 1791021555.2727144
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-02/gateway/budget.json",
+        "requests": 1,
+        "mtime": 1791021498.0448718
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-05/gateway/budget.json",
+        "requests": 11,
+        "mtime": 1791022225.8394344
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway-generation-01/budget.json",
+        "requests": 27,
+        "mtime": 1791094609.5720215
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-07/gateway/budget.json",
+        "requests": 6,
+        "mtime": 1791023322.46192
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-09/gateway/budget.json",
+        "requests": 6,
+        "mtime": 1791029417.5130281
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-08/gateway/budget.json",
+        "requests": 6,
+        "mtime": 1791024708.2807512
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-06/gateway/budget.json",
+        "requests": 6,
+        "mtime": 1791022373.1042647
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway/budget.json",
+        "requests": 263,
+        "mtime": 1791090524.9858851
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/gateway/budget.json",
+        "requests": 111,
+        "mtime": 1791145483.38745
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-03/gateway/budget.json",
+        "requests": 194,
+        "mtime": 1791138910.6674476
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-05/gateway/budget.json",
+        "requests": 36,
+        "mtime": 1791237877.5867555
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/commander-01/gateway/budget.json",
+        "requests": 133,
+        "mtime": 1791195303.7571423
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/gateway/budget.json",
+        "requests": 126,
+        "mtime": 1791127629.437364
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/gateway/budget.json",
+        "requests": 39,
+        "mtime": 1791128997.6638885
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-04/gateway/budget.json",
+        "requests": 40,
+        "mtime": 1791231793.5907352
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/gateway/budget.json",
+        "requests": 152,
+        "mtime": 1791140691.9557433
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/gateway/budget.json",
+        "requests": 224,
+        "mtime": 1791131514.9277
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/gateway/budget.json",
+        "requests": 52,
+        "mtime": 1791125269.1358654
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/gateway/budget.json",
+        "requests": 156,
+        "mtime": 1791143830.3227003
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/gateway/budget.json",
+        "requests": 82,
+        "mtime": 1791152889.1762323
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/gateway/budget.json",
+        "requests": 254,
+        "mtime": 1791166087.7485464
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/gateway/budget.json",
+        "requests": 116,
+        "mtime": 1791175774.6304944
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-02/gateway/budget.json",
+        "requests": 148,
+        "mtime": 1791170957.067877
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/gateway/budget.json",
+        "requests": 127,
+        "mtime": 1791172149.8532374
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/gateway/budget.json",
+        "requests": 20,
+        "mtime": 1791178676.6158001
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-02/gateway/budget.json",
+        "requests": 283,
+        "mtime": 1791223363.4898572
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/gateway/budget.json",
+        "requests": 266,
+        "mtime": 1791174817.9685125
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/gateway/budget.json",
+        "requests": 44,
+        "mtime": 1791168078.0486007
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/gateway/budget.json",
+        "requests": 19,
+        "mtime": 1791151504.7657511
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-03/gateway/budget.json",
+        "requests": 211,
+        "mtime": 1791225095.721438
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/cheerio-02/gateway/budget.json",
+        "requests": 166,
+        "mtime": 1791233721.9696283
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-01/gateway/budget.json",
+        "requests": 161,
+        "mtime": 1791181761.999753
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-01/gateway/budget.json",
+        "requests": 118,
+        "mtime": 1791187510.6185868
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-09/gateway/budget.json",
+        "requests": 71,
+        "mtime": 1791227943.6499822
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-06/gateway/budget.json",
+        "requests": 69,
+        "mtime": 1791239255.1409497
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-10/gateway/budget.json",
+        "requests": 63,
+        "mtime": 1791235389.8949199
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-shell-node-01/gateway/budget.json",
+        "requests": 72,
+        "mtime": 1791214233.2745297
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-02/gateway/budget.json",
+        "requests": 169,
+        "mtime": 1791211630.2287827
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-01/gateway/budget.json",
+        "requests": 135,
+        "mtime": 1791243358.6717775
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-06/gateway/budget.json",
+        "requests": 59,
+        "mtime": 1791147510.0271304
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/gateway/budget.json",
+        "requests": 259,
+        "mtime": 1791161677.8679078
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-01/gateway/budget.json",
+        "requests": 51,
+        "mtime": 1791205683.5829976
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/gateway/budget.json",
+        "requests": 36,
+        "mtime": 1791148039.3225477
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/gateway/budget.json",
+        "requests": 194,
+        "mtime": 1791133773.4172869
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/jinja-01/gateway/budget.json",
+        "requests": 86,
+        "mtime": 1791151183.748357
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-01/gateway/budget.json",
+        "requests": 272,
+        "mtime": 1791123877.6534321
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-02/gateway/budget.json",
+        "requests": 24,
+        "mtime": 1791141209.9354944
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/gateway/budget.json",
+        "requests": 1,
+        "mtime": 1791132699.2857997
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/gateway/budget.json",
+        "requests": 206,
+        "mtime": 1791136102.7039394
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/nunjucks-02/gateway/budget.json",
+        "requests": 160,
+        "mtime": 1791201281.367694
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-shell-node-03/gateway/budget.json",
+        "requests": 49,
+        "mtime": 1791226212.9700093
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/gateway/budget.json",
+        "requests": 318,
+        "mtime": 1791178274.4035852
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-01/gateway/budget.json",
+        "requests": 125,
+        "mtime": 1791217427.971052
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/gateway/budget.json",
+        "requests": 409,
+        "mtime": 1791164317.1110373
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/gateway/budget.json",
+        "requests": 167,
+        "mtime": 1791154195.6861508
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-01/gateway/budget.json",
+        "requests": 146,
+        "mtime": 1791167460.4361238
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/gateway/budget.json",
+        "requests": 266,
+        "mtime": 1791157900.7087717
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/gateway/budget.json",
+        "requests": 210,
+        "mtime": 1791159292.95712
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-shell-node-01/gateway/budget.json",
+        "requests": 32,
+        "mtime": 1791243825.8500059
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-shell-node-01/gateway/budget.json",
+        "requests": 41,
+        "mtime": 1791207217.5892942
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-04/gateway/budget.json",
+        "requests": 206,
+        "mtime": 1791230903.3046951
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-02/gateway/budget.json",
+        "requests": 61,
+        "mtime": 1791183458.0714736
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-05/gateway/budget.json",
+        "requests": 88,
+        "mtime": 1791203679.4593375
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-05/gateway/budget.json",
+        "requests": 50,
+        "mtime": 1791237206.1138754
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-04/gateway/budget.json",
+        "requests": 40,
+        "mtime": 1791197050.4426754
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-03/gateway/budget.json",
+        "requests": 112,
+        "mtime": 1791190180.8260262
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/gateway/budget.json",
+        "requests": 129,
+        "mtime": 1791134559.9873147
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-candidate/gateway/budget.json",
+        "requests": 11,
+        "mtime": 1791301420.982005
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-baseline-isolated/gateway/budget.json",
+        "requests": 18,
+        "mtime": 1791301157.6793826
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-candidate/gateway/budget.json",
+        "requests": 28,
+        "mtime": 1791300779.855552
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-baseline/gateway/budget.json",
+        "requests": 19,
+        "mtime": 1791300631.7785416
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-baseline/gateway/budget.json",
+        "requests": 11,
+        "mtime": 1791301422.5305655
+      },
+      {
+        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-candidate-isolated/gateway/budget.json",
+        "requests": 9,
+        "mtime": 1791301092.304035
+      }
+    ],
+    "uniqueRequests": 13746,
+    "observedRequestRecords": 13814,
+    "requestsWithoutUsage": 506,
+    "receiptConflicts": [],
+    "costBasis": "Frozen per-receipt reference estimates; no provider invoice; do not add report/replay copies to spend. Latest ledger mtime wins conflicting snapshots; original ledgers are preserved in the evidence bundle.",
+    "statuses": {
+      "http-400": 4,
+      "http-200": 13237,
+      "http-200-interrupted": 301,
+      "unknown": 175,
+      "http-401": 7,
+      "reserved": 1,
+      "http-503": 21
+    }
+  },
+  "interpretation": "Historical recorded splits are preserved. All inspected tasks are exposed reference material for future optimization; future independent validation needs new frozen unseen tasks. Missing usage and cost remain unknown. Do not aggregate overlapping campaigns, reused controls or different pricing bases as a universal improvement.",
+  "catalog": {
+    "catalogRecords": 1070,
+    "campaignDirectories": {
+      "parallel-54": 8,
+      "probes": 40,
+      "standard-runtime-v2-20261004": 39,
+      "standard-runtime-v3-20261004": 14,
+      "native-tools-20261004": 26,
+      "project-ablation-20261007": 17,
+      "scriptact-feedback-20261002T0133Z": 9,
+      "runtime-context-20261006": 10,
+      "standard-runtime-v3-host-20261004": 6,
+      "native-desktop-20261003": 93,
+      "jobs": 616,
+      "long-runtime-20261004": 147,
+      "standard-runtime-20261004": 31,
+      "scriptact-nextgen-20261001T142520Z": 2,
+      "runtime-review-20261006": 12
+    },
+    "configurationFiles": 64,
+    "uniqueSanitizedConfigurations": 6,
+    "exposedTaskIdentities": 146
+  },
+  "preservation": {
+    "archiveDirectory": "/Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07",
+    "statistics": {
+      "evidence": {
+        "storedBytes": 5954161448,
+        "archiveMembers": 442346,
+        "evidenceFiles": 191214,
+        "originalBytes": 20586892312,
+        "redactions": 5619,
+        "parseErrors": 62,
+        "deduplicatedReferences": 794100,
+        "sqliteSummaries": 1657,
+        "privateConfigurationFiles": 84,
+        "compressedBytes": 1256332314,
+        "finishedAt": "2026-10-07T17:00:37+08:00"
+      },
+      "frozenRuntimes": {
+        "storedBytes": 64551179,
+        "archiveMembers": 192367,
+        "evidenceFiles": 187745,
+        "originalBytes": 1042381004,
+        "redactions": 9,
+        "parseErrors": 57,
+        "deduplicatedReferences": 181926,
+        "privateConfigurationFiles": 858,
+        "compressedBytes": 25240706,
+        "snapshotRoots": 57
+      }
+    },
+    "verification": {
+      "compact-evidence": {
+        "archive": "compact-evidence.tar.gz",
+        "sha256": "52ee4771c2612f5357f98ec51dd773eb1db50bfdb66180dc2d077be667a75a01",
+        "verified": true,
+        "members": 442346,
+        "evidenceFiles": 191214,
+        "references": 251132,
+        "missingReferences": 0,
+        "privateConfigurationFingerprints": 84,
+        "originalParseErrorsPreserved": 62,
+        "storedBytes": 5954161448,
+        "elapsedSeconds": 30.77
+      },
+      "frozen-runtimes": {
+        "archive": "frozen-runtimes.tar.gz",
+        "sha256": "cc614327a498acca46d02edf8a61b26741c06911b5cca33c0063fc639a27a3d9",
+        "verified": true,
+        "members": 192367,
+        "evidenceFiles": 187745,
+        "references": 4622,
+        "missingReferences": 0,
+        "privateConfigurationFingerprints": 858,
+        "originalParseErrorsPreserved": 57,
+        "storedBytes": 64551179,
+        "elapsedSeconds": 5.95
+      }
+    },
+    "roundtrip": {
+      "source": "curated/scriptact-standard-runtime-results-20261004.json",
+      "jsonValuesEqual": true,
+      "includesMissingUsageAndNullCosts": true,
+      "frozenCode": {
+        "logicalPath": "bench/standard-runtime-v2-20261004/previous/packages/agent/dist/contracts.d.ts",
+        "sourceSha256": "61cc1b1ffdab6612465e3f6abfee2524d4c5f5b4fefe7dd112c23bcf3df9289b",
+        "bytesEqual": true
+      }
+    },
+    "participantImplementationScope": {
+      "auditFile": "implementation-preservation.json",
+      "trackedDiffRoots": 86,
+      "uniqueSourcePathsWithTracePointers": 24,
+      "pathsMentionedInRetainedEvidence": 24,
+      "coverageReviewEntries": 76,
+      "qualification": "Tracked diffs, recorded status, captured added text and original execution evidence are retained. These pointers support reconstruction and review; reconstructing a complete participant checkout requires resolving directory entries and validating final files. Future captures include all maintained source extensions before removal."
+    }
+  },
+  "cleanup": {
+    "verifiedAt": "2026-10-07T17:57:21+08:00",
+    "benchRootRemoved": true,
+    "evaluationEntriesDeleted": 1299,
+    "evaluationDirectoriesDeleted": 104,
+    "initialTemporaryEntries": 12674,
+    "temporaryDeletesInResumedLog": 11089,
+    "temporaryEntriesVerifiedAbsentBeforeResume": 1399,
+    "initialTemporaryIdentitiesGone": 12488,
+    "initialTemporaryPathsCurrentlyAbsent": 12484,
+    "initialTemporaryPathsRecreated": 4,
+    "initialTemporaryIdentitiesRemaining": 186,
+    "preservedReasons": {
+      "live-process-reference-or-registered-worktree": 12,
+      "different-owner": 2,
+      "socket-or-other-special-file": 11,
+      "modified-within-ten-minutes": 3
+    },
+    "osRestrictedTemporaryRoots": 158,
+    "preservedDevelopmentWorktrees": [
+      "/private/tmp/velarscript-openvoxel-loop-20260927",
+      "/private/tmp/openvoxel-velarscript-0.34.1-20260927"
+    ],
+    "freeBytesAtInventory": 2869194752,
+    "freeBytesAtCleanupCompletion": 115089149952,
+    "netFreeBytesAtCleanupCompletion": 112219955200,
+    "freeBytesAtFinalVerification": 113249480704,
+    "measurement": "Decimal GB. Net free space increase is measured on the Data volume, while other applications keep running. du allocated bytes and archive logical bytes have separate meanings.",
+    "temporaryEvaluationRootsRemoved": 92
+  }
+}

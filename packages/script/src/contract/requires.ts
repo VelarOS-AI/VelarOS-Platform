@@ -23,6 +23,8 @@ export interface NodeCodeRunnerOptions {
   readonly packageDirectory?: string
   /** 当前会话锁定的 Skill 与标准依赖环境。 */
   readonly runtime?: NodeRuntimeEnvironment
+  /** 每次执行固定新的依赖快照；优先于静态 runtime，进程树收束后释放。 */
+  acquireRuntime?(signal: AbortSignal): Promise<NodeRuntimeLease>
   /** 在计时与启动前完成本次源码的宿主审批；拒绝时不得启动进程。 */
   authorize?(request: NodeProcessRequest, signal: AbortSignal): Promise<void>
   /** 启动真实 Node，将 source 作为 ESM 标准输入；signal 必须终止并回收进程树。 */
@@ -31,6 +33,18 @@ export interface NodeCodeRunnerOptions {
     onOutput: (text: string) => void,
     signal: AbortSignal
   ): Promise<NodeProcessResult>
+}
+
+/** 宿主为一次 Node 执行及其后代持有的不可变环境。 */
+export interface NodeRuntimeLease {
+  /** 宿主无法证明进程树已收束时保留文件，防止重启回收仍在使用的依赖。 */
+  retain?(): Promise<void>
+  /** 本次执行的依赖和 Skill 目录。 */
+  readonly environment: NodeRuntimeEnvironment
+  /** 随快照固定的包命令目录。 */
+  readonly binDirectories?: readonly string[]
+  /** 进程树完全收束后释放，失败或未回收时保留保护。 */
+  release(): Promise<void>
 }
 
 /** 同一 Kernel 上的一次脚本会话配置。 */

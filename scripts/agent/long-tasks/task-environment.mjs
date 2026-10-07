@@ -49,7 +49,7 @@ export function taskEnvironment(task) {
   assert(value.runtime === undefined || node)
   assert(
     (node
-      ? ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json']
+      ? ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json', 'tap-json']
       : ['pytest', 'unittest']
     ).includes(regressionRunner)
   )
@@ -207,9 +207,12 @@ export async function restoreTaskPaths(source, destination, paths) {
 // 使用项目自身的回归测试入口；新功能验收使用独立测试器。
 export function regressionArguments(environment, report) {
   if (environment.runtime === 'node') {
-    const runner = { 'ava-tap': 'ava', 'jest-json': 'jest', 'vitest-json': 'vitest' }[
-      environment.regressionRunner
-    ]
+    const runner = {
+      'ava-tap': 'ava',
+      'jest-json': 'jest',
+      'vitest-json': 'vitest',
+      'tap-json': 'tap',
+    }[environment.regressionRunner]
     return runner
       ? [
           join(import.meta.dirname, `${runner}-runner.mjs`),

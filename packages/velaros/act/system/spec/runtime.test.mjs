@@ -15,7 +15,6 @@ import {
 } from '@velaros-ai/script'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
-import { SystemMembers } from '../../../dist/act/system/contract/constants.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
@@ -114,7 +113,13 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
   )
   assert.equal(listing.value.items.length, 1)
   assert.equal(listing.value.nextOffset, null)
-  assert.deepEqual(listing.value.items[0].exports, Object.keys(SystemMembers))
+  assert.deepEqual(listing.value.items[0].exports, [
+    'modules',
+    'programs',
+    'goal',
+    'memory',
+    'store',
+  ])
   assert.equal(listing.value.items[0].operations.length, 28)
   assert.equal(listing.value.items[0].binding, undefined)
   const result = await execute(

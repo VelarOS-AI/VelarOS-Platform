@@ -94,3 +94,12 @@ export const ShellEnvironmentVariables = Object.freeze({
     description: '自检读到的 shell 版本。',
   },
 } as const)
+/** npm 安装与元数据查询的进程预算。 */
+export const NpmExecutionLimits = Object.freeze({
+  /** 一次 npm 操作最多五分钟。 */
+  timeoutMs: 300_000,
+  /** 保留有界 JSON 查询与安装输出。 */
+  outputChars: 1_000_000,
+  /** 错误回执保留最后一段诊断。 */
+  diagnosticChars: 8000,
+})

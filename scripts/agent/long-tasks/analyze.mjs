@@ -81,7 +81,7 @@ export function pytestSummary(result) {
 }
 
 export function regressionSummary(result, runner) {
-  if (['mocha-json', 'jest-json', 'ava-tap', 'vitest-json'].includes(runner)) {
+  if (['mocha-json', 'jest-json', 'ava-tap', 'vitest-json', 'tap-json'].includes(runner)) {
     try {
       return {
         ...(result.summary ?? nodeRegressionReport(result, '', runner).summary),

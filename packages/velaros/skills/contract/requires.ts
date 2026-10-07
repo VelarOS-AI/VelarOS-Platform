@@ -1,4 +1,5 @@
 import type { ExclusiveSqliteLockApi } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
+import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { NodeCodeRunnerOptions, NodeRuntimePackage } from '@velaros-ai/script'
 import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 
@@ -24,6 +25,8 @@ export interface SkillRegistryOptions {
   readonly lock: ExclusiveSqliteLockApi
   /** 随产品发布、已经校验过的基础 npm 包。 */
   readonly packages?: readonly NodeRuntimePackage[]
+  /** 宿主提供的只读内置 Skill 包目录，身份不由安装清单决定。 */
+  readonly builtins?: readonly string[]
 }
 
 /** npm CLI 运行在应用自带 Node 上，安装权限和进程回收由宿主负责。 */
@@ -46,6 +49,8 @@ export interface SkillCapabilityModuleOptions {
   readonly lease: SkillEnvironmentLease
   /** 第三方代码使用同一受控 Node 执行口。 */
   readonly node: NodeCodeRunnerOptions
+  /** 宿主已绑定资源的能力；只装配租约授予的模块。 */
+  readonly hostModules?: Readonly<Record<string, OperationModuleDefinition>>
 }
 
 /** 模型管理模块的调用上下文；每轮固定租约，权限决策由宿主注入。 */

@@ -31,8 +31,10 @@ try {
 | --- | --- | --- |
 | `@velaros-ai/velaros/execution` | 可移植 | 宿主契约、命令风险分类与审批请求构造 |
 | `@velaros-ai/velaros/execution/contracts` | 可移植 | 进程、环境、终端数据与常量 |
-| `@velaros-ai/velaros/execution/local` | Node | `createLocalShellHost`、`createShellEnvironment`、`createConfinedShellRunner` |
+| `@velaros-ai/velaros/execution/local` | Node | `createLocalShellHost`、`createShellEnvironment`、`createConfinedShellRunner`、`createNpmClient` |
 
 执行授权发生在 Node 启动之前；操作系统权限覆盖该进程及其子进程。能力 RPC 另外使用领域授权。约束结果报告实际覆盖范围：macOS 文件写约束为 partial，缺少约束后端时拒绝启动。源码中的 Execa 调用遵循其原生 API。
 
 共享登录环境由应用创建并负责关闭，工作区宿主借用它。执行结束或取消时回收所属进程树；Windows 使用 Job Object，交互终端由 PTY 提供者管理。输出按字节接收后解码 UTF-8，并如实保留退出、截断和清理状态。
+
+`createNpmClient` 使用宿主提供的 Node、npm CLI、私有缓存和 ShellHostPort 查询 registry、安装或按锁文件恢复依赖；沿用宿主约束、输出、取消与进程树回收。Skill 安装和 agent 自管环境共用此执行机制。

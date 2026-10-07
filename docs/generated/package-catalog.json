@@ -77,6 +77,18 @@
     },
     {
       "domain": "foundations",
+      "directory": "packages/skill-jsts",
+      "name": "@velaros-ai/skill-jsts",
+      "version": "0.1.0",
+      "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
+      "exportSubpaths": [
+        "./SKILL.md",
+        "./package.json"
+      ],
+      "repositoryDirectory": "packages/skill-jsts"
+    },
+    {
+      "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
       "version": "0.6.0",

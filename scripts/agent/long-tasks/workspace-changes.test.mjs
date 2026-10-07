@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { promisify } from 'node:util'
 
 import { workspaceChanges } from './workspace-changes.mjs'
+import { preserveWorkspaceEvidence } from './workspace-evidence.mjs'
 
 test('task change accounting includes committed, staged, deleted and untracked artifacts', async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), 'long-task-changes-'))
@@ -53,6 +54,26 @@ test('task change accounting includes committed, staged, deleted and untracked a
   assert.equal(historical.changed, result.changed)
   assert.equal(historical.created, result.created)
   assert.equal(historical.changeAccounting.source, 'verified-historical-root')
+  const output = await mkdtemp(join(tmpdir(), 'long-task-evidence-'))
+  t.after(() => rm(output, { recursive: true, force: true }))
+  await write('new-source.ts', 'export const value = 1\n')
+  await write('new-binary.bin', Buffer.from([0, 1, 255]))
+  const evidence = await preserveWorkspaceEvidence(cwd, output, baseline)
+  assert(evidence.files.some((file) => file.path === 'new-source.ts'))
+  assert.deepEqual(
+    await readFile(join(output, 'source-evidence/files/new-binary.bin')),
+    Buffer.from([0, 1, 255])
+  )
+  const patch = await readFile(join(output, 'source-evidence/tracked.patch'), 'utf8')
+  for (const path of [
+    'committed.txt',
+    'staged.txt',
+    'working.txt',
+    'deleted.txt',
+    'new committed.txt',
+    'new staged.txt',
+  ])
+    assert(patch.includes(path))
   await git('checkout', '--orphan', 'unrelated')
   await git('commit', '-qm', 'Other repository')
   await assert.rejects(workspaceChanges(cwd), /Historical task root/u)

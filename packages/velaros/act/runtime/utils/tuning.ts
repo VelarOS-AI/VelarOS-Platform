@@ -4,6 +4,10 @@ export const ActRuntimeTuning = Object.freeze({
   frameMarkerChars: 8,
   /** 常驻能力索引的软字符配额；剩余完整目录从 modules.list 分页读取。 */
   moduleIndexChars: 4096,
+  /** 每帧能力、npm 与 Skill 引子的最大字符数，其余内容从完整目录按需读取。 */
+  inventoryChars: 12000,
+  /** 环境索引中每条用途或读取诊断的展示上限。 */
+  inventorySummaryChars: 180,
   /** 当前运行状态的目标字符上限；不可裁剪的事实超过它时明确报告。 */
   stateChars: 8192,
   /** 当前状态细节的软预算份额，必要事实仍由最终请求核对。 */

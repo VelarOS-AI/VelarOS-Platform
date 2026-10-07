@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { constants, createReadStream, realpathSync } from 'node:fs'
 import { cp, lstat, readFile, readdir, readlink } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 import { avaReport } from './ava-report.mjs'
@@ -26,7 +26,7 @@ export async function buildNodeProject(environment, workspace, node, env = proce
     }
     return await runCapturedCommand(node, [environment.build.entry, ...environment.build.args], {
       cwd: workspace,
-      env,
+      env: { ...env, PATH: join(workspace, 'node_modules/.bin') + delimiter + (env.PATH ?? '') },
       timeout: 180000,
       maxBuffer: 8_000_000,
     })
@@ -290,10 +290,42 @@ export function jestReport(result, workspace) {
 
 export function nodeRegressionReport(result, workspace, runner) {
   assert(
-    ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json'].includes(runner),
+    ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json', 'tap-json'].includes(runner),
     'Unknown Node regression reporter'
   )
   if (runner === 'ava-tap') return avaReport(result)
+  if (runner === 'tap-json') {
+    const report = JSON.parse(result.stdout)
+    assert.equal(report.schema, 'tap-regression-1')
+    assert.equal(report.complete, true, 'Incomplete TAP plan or worker crash')
+    assert(Array.isArray(report.cases) && report.cases.length > 0)
+    for (const item of report.cases) {
+      assert(typeof item.id === 'string' && item.id.startsWith('tap::'))
+      assert(Array.isArray(item.outcomes))
+      assert(item.outcomes.every((outcome) => ['failure', 'skipped'].includes(outcome.kind)))
+    }
+    assert(result.exitCode !== 0 || report.ok, 'TAP successful exit contradicts failures')
+    const failed = report.cases.filter((item) =>
+      item.outcomes.some((outcome) => outcome.kind === 'failure')
+    ).length
+    const skipped = report.cases.filter((item) =>
+      item.outcomes.some((outcome) => outcome.kind === 'skipped')
+    ).length
+    return {
+      cases: report.cases,
+      summary: {
+        exitCode: result.exitCode,
+        passed: report.cases.length - failed - skipped,
+        failed,
+        skipped,
+        errors: 0,
+        summary: `${report.cases.length} TAP assertions and subtests`,
+        failures: report.cases
+          .filter((item) => item.outcomes.some((outcome) => outcome.kind === 'failure'))
+          .map((item) => item.id),
+      },
+    }
+  }
   if (runner === 'vitest-json') return vitestReport(result)
   return runner === 'jest-json' ? jestReport(result, workspace) : mochaReport(result, workspace)
 }

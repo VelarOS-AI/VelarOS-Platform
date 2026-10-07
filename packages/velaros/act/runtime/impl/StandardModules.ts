@@ -21,6 +21,7 @@ import type { AgentsHost, WidgetHost } from '../../agents/contract/requires.js'
 import { agentsModule, interactionModule, widgetModule } from '../../agents/index.js'
 import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
 import { evidenceModule, searchModule } from '../../search/index.js'
+import type { EnvironmentRegistryApi } from '../../system/contract/provides.js'
 import type {
   ContextMaintenanceHost,
   LongTermMemoryHost,
@@ -43,6 +44,8 @@ import type { RuntimeSessionAccess } from './RuntimeSession.js'
 
 /** 标准模块的受控依赖。 */
 export interface StandardModulesHost extends ProgramsHost {
+  /** 与执行器共用的当前 agent npm 环境。 */
+  readonly packageEnvironment?: EnvironmentRegistryApi
   /** 实际子任务配置目录。 */
   readonly agentProfiles: AgentsHost['agentProfiles']
   /** 共享结构化状态端口，复用唯一持久存储。 */

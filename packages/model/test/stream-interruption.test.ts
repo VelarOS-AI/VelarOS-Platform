@@ -186,6 +186,48 @@ test('provider error diagnostics never stringify an unknown object', () => {
   )
 })
 
+test('INV-22 SDK response bodies expose server diagnostics without including request data', () => {
+  const failure = {
+    message: 'Too Many Requests',
+    responseBody: JSON.stringify({
+      error: { code: 'insufficient_quota', message: 'Account credits exhausted' },
+      request: { apiKey: 'fixture-secret' },
+    }),
+  }
+  expect(providerErrorMessage(failure)).toBe('Account credits exhausted')
+  for (const responseBody of [
+    '<html>gateway</html>',
+    '{broken',
+    JSON.stringify({ request: { message: 'fixture-secret' } }),
+    ' '.repeat(65_537),
+  ])
+    expect(providerErrorMessage({ message: 'Gateway failure', responseBody })).toBe(
+      'Gateway failure'
+    )
+})
+
+test('INV-22 actual SDK rejection preserves a permanent body error and does not request a retry', async () => {
+  const model = createOpenAI({
+    apiKey: 'fixture-only',
+    fetch: async () =>
+      new Response(
+        JSON.stringify({
+          error: { type: 'insufficient_quota', message: 'Account credits exhausted' },
+        }),
+        { status: 429, headers: { 'content-type': 'application/json' } }
+      ),
+  })('fixture')
+  const driver = createAiSdkModelDriver({
+    id: 'openai/fixture',
+    model,
+    limits: { contextTokens: 32000, inputTokens: 30000, outputTokens: 1000 },
+  })
+  const events: ModelTurnDelta[] = []
+  for await (const event of driver.stream(request, new AbortController().signal)) events.push(event)
+  expect(events.at(-1)).toMatchObject({ type: 'error', message: 'Account credits exhausted' })
+  expect(events.at(-1)).not.toHaveProperty('retryAfterMs')
+})
+
 test('INV-19 a completed response succeeds once while explicit incomplete reasons remain distinct from missing terminal', async () => {
   for (const [type, reason, finish] of [
     ['response.completed', undefined, 'stop'],

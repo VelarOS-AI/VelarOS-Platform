@@ -323,6 +323,7 @@ class ComposedRuntime implements VelarosRuntime {
       },
       modules: [
         ...standardModules.create({
+          packageEnvironment: this.options.packageEnvironment || undefined,
           agentProfiles: () =>
             Object.entries(options.agents?.profiles ?? {}).map(([name, profile]) => ({
               name,

@@ -22,7 +22,70 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
     options: SkillCapabilityModuleOptions
   ): Promise<readonly OperationModuleDefinition[]> {
     const modules: OperationModuleDefinition[] = []
+    const mountedHosts = new Set<string>()
     for (const skill of options.lease.skills) {
+      for (const name of skill.manifest.contribution.hostCapabilities ?? []) {
+        if (
+          !skill.grants.includes(name) ||
+          name.startsWith('project:language:') ||
+          mountedHosts.has(name)
+        )
+          continue
+        mountedHosts.add(name)
+        const owners = options.lease.skills.filter((owner) => owner.grants.includes(name))
+        const host = options.hostModules?.[name]
+        if (!host || host.binding.moduleId !== name)
+          throw new AppError('UNAVAILABLE', `Skill 需要的宿主能力未绑定：${name}`)
+        const authorize = async (): Promise<void> => {
+          const grants = await Promise.allSettled(
+            owners.map((owner) =>
+              options.registry.assertGranted(owner.manifest.name, owner.generation, name)
+            )
+          )
+          if (!grants.some((grant) => grant.status === 'fulfilled'))
+            throw new AppError('PERMISSION', `Skill 能力授权已失效：${name}`)
+        }
+        const operations: Record<string, OperationDefinition> = Object.create(null)
+        for (const [operation, definition] of Object.entries(host.operations)) {
+          operations[operation] = {
+            ...definition,
+            prepare: definition.prepare
+              ? async (input, context) => {
+                  await authorize()
+                  return definition.prepare!(input, context)
+                }
+              : undefined,
+            observe: definition.observe
+              ? async (input, context) => {
+                  try {
+                    await authorize()
+                  } catch (error) {
+                    context.recordEffect('none')
+                    throw error
+                  }
+                  return definition.observe!(input, context)
+                }
+              : undefined,
+            reconcile: definition.reconcile
+              ? async (invocation, signal) => {
+                  await authorize()
+                  return definition.reconcile!(invocation, signal)
+                }
+              : undefined,
+            run: async (input, context) => {
+              try {
+                await authorize()
+              } catch (error) {
+                context.recordEffect('none')
+                throw error
+              }
+              return definition.run(input, context)
+            },
+          }
+        }
+        modules.push({ ...host, operations })
+      }
+
       for (const capability of skill.manifest.contribution.capabilities) {
         if (!skill.grants.includes(capability.module)) continue
         const entry = await containedSkillPath(

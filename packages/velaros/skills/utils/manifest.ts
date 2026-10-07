@@ -38,6 +38,10 @@ const Path = z.string().refine(isSkillRelativePath)
 const Contribution = z
   .object({
     instructions: Path.optional(),
+    hostCapabilities: z
+      .array(z.string().regex(/^(?:velaros:[a-z][a-z0-9-]*|project:language:[a-z][a-z0-9-]*)$/u))
+      .max(SkillLimits.capabilities)
+      .optional(),
     packages: z.array(Name).max(SkillLimits.packages).default([]),
     capabilities: z
       .array(
@@ -173,10 +177,13 @@ export function parseSkillManifest(value: unknown): SkillManifest {
   if (
     !contribution.instructions &&
     isEmpty(contribution.packages) &&
-    isEmpty(contribution.capabilities)
+    isEmpty(contribution.capabilities) &&
+    isEmpty(contribution.hostCapabilities ?? [])
   )
     throw new AppError('VALIDATION', 'Skill 需要提供说明、标准依赖或宿主能力')
   if (
+    new Set(contribution.hostCapabilities ?? []).size !==
+      (contribution.hostCapabilities ?? []).length ||
     new Set(contribution.packages).size !== contribution.packages.length ||
     new Set(contribution.capabilities.map((capability) => capability.module)).size !==
       contribution.capabilities.length
@@ -201,7 +208,8 @@ export function checkSkillGrants(manifest: SkillManifest, grants: readonly strin
     new Set(grants).size !== grants.length ||
     grants.some(
       (module) =>
-        !manifest.contribution.capabilities.some((capability) => capability.module === module)
+        !manifest.contribution.capabilities.some((capability) => capability.module === module) &&
+        !(manifest.contribution.hostCapabilities ?? []).includes(module)
     )
   )
     throw new AppError('VALIDATION', 'Skill 授权包含未知或重复的能力')

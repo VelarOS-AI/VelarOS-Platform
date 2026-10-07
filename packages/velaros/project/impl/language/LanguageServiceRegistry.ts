@@ -13,8 +13,7 @@ import { pythonLanguageService } from './PythonLanguageService.js'
 /**
  * 内置语言服务的登记处：装着哪几个语言服务，以及「这次查询该由谁来答」。
  *
- * 实例是 `languageServiceRegistry`，构造时就装好两个内置服务——注册不再是 import 时的副作用，
- * `src` 下没有一个文件光被 import 就会改变进程状态。
+ * 每轮实例按所选语言 Skill 固定服务集合；SDK 默认实例 `languageServiceRegistry` 提供全部内置服务。
  */
 export interface LanguageServiceRegistryApi {
   /** 列出全部已装的语言服务。 */
@@ -46,11 +45,17 @@ export interface LanguageServiceRegistryApi {
 }
 
 /** 内置语言服务的登记处，见接口说明。 */
-class LanguageServiceRegistry implements LanguageServiceRegistryApi {
-  private readonly services: readonly LanguageNavigationService[] = [
-    jsTsLanguageService,
-    pythonLanguageService,
-  ]
+export class LanguageServiceRegistry implements LanguageServiceRegistryApi {
+  private readonly services: readonly LanguageNavigationService[]
+
+  public constructor(languages?: readonly string[]) {
+    const available = [jsTsLanguageService, pythonLanguageService]
+    if (languages?.some((id) => !available.some((service) => service.id === id)))
+      throw new AppError('UNAVAILABLE', '所选语言 Skill 的宿主服务不可用')
+    this.services = languages
+      ? available.filter((service) => languages.includes(service.id))
+      : available
+  }
 
   public listServices(): LanguageNavigationService[] {
     return [...this.services]
@@ -100,5 +105,5 @@ class LanguageServiceRegistry implements LanguageServiceRegistryApi {
   }
 }
 
-/** 进程内唯一的一份登记处。 */
+/** SDK 默认登记处；会话组合使用各自的实例。 */
 export const languageServiceRegistry: LanguageServiceRegistryApi = new LanguageServiceRegistry()

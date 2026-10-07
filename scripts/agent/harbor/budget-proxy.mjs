@@ -168,6 +168,8 @@ export class BudgetLedger {
       pricingRef = 'openai-standard-2026-09-28',
       reasoningEffort = null,
       pricingBasis,
+      maxRequestsPerAttempt = null,
+      perAttemptBudgetUsd = null,
     } = {}
   ) {
     if (limitUsd === 'unlimited') limitUsd = null
@@ -198,6 +200,18 @@ export class BudgetLedger {
       })
     }
     this.reasoningEffort = reasoningEffort
+    if (
+      maxRequestsPerAttempt !== null &&
+      (!Number.isSafeInteger(maxRequestsPerAttempt) || maxRequestsPerAttempt < 1)
+    )
+      throw new Error('Request limit must be a positive integer')
+    this.maxRequestsPerAttempt = maxRequestsPerAttempt
+    if (
+      perAttemptBudgetUsd !== null &&
+      (!Number.isFinite(perAttemptBudgetUsd) || perAttemptBudgetUsd <= 0)
+    )
+      throw new Error('Per-attempt budget must be positive')
+    this.perAttemptBudgetUsd = perAttemptBudgetUsd
     this.model = model
     this.pricing = Object.freeze({ ...pricing })
     this.pricingRef = pricingRef
@@ -215,7 +229,14 @@ export class BudgetLedger {
     this.fd = openSync(this.lock, 'wx', 0o600)
     this.state = existsSync(this.path)
       ? JSON.parse(readFileSync(this.path, 'utf8'))
-      : { schema: 2, limitUsd, requests: [] }
+      : { schema: 2, limitUsd, maxRequestsPerAttempt, perAttemptBudgetUsd, requests: [] }
+    if (
+      (this.state.maxRequestsPerAttempt ?? null) !== maxRequestsPerAttempt ||
+      (this.state.perAttemptBudgetUsd ?? null) !== perAttemptBudgetUsd
+    ) {
+      this.close()
+      throw new Error('Existing per-attempt limits differ; use a new ledger directory')
+    }
     if (this.state.limitUsd !== limitUsd) {
       if (!allowLimitChange) {
         this.close()
@@ -247,6 +268,8 @@ export class BudgetLedger {
       reasoningEffort,
       pricing: this.pricing,
       pricingRef,
+      maxRequestsPerAttempt,
+      perAttemptBudgetUsd,
       ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
       budgetMode: limitUsd === null ? 'unlimited' : 'limited',
     })
@@ -295,6 +318,22 @@ export class BudgetLedger {
       this.summary().committedUpperUsd + this.reservationUsd > this.state.limitUsd
     )
       throw Object.assign(new Error('Campaign budget has insufficient unreserved funds'), {
+        code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+      })
+    if (
+      this.maxRequestsPerAttempt !== null &&
+      this.state.requests.filter((item) => item.identity?.attemptId === identity?.attemptId)
+        .length >= this.maxRequestsPerAttempt
+    )
+      throw Object.assign(new Error('Attempt reached its frozen request limit'), {
+        code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+      })
+    if (
+      this.perAttemptBudgetUsd !== null &&
+      (!identity ||
+        this.summary(identity).committedUpperUsd + this.reservationUsd > this.perAttemptBudgetUsd)
+    )
+      throw Object.assign(new Error('Attempt reached its frozen cost reservation limit'), {
         code: 'CAMPAIGN_BUDGET_EXHAUSTED',
       })
     const item = {
@@ -798,9 +837,11 @@ export function budgetServer({
           : 502
         : authenticationBlocked
           ? 403
-          : exhausted || overloaded
-            ? 429
-            : 400
+          : exhausted
+            ? 402
+            : overloaded
+              ? 429
+              : 400
       // 已发送 200/SSE 后，普通 JSON 尾巴会被 SSE 客户端忽略并伪装成正常 EOF。
       if (res.headersSent) {
         responseInterruptedByGateway = true

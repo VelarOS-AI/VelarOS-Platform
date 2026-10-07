@@ -10,6 +10,8 @@ export interface SkillContribution {
   readonly instructions?: string
   readonly packages: readonly string[]
   readonly capabilities: readonly SkillCapability[]
+  /** 由宿主绑定的能力或扩展身份；声明本身不授予权限。 */
+  readonly hostCapabilities?: readonly string[]
 }
 
 /** @AgentView 静态校验后的包信息。 */
@@ -28,6 +30,8 @@ export interface SkillRecord {
   readonly generation: string
   readonly directory: string
   readonly installedAt: string
+  /** 随产品提供，只通过产品更新替换。 */
+  readonly builtin?: boolean
 }
 
 /** @AgentView 安装本地目录到本机库，默认关闭依赖脚本。 */
@@ -50,6 +54,8 @@ export interface SkillGuide {
 
 /** @AgentView 已安装 Skill 的发现信息。available 表示当前轮次可加载这个版本。 */
 export interface SkillSummary {
+  /** 随产品提供，版本由产品更新管理。 */
+  readonly builtin?: boolean
   readonly name: string
   readonly version: string
   readonly description: string

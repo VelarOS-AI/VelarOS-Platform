@@ -19,7 +19,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { NodeExecutionLimits, ScriptOutputLimits } from '../contract/constants.js'
-import type { CodeRunnerApi, NodeCodeRunnerOptions } from '../contract/requires.js'
+import type {
+  CodeRunnerApi,
+  NodeCodeRunnerOptions,
+  NodeRuntimeLease,
+} from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
 import {
@@ -62,6 +66,9 @@ class NodeCodeRunner implements CodeRunnerApi {
     const cancel = () => controller.abort(signal?.reason)
     signal?.addEventListener('abort', cancel, { once: true })
     let directory: string | undefined
+    let runtimeLease: NodeRuntimeLease | undefined
+    let processStarted = false
+    let processSettled = false
     let socketDirectory: string | undefined
     let log: number | undefined
     let logBytes = 0
@@ -274,6 +281,7 @@ class NodeCodeRunner implements CodeRunnerApi {
     server.maxConnections = 64
     try {
       controller.signal.throwIfAborted()
+      runtimeLease = await this.options.acquireRuntime?.(controller.signal)
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
       directory = await realpath(await mkdtemp(join(this.options.directory, 'node-')))
       const catalog = join(directory, 'host')
@@ -335,22 +343,24 @@ class NodeCodeRunner implements CodeRunnerApi {
       await writeFile(
         join(catalog, 'index.json'),
         stringifyPretty({
-          environment: this.options.runtime?.id ?? 'base',
+          environment: runtimeLease?.environment.id ?? this.options.runtime?.id ?? 'base',
           importer: resolve(this.options.cwd, request.path ?? '__velaros_program__.mjs'),
           packages: nodeRuntimePackages.references([
             ...new Map(
               [
                 ...nodeRuntimePackages.defaults(this.options.packageDirectory),
-                ...(this.options.runtime?.packages ?? []),
+                ...(runtimeLease?.environment.packages ?? this.options.runtime?.packages ?? []),
               ].map((pkg) => [pkg.name, pkg])
             ).values(),
           ]),
-          skills: (this.options.runtime?.skills ?? []).map((skill) => ({
-            ...skill,
-            capabilities: skill.capabilities.filter((module) =>
-              Object.hasOwn(request.operations, module)
-            ),
-          })),
+          skills: (runtimeLease?.environment.skills ?? this.options.runtime?.skills ?? []).map(
+            (skill) => ({
+              ...skill,
+              capabilities: skill.capabilities.filter((module) =>
+                Object.hasOwn(request.operations, module)
+              ),
+            })
+          ),
           capabilities: index,
         }),
         { mode: 0o600 }
@@ -381,9 +391,10 @@ class NodeCodeRunner implements CodeRunnerApi {
         this.options.cwd,
         clients,
         this.options.packageDirectory,
-        this.options.runtime
+        runtimeLease?.environment ?? this.options.runtime
       )
       const processRequest = {
+        binDirectories: runtimeLease?.binDirectories,
         source: request.source,
         language: request.language,
         mode: request.mode,
@@ -403,6 +414,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       await this.options.authorize?.(processRequest, controller.signal)
       controller.signal.throwIfAborted()
       arm()
+      processStarted = true
       const result = await this.options.execute(
         processRequest,
         (text) => {
@@ -424,6 +436,7 @@ class NodeCodeRunner implements CodeRunnerApi {
         },
         controller.signal
       )
+      processSettled = !result.cleanupIncomplete
       try {
         await collectOutput()
       } catch (error) {
@@ -501,6 +514,14 @@ class NodeCodeRunner implements CodeRunnerApi {
       if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()))
       if (!isUndefined(log)) closeSync(log)
       if (socketDirectory) await rm(socketDirectory, { recursive: true, force: true })
+      if (runtimeLease) {
+        try {
+          if (!processStarted || processSettled) await runtimeLease.release()
+          else await runtimeLease.retain?.()
+        } catch (error) {
+          Log.tag('NodeCodeRunner').caught('依赖环境租约保留，等待后续回收', error)
+        }
+      }
     }
   }
 }

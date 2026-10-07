@@ -11,6 +11,7 @@ const Destination = fileURLToPath(new URL('../../packages/velaros/act/README.md'
 
 /** 每种合同投影什么时候挂上：由宿主配置、会话作用域与授权决定。 */
 const Activation = Object.freeze({
+  'system-environment': '宿主绑定持久 npm 环境，沿用会话权限',
   'system-goal': '主会话',
   modules: '默认装配',
   programs: '具备当前会话程序目录',

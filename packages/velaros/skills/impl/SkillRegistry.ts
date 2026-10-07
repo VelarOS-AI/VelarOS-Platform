@@ -37,6 +37,7 @@ import {
 } from '../utils/manifest.js'
 import { skillInventory } from '../utils/package-io.js'
 
+import { BuiltinSkills } from './BuiltinSkills.js'
 import { SkillPackageFiles } from './SkillPackageFiles.js'
 
 /** Skill 安装、授权和不可变环境的唯一所有者。 */
@@ -63,6 +64,7 @@ export interface SkillRegistryApi {
 class SkillRegistry implements SkillRegistryApi {
   private readonly files = new SkillPackageFiles()
   private readonly queue = createKeyedSerialQueue()
+  private readonly builtins: BuiltinSkills
   private readonly root: string
   private readonly listeners = new Set<() => void>()
   private readonly log = Log.tag('SkillRegistry')
@@ -70,10 +72,19 @@ class SkillRegistry implements SkillRegistryApi {
   public constructor(private readonly options: SkillRegistryOptions) {
     if (!isAbsolute(options.directory)) throw new AppError('VALIDATION', 'Skill 存储需要绝对目录')
     this.root = resolve(options.directory)
+    this.builtins = new BuiltinSkills(options.builtins ?? [], options.nodeVersion)
   }
 
   public async list(): Promise<readonly SkillRecord[]> {
-    return (await this.readIndex()).skills
+    const builtins = await this.builtins.list()
+    const installed = (await this.readIndex()).skills
+    if (
+      installed.some((item) =>
+        builtins.some((builtin) => builtin.manifest.name === item.manifest.name)
+      )
+    )
+      throw new AppError('CONFLICT', '安装库与内置 Skill 身份冲突')
+    return [...builtins, ...installed]
   }
 
   public async validate(directory: string, signal: AbortSignal): Promise<SkillManifest> {
@@ -102,6 +113,8 @@ class SkillRegistry implements SkillRegistryApi {
       const directory = join(staging, 'package')
       await this.files.copy(request.directory, directory, signal)
       const manifest = await this.files.manifest(directory, this.options.nodeVersion, true)
+      if ((await this.builtins.list()).some((item) => item.manifest.name === manifest.name))
+        throw new AppError('PERMISSION', '内置 Skill 由产品更新管理')
       if (!isEmpty(Object.keys(manifest.dependencies)))
         await this.options.installer.install(
           directory,
@@ -148,6 +161,8 @@ class SkillRegistry implements SkillRegistryApi {
   }
 
   public async remove(name: string): Promise<void> {
+    if ((await this.builtins.list()).some((item) => item.manifest.name === name))
+      throw new AppError('PERMISSION', '内置 Skill 由产品更新管理')
     await this.locked(async () => {
       const index = await this.readIndex()
       if (!index.skills.some((skill) => skill.manifest.name === name))
@@ -162,13 +177,13 @@ class SkillRegistry implements SkillRegistryApi {
 
   public async acquire(selection: readonly SkillSelection[] = []): Promise<SkillEnvironmentLease> {
     return this.locked(async () => {
-      const index = await this.readIndex()
+      const records = await this.list()
       if (selection.length > SkillLimits.selection)
         throw new AppError('LIMIT', '本轮选择的 Skill 数量超过上限')
       if (new Set(selection.map((item) => item.name)).size !== selection.length)
         throw new AppError('VALIDATION', 'Skill 选择包含重复名称')
       const skills: SkillActivation[] = selection.map((item) => {
-        const record = index.skills.find((skill) => skill.manifest.name === item.name)
+        const record = records.find((skill) => skill.manifest.name === item.name)
         if (!record) throw new AppError('NOT_FOUND', `Skill 未安装：${item.name}`)
         if (record.generation !== item.generation)
           throw new AppError('CONFLICT', `Skill 已升级，请重新选择：${item.name}`)
@@ -176,6 +191,7 @@ class SkillRegistry implements SkillRegistryApi {
         return { ...record, grants: [...item.grants] }
       })
       for (const skill of skills) {
+        if (skill.builtin) continue
         const receipt = parseSkillReceipt(
           JSON.parse(await readFile(join(dirname(skill.directory), 'receipt.json'), 'utf8'))
         )
@@ -248,11 +264,12 @@ class SkillRegistry implements SkillRegistryApi {
   }
 
   public async assertGranted(name: string, generation: string, module: string): Promise<void> {
-    const current = (await this.readIndex()).skills.find((skill) => skill.manifest.name === name)
+    const current = (await this.list()).find((skill) => skill.manifest.name === name)
     if (
       !current ||
       current.generation !== generation ||
-      !current.manifest.contribution.capabilities.some((item) => item.module === module)
+      (!current.manifest.contribution.capabilities.some((item) => item.module === module) &&
+        !(current.manifest.contribution.hostCapabilities ?? []).includes(module))
     )
       throw new AppError('PERMISSION', `Skill 能力授权已失效：${module}`)
   }
@@ -314,11 +331,12 @@ class SkillRegistry implements SkillRegistryApi {
       })
     for (const skill of skills) {
       for (const module of skill.grants) {
+        if ((skill.manifest.contribution.hostCapabilities ?? []).includes(module)) continue
         if (capabilities.has(module)) throw new AppError('CONFLICT', `Skill 能力名冲突：${module}`)
         capabilities.add(module)
       }
       for (const name of skill.manifest.contribution.packages) {
-        const pkg = await this.files.packagePath(skill.directory, name)
+        const pkg = await this.files.packagePath(skill.directory, name, !skill.builtin)
         const previous = packages.get(name)
         if (previous) {
           if (

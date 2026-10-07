@@ -19,3 +19,9 @@ export const SkillLimits = Object.freeze({
   /** 单次外部能力调用的最长执行时间。 */
   providerTimeoutMs: 60_000,
 })
+
+/** 工作区组合引用同一套内置 Skill 身份。 */
+export const BuiltinSkillNames = Object.freeze({
+  browser: '@velaros-ai/skill-browser',
+  jsts: '@velaros-ai/skill-jsts',
+})

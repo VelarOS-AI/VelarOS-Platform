@@ -1,3 +1,5 @@
+export type { EnvironmentModuleApi } from '../impl/EnvironmentModule.js'
+export type { EnvironmentRegistryApi } from '../impl/EnvironmentRegistry.js'
 export type { MemoryModuleApi } from '../impl/MemoryModule.js'
 export type { ModulesModuleApi } from '../impl/ModulesModule.js'
 export type { ProgramsModuleApi } from '../impl/ProgramsModule.js'

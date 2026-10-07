@@ -45,13 +45,17 @@ export function skillSummary(
   record: SkillRecord,
   selected: readonly SkillActivation[]
 ): SkillSummary {
-  return {
+  const summary: SkillSummary = {
     name: record.manifest.name,
     version: record.manifest.version,
     description: record.manifest.description,
     available: selected.some((item) => item.generation === record.generation),
     packages: record.manifest.contribution.packages,
-    capabilities: record.manifest.contribution.capabilities.map((item) => item.module),
+    capabilities: [
+      ...record.manifest.contribution.capabilities.map((item) => item.module),
+      ...(record.manifest.contribution.hostCapabilities ?? []),
+    ],
     grants: selected.find((item) => item.generation === record.generation)?.grants ?? [],
   }
+  return record.builtin ? { ...summary, builtin: true } : summary
 }

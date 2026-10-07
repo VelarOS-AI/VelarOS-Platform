@@ -25,7 +25,7 @@ export type {
   CodeSurfaceEventSink,
 } from './contract/requires.js'
 export type { KernelScriptSessionOptions } from './contract/requires.js'
-export type { NodeCodeRunnerOptions } from './contract/requires.js'
+export type { NodeCodeRunnerOptions, NodeRuntimeLease } from './contract/requires.js'
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
 export { codeProgramChecker } from './impl/CodeProgramChecker.js'

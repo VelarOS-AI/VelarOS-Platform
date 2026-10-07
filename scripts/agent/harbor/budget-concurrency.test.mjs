@@ -23,6 +23,58 @@ const usage = {
   output_tokens: 10,
   input_tokens_details: { cached_tokens: 20, cache_write_tokens: 0 },
 }
+
+test('frozen request caps apply independently to each participant and count missing usage across restart', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gateway-request-cap-'))
+  try {
+    const ledger = new BudgetLedger(directory, 'unlimited', { maxRequestsPerAttempt: 1 })
+    ledger.reserve({}, identity('scriptact'))
+    ledger.reserve({}, identity('codex'))
+    assert.throws(() => ledger.reserve({}, identity('scriptact')), {
+      code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+    })
+    ledger.close()
+    assert.throws(() => new BudgetLedger(directory, 'unlimited'), /per-attempt limits differ/)
+    assert.throws(
+      () => new BudgetLedger(directory, 'unlimited', { maxRequestsPerAttempt: 2 }),
+      /per-attempt limits differ/
+    )
+    const reopened = new BudgetLedger(directory, 'unlimited', { maxRequestsPerAttempt: 1 })
+    assert.throws(() => reopened.reserve({}, identity('codex')), {
+      code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+    })
+    assert.equal(reopened.state.requests.length, 2)
+    reopened.close()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+test('one participant exhausting its reservation allowance leaves the other allowance available', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gateway-participant-budget-'))
+  try {
+    const ledger = new BudgetLedger(directory, 80, { perAttemptBudgetUsd: 40 })
+    ledger.reserve({}, identity('scriptact'))
+    ledger.reserve({}, identity('scriptact'))
+    assert.throws(() => ledger.reserve({}, identity('scriptact')), {
+      code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+    })
+    ledger.reserve({}, identity('codex'))
+    ledger.reserve({}, identity('codex'))
+    assert.equal(ledger.summary(identity('codex')).requests, 2)
+    ledger.close()
+    assert.throws(
+      () => new BudgetLedger(directory, 80, { perAttemptBudgetUsd: 80 }),
+      /per-attempt limits differ/
+    )
+    const reopened = new BudgetLedger(directory, 80, { perAttemptBudgetUsd: 40 })
+    assert.throws(() => reopened.reserve({}, identity('codex')), {
+      code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+    })
+    reopened.close()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 async function until(check) {
   const deadline = Date.now() + 3000
   while (!(await check())) {

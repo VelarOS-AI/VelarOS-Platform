@@ -24,3 +24,5 @@
 | INV-20 | 声明里写给模型的上限与常量表一致，入参核对引用同一份常量 | 测试 | spec/acceptance.test.mjs |
 | INV-21 | 参数化程序的 publish/list/describe 合同、效果与模板同源；发布只检查和归档，执行复用正式 sourceRef 链 | 测试 | spec/acceptance.test.mjs |
 | INV-22 | 真实值导出与正文版本按授权发现；指定操作默认不重复整模块模板，多导出共享依赖闭包与模块共同规则，查询不执行业务 | 测试 | spec/runtime.test.mjs |
+
+| INV-23 | npm 环境由宿主绑定持久作用域；查询、变更、回滚合同由 TS 生成；真实 npm 安装、锁文件、版本 CAS、原子发布和进程租约保证后续执行使用新版本、旧执行保持快照；失败与取消保留当前环境，回收不完整保留候选；支持 ESM/CJS、子路径、间接依赖、alias、CLI、重启与历史回收 | 测试 | spec/environment.test.mjs |

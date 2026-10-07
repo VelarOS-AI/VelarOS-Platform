@@ -31,7 +31,8 @@
       "foundations": [
         "script",
         "velaros",
-        "context"
+        "context",
+        "skill-jsts"
       ],
       "model": [
         "model"

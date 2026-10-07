@@ -4,6 +4,7 @@ import type { SystemHost } from '../contract/requires.js'
 import { isSystemMember } from '../utils/members.js'
 
 import { contextModule } from './ContextModule.js'
+import { environmentModule } from './EnvironmentModule.js'
 import { goalModule } from './GoalModule.js'
 import { memoryModule } from './MemoryModule.js'
 import { modulesModule } from './ModulesModule.js'
@@ -21,6 +22,7 @@ export interface SystemModulesApi {
 class SystemModules implements SystemModulesApi {
   public create(host: SystemHost): readonly OperationModuleDefinition[] {
     return [
+      ...(host.packageEnvironment ? [environmentModule.create(host.packageEnvironment)] : []),
       ...(host.stores
         ? [
             storeModule.create(host.stores),

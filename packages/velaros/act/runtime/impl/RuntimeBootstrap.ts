@@ -36,8 +36,10 @@ import {
   createProjectKernel,
   createProjectObservationProvider,
 } from '../../../project/index.js'
+import { skillCapabilityModules } from '../../../skills/index.js'
 import type { VelarosSearchOptions } from '../../search/index.js'
 import { SystemCatalogLimits } from '../../system/contract/constants.js'
+import { createEnvironmentRegistry } from '../../system/impl/EnvironmentRegistry.js'
 import {
   ModelToolLimits,
   RuntimeModelLimits,
@@ -49,6 +51,7 @@ import type {
   VelarosProjectOptions,
   VelarosRuntimeOptions,
 } from '../contract/requires.js'
+import { withPackageEnvironment } from '../utils/package-environment.js'
 
 import { createNodeExecutionEnvironment } from './NodeExecutionEnvironment.js'
 import {
@@ -94,6 +97,8 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
 
   public async prepare(options: VelarosRuntimeOptions): Promise<RuntimeBootstrapOptions> {
     const modules = [...(options.modules ?? [])]
+    const projectEnabled = !isFalse(options.project)
+    const extras: VelarosProjectOptions = isPlainObject(options.project) ? options.project : {}
     const sources = [...(options.context?.sources ?? [])]
     const snapshots = [...(options.context?.snapshots ?? [])]
     if (
@@ -144,7 +149,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       if (!(await stat(workspace)).isDirectory())
         throw new AppError('VALIDATION', 'workspace 必须是已有目录')
       if (
-        !isFalse(options.project) &&
+        projectEnabled &&
         (modules.some((module) => module.binding.moduleId === 'velaros:project') ||
           sources.some((source) => source.id === 'project'))
       )
@@ -170,7 +175,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
     }
     if (!options.storage && !dataDir)
       throw new AppError('VALIDATION', '需要 dataDir 保存运行状态，或注入 ContextStorage')
-    if (workspace && !isFalse(options.project)) {
+    if (workspace && (projectEnabled || isTrue(extras.images))) {
       const root = workspace
       const transactionStatePath = dataDir
         ? join(
@@ -181,7 +186,6 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
           )
         : undefined
       const kernel = await createProjectKernel({ root, transactionStatePath })
-      const extras: VelarosProjectOptions = isPlainObject(options.project) ? options.project : {}
       const code = extras.code
       const codeIndex =
         isUndefined(code) || isBoolean(code)
@@ -189,17 +193,56 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             ? RuntimeBootstrap.NoCodeGraph
             : undefined
           : code
+      const languageOwners =
+        options.skills?.lease.skills.filter((skill) =>
+          skill.grants.some((name) => name.startsWith('project:language:'))
+        ) ?? []
+      const query = codeIndex
+        ? createProjectCodeQuery(
+            codeIndex,
+            options.skills
+              ? languageOwners.flatMap((skill) =>
+                  skill.grants
+                    .filter((name) => name.startsWith('project:language:'))
+                    .map((name) => name.slice('project:language:'.length))
+                )
+              : undefined
+          )
+        : undefined
       const project: ProjectSpacePort = {
         getRootPath: () => root,
         kernel: async () => kernel,
-        queryCode: codeIndex
-          ? createProjectCodeQuery(codeIndex)
-          : async () => {
-              throw new AppError('UNAVAILABLE', '此项目没有装配代码智能端口')
-            },
+        queryCode: async (input, context) => {
+          if (!query) throw new AppError('UNAVAILABLE', '此项目没有装配代码智能端口')
+          const languageGrants = new Set(
+            languageOwners.flatMap((skill) =>
+              skill.grants.filter((name) => name.startsWith('project:language:'))
+            )
+          )
+          for (const grant of languageGrants) {
+            const checks = await Promise.allSettled(
+              languageOwners
+                .filter((skill) => skill.grants.includes(grant))
+                .map((skill) =>
+                  options.skills!.registry.assertGranted(
+                    skill.manifest.name,
+                    skill.generation,
+                    grant
+                  )
+                )
+            )
+            if (!checks.some((check) => check.status === 'fulfilled'))
+              throw new AppError('PERMISSION', `语言 Skill 授权已失效：${grant}`)
+          }
+          return query(input, context)
+        },
       }
-      modules.push(createProjectCapabilityModule({ instanceId: root, project }))
-      if (codeIndex) modules.push(createProjectCodeModule({ instanceId: root, project }))
+      if (projectEnabled) {
+        modules.push(createProjectCapabilityModule({ instanceId: root, project }))
+        if (codeIndex) modules.push(createProjectCodeModule({ instanceId: root, project }))
+        sources.push(createProjectContextSource({ id: 'project', kernel }))
+        snapshots.push(createProjectObservationProvider())
+      }
       if (isTrue(extras.images))
         modules.push(
           createProjectImagesModule({
@@ -209,8 +252,15 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             resizeImage: createLocalImagePort({ resolvePath: (path) => path }).resizeImage,
           })
         )
-      sources.push(createProjectContextSource({ id: 'project', kernel }))
-      snapshots.push(createProjectObservationProvider())
+    }
+    if (options.skills) {
+      if (!options.node) throw new AppError('UNAVAILABLE', 'Skill 环境需要标准 Node 执行口')
+      modules.push(
+        ...(await skillCapabilityModules.create({
+          ...options.skills,
+          node: options.node,
+        }))
+      )
     }
     if (new Set(snapshots.map((provider) => provider.id)).size !== snapshots.length)
       throw new AppError('VALIDATION', '纯快照提供者身份不能重复')
@@ -247,7 +297,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         limits,
       })
     }
-    const node =
+    const baseNode =
       options.node ??
       (!options.runner
         ? createNodeExecutionEnvironment({
@@ -256,6 +306,31 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
           })
         : undefined)
+    const packageEnvironment = isFalse(options.packageEnvironment)
+      ? undefined
+      : (options.packageEnvironment ??
+        (baseNode?.npm && dataDir
+          ? createEnvironmentRegistry({
+              directory: join(dataDir, 'environments', 'default'),
+              npm: baseNode.npm,
+              reservedPackages: baseNode.runtime?.packages.map((pkg) => pkg.name),
+            })
+          : undefined))
+    if (packageEnvironment && !baseNode)
+      throw new AppError('VALIDATION', '持久 npm 环境需要标准 Node 执行口')
+    if (packageEnvironment && workspace) {
+      const path = relative(workspace, packageEnvironment.directory)
+      if (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path))
+        throw new AppError('VALIDATION', 'npm 环境必须位于业务工作区之外')
+      await mkdir(packageEnvironment.directory, { recursive: true, mode: 0o700 })
+      const actual = relative(workspace, await realpath(packageEnvironment.directory))
+      if (!actual.startsWith(`..${sep}`) && actual !== '..' && !isAbsolute(actual))
+        throw new AppError('VALIDATION', 'npm 环境真实路径必须位于业务工作区之外')
+    }
+    const node =
+      baseNode && packageEnvironment
+        ? withPackageEnvironment(baseNode, packageEnvironment)
+        : baseNode
     const observationNode =
       node ??
       (options.runner === nodeSubprocessCodeRunner
@@ -331,12 +406,15 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       model,
       modules,
       node,
+      packageEnvironment,
       runner: observationNode
         ? createNodeCodeRunner({
             cwd: observationNode.cwd,
             directory: observationNode.directory,
             packageDirectory: observationNode.packageDirectory,
             runtime: observationNode.runtime,
+            acquireRuntime:
+              'acquireRuntime' in observationNode ? observationNode.acquireRuntime : undefined,
             execute: (request, output, signal) =>
               observationNode.execute({ ...request, mode: 'observe' }, output, signal),
           })

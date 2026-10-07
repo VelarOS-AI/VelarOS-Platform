@@ -6,6 +6,8 @@ import {
   isPresent,
   isString,
   isTrue,
+  Log,
+  optionalWhen,
 } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -133,7 +135,7 @@ export async function waitForRetry(delayMs: number, signal: AbortSignal): Promis
   await TimerScope.sleep(delayMs, { label: 'ModelProviderRetry.wait', signal })
 }
 
-/** 沿 cause / data / error / lastError / response 逐层收集状态码、errno、文案与响应头。 */
+/** 沿 SDK 错误链与有界 JSON 响应体收集事实；请求对象不进入诊断。 */
 function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
   const facts: ModelRetryErrorFacts = {
     statuses: new Set(),
@@ -142,9 +144,11 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
     headers: {},
     retryable: false,
   }
-  const queue: Array<{ readonly value: unknown; readonly depth: number }> = [
-    { value: root, depth: 0 },
-  ]
+  const queue: Array<{
+    readonly value: unknown
+    readonly depth: number
+    readonly responseBody?: boolean
+  }> = [{ value: root, depth: 0 }]
   const seen = new Set<unknown>()
   while (!isEmpty(queue)) {
     const item = queue.shift()!
@@ -161,22 +165,39 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
       const status = Number(Reflect.get(record, key))
       if (Number.isInteger(status) && status >= 100 && status <= 599) facts.statuses.add(status)
     }
-    const code = Reflect.get(record, 'code')
-    if (isString(code)) facts.codes.add(code.toUpperCase())
+    for (const key of ['code', 'type']) {
+      const code = Reflect.get(record, key)
+      if (isString(code)) facts.codes.add(code.toUpperCase())
+    }
     if (Reflect.get(record, 'name') === 'AbortError') facts.codes.add('ABORT_ERR')
     if (isTrue(Reflect.get(record, 'isRetryable')) || isTrue(Reflect.get(record, 'retryable')))
       facts.retryable = true
     const message = Reflect.get(record, 'message')
-    if (isString(message)) collectMessage(facts, message)
+    if (isString(message)) collectMessage(facts, message, item.responseBody)
     mergeHeaders(facts.headers, Reflect.get(record, 'headers'))
     mergeHeaders(facts.headers, Reflect.get(record, 'responseHeaders'))
     for (const key of ['cause', 'data', 'error', 'lastError', 'response']) {
       const value = Reflect.get(record, key)
-      if (isPresent(value)) queue.push({ value, depth: item.depth + 1 })
+      if (isPresent(value))
+        queue.push({ value, depth: item.depth + 1, responseBody: item.responseBody })
     }
+    const body = readErrorResponseBody(Reflect.get(record, 'responseBody'))
+    if (isPresent(body)) queue.push({ value: body, depth: item.depth + 1, responseBody: true })
   }
   if (isEmpty(facts.messages)) collectMessage(facts, '供应商请求失败')
   return facts
+}
+
+/** 只解 SDK 明确标识的响应体；无效、过大的正文不参与错误推断，也不原样显示。 */
+function readErrorResponseBody(value: unknown): unknown {
+  if (!isString(value) || value.length > ModelTuning.retry.errorBodyChars) return undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return optionalWhen(isObject, parsed)
+  } catch {
+    Log.tag('ModelProviderRetry').debug('供应商错误响应不是 JSON，继续按状态码与错误链判断')
+    return undefined
+  }
 }
 
 /** 把 Headers 实例或普通对象里的两个 retry-after 头收进同一张表。 */
@@ -222,9 +243,12 @@ function retryMessage(kind: ModelProviderRetryDecision['kind'], message?: string
 }
 
 /** 保留原诊断；完整文案只有一个机器码时，也交给同一白名单分类，不从普通句子猜代码。 */
-function collectMessage(facts: ModelRetryErrorFacts, value: string): void {
+function collectMessage(facts: ModelRetryErrorFacts, value: string, prefer = false): void {
   const compact = value.replace(/\s+/gu, ' ').trim()
   if (compact && !facts.messages.includes(compact)) facts.messages.push(compact)
+  // SDK 的笼统 HTTP 文案不能遮住服务端实际拒绝原因。
+  const index = facts.messages.indexOf(compact)
+  if (prefer && index > 0) facts.messages.unshift(...facts.messages.splice(index, 1))
   if (/^[a-z][a-z0-9_]*$/iu.test(compact)) facts.codes.add(compact.toUpperCase())
 }
 

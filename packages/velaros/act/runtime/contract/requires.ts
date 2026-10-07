@@ -25,6 +25,7 @@ import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 import type { ImageSpacePort } from '@velaros-ai/velaros/images'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
+import type { SkillCapabilityModuleOptions } from '@velaros-ai/velaros/skills'
 
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
@@ -188,7 +189,7 @@ export interface VelarosProjectOptions {
    * 给了代码图谱后端时调用关系与四类分析也能答，不给时它们报 UNAVAILABLE。
    */
   readonly code?: boolean | ProjectCodeIndexApi
-  /** 挂 velaros:images：只看项目里的图；macOS 上超限的图与区域裁图用系统自带的 sips 缩。 */
+  /** 宿主直接挂通用 velaros:images 并绑定项目路径，独立于 Skill 选择；macOS 上用 sips 缩图和裁图。 */
   readonly images?: boolean
 }
 
@@ -220,6 +221,8 @@ export interface VelarosRuntimeOptions {
    * 给对象时照样挂这两项，另按项挂上同一个项目内核上的能力（见 VelarosProjectOptions）。
    */
   readonly project?: boolean | VelarosProjectOptions
+  /** 当前轮次固定的 Skill 组合；Skill 声明的宿主能力经授权桥装配。 */
+  readonly skills?: Omit<SkillCapabilityModuleOptions, 'node'>
   /** 框架状态目录，放在业务工作区之外；未注入 storage 时必填。 */
   readonly dataDir?: string
   /** 固定主会话存储边界、创建权限和已授予空间；返回 undefined 关闭。 */
@@ -255,7 +258,9 @@ export interface VelarosRuntimeOptions {
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
   /** Node 执行环境；内部观察和维护复用该环境的只读进程口。 */
-  readonly node?: NodeCodeRunnerOptions
+  readonly node?: RuntimeNodeOptions
+  /** agent 的持久 npm 环境；默认使用 dataDir/environments/default 与 node.npm，false 关闭。 */
+  readonly packageEnvironment?: EnvironmentRegistryApi | false
   /** 宿主挂载的领域模块；标准模块由运行时提供。 */
   readonly modules?: readonly OperationModuleDefinition[]
   /** 使用共享驱动接入模型；纯脚本宿主可以不给。 */
@@ -264,8 +269,21 @@ export interface VelarosRuntimeOptions {
   readonly limits?: Partial<ActRunLimits>
 }
 
+/**
+ * 标准代码进程与可选的同策略 npm 进程入口。
+ * Runtime 也会在模型请求前短暂调用 acquireRuntime 读取环境索引，读取完成即释放；此调用不代表启动了代码进程。
+ */
+export interface RuntimeNodeOptions extends NodeCodeRunnerOptions {
+  /** 与 Node 共用宿主策略的 npm 客户端；由 createNodeExecutionEnvironment 提供。 */
+  readonly npm?: NpmClientApi
+}
+
 /** 通过 execution 宿主启动标准 Node 业务进程。 */
 export interface NodeExecutionEnvironmentOptions {
+  /** 随宿主分发的 npm-cli.js；省略时按 Node 安装与 PATH 发现。 */
+  readonly npmCli?: string
+  /** npm 私有缓存；省略时使用 directory/npm-cache。 */
+  readonly npmCacheDirectory?: string
   /** 标准进程的绝对工作目录。 */
   readonly cwd: string
   /** 执行日志与能力目录的宿主存储位置。 */
@@ -404,3 +422,5 @@ export interface EventDeliveryOptions<Value, Receipt> {
   /** 将已持久化回执交给传输层；严格按 append 顺序调用，拒绝会封闭后续交付。 */
   deliver(receipt: Receipt): void | Promise<void>
 }
+import type { EnvironmentRegistryApi } from '@velaros-ai/velaros/act/system'
+import type { NpmClientApi } from '@velaros-ai/velaros/execution'

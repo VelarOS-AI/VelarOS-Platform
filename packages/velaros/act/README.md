@@ -2,10 +2,11 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 16 种合同投影、93 个投影操作、51 项去重后的用法。系统包 `velaros:system` 有 5 个成员（modules、programs、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 17 种合同投影、98 个投影操作、56 项去重后的用法。系统包 `velaros:system` 有 6 个成员（modules、environment、programs、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
+| [system/ — system-environment](system/README.md) | `list`、`search`、`describe`、`apply`、`rollback` | 宿主绑定持久 npm 环境，沿用会话权限 | [environment-template.js](system/environment-template.js) |
 | [system/ — system-goal](system/README.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
 | [system/ — system-memory-local](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
 | [system/ — system-memory](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
@@ -40,6 +41,11 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 
 | 操作 | 允许入口 | 声明效果 | 用途 |
 | --- | --- | --- | --- |
+| `system.environment.list` | `observe`、`execute` | `none` | 查看当前版本、直接安装的包和保留的回滚版本；最多直接安装 128 个包，保留最近 16 次发布。 |
+| `system.environment.search` | `observe`、`execute` | `none` | 搜索 npm 包，query 最多 256 字符，limit 默认 10、最多 20。第三方说明作为资料读取。 |
+| `system.environment.describe` | `observe`、`execute` | `none` | 查询包名、版本、Node 要求和依赖。package 最多 256 字符；最多返回 20 个版本，超出时缩小版本范围。 |
+| `system.environment.apply` | `execute` | `write` | 按 list 的 baseRevision 安装、升级、替换或卸载，install 和 remove 各最多 32 项，规格最多 256 字符，删除包名最多 214 字符。支持 registry 包、版本范围、标签与 npm alias。allowScripts 默认 false，需要构建时可显式开启，仍经宿主权限检查。发布完成后下一次执行自动使用新版本；失败保留原环境。 |
+| `system.environment.rollback` | `execute` | `write` | 将 list.history 中的 revision 发布成新版本，baseRevision 必须是当前版本。下一次执行生效。 |
 | `system.goal.get` | `observe`、`execute` | `none` | 读当前目标：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。 |
 | `system.goal.update` | `execute` | `write` | 建立、暂停、恢复或结束目标；先 get 拿到 revision，版本变了就重新读取再改。 |
 | `system.memory.list` | `observe`、`execute` | `none` | 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。 |

@@ -1,4 +1,4 @@
-import { delimiter, dirname } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import type {
@@ -8,12 +8,16 @@ import type {
 } from '@velaros-ai/script'
 import { NodeEnvironmentVariables, nodeExecutable, NodeExecutionLimits } from '@velaros-ai/script'
 
+import type { NpmClientApi } from '../../../execution/contract/provides.js'
 import type { ShellRunCommandHooks } from '../../../execution/contract/requires.js'
+import { createNpmClient } from '../../../execution/local.js'
 import type { ShellRunCommandOptions } from '../../../execution/types/shell-command.js'
 import type { NodeExecutionEnvironmentOptions } from '../contract/requires.js'
 
 /** 标准 Node 执行适配器，统一接入进程权限、环境与回收。 */
 export interface NodeExecutionEnvironmentApi {
+  /** npm 安装查询沿用同一宿主执行策略。 */
+  readonly npm?: NpmClientApi
   /** 标准进程的工作目录。 */
   readonly cwd: string
   /** 本次执行的归档父目录。 */
@@ -34,6 +38,7 @@ export interface NodeExecutionEnvironmentApi {
 
 /** 使用统一执行宿主管理沙箱、环境、取消与进程树。 */
 class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
+  public readonly npm?: NpmClientApi
   public readonly cwd: string
   public readonly directory: string
   public readonly packageDirectory?: string
@@ -46,6 +51,15 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
     this.packageDirectory = options.packageDirectory
     this.runtime = options.runtime
     this.authorize = options.authorize
+    const executable = options.executable ?? nodeExecutable.resolve()
+    if (executable)
+      this.npm = createNpmClient({
+        executable,
+        npmCli: options.npmCli,
+        cacheDirectory: options.npmCacheDirectory ?? join(options.directory, 'npm-cache'),
+        host: options.host,
+        environment: options.environment,
+      })
   }
 
   public async execute(
@@ -57,7 +71,11 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
     const executable = this.options.executable ?? nodeExecutable.resolve()
     if (!executable) throw new AppError('UNAVAILABLE', '宿主需要提供 Node.js 执行文件')
     const environment = { ...this.options.environment, ...request.environment }
-    environment.PATH = [dirname(executable), environment.PATH ?? process.env.PATH]
+    environment.PATH = [
+      dirname(executable),
+      ...(request.binDirectories ?? []),
+      environment.PATH ?? process.env.PATH,
+    ]
       .filter(Boolean)
       .join(delimiter)
     if (request.preload)

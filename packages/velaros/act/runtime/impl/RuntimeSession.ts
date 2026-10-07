@@ -41,11 +41,13 @@ import type {
   CodeProgramRequest,
   CodeRunnerApi,
   CodeSurfaceOutcome,
+  NodeRuntimeLease,
   ScriptPackageDefinition,
 } from '@velaros-ai/script'
 import {
   createKernelScriptSession,
   createNodeCodeRunner,
+  nodeRuntimePackages,
   scriptOutputs,
   scriptPackageCompiler,
 } from '@velaros-ai/script'
@@ -68,6 +70,7 @@ import type {
   VelarosContextOptions,
   VelarosRuntimeOptions,
 } from '../contract/requires.js'
+import type { RuntimeInventory } from '../types/inventory.js'
 import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
 import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.js'
@@ -99,6 +102,7 @@ import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
+import { boundedInventory, capabilityHints } from '../utils/inventory.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
 import {
@@ -766,6 +770,68 @@ export class RuntimeSession implements VelarosSession {
     )
   }
 
+  /** 每次模型请求重新读授权和依赖事实，首帧无需执行探索脚本。 */
+  private async inventory(signal: AbortSignal, maxChars: number): Promise<RuntimeInventory> {
+    const capabilities = capabilityHints(
+      this.dependencies.allowedModules().map((module) => this.dependencies.kernel.describe(module)),
+      this.dependencies.packages
+    )
+    let packages: RuntimeInventory['packages'] = []
+    let skills: RuntimeInventory['skills'] = []
+    let npm: RuntimeInventory['npm']
+    const node = this.dependencies.node
+    let lease: NodeRuntimeLease | undefined
+    if (node) {
+      try {
+        lease = await node.acquireRuntime?.(signal)
+        signal.throwIfAborted()
+        const runtime = lease?.environment ?? node.runtime
+        npm = { environment: runtime?.id ?? 'base' }
+        const installed = new Map(
+          [
+            ...nodeRuntimePackages.defaults(node.packageDirectory),
+            ...(runtime?.packages ?? []),
+          ].map((pkg) => [pkg.name, pkg] as const)
+        )
+        packages = nodeRuntimePackages.references([...installed.values()]).map((pkg) => ({
+          name: pkg.name,
+          version: pkg.version,
+          skill: pkg.skill,
+          error: pkg.error && `${pkg.error.code}: ${pkg.error.message}`,
+        }))
+        skills = (runtime?.skills ?? []).map(({ name, version, description }) => ({
+          name,
+          version,
+          description,
+        }))
+      } catch (error) {
+        signal.throwIfAborted()
+        Log.tag('ActRuntime').caught('读取环境索引失败，保留能力入口和诊断', error)
+        npm = { error: error instanceof Error ? error.message : String(error) }
+      } finally {
+        try {
+          await lease?.release()
+        } catch (error) {
+          Log.tag('ActRuntime').caught('环境索引读取租约待回收', error)
+        }
+      }
+    }
+    return boundedInventory(
+      {
+        capabilities,
+        packages,
+        skills,
+        npm,
+        totals: {
+          capabilities: capabilities.length,
+          packages: packages.length,
+          skills: skills.length,
+        },
+      },
+      maxChars
+    )
+  }
+
   private async project(
     view: ModelView,
     signal: AbortSignal,
@@ -794,8 +860,13 @@ export class RuntimeSession implements VelarosSession {
       ...frameEnvironment(this.dependencies.environment),
     }
     if (this.dependencies.parentTask) environment.parentTask = this.dependencies.parentTask
+    const inventory = await this.inventory(
+      signal,
+      Math.min(ActRuntimeTuning.inventoryChars, Math.floor(maxChars / 4))
+    )
     const extra =
       JSON.stringify(environment).length +
+      JSON.stringify(inventory).length +
       (goal ? JSON.stringify(goal).length : 0) +
       (goalControl ? JSON.stringify(goalControl).length : 0) +
       (stores ? JSON.stringify(stores).length : 0) +
@@ -809,7 +880,7 @@ export class RuntimeSession implements VelarosSession {
     )
     const frame = JSON.parse(projected.body)
     if (this.executionRunner.environment === 'node') frame.presentation = 'node'
-    frame.partitions.runtime = { environment, ...frame.partitions.runtime }
+    frame.partitions.runtime = { ...frame.partitions.runtime, environment, inventory }
     // 同一任务里此前运行的输入只作上文，模型据此只回应本次运行的新请求
     frame.partitions.task.goals = frame.partitions.task.goals.map(
       (goal: { record: { ref: { id: string } } }) =>

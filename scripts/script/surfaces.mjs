@@ -110,6 +110,13 @@ export const CodeSurfaces = [
   },
   // ── Act 自管理能力：模型从 velaros:system 导入 goal 成员（聚合包由 act/system 的目录编出），模块身份照旧是 velaros:system-goal
   {
+    namespace: 'system-environment',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['EnvironmentOperationsApi'],
+    templates: 'environment-template.js',
+  },
+  {
     namespace: 'system-goal',
     directory: 'velaros',
     unit: 'act/system',
@@ -264,6 +271,7 @@ export const StandardSurfaces = [
  * 登记在这里而不是靠猜，是因为丢错一个参数模型就会写出调不通的程序。
  */
 export const HostContextTypes = new Set([
+  'EnvironmentOperationContext',
   'SkillsOperationContext',
   'ImageOperationContext',
   'SandboxOperationContext',

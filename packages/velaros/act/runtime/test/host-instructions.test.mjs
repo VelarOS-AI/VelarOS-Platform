@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { nodeRuntimePackages } from '@velaros-ai/script'
+
+import { createCapabilityModule, createRuntime } from '../../../dist/act/runtime/index.js'
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
+import { boundedInventory } from '../../../dist/act/runtime/utils/inventory.js'
 import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instructions.js'
+import { VelarBrowserModule } from '../../../dist/browser/contract/surface.js'
+import { VelarComputerModule } from '../../../dist/computer/contract/surface.js'
+import { VelarOfficeModule } from '../../../dist/office/contract/surface.js'
 
 import { done, modelText, turn } from './support/model-turn.mjs'
 
@@ -32,6 +38,227 @@ async function fixture(t, options) {
   })
   return { runtime, dataDir, session: await runtime.openSession('main') }
 }
+
+const inventory = (request) =>
+  JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text).partitions
+    .runtime.inventory
+
+test('INV-57 子任务首帧按自己的授权展示能力，不继承父任务专属入口', async (t) => {
+  const parentFrames = []
+  const childFrames = []
+  const surface = VelarOfficeModule
+  const office = createCapabilityModule({
+    surface,
+    instanceId: surface.specifier,
+    implementation: Object.fromEntries(
+      surface.methods.map((name) => [name, () => assert.fail('discovery ran office')])
+    ),
+    context: () => assert.fail('discovery constructed office context'),
+  })
+  const f = await fixture(t, {
+    modules: [office],
+    agents: {
+      concurrency: 1,
+      maxChildren: 1,
+      profiles: {
+        worker: {
+          modules: [],
+          node: true,
+          model: driver(async function* (request) {
+            childFrames.push(request)
+            yield* done(request)
+          }),
+        },
+      },
+    },
+    model: driver(async function* (request) {
+      parentFrames.push(request)
+      if (parentFrames.length === 1) {
+        yield turn(request, {
+          execute: {
+            source:
+              "import {start,wait} from 'velaros:agents';const job=await start({task:'Describe this environment',profile:'worker'});console.log(await wait({id:job.id}));",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Delegate a small inspection'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  assert.ok(
+    inventory(parentFrames[0]).capabilities.some((item) => item.module === 'velaros:office')
+  )
+  assert.ok(childFrames.length > 0)
+  assert.ok(
+    !inventory(childFrames[0]).capabilities.some((item) =>
+      ['velaros:office', 'velaros:agents'].includes(item.module)
+    )
+  )
+  assert.ok(inventory(childFrames[0]).packages.length > 0)
+})
+
+test('INV-57 首帧直接交付真实领域能力用途和已安装 npm，详细合同按需查询', async (t) => {
+  const frames = []
+  const modules = [VelarOfficeModule, VelarComputerModule, VelarBrowserModule].map((surface) =>
+    createCapabilityModule({
+      surface,
+      instanceId: surface.specifier,
+      implementation: Object.fromEntries(
+        surface.methods.map((name) => [name, () => assert.fail('discovery executed an operation')])
+      ),
+      context: () => assert.fail('discovery constructed an operation context'),
+    })
+  )
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-primer-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const f = await fixture(t, {
+    workspace,
+    modules,
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('What can this environment do?'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  const first = inventory(frames[0])
+  for (const module of [
+    'velaros:office',
+    'velaros:computer',
+    'velaros:browser',
+    'velaros:project',
+  ]) {
+    const card = first.capabilities.find((item) => item.module === module)
+    assert.equal(card.summary, f.runtime.describe(module).summary.slice(0, 180))
+    assert.ok(frames[0].compiledPrompt.includes(module))
+    assert.ok(frames[0].compiledPrompt.includes(card.summary))
+    assert.ok(!frames[0].instructions.includes(f.runtime.describe(module).declarations))
+  }
+  assert.ok(
+    first.capabilities.some(
+      (item) => item.module === 'velaros:system' && item.member === 'environment'
+    )
+  )
+  assert.ok(first.capabilities.every((item) => !item.module.startsWith('velaros:system-')))
+  assert.ok(!JSON.stringify(first).includes('velaros:search'))
+  for (const pkg of nodeRuntimePackages.defaults())
+    assert.deepEqual(
+      first.packages.find((item) => item.name === pkg.name),
+      { name: pkg.name, version: pkg.version }
+    )
+  assert.equal(first.totals.capabilities, first.capabilities.length)
+  assert.match(frames[0].instructions, /runtime.inventory/)
+})
+
+test('INV-57 环境引子读取所选 Skill 和损坏包的实际状态，元数据租约完整释放', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'runtime-primer-packages-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  for (const name of ['primer-package', 'primer-broken']) {
+    await mkdir(join(directory, 'node_modules', name), { recursive: true })
+    await writeFile(
+      join(directory, 'node_modules', name, 'package.json'),
+      name === 'primer-broken' ? '{broken' : JSON.stringify({ name, version: '2.3.4' })
+    )
+  }
+  let acquired = 0
+  let released = 0
+  const frames = []
+  const f = await fixture(t, {
+    packageEnvironment: false,
+    node: {
+      cwd: directory,
+      directory: join(directory, 'runs'),
+      execute: () => assert.fail('primer launched a process'),
+      acquireRuntime: async () => {
+        acquired++
+        return {
+          environment: {
+            id: 'selected-skills',
+            packages: ['primer-package', 'primer-broken'].map((name) => ({
+              name,
+              version: 'old-metadata',
+              directory,
+              skill: 'fixture-skill',
+            })),
+            skills: [
+              {
+                name: 'fixture-skill',
+                version: '3.0.0',
+                description: '解析科学数据',
+                directory,
+                packages: ['primer-package'],
+                capabilities: [],
+              },
+            ],
+          },
+          binDirectories: [],
+          release: async () => {
+            released++
+          },
+        }
+      },
+    },
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Explain available dependencies'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  const first = inventory(frames[0])
+  assert.equal(first.packages.find((item) => item.name === 'primer-package').version, '2.3.4')
+  assert.ok(first.packages.find((item) => item.name === 'primer-broken').error)
+  assert.deepEqual(first.skills, [
+    { name: 'fixture-skill', version: '3.0.0', description: '解析科学数据' },
+  ])
+  assert.ok(acquired > 0)
+  assert.equal(acquired, released)
+})
+
+test('INV-57 环境清单读取失败仍交付能力和诊断，不阻断模型请求', async (t) => {
+  const frames = []
+  const f = await fixture(t, {
+    packageEnvironment: false,
+    node: {
+      cwd: process.cwd(),
+      directory: join(tmpdir(), 'unused-primer-runs'),
+      execute: () => assert.fail('primer launched a process'),
+      acquireRuntime: async () => {
+        throw new Error('fixture inventory unavailable')
+      },
+    },
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Diagnose my environment'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  assert.match(inventory(frames[0]).npm.error, /fixture inventory unavailable/)
+  assert.ok(inventory(frames[0]).capabilities.length > 0)
+})
+
+test('INV-57 大目录遵守展示预算并保留完整数量，常规环境保留用途与版本', () => {
+  const full = {
+    capabilities: Array.from({ length: 40 }, (_, i) => ({
+      module: `example:module-${i}`,
+      summary: '用途说明'.repeat(100),
+    })),
+    packages: Array.from({ length: 128 }, (_, i) => ({ name: `package-${i}`, version: '1.2.3' })),
+    skills: [{ name: 'test-skill', version: '1', description: 'skill 用途' }],
+    totals: { capabilities: 40, packages: 128, skills: 1 },
+  }
+  const limited = boundedInventory(full, 1500)
+  assert.ok(JSON.stringify(limited).length <= 1500)
+  assert.deepEqual(limited.totals, full.totals)
+  assert.ok(
+    limited.capabilities.length > 0 && limited.capabilities.length < full.capabilities.length
+  )
+  assert.ok(limited.packages.length > 0 && limited.packages.length < full.packages.length)
+  assert.equal(full.capabilities.length, 40)
+  assert.equal(full.packages.length, 128)
+})
 
 test('base instructions stay small while authorized packages are discoverable on demand', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-domain-guidance-'))

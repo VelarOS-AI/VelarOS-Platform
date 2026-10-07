@@ -7,4 +7,5 @@
 
 export { createConfinedShellRunner } from './impl/local/ConfinedShellRunner.js'
 export { createLocalShellHost } from './impl/local/LocalShellHost.js'
+export { createNpmClient } from './impl/local/NpmClient.js'
 export { createShellEnvironment } from './impl/local/ShellEnvironment.js'

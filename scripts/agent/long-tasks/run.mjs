@@ -38,6 +38,7 @@ import {
   taskTemporaryEnvironment,
 } from './task-environment.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
+import { preserveWorkspaceEvidence } from './workspace-evidence.mjs'
 
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
@@ -394,7 +395,11 @@ if (recovery) {
   )
   await activity({ participant: 'scriptact', state: 'evidence-recovered', modelRerun: false })
 }
-const ledger = new BudgetLedger(join(directory, 'gateway'), 'unlimited', manifest.accounting)
+const ledger = new BudgetLedger(
+  join(directory, 'gateway'),
+  manifest.budgetUsd ?? 'unlimited',
+  manifest.accounting
+)
 const token = randomBytes(32).toString('hex')
 const server = budgetServer({
   ledger,
@@ -482,6 +487,7 @@ try {
       ...installed,
     })
     await activity({ participant, state: 'grading', solveMs })
+    await preserveWorkspaceEvidence(workspace, output, baseline)
     const grading = await grade(workspace, output)
     await snapshot(join(output, 'grade.json'), grading)
     await verifyFrozen()

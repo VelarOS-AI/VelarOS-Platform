@@ -39,6 +39,8 @@ declare module 'velaros:skills' {
 
   /** 已安装 Skill 的发现信息。available 表示当前轮次可加载这个版本。 */
   interface SkillSummary {
+    /** 随产品提供，版本由产品更新管理。 */
+    readonly builtin?: boolean
     readonly name: string
     readonly version: string
     readonly description: string
@@ -87,6 +89,8 @@ declare module 'velaros:skills' {
     readonly instructions?: string
     readonly packages: readonly string[]
     readonly capabilities: readonly SkillCapability[]
+    /** 由宿主绑定的能力或扩展身份；声明本身不授予权限。 */
+    readonly hostCapabilities?: readonly string[]
   }
 
   /** Skill 提供的外部能力；contract 是带效果声明的 TypeScript 声明文件。 */

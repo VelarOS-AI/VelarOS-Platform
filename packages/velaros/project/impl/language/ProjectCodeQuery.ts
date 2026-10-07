@@ -9,7 +9,7 @@ import {
   withCodeQuerySource,
 } from '../../utils/language/language-queries.js'
 
-import { languageQueries } from './LanguageQueries.js'
+import { LanguageQueries } from './LanguageQueries.js'
 
 /**
  * project 注入面里 `queryCode` 的实现：把一次代码查询分给内置语言服务或宿主的代码图谱。
@@ -28,18 +28,21 @@ export interface ProjectCodeQueryApi {
 
 /** 代码查询的两路分派，见接口说明。 */
 class ProjectCodeQuery implements ProjectCodeQueryApi {
-  public constructor(private readonly codeIndex: ProjectCodeIndexApi) {}
+  private readonly languages: LanguageQueries
+  public constructor(
+    private readonly codeIndex: ProjectCodeIndexApi,
+    languages?: readonly string[]
+  ) {
+    this.languages = new LanguageQueries(languages)
+  }
 
   public async run(
     input: ProjectCodeQueryInput,
     context: ProjectOperationContext
   ): Promise<unknown> {
-    if (isProjectCodeLanguageQuery(input)) return languageQueries.run(input, context)
+    if (isProjectCodeLanguageQuery(input)) return this.languages.run(input, context)
     if (!this.codeIndex.isAvailable()) {
-      throw new AppError(
-        'UNAVAILABLE',
-        '此代码图谱查询需要安装并启用 CodeGraph；内置符号、引用和诊断 action 仍可使用。'
-      )
+      throw new AppError('UNAVAILABLE', '此代码图谱查询需要安装并启用 CodeGraph。')
     }
     const result = await this.codeIndex.query(input, context)
     return withCodeQuerySource(CodeQuerySources.codeGraph, result)
@@ -52,8 +55,9 @@ class ProjectCodeQuery implements ProjectCodeQueryApi {
  * 返回的是函数而不是对象，宿主照旧把它直接塞进 `ProjectHostPort.queryCode`。
  */
 export function createProjectCodeQuery(
-  codeIndex: ProjectCodeIndexApi
+  codeIndex: ProjectCodeIndexApi,
+  languages?: readonly string[]
 ): (input: ProjectCodeQueryInput, context: ProjectOperationContext) => Promise<unknown> {
-  const query = new ProjectCodeQuery(codeIndex)
+  const query = new ProjectCodeQuery(codeIndex, languages)
   return (input, context) => query.run(input, context)
 }

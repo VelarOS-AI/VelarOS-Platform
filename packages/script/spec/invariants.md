@@ -75,3 +75,5 @@ npm 目录由本次 Node 进程按程序入口查询，工作区版本覆盖后�
 同次发布的 execution 来自实际子进程，保留 Node 版本、执行文件、平台、架构、工作目录和有序命令路径；其他环境变量不进入目录。标准命令的可用性由实际解析决定，目录是启动快照。
 
 验证：`test/operation-docs.test.ts`、`test/subprocess.test.ts`；Desktop 的 Electron 主进程与 ASAR 分发探针。
+
+宿主可通过 acquireRuntime 为每次执行固定新的 npm 快照；目录发现、ESM/CJS 解析、PATH 与 Node 子进程使用同一快照。安装和升级在后续执行生效，当前进程继续使用原版本；完整回收后释放租约，回收不完整时保留。验证：`../velaros/act/system/spec/environment.test.mjs` 与 `test/subprocess.test.ts`。
