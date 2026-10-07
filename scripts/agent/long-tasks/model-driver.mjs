@@ -67,7 +67,7 @@ export async function verifyCampaignDriver(modelPackage, providerCapabilities = 
       (item) =>
         Array.isArray(item.content) && item.content.some((part) => part.prompt_cache_breakpoint)
     )
-    assert.equal(explicitBreakpoints, providerCapabilities.openaiExplicitCacheBreakpoints !== false)
+    assert.equal(explicitBreakpoints, providerCapabilities.openaiExplicitCacheBreakpoints === true)
     return { provider: 'formal-model-composition', sessionKey: true, explicitBreakpoints }
   } finally {
     globalThis.fetch = transport

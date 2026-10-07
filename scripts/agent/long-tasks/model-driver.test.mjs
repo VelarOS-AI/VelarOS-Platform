@@ -9,9 +9,20 @@ test('campaign driver sends formal cache and reasoning fields on the real SDK wi
   assert.deepEqual(await verifyCampaignDriver(modelPackage), {
     provider: 'formal-model-composition',
     sessionKey: true,
-    explicitBreakpoints: true,
+    explicitBreakpoints: false,
   })
   assert.equal(globalThis.fetch, original)
+})
+
+test('a compatible provider can explicitly opt into cache breakpoints', async () => {
+  assert.deepEqual(
+    await verifyCampaignDriver(modelPackage, { openaiExplicitCacheBreakpoints: true }),
+    {
+      provider: 'formal-model-composition',
+      sessionKey: true,
+      explicitBreakpoints: true,
+    }
+  )
 })
 
 test('a provider without explicit cache support keeps the session key and reasoning policy', async () => {

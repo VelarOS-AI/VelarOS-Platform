@@ -9,7 +9,10 @@ import type {
   ModelAdapterConfig,
 } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
-import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
+import {
+  isOfficialOpenAiEndpoint,
+  isOpenRouterCompatibleProvider,
+} from '../../utils/catalog/model-selection'
 import { createOpenRouterFetch, normalizeOpenRouterRouting } from '../../utils/wire/openrouter'
 import { createResponsesFetch } from '../../utils/wire/responses-stream.js'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
@@ -53,13 +56,14 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
           ),
           {
             sessionKey: true,
-            // 官方缓存合同从 GPT-5.6 起支持显式断点；只认已知系列及日期快照，未知别名不猜能力。
+            // 官方端点按已知系列默认启用；兼容端点的同名模型由宿主显式声明能力。
             // https://developers.openai.com/api/docs/guides/prompt-caching
             openaiBreakpoints:
               config.openaiExplicitCacheBreakpoints ??
               optionalWhen(
-                /^gpt-5\.6(?:-(?:sol|terra|luna))?(?:-\d{4}-\d{2}-\d{2})?$/i.test(modelId) ||
-                  /^gpt-6-sol(?:$|-)/i.test(modelId),
+                isOfficialOpenAiEndpoint(baseURL) &&
+                  (/^gpt-5\.6(?:-(?:sol|terra|luna))?(?:-\d{4}-\d{2}-\d{2})?$/i.test(modelId) ||
+                    /^gpt-6-sol(?:$|-)/i.test(modelId)),
                 true
               ),
           }

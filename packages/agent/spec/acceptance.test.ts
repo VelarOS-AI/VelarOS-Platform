@@ -121,6 +121,53 @@ test('INV-45 cache context preserves unknown fields and clears measurements afte
   }
 })
 
+test('INV-49 accepted request prefixes survive sequential submissions only while logical history still matches', async () => {
+  const f = runFixture()
+  const requests: ModelTurnRequest[] = []
+  let logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+  let revision = 0
+  f.options.frames.delta = (body) => `current state ${body}`
+  f.options.frames.project = async () => ({
+    body: JSON.stringify({ revision }),
+    history: structuredClone(logical),
+    images: [],
+  })
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    yield { type: 'text', text: `answer-${revision}` }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const withoutMarks = (messages: readonly ModelHistoryMessage[]) =>
+    messages.map(({ cacheBreakpoint: _mark, ...message }) => message)
+  try {
+    for (const prompt of ['first', 'follow-up', 'corrected history']) {
+      const events = []
+      for await (const event of service.submit(prompt)) events.push(event)
+      expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      revision++
+      logical =
+        revision === 1
+          ? [
+              ...logical,
+              { role: 'assistant', content: 'answer-0' },
+              { role: 'user', content: 'follow-up' },
+            ]
+          : [{ role: 'user', content: 'revised task after compaction' }]
+    }
+    const previous = modelRequestEncoder.messages(requests[0]!)
+    const followup = modelRequestEncoder.messages(requests[1]!)
+    expect(withoutMarks(followup.slice(0, previous.length))).toEqual(withoutMarks(previous))
+    expect(JSON.stringify(followup.at(-1))).toContain('revision')
+    expect(requests[2]!.history).toEqual([
+      { role: 'user', content: 'revised task after compaction' },
+    ])
+    expect(new Set(requests.map((request) => request.cacheKey)).size).toBe(1)
+  } finally {
+    await service.close()
+  }
+})
+
 test('INV-40 accepted provider usage drives growth while calibrated admission remains independent', async () => {
   const f = runFixture()
   const requests: ModelTurnRequest[] = []

@@ -22,7 +22,7 @@ export interface ModelAdapterConfig {
   adapter?: LooseOptional<AgentProviderAdapterConfig>
   /** 输入框选的思考力度；adapter 按 provider 能力映射为 reasoning/thinking 参数，缺席时按 medium。 */
   reasoningLevel?: LooseOptional<ReasoningLevel>
-  /** 宿主明确配置的 OpenAI 显式缓存断点能力；缺席使用已知模型默认值。 */
+  /** OpenAI 显式缓存断点能力；缺席时仅官方端点使用已知型号默认值。 */
   openaiExplicitCacheBreakpoints?: boolean
   /** 本地 provider script 已解析的运行时元数据；执行阶段复用它，避免同一轮运行二次解析漂移。 */
   providerScriptRuntimeMetadata?: LooseOptional<ProviderScriptRuntimeMetadata>

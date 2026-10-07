@@ -97,7 +97,7 @@ export interface AgentProviderRuntimeConfig {
   defaultModel: string
   providerScript?: LooseOptional<ProviderScriptManifest>
   adapter?: LooseOptional<AgentProviderAdapterConfig>
-  /** OpenAI 显式缓存断点的供应商能力；缺席沿用已知模型默认值，false 禁用，true 显式启用。 */
+  /** OpenAI 显式缓存断点能力；缺席时仅官方端点沿用已知型号默认值，false 禁用，true 启用。 */
   openaiExplicitCacheBreakpoints?: boolean
 }
 
@@ -171,7 +171,7 @@ export interface ModelProviderSelection {
   baseURL: string
   adapter?: LooseOptional<AgentProviderAdapterConfig>
   reasoningLevel?: LooseOptional<ReasoningLevel>
-  /** OpenAI 显式缓存断点能力；覆盖 provider 运行时配置，缺席沿用已知模型默认值。 */
+  /** OpenAI 显式缓存断点能力；覆盖 provider 配置，缺席时仅官方端点沿用已知型号默认值。 */
   openaiExplicitCacheBreakpoints?: boolean
 }
 

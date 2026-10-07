@@ -159,9 +159,11 @@ function applyPromptPromptCacheProviderOptions(
       wire,
       anthropicBoundaries?.has(index)
     )
+    const normalized =
+      wire.openaiBreakpoints && responses ? normalizeOpenAiToolResults(translated) : translated
     const nextMessage = boundaries.has(index)
-      ? withOpenAiBreakpoint(translated, responses)
-      : translated
+      ? withOpenAiBreakpoint(normalized, responses)
+      : normalized
     changed ||= nextMessage !== message
     return nextMessage
   })
@@ -203,6 +205,40 @@ function applyMessagePromptCacheProviderOptions(
   }
 }
 
+/** 显式断点可移动，已发送的工具正文表示保持稳定，避免在字符串与内容块之间来回转换。 */
+function normalizeOpenAiToolResults(message: unknown): unknown {
+  if (!isPlainObject(message) || message.role !== 'tool' || !isArray(message.content))
+    return message
+  let changed = false
+  const content = message.content.map((part) => {
+    if (
+      !canCacheOpenAiToolResult(part) ||
+      !isPlainObject(part) ||
+      !isPlainObject(part.output) ||
+      part.output.type === 'content'
+    )
+      return part
+    changed = true
+    const output = part.output
+    return {
+      ...part,
+      output: {
+        ...output,
+        type: 'content',
+        value: [
+          {
+            type: 'text',
+            text: ['json', 'error-json'].includes(String(output.type))
+              ? JSON.stringify(output.value)
+              : output.value,
+          },
+        ],
+      },
+    }
+  })
+  return changed ? { ...message, content } : message
+}
+
 /** SDK 对 user/assistant 读取内容块选项，对 system 读取消息选项；两者都保留显式意图。 */
 function withOpenAiBreakpoint(message: unknown, responses: boolean): unknown {
   if (!isPlainObject(message)) return message
@@ -228,17 +264,7 @@ function withOpenAiBreakpoint(message: unknown, responses: boolean): unknown {
         if (!responses) return { ...part, providerOptions: options(part.providerOptions) }
         // Responses 只读取 output 的内容块；Chat 保持原始输出表示，在结果 part 上挂点。
         const output = part.output
-        const content =
-          output.type === 'content' && isArray(output.value)
-            ? output.value
-            : [
-                {
-                  type: 'text',
-                  text: ['json', 'error-json'].includes(String(output.type))
-                    ? JSON.stringify(output.value)
-                    : output.value,
-                },
-              ]
+        const content = isArray(output.value) ? output.value : []
         const last = content.reduce<number>(
           (found, item, i) => (isPlainObject(item) && item.type === 'text' ? i : found),
           -1

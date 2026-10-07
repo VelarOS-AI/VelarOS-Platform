@@ -157,6 +157,40 @@ test.each(['responses', 'chat'] as const)(
   }
 )
 
+test('Responses tool result bodies keep the same representation when automatic breakpoints move', async () => {
+  const bodies: any[] = []
+  const provider = createOpenAI({
+    apiKey: 'offline',
+    fetch: async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return Response.json({ error: { message: 'fixture stop' } }, { status: 400 })
+    },
+  })
+  const model = new PromptCacheLanguageModel(provider.responses('fixture'), {
+    sessionKey: true,
+    openaiBreakpoints: true,
+  })
+  const result = (id: string, output: any) => ({
+    role: 'tool' as const,
+    content: [{ type: 'tool-result' as const, toolCallId: id, toolName: 'exec', output }],
+    providerOptions: { velaros: { promptCacheBreakpoint: true } },
+  })
+  const original = result('original', { type: 'json', value: { text: '结果', count: 2 } })
+  for (const prompt of [
+    [original],
+    [original, ...['a', 'b', 'c'].map((id) => result(id, { type: 'text', value: id }))],
+  ])
+    await expect(model.doGenerate({ prompt })).rejects.toThrow('fixture stop')
+  const withoutMarks = (value: unknown) =>
+    JSON.parse(
+      JSON.stringify(value, (key, item) => (key === 'prompt_cache_breakpoint' ? undefined : item))
+    )
+  expect(withoutMarks(bodies[1].input[0])).toEqual(withoutMarks(bodies[0].input[0]))
+  expect(JSON.stringify(bodies[1].input[0])).not.toContain('prompt_cache_breakpoint')
+  expect(JSON.stringify(bodies[1]).match(/prompt_cache_breakpoint/gu)).toHaveLength(3)
+  expect(original.content[0]!.output.type).toBe('json')
+})
+
 test('images count a fixed amount each instead of their base64 bytes', () => {
   const plain = estimateRequestInput(base)
   const withImage = estimateRequestInput({
@@ -735,16 +769,16 @@ async function captureOpenAiCacheWire(
   const selection = {
     provider: 'openai',
     apiKey: 'offline-fixture',
-    baseURL: 'https://offline.invalid/v1',
+    baseURL: 'https://api.openai.com/v1',
     reasoningLevel: 'high',
     ...selectionOverrides,
   }
   const bodies: OpenAiCacheWire[] = []
   const originalFetch = globalThis.fetch
+  const baseURL = selection.baseURL.replace(/\/+$/u, '') || 'https://api.openai.com/v1'
   globalThis.fetch = (async (input: unknown, init: { body?: unknown }) => {
-    if (String(input) === 'https://offline.invalid/v1/models')
-      return Response.json({ data: [{ id: model }] })
-    expect(String(input)).toBe('https://offline.invalid/v1/responses')
+    if (String(input) === `${baseURL}/models`) return Response.json({ data: [{ id: model }] })
+    expect(String(input)).toBe(`${baseURL}/responses`)
     bodies.push(JSON.parse(String(init.body)))
     return Response.json({ error: { message: 'offline cache fixture' } }, { status: 400 })
   }) as typeof fetch
@@ -942,6 +976,37 @@ test('runtime provider cache capability is inherited and an explicit selection o
   await expect(
     captureOpenAiCacheWire('gpt-5.6-sol', [request], {}, { openaiExplicitCacheBreakpoints: 0 })
   ).rejects.toThrow('openaiExplicitCacheBreakpoints')
+})
+
+test.each([
+  ['https://api.openai.com/v1', true],
+  ['https://API.OPENAI.COM:443/v1/', true],
+  ['', true],
+  ['https://compat.example/v1', false],
+  ['http://localhost:4000/openai/v1', false],
+  ['https://api.openai.com.compat.example/v1', false],
+  ['https://compat.example/api.openai.com/v1', false],
+  ['http://api.openai.com/v1', false],
+  ['https://api.openai.com:444/v1', false],
+] as const)('explicit cache defaults follow endpoint %s (%s)', async (baseURL, supported) => {
+  const request: ModelTurnRequest = {
+    ...base,
+    cacheKey: 'endpoint-session',
+    history: [{ role: 'user', content: 'stable prefix', cacheBreakpoint: true }],
+  }
+  const [wire] = await captureOpenAiCacheWire('gpt-5.6-sol', [request], { baseURL })
+  expect(wire!.prompt_cache_key).toBe('endpoint-session')
+  expect(JSON.stringify(wire).includes('prompt_cache_breakpoint')).toBe(supported)
+  const [enabled] = await captureOpenAiCacheWire('gpt-5.6-sol', [request], {
+    baseURL,
+    openaiExplicitCacheBreakpoints: true,
+  })
+  expect(JSON.stringify(enabled)).toContain('prompt_cache_breakpoint')
+  const [disabled] = await captureOpenAiCacheWire('gpt-5.6-sol', [request], {
+    baseURL,
+    openaiExplicitCacheBreakpoints: false,
+  })
+  expect(JSON.stringify(disabled)).not.toContain('prompt_cache_breakpoint')
 })
 
 test('explicitly disabling OpenAI breakpoints rejects conflicting caller fields without rewriting them', () => {

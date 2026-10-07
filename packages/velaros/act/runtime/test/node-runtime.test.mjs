@@ -53,18 +53,18 @@ for (const explicit of [true, false])
     const bodies = []
     t.mock.method(globalThis, 'fetch', async (_url, init) => {
       const index = bodies.push(JSON.parse(init.body))
-      assert(index <= 2)
+      assert(index <= 4)
       const item =
-        index === 1
+        index % 2 === 1
           ? {
               type: 'function_call',
-              id: 'fc_node',
-              call_id: 'call_node',
+              id: `fc_node_${index}`,
+              call_id: `call_node_${index}`,
               name: 'exec',
               arguments: JSON.stringify({ code: "console.log('observed-native-output')" }),
               status: 'completed',
             }
-          : { type: 'message', id: 'msg_final' }
+          : { type: 'message', id: `msg_final_${index}` }
       const chunks = [
         {
           type: 'response.created',
@@ -73,9 +73,9 @@ for (const explicit of [true, false])
         {
           type: 'response.output_item.added',
           output_index: 0,
-          item: index === 1 ? { ...item, arguments: '' } : item,
+          item: index % 2 === 1 ? { ...item, arguments: '' } : item,
         },
-        index === 1
+        index % 2 === 1
           ? {
               type: 'response.function_call_arguments.delta',
               item_id: item.id,
@@ -85,7 +85,7 @@ for (const explicit of [true, false])
         {
           type: 'response.output_item.done',
           output_index: 0,
-          item: index === 1 ? item : { ...item, status: 'completed' },
+          item: index % 2 === 1 ? item : { ...item, status: 'completed' },
         },
         {
           type: 'response.completed',
@@ -134,8 +134,10 @@ for (const explicit of [true, false])
     const events = []
     for await (const event of session.submit('Print the requested result and finish.'))
       events.push(event)
+    for await (const event of session.submit('Print the result once more and finish.'))
+      events.push(event)
     assert.equal(events.at(-1).status, 'completed')
-    assert.equal(bodies.length, 2)
+    assert.equal(bodies.length, 4)
     const [first, second] = bodies
     assert.equal(first.prompt_cache_key, second.prompt_cache_key)
     assert.match(first.prompt_cache_key, /^[a-f0-9]{32}$/u)
@@ -148,6 +150,16 @@ for (const explicit of [true, false])
       withoutMarks(second.input.slice(0, first.input.length)),
       withoutMarks(first.input)
     )
+    for (let index = 1; index < bodies.length; index++) {
+      const previous = bodies[index - 1]
+      const current = bodies[index]
+      assert.equal(current.prompt_cache_key, first.prompt_cache_key)
+      assert.deepEqual(current.tools, first.tools)
+      assert.deepEqual(
+        withoutMarks(current.input.slice(0, previous.input.length)),
+        withoutMarks(previous.input)
+      )
+    }
     const system = JSON.stringify(
       first.input.filter((item) => ['system', 'developer'].includes(item.role))
     )
@@ -156,7 +168,7 @@ for (const explicit of [true, false])
     assert(!system.includes('revision-'))
     assert(!system.includes('apply_patch'))
     assert(!system.includes('declare module'))
-    assert(JSON.stringify(second.input.at(-1)).includes(`revision-${revision}`))
+    assert(JSON.stringify(bodies.at(-1).input.at(-1)).includes(`revision-${revision}`))
     const result = second.input.find((item) => item.type === 'function_call_output')
     assert(JSON.stringify(result.output).includes('observed-native-output'))
     assert.equal(JSON.stringify(result.output).includes('prompt_cache_breakpoint'), explicit)

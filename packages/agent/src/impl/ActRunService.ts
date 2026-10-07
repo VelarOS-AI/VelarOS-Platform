@@ -13,7 +13,7 @@ import type {
   ActRunEvent,
   ActRunSnapshot,
 } from '../types/act.js'
-import type { ActPendingInteraction } from '../types/runtime.js'
+import type { ActPendingInteraction, ActRequestPrefix } from '../types/runtime.js'
 import { boundedModelOperation } from '../utils/model-stream.js'
 import { AgentTuning } from '../utils/tuning.js'
 
@@ -50,6 +50,7 @@ export interface ActRunServiceApi {
 /** 同一会话的运行、输入和交互使用现有上下文存储记录真实生命周期。 */
 class ActRunService implements ActRunServiceApi {
   private loop?: ActLoopApi
+  private readonly prefix: ActRequestPrefix = {}
   private active?: Promise<void>
   private controller?: AbortController
   private turnController = new AbortController()
@@ -84,70 +85,73 @@ class ActRunService implements ActRunServiceApi {
     this.turnController = new AbortController()
     const combined = AbortSignal.any([this.controller.signal, ...(signal ? [signal] : [])])
     let restored = false
-    this.loop = new ActLoop({
-      ...this.options,
-      control: {
-        runId: this.runId,
-        pending: () => !isEmpty(this.inputs) || this.steering > 0,
-        turnSignal: () => this.turnController.signal,
-        beforeTurn: async (turnSignal) => {
-          await this.inputWrites
-          turnSignal.throwIfAborted()
-          if (!restored) {
-            const state = await this.options.storage.load(this.options.sessionId)
-            const applied = new Set(
-              (state?.records ?? [])
-                .filter((r) => r.title?.startsWith('act:input-applied:'))
-                .map((r) => r.title.slice('act:input-applied:'.length))
-            )
-            const events: ActRunEvent[] = []
-            for (const record of state?.records ?? [])
-              if (record.title === 'act:event') {
-                const event = JSON.parse(
-                  (await this.options.storage.get(this.options.sessionId, record.objectId))!
-                ) as ActRunEvent
-                events.push(event)
-                if (event.type === 'input-applied') applied.add(event.ref.id)
-              }
-            for (const event of events)
-              if (
-                event.type === 'input' &&
-                !(event.source === 'submit' && event.runId === this.runId) &&
-                !applied.has(event.ref.id) &&
-                !this.inputs.some((item) => item.ref.id === event.ref.id)
-              ) {
-                this.inputs.push(event)
-                this.unapplied.set(event.ref.id, event)
-              }
-            restored = true
-          }
-          this.turnController = new AbortController()
-          this.prepared = [...this.inputs]
-          for (const { ref } of this.prepared)
-            if (
-              !(await this.options.view.inspect())?.goals.some(
-                (goal) => goal.id === ref.id && goal.sessionId === ref.sessionId
+    this.loop = new ActLoop(
+      {
+        ...this.options,
+        control: {
+          runId: this.runId,
+          pending: () => !isEmpty(this.inputs) || this.steering > 0,
+          turnSignal: () => this.turnController.signal,
+          beforeTurn: async (turnSignal) => {
+            await this.inputWrites
+            turnSignal.throwIfAborted()
+            if (!restored) {
+              const state = await this.options.storage.load(this.options.sessionId)
+              const applied = new Set(
+                (state?.records ?? [])
+                  .filter((r) => r.title?.startsWith('act:input-applied:'))
+                  .map((r) => r.title.slice('act:input-applied:'.length))
               )
-            )
-              await this.options.view.appendGoal(ref, turnSignal)
-        },
-        applied: async (turnId, turnSignal) => {
-          turnSignal.throwIfAborted()
-          for (const input of this.prepared) {
-            await this.emit({
-              type: 'input-applied',
-              runId: this.runId,
-              ref: input.ref,
-              inputId: input.inputId,
-              turnId,
-            })
-            const index = this.inputs.findIndex((item) => item.ref.id === input.ref.id)
-            if (index >= 0) this.inputs.splice(index, 1)
-          }
-          this.prepared = []
+              const events: ActRunEvent[] = []
+              for (const record of state?.records ?? [])
+                if (record.title === 'act:event') {
+                  const event = JSON.parse(
+                    (await this.options.storage.get(this.options.sessionId, record.objectId))!
+                  ) as ActRunEvent
+                  events.push(event)
+                  if (event.type === 'input-applied') applied.add(event.ref.id)
+                }
+              for (const event of events)
+                if (
+                  event.type === 'input' &&
+                  !(event.source === 'submit' && event.runId === this.runId) &&
+                  !applied.has(event.ref.id) &&
+                  !this.inputs.some((item) => item.ref.id === event.ref.id)
+                ) {
+                  this.inputs.push(event)
+                  this.unapplied.set(event.ref.id, event)
+                }
+              restored = true
+            }
+            this.turnController = new AbortController()
+            this.prepared = [...this.inputs]
+            for (const { ref } of this.prepared)
+              if (
+                !(await this.options.view.inspect())?.goals.some(
+                  (goal) => goal.id === ref.id && goal.sessionId === ref.sessionId
+                )
+              )
+                await this.options.view.appendGoal(ref, turnSignal)
+          },
+          applied: async (turnId, turnSignal) => {
+            turnSignal.throwIfAborted()
+            for (const input of this.prepared) {
+              await this.emit({
+                type: 'input-applied',
+                runId: this.runId,
+                ref: input.ref,
+                inputId: input.inputId,
+                turnId,
+              })
+              const index = this.inputs.findIndex((item) => item.ref.id === input.ref.id)
+              if (index >= 0) this.inputs.splice(index, 1)
+            }
+            this.prepared = []
+          },
         },
       },
-    })
+      this.prefix
+    )
     const run = this.loop
     let finished = false
     this.active = (async () => {
@@ -364,6 +368,7 @@ class ActRunService implements ActRunServiceApi {
     await this.active?.catch(() => {
       Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支')
     })
+    this.prefix.transcript = undefined
     await this.writes
   }
   private snapshot(): ActRunSnapshot {

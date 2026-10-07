@@ -21,6 +21,7 @@ import {
 
 import type { ActLoopOptions, ActRunServiceOptions, ActTurnDecoder } from '../contract/requires.js'
 import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
+import type { ActRequestPrefix } from '../types/runtime.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
@@ -46,19 +47,9 @@ export class ActLoop implements ActLoopApi {
   private readonly planner
   private cache: ModelContextStatus['cache']
   private stallBase?: number
-  /**
-   * 上一次被接受请求的实际出线。下一帧的逻辑历史以它的逻辑历史开头时只在其后追加，
-   * 请求成为上一请求的完整延续，只认完整延续的供应商缓存也能复用整段前缀。
-   */
-  private transcript?: {
-    readonly logical: readonly ModelHistoryMessage[]
-    readonly sent: readonly ModelHistoryMessage[]
-    readonly positions: readonly number[]
-    readonly body: string
-  }
-
   public constructor(
-    private readonly options: ActLoopOptions & Pick<ActRunServiceOptions, 'sessionId'>
+    private readonly options: ActLoopOptions & Pick<ActRunServiceOptions, 'sessionId'>,
+    private readonly prefix: ActRequestPrefix
   ) {
     this.policy = {
       foldTurns: ContextPlanTuning.foldTurns,
@@ -457,7 +448,7 @@ export class ActLoop implements ActLoopApi {
             acceptedResponseRef = accepted.ref
             // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
             const sent = modelRequestEncoder.messages(compiled.request)
-            const previous = this.transcript
+            const previous = this.prefix.transcript
             const positions =
               frame.retained && previous
                 ? [
@@ -467,7 +458,7 @@ export class ActLoop implements ActLoopApi {
                       .map((_, index) => previous.sent.length + index),
                   ]
                 : frame.logical.map((_, index) => index)
-            this.transcript =
+            this.prefix.transcript =
               this.options.frames.delta &&
               !sent.some(
                 (message) =>
@@ -557,7 +548,7 @@ export class ActLoop implements ActLoopApi {
             ) {
               // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
               this.planner.rejected()
-              this.transcript = undefined
+              this.prefix.transcript = undefined
               const repaired = await this.frame(controller.signal, decoder, {
                 provider: true,
                 recovery: repair > 0,
@@ -949,7 +940,7 @@ export class ActLoop implements ActLoopApi {
     // 真实放不下时先重建逻辑历史与完整帧，再考虑退卡和封段。
     if (current.retained && !fits(current)) {
       retain = false
-      this.transcript = undefined
+      this.prefix.transcript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
@@ -960,7 +951,7 @@ export class ActLoop implements ActLoopApi {
       (await frames.retire?.(signal))
     ) {
       retain = false
-      this.transcript = undefined
+      this.prefix.transcript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
@@ -1088,7 +1079,7 @@ export class ActLoop implements ActLoopApi {
     // 状态说明也是实际请求的一部分；追加后越界仍先收紧投影，再判断容量受阻。
     if (!compiled.okToSend || compiled.estimate.tokens > window) {
       retain = false
-      this.transcript = undefined
+      this.prefix.transcript = undefined
       current = await compose(Math.min(budget, limits.recoveryChars))
       compiled = await finalize()
     }
@@ -1122,7 +1113,7 @@ export class ActLoop implements ActLoopApi {
   private retained(
     logical: readonly ModelHistoryMessage[]
   ): Optional<{ history: readonly ModelHistoryMessage[]; body: string }> {
-    const transcript = this.transcript
+    const transcript = this.prefix.transcript
     if (!transcript || logical.length < transcript.logical.length) return undefined
     const identity = ({ cacheBreakpoint: _mark, ...message }: ModelHistoryMessage) =>
       JSON.stringify(message)

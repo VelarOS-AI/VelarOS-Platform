@@ -1,7 +1,20 @@
+import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+
 import type { ActChildSession } from '../contract/requires.js'
 
 import type { ActInteraction } from './act.js'
 import type { AgentJob } from './delegation.js'
+
+/** 打开的会话持有已接受请求的实际前缀，跨次提交仍逐条核对逻辑历史后复用。 */
+export interface ActRequestPrefix {
+  /** 容量重建时清除；关闭或重建会话时自然释放，不跨会话共享。 */
+  transcript?: {
+    readonly logical: readonly ModelHistoryMessage[]
+    readonly sent: readonly ModelHistoryMessage[]
+    readonly positions: readonly number[]
+    readonly body: string
+  }
+}
 
 /** 调度器持有活动权；持久状态不包含这些进程对象。 */
 export interface ActiveAgentJob {

@@ -1,0 +1,2649 @@
+{
+  "date": "2026-10-07",
+  "sourceBase": "d3c7abb5",
+  "configuredModel": "gpt-5.6-sol",
+  "reasoning": "high",
+  "evidence": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
+  "comparison": [
+    {
+      "id": "ledger-key",
+      "completed": true,
+      "requestCount": 15,
+      "wireCount": 15,
+      "knownInput": 220697,
+      "knownOutput": 9309,
+      "knownCacheRead": 160768,
+      "cacheReadRatio": 0.7284557560818679,
+      "missingUsage": 1,
+      "knownReferenceUsd": 0.49020320000000006,
+      "modelMs": 210926,
+      "solveMs": 216412,
+      "prefixChecks": 14,
+      "prefixPreserved": 12,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            }
+          ],
+          "ms": 101980
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            }
+          ],
+          "ms": 72928
+        },
+        {
+          "stage": 2,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            },
+            {
+              "name": "cli",
+              "passed": true
+            }
+          ],
+          "ms": 41271
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 6202,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5733,
+            "outputTokens": 187,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.026672,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 3645,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 6842,
+            "outputTokens": 131,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.029988,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 3,
+          "ms": 34823,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10817,
+            "outputTokens": 1751,
+            "cacheReadTokens": 6656,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.054326400000000004,
+          "previousItems": 8,
+          "commonItems": 8,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 32347,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17739,
+            "outputTokens": 1566,
+            "cacheReadTokens": 10624,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.06402959999999999,
+          "previousItems": 13,
+          "commonItems": 13,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 5,
+          "ms": 10823,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20471,
+            "outputTokens": 526,
+            "cacheReadTokens": 17536,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.029274400000000003,
+          "previousItems": 19,
+          "commonItems": 19,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 12752,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22601,
+            "outputTokens": 427,
+            "cacheReadTokens": 20352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0256768,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 7,
+          "ms": 8283,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16422,
+            "outputTokens": 236,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.054740800000000006,
+          "previousItems": 29,
+          "commonItems": 3,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 8,
+          "ms": 24327,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19062,
+            "outputTokens": 1035,
+            "cacheReadTokens": 16256,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0384264,
+          "previousItems": 27,
+          "commonItems": 27,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 9,
+          "ms": 18085,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 21084,
+            "outputTokens": 796,
+            "cacheReadTokens": 18944,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0320576,
+          "previousItems": 32,
+          "commonItems": 32,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 10,
+          "ms": 7579,
+          "http": [
+            200
+          ],
+          "usage": null,
+          "previousItems": 37,
+          "commonItems": 37,
+          "prefixPreserved": true,
+          "error": "terminated",
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 11,
+          "ms": 11703,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 23499,
+            "outputTokens": 416,
+            "cacheReadTokens": 23296,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.018450400000000002,
+          "previousItems": 42,
+          "commonItems": 42,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 12,
+          "ms": 6015,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10424,
+            "outputTokens": 211,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0302488,
+          "previousItems": 42,
+          "commonItems": 1,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 13,
+          "ms": 17178,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13150,
+            "outputTokens": 1140,
+            "cacheReadTokens": 10240,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.038536,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 14,
+          "ms": 11326,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15287,
+            "outputTokens": 613,
+            "cacheReadTokens": 13056,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0264064,
+          "previousItems": 29,
+          "commonItems": 29,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 15,
+          "ms": 5838,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17566,
+            "outputTokens": 274,
+            "cacheReadTokens": 15104,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0213696,
+          "previousItems": 34,
+          "commonItems": 34,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        }
+      ]
+    },
+    {
+      "id": "ledger-none",
+      "completed": true,
+      "requestCount": 17,
+      "wireCount": 17,
+      "knownInput": 305642,
+      "knownOutput": 9476,
+      "knownCacheRead": 58880,
+      "cacheReadRatio": 0.19264368116947278,
+      "missingUsage": 0,
+      "knownReferenceUsd": 1.2001200000000003,
+      "modelMs": 243780,
+      "solveMs": 247217,
+      "prefixChecks": 16,
+      "prefixPreserved": 12,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            }
+          ],
+          "ms": 117677
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            }
+          ],
+          "ms": 70269
+        },
+        {
+          "stage": 2,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "empty",
+              "passed": true
+            },
+            {
+              "name": "primary",
+              "passed": true
+            },
+            {
+              "name": "summary artifact",
+              "passed": true
+            },
+            {
+              "name": "edge-0",
+              "passed": true
+            },
+            {
+              "name": "edge-1",
+              "passed": true
+            },
+            {
+              "name": "edge-2",
+              "passed": true
+            },
+            {
+              "name": "edge-3",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            },
+            {
+              "name": "cli",
+              "passed": true
+            }
+          ],
+          "ms": 58983
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 5506,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5740,
+            "outputTokens": 201,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.02698,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 12986,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9039,
+            "outputTokens": 397,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.044096,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 3,
+          "ms": 33604,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14038,
+            "outputTokens": 1569,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.087532,
+          "previousItems": 8,
+          "commonItems": 8,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 34147,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18015,
+            "outputTokens": 1555,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.10316,
+          "previousItems": 13,
+          "commonItems": 13,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 5,
+          "ms": 8647,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20853,
+            "outputTokens": 227,
+            "cacheReadTokens": 5632,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.06767680000000001,
+          "previousItems": 18,
+          "commonItems": 18,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 14773,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22707,
+            "outputTokens": 415,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.099128,
+          "previousItems": 23,
+          "commonItems": 23,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 7,
+          "ms": 6800,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 21389,
+            "outputTokens": 387,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0776288,
+          "previousItems": 28,
+          "commonItems": 3,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 8,
+          "ms": 5970,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18234,
+            "outputTokens": 220,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0616688,
+          "previousItems": 26,
+          "commonItems": 25,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 9,
+          "ms": 21327,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20997,
+            "outputTokens": 946,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.08724080000000001,
+          "previousItems": 28,
+          "commonItems": 28,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 10,
+          "ms": 15353,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22928,
+            "outputTokens": 430,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0846448,
+          "previousItems": 32,
+          "commonItems": 32,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 11,
+          "ms": 11253,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 25625,
+            "outputTokens": 369,
+            "cacheReadTokens": 22784,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0278576,
+          "previousItems": 37,
+          "commonItems": 37,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 12,
+          "ms": 15407,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13493,
+            "outputTokens": 317,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.044644800000000005,
+          "previousItems": 42,
+          "commonItems": 1,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 13,
+          "ms": 5413,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13500,
+            "outputTokens": 154,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0414128,
+          "previousItems": 19,
+          "commonItems": 1,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 14,
+          "ms": 26123,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16349,
+            "outputTokens": 1249,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.090376,
+          "previousItems": 20,
+          "commonItems": 20,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 15,
+          "ms": 9614,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18591,
+            "outputTokens": 460,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.06789680000000001,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 16,
+          "ms": 8036,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20762,
+            "outputTokens": 309,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.089228,
+          "previousItems": 29,
+          "commonItems": 29,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 17,
+          "ms": 8821,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 23382,
+            "outputTokens": 271,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.098948,
+          "previousItems": 34,
+          "commonItems": 34,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        }
+      ]
+    },
+    {
+      "id": "catalog-none",
+      "completed": true,
+      "requestCount": 18,
+      "wireCount": 18,
+      "knownInput": 311196,
+      "knownOutput": 9022,
+      "knownCacheRead": 50176,
+      "cacheReadRatio": 0.16123600560418513,
+      "missingUsage": 0,
+      "knownReferenceUsd": 1.2445904,
+      "modelMs": 228506,
+      "solveMs": 233899,
+      "prefixChecks": 17,
+      "prefixPreserved": 14,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            }
+          ],
+          "ms": 75852
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            }
+          ],
+          "ms": 54876
+        },
+        {
+          "stage": 2,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            },
+            {
+              "name": "cli",
+              "passed": true
+            }
+          ],
+          "ms": 102808
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 6089,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5714,
+            "outputTokens": 182,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0108288,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 8192,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 6813,
+            "outputTokens": 220,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0159848,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 4
+        },
+        {
+          "sequence": 3,
+          "ms": 8975,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12022,
+            "outputTokens": 338,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.054848,
+          "previousItems": 8,
+          "commonItems": 8,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 9367,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17237,
+            "outputTokens": 204,
+            "cacheReadTokens": 6656,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0490664,
+          "previousItems": 19,
+          "commonItems": 19,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 5,
+          "ms": 15848,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19100,
+            "outputTokens": 1299,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0867128,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 10163,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 23063,
+            "outputTokens": 405,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.100352,
+          "previousItems": 28,
+          "commonItems": 28,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 7,
+          "ms": 7453,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19628,
+            "outputTokens": 226,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.083032,
+          "previousItems": 33,
+          "commonItems": 3,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 8,
+          "ms": 7584,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22084,
+            "outputTokens": 308,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.094496,
+          "previousItems": 32,
+          "commonItems": 32,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 9,
+          "ms": 21866,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16881,
+            "outputTokens": 1001,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.087544,
+          "previousItems": 37,
+          "commonItems": 31,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 10,
+          "ms": 13822,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18748,
+            "outputTokens": 549,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0703048,
+          "previousItems": 38,
+          "commonItems": 38,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 11,
+          "ms": 7579,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20604,
+            "outputTokens": 211,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.086636,
+          "previousItems": 44,
+          "commonItems": 44,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 12,
+          "ms": 10316,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 21997,
+            "outputTokens": 375,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0798208,
+          "previousItems": 49,
+          "commonItems": 49,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 13,
+          "ms": 8207,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10253,
+            "outputTokens": 251,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0303648,
+          "previousItems": 54,
+          "commonItems": 1,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 4
+        },
+        {
+          "sequence": 14,
+          "ms": 14546,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13905,
+            "outputTokens": 1103,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.07768,
+          "previousItems": 23,
+          "commonItems": 23,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 15,
+          "ms": 16169,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16887,
+            "outputTokens": 1162,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0751208,
+          "previousItems": 33,
+          "commonItems": 33,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 16,
+          "ms": 14629,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19664,
+            "outputTokens": 539,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.07376880000000001,
+          "previousItems": 38,
+          "commonItems": 38,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 17,
+          "ms": 11711,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22175,
+            "outputTokens": 352,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0800728,
+          "previousItems": 43,
+          "commonItems": 43,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 18,
+          "ms": 35990,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 24421,
+            "outputTokens": 297,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0879568,
+          "previousItems": 48,
+          "commonItems": 48,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        }
+      ]
+    },
+    {
+      "id": "catalog-key",
+      "completed": true,
+      "requestCount": 18,
+      "wireCount": 18,
+      "knownInput": 257046,
+      "knownOutput": 8483,
+      "knownCacheRead": 198656,
+      "cacheReadRatio": 0.772842215012099,
+      "missingUsage": 1,
+      "knownReferenceUsd": 0.48268240000000007,
+      "modelMs": 214733,
+      "solveMs": 222482,
+      "prefixChecks": 17,
+      "prefixPreserved": 15,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            }
+          ],
+          "ms": 81987
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            }
+          ],
+          "ms": 76600
+        },
+        {
+          "stage": 2,
+          "status": "failed",
+          "checks": [
+            {
+              "name": "vector-0",
+              "passed": true
+            },
+            {
+              "name": "vector-1",
+              "passed": true
+            },
+            {
+              "name": "vector-2",
+              "passed": true
+            },
+            {
+              "name": "vector-3",
+              "passed": true
+            },
+            {
+              "name": "vector-4",
+              "passed": true
+            },
+            {
+              "name": "manifest artifact",
+              "passed": true
+            },
+            {
+              "name": "updated artifact",
+              "passed": true
+            },
+            {
+              "name": "cli",
+              "passed": true
+            }
+          ],
+          "ms": 63580
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 6388,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5714,
+            "outputTokens": 185,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.010888799999999999,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 5754,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 6811,
+            "outputTokens": 136,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0142968,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 3,
+          "ms": 22778,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11062,
+            "outputTokens": 360,
+            "cacheReadTokens": 5632,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0311728,
+          "previousItems": 8,
+          "commonItems": 8,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 18584,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12521,
+            "outputTokens": 1409,
+            "cacheReadTokens": 10880,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.039096,
+          "previousItems": 13,
+          "commonItems": 13,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 5,
+          "ms": 6631,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15151,
+            "outputTokens": 228,
+            "cacheReadTokens": 12416,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.020466400000000003,
+          "previousItems": 18,
+          "commonItems": 18,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 11762,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16900,
+            "outputTokens": 608,
+            "cacheReadTokens": 6656,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0557984,
+          "previousItems": 23,
+          "commonItems": 23,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 7,
+          "ms": 7911,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19200,
+            "outputTokens": 372,
+            "cacheReadTokens": 16768,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0238752,
+          "previousItems": 28,
+          "commonItems": 28,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 8,
+          "ms": 6315,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15036,
+            "outputTokens": 190,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0482768,
+          "previousItems": 33,
+          "commonItems": 3,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 9,
+          "ms": 9245,
+          "http": [
+            200
+          ],
+          "usage": null,
+          "previousItems": 29,
+          "commonItems": 29,
+          "prefixPreserved": true,
+          "error": "terminated",
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 10,
+          "ms": 23300,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17266,
+            "outputTokens": 1064,
+            "cacheReadTokens": 17152,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0285968,
+          "previousItems": 33,
+          "commonItems": 33,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 11,
+          "ms": 12161,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19322,
+            "outputTokens": 308,
+            "cacheReadTokens": 17152,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0217008,
+          "previousItems": 33,
+          "commonItems": 33,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 12,
+          "ms": 10960,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20964,
+            "outputTokens": 543,
+            "cacheReadTokens": 19200,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.025596,
+          "previousItems": 38,
+          "commonItems": 38,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 13,
+          "ms": 10934,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22819,
+            "outputTokens": 353,
+            "cacheReadTokens": 20864,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0232256,
+          "previousItems": 43,
+          "commonItems": 43,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 14,
+          "ms": 5565,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10074,
+            "outputTokens": 170,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0280288,
+          "previousItems": 48,
+          "commonItems": 1,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 15,
+          "ms": 18988,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12383,
+            "outputTokens": 1297,
+            "cacheReadTokens": 9984,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0395296,
+          "previousItems": 21,
+          "commonItems": 21,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 16,
+          "ms": 10009,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14672,
+            "outputTokens": 414,
+            "cacheReadTokens": 12288,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0227312,
+          "previousItems": 25,
+          "commonItems": 25,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 17,
+          "ms": 9347,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17772,
+            "outputTokens": 282,
+            "cacheReadTokens": 14592,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0241968,
+          "previousItems": 30,
+          "commonItems": 30,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 18,
+          "ms": 18101,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 19379,
+            "outputTokens": 564,
+            "cacheReadTokens": 17664,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.025205599999999998,
+          "previousItems": 35,
+          "commonItems": 35,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        }
+      ]
+    }
+  ],
+  "heldout": {
+    "before": {
+      "id": "checksums-key",
+      "completed": true,
+      "requestCount": 8,
+      "wireCount": 8,
+      "knownInput": 76005,
+      "knownOutput": 2867,
+      "knownCacheRead": 43392,
+      "cacheReadRatio": 0.570909808565226,
+      "missingUsage": 0,
+      "knownReferenceUsd": 0.2051488,
+      "modelMs": 69098,
+      "solveMs": 70036,
+      "prefixChecks": 7,
+      "prefixPreserved": 4,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 16408
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 15282
+        },
+        {
+          "stage": 2,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 19354
+        },
+        {
+          "stage": 3,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            },
+            {
+              "name": "totals",
+              "passed": true
+            }
+          ],
+          "ms": 18847
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 10867,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5677,
+            "outputTokens": 678,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.036268,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 5276,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8091,
+            "outputTokens": 141,
+            "cacheReadTokens": 5504,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0153696,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 3,
+          "ms": 8845,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8039,
+            "outputTokens": 559,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0276688,
+          "previousItems": 7,
+          "commonItems": 3,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 6261,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9775,
+            "outputTokens": 137,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0261728,
+          "previousItems": 8,
+          "commonItems": 8,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 5,
+          "ms": 12723,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9695,
+            "outputTokens": 532,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0337528,
+          "previousItems": 12,
+          "commonItems": 7,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 6468,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11143,
+            "outputTokens": 157,
+            "cacheReadTokens": 9600,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.013152,
+          "previousItems": 13,
+          "commonItems": 13,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 7,
+          "ms": 13840,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11085,
+            "outputTokens": 533,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0393328,
+          "previousItems": 17,
+          "commonItems": 12,
+          "prefixPreserved": false,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 8,
+          "ms": 4818,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12500,
+            "outputTokens": 130,
+            "cacheReadTokens": 10880,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.013432,
+          "previousItems": 18,
+          "commonItems": 18,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        }
+      ]
+    },
+    "after": {
+      "id": "checksums-key",
+      "completed": true,
+      "requestCount": 9,
+      "wireCount": 9,
+      "knownInput": 90928,
+      "knownOutput": 2982,
+      "knownCacheRead": 78976,
+      "cacheReadRatio": 0.8685553404891783,
+      "missingUsage": 1,
+      "knownReferenceUsd": 0.1390384,
+      "modelMs": 94797,
+      "solveMs": 97877,
+      "prefixChecks": 8,
+      "prefixPreserved": 8,
+      "systemVariants": 1,
+      "toolVariants": 1,
+      "stages": [
+        {
+          "stage": 0,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 30540
+        },
+        {
+          "stage": 1,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 16220
+        },
+        {
+          "stage": 2,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            }
+          ],
+          "ms": 18560
+        },
+        {
+          "stage": 3,
+          "status": "completed",
+          "checks": [
+            {
+              "name": "current bytes and hashes",
+              "passed": true
+            },
+            {
+              "name": "totals",
+              "passed": true
+            }
+          ],
+          "ms": 32410
+        }
+      ],
+      "rows": [
+        {
+          "sequence": 1,
+          "ms": 24006,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5688,
+            "outputTokens": 614,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.019364799999999998,
+          "commonItems": 0,
+          "prefixPreserved": null,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 2,
+          "ms": 6273,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8116,
+            "outputTokens": 118,
+            "cacheReadTokens": 5504,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0150096,
+          "previousItems": 4,
+          "commonItems": 4,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 3,
+          "ms": 9639,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9054,
+            "outputTokens": 646,
+            "cacheReadTokens": 7936,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.020566400000000002,
+          "previousItems": 7,
+          "commonItems": 7,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 4,
+          "ms": 6352,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11001,
+            "outputTokens": 135,
+            "cacheReadTokens": 8960,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.014448,
+          "previousItems": 10,
+          "commonItems": 10,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 5,
+          "ms": 12241,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12055,
+            "outputTokens": 649,
+            "cacheReadTokens": 10880,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.022032,
+          "previousItems": 14,
+          "commonItems": 14,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 6,
+          "ms": 6111,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13724,
+            "outputTokens": 157,
+            "cacheReadTokens": 11904,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.0151816,
+          "previousItems": 17,
+          "commonItems": 17,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 7,
+          "ms": 10091,
+          "http": [
+            200
+          ],
+          "usage": null,
+          "previousItems": 21,
+          "commonItems": 21,
+          "prefixPreserved": true,
+          "error": "terminated",
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        },
+        {
+          "sequence": 8,
+          "ms": 15476,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14912,
+            "outputTokens": 545,
+            "cacheReadTokens": 14720,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.017556,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 1
+        },
+        {
+          "sequence": 9,
+          "ms": 4608,
+          "http": [
+            200
+          ],
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16378,
+            "outputTokens": 118,
+            "cacheReadTokens": 14720,
+            "cacheWriteTokens": 0
+          },
+          "referenceCost": 0.01488,
+          "previousItems": 24,
+          "commonItems": 24,
+          "prefixPreserved": true,
+          "explicitPoints": 0,
+          "nodeCalls": 0
+        }
+      ]
+    },
+    "freeze": {
+      "createdAt": "2026-10-07T03:28:40.423Z",
+      "purpose": "Frozen unseen checksum task comparing cross-submission prefix continuity with stable session keys.",
+      "order": [
+        "baseline",
+        "fixed"
+      ],
+      "files": {
+        "holdout.mjs": "7433c7a552c07ae904b56a04d369e92753699eee9ee9b2fee49a095a13972cae",
+        "checksum-cases.mjs": "f7b73f175543a3955a695d4269c05cc00f78ab4b9e7a002ff56a6f584041ee51",
+        "runtime/manifest.json": "e4203cc97cfc80857da527c8253329d29e22d9c274989dd1fbfd95da642857b0",
+        "runtime-verified/manifest.json": "78a63554b1732e99659cf93e407ad36456ac494d2edb50e17aca511efbb9e12b"
+      }
+    }
+  },
+  "capability": {
+    "before": [
+      {
+        "mode": "default",
+        "passed": false,
+        "http": [
+          400
+        ],
+        "errors": [
+          {
+            "type": "error",
+            "code": "provider",
+            "message": "prompt_cache_breakpoint is not supported on this model"
+          }
+        ]
+      },
+      {
+        "mode": "enabled",
+        "passed": false,
+        "http": [
+          400
+        ],
+        "errors": [
+          {
+            "type": "error",
+            "code": "provider",
+            "message": "prompt_cache_breakpoint is not supported on this model"
+          }
+        ]
+      },
+      {
+        "mode": "disabled",
+        "passed": true,
+        "http": [
+          200
+        ],
+        "errors": []
+      }
+    ],
+    "after": [
+      {
+        "mode": "default",
+        "passed": true,
+        "http": [
+          200
+        ]
+      }
+    ]
+  },
+  "excludedInitialRun": {
+    "exclusion": "workspace initially inherited parent repository Git status; diagnostic only",
+    "startedRequests": 16,
+    "captured": [
+      {
+        "sequence": 1,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 5731,
+          "outputTokens": 211,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 2,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 7000,
+          "outputTokens": 84,
+          "cacheReadTokens": 5632,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 3,
+        "usage": null,
+        "http": [
+          null
+        ]
+      },
+      {
+        "sequence": 4,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 10934,
+          "outputTokens": 1794,
+          "cacheReadTokens": 10752,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 5,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 14872,
+          "outputTokens": 1670,
+          "cacheReadTokens": 10752,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 6,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 17737,
+          "outputTokens": 407,
+          "cacheReadTokens": 14720,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 7,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 19717,
+          "outputTokens": 561,
+          "cacheReadTokens": 17536,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 8,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 21814,
+          "outputTokens": 477,
+          "cacheReadTokens": 19584,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 9,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 17650,
+          "outputTokens": 236,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 10,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 20271,
+          "outputTokens": 492,
+          "cacheReadTokens": 17536,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 11,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 22114,
+          "outputTokens": 1128,
+          "cacheReadTokens": 20096,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 12,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 24334,
+          "outputTokens": 711,
+          "cacheReadTokens": 22016,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 13,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 13470,
+          "outputTokens": 169,
+          "cacheReadTokens": 4352,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 14,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 15125,
+          "outputTokens": 316,
+          "cacheReadTokens": 13312,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      },
+      {
+        "sequence": 15,
+        "usage": {
+          "type": "usage",
+          "inputTokens": 14139,
+          "outputTokens": 151,
+          "cacheReadTokens": 4352,
+          "cacheWriteTokens": 0
+        },
+        "http": [
+          200
+        ]
+      }
+    ],
+    "missingRequests": [
+      16
+    ]
+  },
+  "additionalCliChecks": {
+    "kind": "post-run independent supplementary checks; no model feedback",
+    "report": [
+      {
+        "id": "ledger-key",
+        "passed": true
+      },
+      {
+        "id": "ledger-none",
+        "passed": true
+      },
+      {
+        "id": "catalog-key",
+        "passed": true
+      },
+      {
+        "id": "catalog-none",
+        "passed": true
+      }
+    ]
+  },
+  "pricing": {
+    "kind": "frozen reference only; not provider billing",
+    "capturedDate": "2026-09-30",
+    "inputPerMillion": 4,
+    "cachedInputPerMillion": 0.4,
+    "cacheWritePerMillion": 5,
+    "outputPerMillion": 20
+  }
+}
