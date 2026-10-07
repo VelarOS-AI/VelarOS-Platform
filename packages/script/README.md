@@ -20,7 +20,7 @@ const result = await session.run({
 if (result.checked) console.log(result.result.process)
 ```
 
-每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`，直接按包名 import；工作区自己的 npm 依赖优先，损坏的项目依赖保留原错误。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
+每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`、`ts-morph`、`prettier`，直接按包名 import；工作区自己的 npm 依赖优先，损坏的项目依赖保留原错误。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
 
 `VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 

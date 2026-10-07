@@ -169,4 +169,6 @@ export const NodeDefaultPackages = Object.freeze([
   'globby',
   'diff',
   'yaml',
+  'ts-morph',
+  'prettier',
 ] as const)

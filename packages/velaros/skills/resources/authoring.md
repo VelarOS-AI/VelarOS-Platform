@@ -1,7 +1,7 @@
 # VelarOS Skill 开发规范
 
 Skill 是 Node Agent Runtime 的可安装扩展包，可以组合按需说明、资源文件、标准 npm 依赖与外部能力。
-基础环境提供 Node.js、execa、@vscode/ripgrep、globby、diff、yaml。文件、进程、计算和标准库操作直接使用这些模块。
+基础环境提供 Node.js、execa、@vscode/ripgrep、globby、diff、yaml、ts-morph、prettier。标准库与 npm 包直接按原始 API 使用，版本、README 和类型声明可从运行环境目录按需查询。
 标准 npm 包沿用自身 API；只有系统特有的安装、权限、资源生命周期和外部能力接入才使用自定义接口。
 
 ## 选择最小包结构

@@ -1767,6 +1767,73 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })
 
+test('default development packages refactor TypeScript and format TSX in entrypoints and child Node processes', async (t) => {
+  const f = await fixture(t)
+  const original = {
+    'package.json': JSON.stringify({ type: 'module' }),
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: { target: 'ES2022', module: 'NodeNext', strict: true },
+      include: ['*.ts'],
+    }),
+    '.prettierrc.json': JSON.stringify({ semi: false, singleQuote: true }),
+    'math.ts':
+      '// double stays in this comment\nexport function double(value: number) { return value * 2 }\n',
+    'consumer.ts':
+      "import { double } from './math.js'\nexport const answer = double(21)\nexport const description = 'double'\nfunction local(double: number) { return double + 1 }\nexport const independent = local(5)\n",
+    'View.tsx': 'export const View=({name}:{name:string})=><p title="greeting">{name}</p>;',
+  }
+  for (const [name, source] of Object.entries(original)) await writeFile(join(f.cwd, name), source)
+  const child = `
+    const assert = require('node:assert/strict');
+    const {Project} = require('ts-morph');
+    const {format} = require('prettier');
+    const typescript = require('prettier/plugins/typescript');
+    const estree = require('prettier/plugins/estree');
+    const project = new Project({tsConfigFilePath:'tsconfig.json'});
+    assert.equal(project.getPreEmitDiagnostics().length,0);
+    project.emitSync();
+    format('const total:number=42;', {parser:'typescript',plugins:[typescript,estree],semi:false})
+      .then(formatted => console.log(formatted.trim()));
+  `
+  const result = await createNodeCodeRunner(f.node).run(
+    request(`
+      import {Project} from 'ts-morph';
+      import {format,resolveConfig} from 'prettier';
+      import {execa} from 'execa';
+      import {readFile,writeFile} from 'node:fs/promises';
+      const project = new Project({tsConfigFilePath:'tsconfig.json'});
+      project.getSourceFileOrThrow('math.ts').getFunctionOrThrow('double').rename('twice');
+      await project.save();
+      const filepath = 'View.tsx';
+      const config = await resolveConfig(filepath);
+      await writeFile(filepath,await format(await readFile(filepath,'utf8'),{...config,filepath}));
+      await writeFile('verify.cjs',${JSON.stringify(child)});
+      console.log((await execa(process.execPath,['verify.cjs'])).stdout);
+      await writeFile('verify.mjs',"import {answer,independent,description} from './consumer.js';import {check} from 'prettier';import {readFile} from 'node:fs/promises';console.log(JSON.stringify({answer,independent,description,formatted:await check(await readFile('View.tsx','utf8'),{filepath:'View.tsx',semi:false,singleQuote:true})}));");
+      console.log((await execa(process.execPath,['verify.mjs'])).stdout);
+    `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.match(result.process.stdout, /const total: number = 42/u)
+  assert.match(
+    result.process.stdout,
+    /"answer":42,"independent":6,"description":"double","formatted":true/u
+  )
+  assert.equal(
+    await readFile(join(f.cwd, 'math.ts'), 'utf8'),
+    original['math.ts'].replace('function double(', 'function twice(')
+  )
+  assert.equal(
+    await readFile(join(f.cwd, 'consumer.ts'), 'utf8'),
+    original['consumer.ts']
+      .replace('{ double }', '{ twice }')
+      .replace('= double(21)', '= twice(21)')
+  )
+  assert.match(await readFile(join(f.cwd, 'View.tsx'), 'utf8'), /\n$/u)
+})
+
 test('standard package references expose installed versions, original docs and declarations on demand', async (t) => {
   const f = await fixture(t, {}, 'workspace-write')
   const result = await createNodeCodeRunner(f.node).run(
@@ -1783,6 +1850,12 @@ test('standard package references expose installed versions, original docs and d
     const execa=catalog.packages.find(pkg=>pkg.name==='execa');
     const manifest=JSON.parse(await readFile(execa.packageJson,'utf8'));
     if(!(await readFile(join(execa.root,manifest.exports.types),'utf8')).includes('execa')) throw Error('missing declaration');
+    for(const name of ['ts-morph','prettier']) {
+      const pkg=catalog.packages.find(pkg=>pkg.name===name);
+      const manifest=JSON.parse(await readFile(pkg.packageJson,'utf8'));
+      const declaration=manifest.exports?.['.']?.types ?? manifest.types ?? manifest.typings;
+      if(!(await readFile(join(pkg.root,declaration),'utf8')).trim()) throw Error('missing development package declaration');
+    }
     export default refs;
   `),
     noCalls,
@@ -1826,7 +1899,7 @@ test('execution discovery records the real child environment without exposing un
 
 test('package discovery follows workspace versions, aliases and hidden package manifests', async (t) => {
   const f = await fixture(t)
-  for (const name of ['execa', '@vscode/ripgrep']) {
+  for (const name of ['execa', '@vscode/ripgrep', 'ts-morph', 'prettier']) {
     const root = join(f.cwd, 'node_modules', name)
     await mkdir(root, { recursive: true })
     await writeFile(
@@ -1845,19 +1918,23 @@ test('package discovery follows workspace versions, aliases and hidden package m
     request(`
       import {version} from 'execa';
       import {version as scopedVersion} from '@vscode/ripgrep';
+      import {version as morphVersion} from 'ts-morph';
+      import {version as prettierVersion} from 'prettier';
       import {readFileSync} from 'node:fs';
       const catalog=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));
-      export default {version,scopedVersion,catalog};
+      export default {version,scopedVersion,morphVersion,prettierVersion,catalog};
     `),
     noCalls,
     () => {}
   )
   assert.equal(result.ok, true, JSON.stringify(result))
-  const { version, scopedVersion, catalog } = result.value
+  const { version, scopedVersion, morphVersion, prettierVersion, catalog } = result.value
   assert.equal(version, '1.2.3')
   assert.equal(scopedVersion, version)
+  assert.equal(morphVersion, version)
+  assert.equal(prettierVersion, version)
   assert.equal(catalog.importer, join(f.cwd, '__velaros_program__.mjs'))
-  for (const name of ['execa', '@vscode/ripgrep']) {
+  for (const name of ['execa', '@vscode/ripgrep', 'ts-morph', 'prettier']) {
     const reference = catalog.packages.find((pkg) => pkg.name === name)
     assert.equal(reference.source, 'workspace')
     assert.equal(reference.version, version)
