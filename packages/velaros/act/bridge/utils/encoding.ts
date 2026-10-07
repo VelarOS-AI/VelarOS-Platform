@@ -1,3 +1,4 @@
+import { isString } from '@velaros-ai/core'
 import type { ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
@@ -5,7 +6,7 @@ import { modelRequestEncoder } from '@velaros-ai/kernel'
 export function externalModelPrompt(request: ModelTurnRequest): string {
   let imageIndex = 0
   const messages = modelRequestEncoder.messages(request).map((message) => {
-    if (typeof message.content === 'string') return message
+    if (isString(message.content)) return message
     return {
       ...message,
       content: message.content.map((part) =>
@@ -25,7 +26,7 @@ export function externalModelPrompt(request: ModelTurnRequest): string {
 /** 按正式编码器的消息顺序提取真实图像，与文字中的附件编号一致。 */
 export function externalModelImages(request: ModelTurnRequest) {
   return modelRequestEncoder.messages(request).flatMap((message) =>
-    typeof message.content === 'string'
+    isString(message.content)
       ? []
       : message.content.flatMap((part) =>
           part.type === 'image'

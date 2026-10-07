@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { AppError } from '@velaros-ai/core/error'
 
 import { ScriptActBridge } from '../contract/constants.js'
@@ -10,29 +12,22 @@ export interface BridgeProtocolApi {
 }
 
 class BridgeProtocol implements BridgeProtocolApi {
+  private readonly identity = z.string().min(1).max(128)
+  private readonly envelope = z.strictObject({
+    service: z.literal(ScriptActBridge.service),
+    version: z.literal(ScriptActBridge.version),
+    id: this.identity,
+    type: this.identity,
+    hostId: this.identity.optional(),
+    epoch: this.identity.optional(),
+    replyTo: this.identity.optional(),
+    payload: z.record(z.string(), z.unknown()),
+  })
+
   public parse(value: unknown): ScriptActBridgeEnvelope {
-    if (!value || typeof value !== 'object' || Array.isArray(value))
-      throw new AppError('PROTOCOL', '桥消息必须是 JSON 对象')
-    const message = value as Record<string, unknown>
-    const allowed = ['service', 'version', 'id', 'type', 'hostId', 'epoch', 'replyTo', 'payload']
-    if (
-      Object.keys(message).some((key) => !allowed.includes(key)) ||
-      message.service !== ScriptActBridge.service ||
-      message.version !== ScriptActBridge.version
-    )
-      throw new AppError('PROTOCOL', '桥消息合同不兼容')
-    for (const key of ['id', 'type'])
-      if (typeof message[key] !== 'string' || !message[key] || message[key].length > 128)
-        throw new AppError('PROTOCOL', `桥消息 ${key} 无效`)
-    for (const key of ['hostId', 'epoch', 'replyTo'])
-      if (
-        message[key] !== undefined &&
-        (typeof message[key] !== 'string' || !message[key] || message[key].length > 128)
-      )
-        throw new AppError('PROTOCOL', `桥消息 ${key} 无效`)
-    if (!message.payload || typeof message.payload !== 'object' || Array.isArray(message.payload))
-      throw new AppError('PROTOCOL', '桥消息 payload 必须是对象')
-    return message as unknown as ScriptActBridgeEnvelope
+    const parsed = this.envelope.safeParse(value)
+    if (!parsed.success) throw new AppError('PROTOCOL', `桥消息字段无效：${parsed.error.message}`)
+    return parsed.data
   }
 }
 

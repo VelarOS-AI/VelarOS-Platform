@@ -1,4 +1,6 @@
+import { isString } from '@velaros-ai/core'
 import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   ModelDriver,
   ModelInputEstimate,
@@ -53,7 +55,7 @@ class ExternalModelDriver implements ExternalModelDriverApi {
       throw new AppError('PROTOCOL', '网页模型通道只接受 text 或 json')
     const requestId = this.options.createId()
     const lease = this.options.createId()
-    let timer: ReturnType<typeof setTimeout> | undefined
+    const timers = new TimerScope({ name: 'ExternalModelDriver.stream' })
     let onAbort: (() => void) | undefined
     try {
       const reply = await new Promise<ExternalModelReply>((resolve, reject) => {
@@ -64,9 +66,8 @@ class ExternalModelDriver implements ExternalModelDriverApi {
         }
         onAbort = () => revoke(createAbortError('网页模型请求已取消'))
         signal.addEventListener('abort', onAbort, { once: true })
-        timer = setTimeout(
-          () => revoke(createTimeoutError('网页模型请求超时')),
-          this.options.timeoutMs ?? ScriptActBridge.requestTimeoutMs
+        timers.after(this.options.timeoutMs ?? ScriptActBridge.requestTimeoutMs, () =>
+          revoke(createTimeoutError('网页模型请求超时'))
         )
         // 先登记租约，再发送；同步返回也只能交给这一请求。
         void this.options
@@ -83,10 +84,10 @@ class ExternalModelDriver implements ExternalModelDriverApi {
       signal.throwIfAborted()
       if (reply.type === 'failed') {
         if (
-          typeof reply.code !== 'string' ||
+          !isString(reply.code) ||
           !reply.code ||
           reply.code.length > 128 ||
-          typeof reply.message !== 'string' ||
+          !isString(reply.message) ||
           !reply.message ||
           reply.message.length > 8000
         )
@@ -95,11 +96,11 @@ class ExternalModelDriver implements ExternalModelDriverApi {
       }
       if (
         reply.type !== 'finished' ||
-        typeof reply.evidence !== 'string' ||
+        !isString(reply.evidence) ||
         !reply.evidence.trim() ||
         reply.evidence.length > 128 ||
         !['stop', 'length'].includes(reply.reason) ||
-        typeof reply.text !== 'string' ||
+        !isString(reply.text) ||
         reply.text.length > ScriptActBridge.maxResponseChars
       )
         throw new AppError('PROTOCOL', '网页模型回复缺少有效的完整结束事实')
@@ -115,7 +116,7 @@ class ExternalModelDriver implements ExternalModelDriverApi {
       yield { type: 'finish', reason: reply.reason }
     } finally {
       this.pending.delete(requestId)
-      if (timer) clearTimeout(timer)
+      timers.dispose()
       if (onAbort) signal.removeEventListener('abort', onAbort)
       await this.options.cancel(requestId, lease)
     }
