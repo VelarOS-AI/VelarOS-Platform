@@ -38,6 +38,12 @@ import {
   taskTemporaryEnvironment,
 } from './task-environment.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
+import {
+  acquireTaskResources,
+  archiveTaskResources,
+  checkTaskResourceBudget,
+  monitorTaskResources,
+} from './resource-lifecycle.mjs'
 import { preserveWorkspaceEvidence } from './workspace-evidence.mjs'
 
 const execute = promisify(execFile)
@@ -361,149 +367,164 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
   }
 }
 
-await verifyFrozen()
-if (recovery) {
-  const output = join(directory, 'scriptact')
-  const events = (await readFile(join(output, 'events.jsonl'), 'utf8'))
-    .trim()
-    .split('\n')
-    .map(JSON.parse)
-  assert.equal(events.at(-1).type, 'state')
-  assert.equal(events.at(-1).status, recovery.terminalStatus)
-  const trace = await readTraceArtifact(join(output, 'traces.json'))
-  await snapshot(
-    join(output, 'trajectory.json'),
-    toTrajectory({
-      sessionId: scriptactSessionId,
-      instruction: manifest.executionEnvironments?.scriptact?.prompt ?? manifest.prompt,
-      ...trace,
-      identity,
-      model: manifest.model,
-    })
-  )
-  await snapshot(join(output, 'solve.json'), {
-    status: recovery.terminalStatus,
-    startedAt: recovery.startedAt,
-    finishedAt: recovery.finishedAt,
-    solveMs: recovery.finishedAt - recovery.startedAt,
-    evaluatorRecovery: recovery.reason,
-    timingSource: recovery.timingSource,
-  })
-  await snapshot(
-    join(output, 'grade.json'),
-    await grade(join(manifest.taskRoot, 'scriptact', environment.project), output)
-  )
-  await activity({ participant: 'scriptact', state: 'evidence-recovered', modelRerun: false })
-}
-const ledger = new BudgetLedger(
-  join(directory, 'gateway'),
-  manifest.budgetUsd ?? 'unlimited',
-  manifest.accounting
-)
-const token = randomBytes(32).toString('hex')
-const server = budgetServer({
-  ledger,
-  apiKey: credentials.apiKey,
-  token,
-  upstream: credentials.baseURL,
-  requireIdentity: true,
-  maxConcurrency: manifest.concurrency,
-  perAttemptConcurrency: manifest.concurrency,
-  generationPolicy: manifest.generationPolicy,
-})
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-const baseURL = `http://127.0.0.1:${server.address().port}/v1`
-const cancellation = new AbortController()
-const cancel = () => cancellation.abort(new Error('Controller interrupted'))
-process.once('SIGINT', cancel)
-process.once('SIGTERM', cancel)
+const resources = manifest.resources
+const releaseResources = resources ? await acquireTaskResources(resources) : null
+let finished = false
 try {
-  for (const participant of recovery
-    ? ['codex']
-    : (manifest.participants ?? ['scriptact', 'codex'])) {
-    cancellation.signal.throwIfAborted()
-    await verifyFrozen()
-    const output = join(directory, participant)
-    await mkdir(output)
-    const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
-    const workspace = join(manifest.taskRoot, participant, environment.project)
-    const baseline = await copySource(workspace, output)
-    const sourceBinding = python ? await bindPythonCheckout(python, workspace) : null
-    if (sourceBinding) await snapshot(join(output, 'source-binding.json'), sourceBinding)
-    assert.deepEqual(
-      node
-        ? await nodeDependencyState(workspace, node)
-        : (await execute(python, ['-m', 'pip', 'freeze'])).stdout,
-      manifest.dependencyLock,
-      'Participant must start with the frozen dependencies'
+  await verifyFrozen()
+  if (resources) await checkTaskResourceBudget(resources)
+  if (recovery) {
+    const output = join(directory, 'scriptact')
+    const events = (await readFile(join(output, 'events.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map(JSON.parse)
+    assert.equal(events.at(-1).type, 'state')
+    assert.equal(events.at(-1).status, recovery.terminalStatus)
+    const trace = await readTraceArtifact(join(output, 'traces.json'))
+    await snapshot(
+      join(output, 'trajectory.json'),
+      toTrajectory({
+        sessionId: scriptactSessionId,
+        instruction: manifest.executionEnvironments?.scriptact?.prompt ?? manifest.prompt,
+        ...trace,
+        identity,
+        model: manifest.model,
+      })
     )
-    await snapshot(join(output, 'workspace-baseline.json'), { commit: baseline })
-    const apiKey = attemptCredential(
-      {
-        campaignId: 'long-runtime-20261004',
-        candidateId: manifest.candidateId,
-        participantId: participant,
-        taskId: manifest.task.id,
-        attemptId: `${manifest.attemptId}-${participant}`,
-        jobId: manifest.attemptId,
-        phase: 'source',
-      },
-      token
-    )
-    await activity({ participant, state: 'started', workspace })
-    const startedAt = Date.now()
-    const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(manifest.timeoutMs)])
-    const result =
-      participant === 'scriptact'
-        ? await scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt })
-        : await runCodex({
-            executable: manifest.codex,
-            workspace,
-            directory: output,
-            baseURL,
-            apiKey,
-            model: manifest.model,
-            prompt,
-            timeoutMs: manifest.timeoutMs,
-            contextTokens: manifest.contextTokens,
-            inputWindowTokens: manifest.inputWindowTokens,
-            signal,
-          })
-    const solveMs = Date.now() - startedAt
-    await snapshot(join(output, 'solve.json'), { ...result, startedAt, solveMs })
-    const installed = await (
-      node
-        ? nodeDependencyState(workspace, node)
-        : execute(python, ['-m', 'pip', 'freeze']).then((value) => value.stdout)
-    ).then(
-      (value) => ({ finalDependencies: value }),
-      (error) => ({ finalDependencies: null, inspectionError: redact(error) })
-    )
-    await snapshot(join(output, 'execution-environment.json'), {
-      python,
-      node,
-      sourceBinding,
-      initialDependencies: manifest.dependencyLock,
-      ...installed,
+    await snapshot(join(output, 'solve.json'), {
+      status: recovery.terminalStatus,
+      startedAt: recovery.startedAt,
+      finishedAt: recovery.finishedAt,
+      solveMs: recovery.finishedAt - recovery.startedAt,
+      evaluatorRecovery: recovery.reason,
+      timingSource: recovery.timingSource,
     })
-    await activity({ participant, state: 'grading', solveMs })
-    await preserveWorkspaceEvidence(workspace, output, baseline)
-    const grading = await grade(workspace, output)
-    await snapshot(join(output, 'grade.json'), grading)
-    await verifyFrozen()
-    await activity({
-      participant,
-      state: 'finished',
-      solveMs,
-      passed: grading.passed,
-      solve: result,
-    })
-    if (ledger.state.authenticationBlocker) throw new Error('Gateway authentication blocked')
+    await snapshot(
+      join(output, 'grade.json'),
+      await grade(join(manifest.taskRoot, 'scriptact', environment.project), output)
+    )
+    await activity({ participant: 'scriptact', state: 'evidence-recovered', modelRerun: false })
   }
+  const ledger = new BudgetLedger(
+    join(directory, 'gateway'),
+    manifest.budgetUsd ?? 'unlimited',
+    manifest.accounting
+  )
+  const token = randomBytes(32).toString('hex')
+  const server = budgetServer({
+    ledger,
+    apiKey: credentials.apiKey,
+    token,
+    upstream: credentials.baseURL,
+    requireIdentity: true,
+    maxConcurrency: manifest.concurrency,
+    perAttemptConcurrency: manifest.concurrency,
+    generationPolicy: manifest.generationPolicy,
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const baseURL = `http://127.0.0.1:${server.address().port}/v1`
+  const cancellation = new AbortController()
+  const cancel = () => cancellation.abort(new Error('Controller interrupted'))
+  process.once('SIGINT', cancel)
+  process.once('SIGTERM', cancel)
+  const stopMonitor = resources
+    ? monitorTaskResources(resources, (error) => cancellation.abort(error))
+    : null
+  try {
+    for (const participant of recovery
+      ? ['codex']
+      : (manifest.participants ?? ['scriptact', 'codex'])) {
+      cancellation.signal.throwIfAborted()
+      if (resources) await checkTaskResourceBudget(resources)
+      await verifyFrozen()
+      const output = join(directory, participant)
+      await mkdir(output)
+      const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
+      const workspace = join(manifest.taskRoot, participant, environment.project)
+      const baseline = await copySource(workspace, output)
+      const sourceBinding = python ? await bindPythonCheckout(python, workspace) : null
+      if (sourceBinding) await snapshot(join(output, 'source-binding.json'), sourceBinding)
+      assert.deepEqual(
+        node
+          ? await nodeDependencyState(workspace, node)
+          : (await execute(python, ['-m', 'pip', 'freeze'])).stdout,
+        manifest.dependencyLock,
+        'Participant must start with the frozen dependencies'
+      )
+      await snapshot(join(output, 'workspace-baseline.json'), { commit: baseline })
+      const apiKey = attemptCredential(
+        {
+          campaignId: 'long-runtime-20261004',
+          candidateId: manifest.candidateId,
+          participantId: participant,
+          taskId: manifest.task.id,
+          attemptId: `${manifest.attemptId}-${participant}`,
+          jobId: manifest.attemptId,
+          phase: 'source',
+        },
+        token
+      )
+      await activity({ participant, state: 'started', workspace })
+      const startedAt = Date.now()
+      const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(manifest.timeoutMs)])
+      const result =
+        participant === 'scriptact'
+          ? await scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt })
+          : await runCodex({
+              executable: manifest.codex,
+              workspace,
+              directory: output,
+              baseURL,
+              apiKey,
+              model: manifest.model,
+              prompt,
+              timeoutMs: manifest.timeoutMs,
+              contextTokens: manifest.contextTokens,
+              inputWindowTokens: manifest.inputWindowTokens,
+              signal,
+            })
+      const solveMs = Date.now() - startedAt
+      await snapshot(join(output, 'solve.json'), { ...result, startedAt, solveMs })
+      const installed = await (
+        node
+          ? nodeDependencyState(workspace, node)
+          : execute(python, ['-m', 'pip', 'freeze']).then((value) => value.stdout)
+      ).then(
+        (value) => ({ finalDependencies: value }),
+        (error) => ({ finalDependencies: null, inspectionError: redact(error) })
+      )
+      await snapshot(join(output, 'execution-environment.json'), {
+        python,
+        node,
+        sourceBinding,
+        initialDependencies: manifest.dependencyLock,
+        ...installed,
+      })
+      await activity({ participant, state: 'grading', solveMs })
+      await preserveWorkspaceEvidence(workspace, output, baseline)
+      const grading = await grade(workspace, output)
+      await snapshot(join(output, 'grade.json'), grading)
+      await verifyFrozen()
+      await activity({
+        participant,
+        state: 'finished',
+        solveMs,
+        passed: grading.passed,
+        solve: result,
+      })
+      if (ledger.state.authenticationBlocker) throw new Error('Gateway authentication blocked')
+    }
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+    ledger.close()
+    process.off('SIGINT', cancel)
+    process.off('SIGTERM', cancel)
+    await stopMonitor?.()
+  }
+  finished = true
 } finally {
-  server.closeAllConnections()
-  await new Promise((resolve) => server.close(resolve))
-  ledger.close()
-  process.off('SIGINT', cancel)
-  process.off('SIGTERM', cancel)
+  await releaseResources?.()
+  if (finished && resources) await archiveTaskResources(resources)
 }

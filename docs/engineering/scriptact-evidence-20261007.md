@@ -1,6 +1,6 @@
 # ScriptAct 新任务对比、产品修复与证据发布
 
-2026-10-07。延续 `evaluation-retrospective-20261007.md` 的清理与经验归档。本轮完整原始材料位于 `/Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07-followup`；公开材料在 Website 的 `public/research/scriptact-2026-10-07/`。最终结果以公开 `results.json`、评分修正记录和人工复核一并阅读。
+2026-10-07。延续 `evaluation-retrospective-20261007.md` 的清理与经验归档。本轮完整原始材料位于 `~/Documents/VelarOS-Evaluation-Archive/2026-10-07-followup`；公开材料在 Website 的 `public/research/scriptact-2026-10-07/`。最终结果以公开 `results.json`、评分修正记录和人工复核一并阅读。
 
 ## 本轮差量及原因
 

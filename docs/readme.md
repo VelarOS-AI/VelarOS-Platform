@@ -1,101 +1,67 @@
-# VelarOS Platform documentation
+# Platform 文档
 
-This directory is the authoritative documentation entry point for VelarOS Platform. Public contracts, architecture decisions, and contributor-facing constraints must be reviewable in this repository. A private consumer repository may document its own adapters, but it cannot redefine Platform behavior.
+当前公开接口以包 exports、合同和可执行验收为准。本文组织持续维护的架构、开发与评测入口。
 
-## Start here
+## 架构与运行
 
-| Document | Read it when |
-| --- | --- |
-| [Platform boundaries](architecture/platform-boundaries.md) | Deciding whether behavior belongs to Platform, a host, or a product |
-| [Repository topology](architecture/repository-topology.md) | Adding a package, changing a dependency direction, or working across domains |
-| [Module ownership](architecture/module-ownership.md) | Using the unified contract/types/impl/utils layout, class APIs, injection ports, model operation definitions, templates, implementation layers and export checks |
-| [Act runtime](architecture/platform-runtime.md) | Following session input, ScriptAct execution, context assembly and model requests |
-| [Browser ScriptAct Bridge design](engineering/browser-scriptact-bridge-design-20261007.md) | Current daily-task CLI Host, external web ModelDriver, approval UI and durable recovery |
-| [Long-running context](architecture/long-running-context.md) | Keeping one session running indefinitely: cache-stable request layout, segments, folding by remaining turns |
-| [System space](architecture/act-system-space.md) | Using modules, memory, shared stores and durable messages |
-| [Observation output](architecture/script-output-observation.md) | Controlling recurring script output, budgets and derived presentations |
-| [Storage adapters](architecture/storage.md) | Replacing persistence through ContextStorage and StoreStorage |
-| [Act API catalog](../packages/velaros/act/README.md) | Inspecting generated operation names, effects and templates |
-| [Runtime assurance and observability](architecture/runtime-assurance.md) | Inspecting composition, model requests, or process confinement without changing authority |
-| [Engineering standard](engineering/code-standard.md) | Writing or reviewing code, tests, comments, generated artifacts, or documentation |
-| [Decision records](decisions/README.md) | Changing public protocols, storage, permissions, package ownership, or compatibility policy |
-| [Gate coverage matrix](gate-coverage-matrix.md) | Finding the checks that cover a package or identifying a missing gate |
-| [Platform 0.6.18 package source release](engineering/platform-0.6.18-package-source-release.md) | Reviewing the metadata-only package update that makes GitHub source association durable |
-| [Platform 0.6.17 open-source release](engineering/platform-0.6.17-open-source-release.md) | Reviewing the first public release, package versions, history boundary, and release verification |
-| VelarOS Termel | Independent terminal product, Host composition, remote nodes, packaging, and release |
+| 文档                                                                              | 内容                             |
+| --------------------------------------------------------------------------------- | -------------------------------- |
+| [Platform boundaries](architecture/platform-boundaries.md)                        | 产品、宿主与 Platform 的职责     |
+| [Repository topology](architecture/repository-topology.md)                        | 包、依赖方向与仓库布局           |
+| [模块结构与所有权](architecture/module-ownership.md)                              | 合同、实现、注入与目录治理       |
+| [模块说明规范](architecture/module-readme.md)                                     | 模块 README 的内容和示例要求     |
+| [Platform 运行主链](architecture/platform-runtime.md)                             | 协议选择、执行、完成、交互与恢复 |
+| [Skill 与标准 Node 运行环境](architecture/skill-runtime.md)                       | 标准 Node、Skill 与持久 npm 环境 |
+| [浏览器日常任务与 ScriptAct Bridge](architecture/browser-scriptact-bridge.md)     | 外部模型驱动与浏览器 Host        |
+| [长程上下文](architecture/long-running-context.md)                                | 历史封段、叙事、观察和容量       |
+| [ScriptAct 文本协议：设计复核与执行约束](architecture/scriptact-text-protocol.md) | 文本控制段的语法与接收约束       |
+| [观察脚本与结果租期](architecture/script-context-leases.md)                       | 观察与执行结果的展示寿命         |
+| [ScriptAct 声明式观察输出](architecture/script-output-observation.md)             | 观察输出、预算与派生展示         |
+| [脚本增量编辑与版本发布](architecture/script-incremental-edit.md)                 | 程序版本与精确修改               |
+| [Act 模型自管理空间](architecture/act-system-space.md)                            | 模块发现、目标、记忆与共享存储   |
+| [高级搜索：正式运行链路](architecture/advanced-search.md)                         | 有界搜索、续接与证据             |
+| [存储适配规范](architecture/storage.md)                                           | 存储端口与适配器                 |
+| [VelarOS shared resources](architecture/shared-resources.md)                      | 跨产品共享的运行资源             |
+| [Runtime assurance and observability](architecture/runtime-assurance.md)          | 授权、可观测性与进程约束         |
 
-The root [README](../README.md) contains the human-readable package inventory, setup instructions, and
-merge-gate commands. The [generated package catalog](generated/package-catalog.json) is the deterministic
-machine-readable projection of the root manifest and package manifests.
+## 开发与交付
 
-The [module structure refresh report](engineering/module-structure-refresh-delta.md) records the unified layout migration and current-document refresh. Refactor-plan records are dated evidence; start with the architecture guides above for current integration.
+- [仓库说明](../README.md)与[包目录](generated/package-catalog.json)：安装、工作区和公开包。
+- [代码规范](engineering/code-standard.md)、[门禁覆盖](gate-coverage-matrix.md)：实现与验证。
+- [本机发布](engineering/local-package-release.md)、[消费者更新](engineering/platform-consumer-updates.md)、[依赖安全](engineering/dependency-security.md)：发布与依赖管理。
+- [模块与 Mod 接入](mod-dev/README.md)：最小示例、注入点、权限、包格式与宿主装配。
+- [Act 能力目录](../packages/velaros/act/README.md)：生成的操作、效果和模板。
+- [架构决策](decisions/README.md)：现行规则的设计依据。
 
-## Local validation and release
+## 评测
 
-| Document | Purpose |
-| --- | --- |
-| [Local release and validation](engineering/local-package-release.md) | Run the full local gate and publish Platform packages |
-| [Consumer repository updates](engineering/platform-consumer-updates.md) | Align a consumer with published Platform packages and verify its frozen dependency graph |
+- [评测规范](engineering/scriptact-acceptance-criteria.md)：冻结配置、独立验收、完整计量与恢复。
+- [Agent Lab](../packages/agent-lab/README.md)：`eval:act` 使用的驱动、核验、归档与统计包。
+- [架构](agent-lab/architecture.md)、[测量方法](agent-lab/methodology.md)、[宿主接入](agent-lab/integration.md)。
+- [长任务运行器](../scripts/agent/long-tasks/README.md)：独占任务资源、候选准备、评分与归档。
 
-## Mod development
+## 验证记录
 
-| Document | Purpose |
-| --- | --- |
-| [Mod developer guide](mod-dev/README.md) | Current Kernel envelope, explicit Act capability assembly and host responsibilities |
-| [Getting started](mod-dev/getting-started.md) | Create and mount a minimal operation module; validate distributable envelopes |
-| [Contribution axes](mod-dev/axes/README.md) | Choose the actual injection port for each extension responsibility |
-| [Runtime seams](mod-dev/seams.md) | Use explicit execution, context, authorization and lifecycle ports |
-| [Capabilities](mod-dev/capabilities.md) | Use capability tokens and the permission broker across mod boundaries |
-| [Distribution](mod-dev/distribution.md) | Package and distribute bundled or installed mods |
-| [Conventions](mod-dev/conventions.md) | Ownership, data lifecycle, i18n, semantic vocabulary, and drift prevention |
+以下记录按各自冻结的源码、任务与时间解释，原始观测和未知项随记录保留。
 
-Host products own their adapters, installation UI, and product-specific policies. Those details are intentionally outside the public Platform contract.
+- [评测结构、结果与优化经验归档](engineering/evaluation-retrospective-20261007.md)
+- [Runtime 静态与动态联合审查差量报告](engineering/runtime-context-audit-20261006.md)
+- [Runtime 修复与三轮追加对照差量报告](engineering/runtime-review-followup-20261006.md)
+- [普通 Desktop 项目的完整交付复核与完整模型请求账本](engineering/scriptact-completion-review-20261008.md)
+- [ScriptAct 新任务对比、产品修复与证据发布](engineering/scriptact-evidence-20261007.md)
+- [ScriptAct 完整交付目标：当前验收清单](engineering/scriptact-goal-audit-20261007.md)
+- [ScriptAct 真实缓存验证与修复](engineering/scriptact-live-cache-validation-20261007.md)
+- [ScriptAct Desktop 原生评测](engineering/scriptact-native-desktop-evaluation.md)
+- [ScriptAct 下一代实现与证据](engineering/scriptact-next-generation-implementation.md)
+- [ScriptAct 后续优化与验证，2026-10-07](engineering/scriptact-optimization-20261007.md)
+- [ScriptAct 优化实现与收益证据](engineering/scriptact-optimization-implementation.md)
+- [ScriptAct 并行评测环境与修复循环](engineering/scriptact-parallel-evaluation.md)
+- [ScriptAct：project 与标准 Node 的真实仓库任务对比](engineering/scriptact-project-ablation-20261007.md)
+- [ScriptAct 工具协议实现与实测（2026-10-07）](engineering/scriptact-protocol-ab-20261007.md)
+- [ScriptAct 两种传输的模型提示分流](engineering/scriptact-protocol-prompts-20261008.md)
+- [标准编程环境与宿主能力发现](engineering/scriptact-standard-runtime-20261004.md)
+- [标准运行时：输入精简与原生模块发现](engineering/scriptact-standard-runtime-v2-20261004.md)
 
-## Agent and evaluation
+## 维护约定
 
-| Document | Purpose |
-| --- | --- |
-| [Agent mod trunk](agent/agent-mod-trunk.md) | Current ownership of Act assembly and Kernel module loading |
-| [Agent Lab architecture](agent-lab/architecture.md) | Package boundaries, continuous journeys, drivers, verifiers, and trust boundaries |
-| [Agent Lab methodology](agent-lab/methodology.md) | Reproducibility, comparison, variance, and evaluation validity |
-| [Agent Lab integration](agent-lab/integration.md) | Add an execution engine, journey, verifier, detector, or CLI runtime |
-| [Legacy equivalence](agent-lab/legacy-equivalence.md) | Understand historical behavior that the current package intentionally preserves or changes |
-
-## Act details
-
-| Document | Purpose |
-| --- | --- |
-| [Agent integration](architecture/agent-act-consolidation.md) | Loop ownership, injected ports and durable run control |
-| [Code surface design](engineering/script-design.md) | Why the model writes programs, how declarations are generated and how capabilities reach the model |
-| [ScriptAct implementation and evidence](engineering/scriptact-optimization-implementation.md) | Implementation scope, compatibility, frozen comparisons and next directions |
-| [ScriptAct current state decision (ADR 0026)](decisions/0026-scriptact-current-state-and-verification.md) | Current frames, atomic completion and trusted observation coverage |
-| [ScriptAct optimization design](engineering/scriptact-optimization-design.md) | Current working view, capability templates, domain verification, observation reuse and evaluation design |
-| [ScriptAct next generation design](engineering/scriptact-next-generation-design.md) | Priorities, concrete interfaces, domain reuse boundaries and independent validation for the next generation |
-| [ScriptAct next generation evidence](engineering/scriptact-next-generation-implementation.md) | Contract changes, complete mechanism costs, frozen model comparisons and regression diagnosis |
-| [ScriptAct final delivery](engineering/scriptact-next-generation-delivery.md) | Committed implementation, current contracts, final checks and complete original model attempts |
-| [Text protocol](architecture/scriptact-text-protocol.md) | Frames, streaming, blobs, execution and completion |
-| [Result leases](architecture/script-context-leases.md) | Recurring observations and retained one-shot results |
-| [Incremental edits](architecture/script-incremental-edit.md) | Version-bound updates to model-maintained programs |
-| [Context management](architecture/context-management.md) | Five partitions, model maintenance and overflow recovery |
-| [Advanced search](architecture/advanced-search.md) | Bounded search, continuation and its context policy |
-| [Shared resources](architecture/shared-resources.md) | Shared structured state, grants and durable messages |
-
-## Memory
-
-| Document | Purpose |
-| --- | --- |
-| [Memory slimming (ADR 0010)](decisions/0010-memory-slimming.md) | Historical decision establishing host-scoped Markdown memory |
-| [Memory module README](../packages/velaros/memory/README.md) | The host memory store used by system.memory.recall/save/remove |
-
-Historical review and revision documents remain evidence of prior decisions. They must be clearly labeled as historical and cannot override current schemas, tests, architecture documents, or accepted decision records.
-
-## Documentation rules
-
-- Add every maintained document to this index.
-- Keep public API names, package paths, and implementation status aligned with the current tree.
-- Describe unavailable work as planned, not shipped.
-- Replace stale plans; keep history in Git or in an explicitly labeled historical record.
-- Link to public, stable sources. Do not make private repositories or local files a prerequisite for understanding Platform behavior.
-- Update documentation in the same change as the contract or behavior it describes.
-
-- [Project language and CLI ownership (ADR 0016)](decisions/0016-project-language-and-cli-ownership.md): project owns language services; Termel owns the CLI.
+持续维护的说明只写当前合同、用法与理由；行为变更同步更新相应入口和测试。阶段工作记录按其验证身份保存，过程流水账由 Git 历史承载。调整文档时同步修正链接、示例和调用方引用。

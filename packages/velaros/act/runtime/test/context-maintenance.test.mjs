@@ -620,7 +620,7 @@ test('context maintenance publishes a validated native Node patch in one model r
       )
       assert.deepEqual(
         request.response.tools.map((tool) => tool.name),
-        ['exec']
+        ['blobs', 'exec', 'done']
       )
       assert.equal(toolCalls, 1)
       yield {
@@ -971,9 +971,12 @@ test('shared provider usage lets maintenance deliver the full original in its fi
                 },
               ]
             : [
-                { type: 'text-start', id: 't' },
-                { type: 'text-delta', id: 't', delta: 'Finished the fixture.' },
-                { type: 'text-end', id: 't' },
+                {
+                  type: 'tool-call',
+                  toolCallId: `done-${mainCalls}`,
+                  toolName: 'done',
+                  input: JSON.stringify({ message: 'Finished the fixture.' }),
+                },
               ]),
           {
             type: 'finish',
@@ -1122,10 +1125,11 @@ test('native maintenance locally sizes its initial evidence using the standard p
       const input = facts.inputs.find((item) => item.text.startsWith('Review every batch'))
       firstInputChars = input?.text.length ?? 0
       assert.equal(
-        input?.text,
-        original,
+        input?.text.length,
+        original.length,
         'the complete original fits in the locally resized first request'
       )
+      assert.equal(input?.text, original)
       assert.equal(request.contextStatus.phase, 'work')
       assert((await estimator.estimate(request)).tokens <= 32768)
       const candidate = {

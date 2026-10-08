@@ -83,3 +83,27 @@ export const ActRuntimeTuning = Object.freeze({
   /** 本帧尾最多列几条最近的缺页。 */
   recentFaults: 4,
 })
+
+/** 提取与复核各调用一次；正文和响应的硬上限不随模型窗口无限增长。 */
+export const CompletionReviewLimits = Object.freeze({
+  /** 每次完成尝试中，格式或引文核对失败后的专项纠正次数。 */
+  protocolRepairs: 1,
+  /** 一次专项请求的总时限，单位毫秒。 */
+  timeoutMs: 45_000,
+  /** 专项输入的最高模型 Token 预算，仍受真实窗口限制。 */
+  inputTokens: 32_000,
+  /** 单次提取或复核的最高输出 Token。 */
+  outputTokens: 4096,
+  /** 当前任务完整用户原文的 UTF-16 字符总上限。 */
+  originalChars: 48_000,
+  /** 最终答复及执行证据各自的 UTF-16 字符上限。 */
+  evidenceChars: 32_000,
+  /** 一次完整产物快照的 UTF-8 字节总上限。 */
+  artifactBytes: 128_000,
+  /** 单次专项响应文本的 UTF-16 字符上限。 */
+  responseChars: 32_000,
+  /** 一份固定需求清单的条目上限。 */
+  requirements: 24,
+  /** 所有需求引用的不同产物身份总数上限。 */
+  artifacts: 32,
+})

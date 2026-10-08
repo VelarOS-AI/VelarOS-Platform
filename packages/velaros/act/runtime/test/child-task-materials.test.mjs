@@ -209,7 +209,14 @@ test('Node child reads original parent inputs and attachments from ordinary file
     } else {
       assert.match(modelText(request), /Preserve the public API/)
       assert.match(modelText(request), /attached-data/)
-      yield { type: 'text', text: 'The assigned work is complete.' }
+      yield {
+        type: 'tool-call',
+        value: {
+          id: `child-done-${childCalls}`,
+          name: 'done',
+          input: { message: 'The assigned work is complete.' },
+        },
+      }
     }
     yield { type: 'finish', reason: 'stop' }
   })
@@ -243,7 +250,11 @@ test('Node child reads original parent inputs and attachments from ordinary file
         yield call(
           "import {start,wait} from 'velaros:agents'; const child=await start({task:'Read an attachment.',profile:'worker',materials:[{sessionId:'other',id:'forged'}]}); console.log(await wait({id:child.id}));"
         )
-      else yield { type: 'text', text: 'Complete.' }
+      else
+        yield {
+          type: 'tool-call',
+          value: { id: `parent-done-${mainCalls}`, name: 'done', input: { message: 'Complete.' } },
+        }
       yield { type: 'finish', reason: 'stop' }
     }),
   })

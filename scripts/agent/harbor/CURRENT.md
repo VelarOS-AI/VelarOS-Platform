@@ -1,6 +1,6 @@
 # 当前：Desktop macOS 原生评测与修复
 
-当前目标与协议见 `docs/engineering/scriptact-native-desktop-evaluation.md`；差量与真实配对汇总见 `docs/engineering/scriptact-native-desktop-repair-delta-20261003.md`。私有状态入口为 `.velaros-workspace/bench/native-desktop-20261003/active-campaign.json`。双方使用精确 `gpt-5.6-sol` / `high`、同一上游与本机工具链、最多两个槽；ScriptAct 完全访问，Codex 同等级访问。
+当前目标与协议见 `docs/engineering/scriptact-native-desktop-evaluation.md`；差量与真实配对汇总见 `../../../docs/architecture/platform-runtime.md`。私有状态入口为 `.velaros-workspace/bench/native-desktop-20261003/active-campaign.json`。双方使用精确 `gpt-5.6-sol` / `high`、同一上游与本机工具链、最多两个槽；ScriptAct 完全访问，Codex 同等级访问。
 
 Flask、Requests、Pytest、Sphinx、Django、SymPy 六个仓库累计十四组原生开发尝试已有终态，涉及十一道题；有效题数按协议另行核对，Requests 的源行为违反评测规则。最新 Sphinx 9461 首轮 ScriptAct / Codex 官方重放 59/62、62/62，解题 383.390 / 277.586 秒；32 条新增请求物理结束，双方各一笔未知用量，已知参考小计 $0.7623648 / $0.5627672。完整轨迹确认 ScriptAct 某失败响应在闭合脚本后连续生成 36465 字符空白，等待 185.141 秒；该响应没有执行程序。两方连接重置时间一致，生产原因仍未确定。该轮及 Django 16631 的高级生成参数存在差异，保留为诊断记录，资源对齐的时间、完整费用证明资格不成立。
 
@@ -14,7 +14,7 @@ Django 16263 的源任务均结束、40 条新增请求全部结算；原控制�
 
 已修复供应商能力配置丢失、单文件搜索空结果、脚本尾部未声明答复的文字展示、透明代码行号栏及文件链接断开下划线。Pytest 开发重测双方 16 项通过，ScriptAct / Codex 解题 69.698 / 72.328 秒，完整参考估算 $0.2384264 / $0.1429464；一次重测不能证明总体持平或领先。
 
-当前产品修复另含完成活动自动折叠、文件链接保持聊天滚动、Python PyCharm 配色、GPT-5.6 Sol 精确 ID 的容量登记与模型可回填引用的 8 位短身份。短引用经过真实哈希碰撞、跨连接、重启、旧引用兼容、程序编辑及子任务链路回归；完整内容校验保留。版本绑定编辑已实现：连续源码定位、八位目标引用、同版本批量提交、问题项增量修正及整次撤销。项目 688 项、Runtime 150 项、控制器 9 项通过，实际 Desktop 装配核对完成。实现与成本边界见 `docs/engineering/scriptact-bound-editing-20261004.md`。
+当前产品修复另含完成活动自动折叠、文件链接保持聊天滚动、Python PyCharm 配色、GPT-5.6 Sol 精确 ID 的容量登记与模型可回填引用的 8 位短身份。短引用经过真实哈希碰撞、跨连接、重启、旧引用兼容、程序编辑及子任务链路回归；完整内容校验保留。版本绑定编辑已实现：连续源码定位、八位目标引用、同版本批量提交、问题项增量修正及整次撤销。项目 688 项、Runtime 150 项、控制器 9 项通过，实际 Desktop 装配核对完成。实现与成本边界见 `../../../packages/velaros/project/README.md`。
 
 用户要求的 21 个 A/B 与取消验收会话已删除，重启后验证为零，其他会话保持；日常循环使用本地定向回归、真实修复题与既有环境凭据。Pytest 10356 已结算：双方新增必需用例失败、其余 89 项通过，解题 203.885 / 185.549 秒；各一笔连接重置缺用量，完整费用未知。现有环境复用于较难的 Sphinx 11510 开发题，零模型基线及官方 Oracle 各核对 9 项。11728 个产物及实际 renderer 快照冻结为候选 `639e2d4f`；`sphinx-11510-01` 已结算，双方 8/9，解题 168.090 / 339.955 秒，已知参考费用 $0.7640328 / $0.5820144，Codex 另有一笔未知。失败为模型遗漏包含文件回调身份与纯文本例外，编辑链无故障；本轮使用旧 `edit`，不归因于新接口。完整轨迹与账本重算一致，产物校验、配置恢复及物理结算完成，全局租约释放，当前无付费控制器。独立验证池保持隔离。
 
@@ -62,7 +62,7 @@ T2 Element Web 已完整结算，双方官方 reward=1。ScriptAct / Codex 解�
 
 验证修复周转优化已通过独立复核：70 项集成检查通过，四组同输入验证 5.127→0.177 秒；R/Q 完整自动诊断约 0.224/0.251 秒，输入相同可复用。诊断与验证已加速，完整修复周期仍持续记录。验收 `throughput-optimization/final-validation.json`，SHA `b5688784f3e0543476be226787b6c4da7004742ecb8db4bcad53cde38662411a`。S 完整诊断已在源任务与控制器终态自动生成，双方关键路径独审完成；通用核心问题已修复并封存 T2。
 
-核心链路与实测费用拆解见 [ScriptAct 核心与缓存断点联合优化](../../../docs/engineering/scriptact-cache-output-optimization.md)。固定开发题第 8 题 Navidrome（`parallel-54r`）已完成，双方官方 reward=1；源任务、重放、账本及资源全部结算。ScriptAct / Codex 解题 **226.953 / 206.937 秒**，完整 attempt **355.544 / 329.321 秒**，完整模型费参考估算 **$0.3147728 / $0.2840648**，第三方实际扣费未知。本题 ScriptAct 仍慢约 8%、参考模型费高约 11%，单题开发证据不能支持整体领先或 R 修复的因果收益。
+核心链路与实测费用拆解见 [Platform 运行主链](../../../docs/architecture/platform-runtime.md)。固定开发题第 8 题 Navidrome（`parallel-54r`）已完成，双方官方 reward=1；源任务、重放、账本及资源全部结算。ScriptAct / Codex 解题 **226.953 / 206.937 秒**，完整 attempt **355.544 / 329.321 秒**，完整模型费参考估算 **$0.3147728 / $0.2840648**，第三方实际扣费未知。本题 ScriptAct 仍慢约 8%、参考模型费高约 11%，单题开发证据不能支持整体领先或 R 修复的因果收益。
 
 R 候选指纹 `dcc99c8f31558a703f619b04d566078bce33b732fa3c7ae71b83dd5a89d62b2c`，清单 SHA `f154b98d460a3f676fceeae1c598389a351b33286f1435a2face1ed655f852dd`，启动验收 SHA `2c0a69376ee9eba5fabda5c69ecfe6971c532f99b92185a0f919563dd71bd36e`。Shell 生成判断指导修复经正式构建、40 项相关回归、32 组能力配置、4 个实际 Runtime 零模型 SDK 会话与候选独审后封存。Navidrome 实际 glibc、两槽容量、双方安装和零模型官方 Oracle（reward=1）均通过。精确回收两张可恢复历史镜像，保留压缩恢复缓存与全部执行记录。
 
@@ -126,7 +126,7 @@ K 清单 SHA-256 `f09ea78b9564663a536625f6061c67f3c1ddba43b09fe92f39776a28ba2c70
 
 用户要求优先修复 54g 的速度差距，相关修复已在候选 I 完成并通过验收。成功请求累计差约 539 秒，中断请求差约 309 秒；上下文编译仅 1.69 秒，不能把慢都归因于本地编排或缓存。实际请求、输出生成和流时序已完成首轮核对。原收尾审计遗漏了 `runtime.decision.missing`，只查看了观察区的 `missingRequired`；真实完成区在后期仍列两份早期结果的 `required-body-unavailable`，因此不能将后续释放操作直接归为模型自主浪费。报告已按完整分区纠正，通用完成与材料生命周期机制的修复见下。
 
-候选 I 已封存，指纹 `b40f751cf989b23582023c87c8424ab97c277b837bb49aa18e9974569d8c2d44`。Runtime 修复通过 65 项回归、5 个独立边界反例和 3 个实际请求编译链路反例：正文完整保留在本次历史中时，当前帧缩容不会再次误报同一必需块缺失；折叠、释放或正文退役后仍恢复应有缺口。证明按结果引用、块名和内容哈希绑定，不送进模型提示词。Model 修复完整 Responses 终端之后仍等待传输 EOF 的问题，通过 171 项 Model 测试、实际归档 SDK 3.0.119 的 16 项终端回归及独立审核。七包正式构建身份、3,954 文件封印、glibc/musl 两归档均通过；相对 H 仅 Model/Runtime 包内 23 文件变化，依赖锁与运行参数保持。人工 500 毫秒尾流实验中终端后的等待从 501.67 毫秒降至 1.19 毫秒，不能推算为 54g 整题提速。证据入口 `validation-54i.json`、`readonly-required-history-audit.json`、`readonly-responses-terminal-audit/`，机制说明见 [终端交付修复](../../../docs/engineering/scriptact-responses-terminal-delivery.md)。
+候选 I 已封存，指纹 `b40f751cf989b23582023c87c8424ab97c277b837bb49aa18e9974569d8c2d44`。Runtime 修复通过 65 项回归、5 个独立边界反例和 3 个实际请求编译链路反例：正文完整保留在本次历史中时，当前帧缩容不会再次误报同一必需块缺失；折叠、释放或正文退役后仍恢复应有缺口。证明按结果引用、块名和内容哈希绑定，不送进模型提示词。Model 修复完整 Responses 终端之后仍等待传输 EOF 的问题，通过 171 项 Model 测试、实际归档 SDK 3.0.119 的 16 项终端回归及独立审核。七包正式构建身份、3,954 文件封印、glibc/musl 两归档均通过；相对 H 仅 Model/Runtime 包内 23 文件变化，依赖锁与运行参数保持。人工 500 毫秒尾流实验中终端后的等待从 501.67 毫秒降至 1.19 毫秒，不能推算为 54g 整题提速。证据入口 `validation-54i.json`、`readonly-required-history-audit.json`、`readonly-responses-terminal-audit/`，机制说明见 [Platform 运行主链](../../../docs/architecture/platform-runtime.md)。
 
 开发压力组题序已冻结于 `campaign/development-pressure-24-v1.json`（SHA-256 `1ddb30e8a87cd33d46af0b07e8fafb9651ef7bc07873866c5b1c4121800e9c70`），24 道题按 11 仓库分层并明确登记 development，HARD-51 与旧验证保留题隔离。首题为新的 Proton 仓库任务，官方十份文件和不可变镜像身份已核对。大层连续四个下载窗口正常增长却耗尽旧重试上限，现已修复为有总期限的进展续传、连续停滞限制和损坏文件隔离，20 项回归通过，原始失败及 partial 保留并以新证据目录恢复。I 的速度修复回归、官方 Oracle 与双方安装已通过。
 
@@ -150,7 +150,7 @@ I 配对清单已冻结为 `parallel-54i-manifest.json`，SHA-256 `ac936048a87e5
 
 首批暴露的三项问题已修复：显式输出预算现在可使用有限帧份额；适配器按候选冻结价格计费；GPT-5.6 已有历史断点正常传输。134 项基础设施、143 项模型、78 项输出与上下文回归通过。新候选 `bundle-foundation-54c` 指纹 `5a63761be61f4d9f7b90b6b05e26b5378009002a10046170cb37d09753f0c19a`；Proton musl 上双方安装及官方 Oracle（reward=1、零模型调用）已通过；`parallel-54c` 的 source/replay 已完成，控制器及资源采样已退出，两个槽位均释放。实时入口 `.velaros-workspace/bench/parallel-54/active-campaign.json`，详细环境及结果见 [并行评测记录](../../../docs/engineering/scriptact-parallel-evaluation.md)。
 
-第 53 轮已完成根基修复与联合验收：2,783 项通过、10 项条件跳过，8 个包完成构建，类型、格式、模块所有权、生成合同与独立打包消费者检查通过。具体修复、证据及边界见 [根基修复报告](../../../docs/engineering/scriptact-foundation-fixes.md)。第 52 轮的审核作为问题来源保留，见 [完整审核报告](../../../docs/engineering/scriptact-foundation-audit.md)。
+第 53 轮已完成根基修复与联合验收：2,783 项通过、10 项条件跳过，8 个包完成构建，类型、格式、模块所有权、生成合同与独立打包消费者检查通过。具体修复、证据及边界见 [Platform 运行主链](../../../docs/architecture/platform-runtime.md)。第 52 轮的审核作为问题来源保留，见 [Platform 运行主链](../../../docs/architecture/platform-runtime.md)。
 
 第 51 轮已修复过拟合审计的四项问题：补读区分条目与字符并按所需缺口定位，领域指引按能力注入，任务暴露归属在派发与报告时自动校验，工具发现覆盖嵌套工程并明确扫描边界。180 项相关本地回归通过；518 份历史 campaign JSON 哈希保持，新增 API 请求与费用均为 0。详见 [修复结果与证据](OVERFITTING-FIXES.md)，诊断过程见 [第 50 轮审计](OVERFITTING-AUDIT.md)。
 

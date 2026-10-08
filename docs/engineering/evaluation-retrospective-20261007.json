@@ -1153,7 +1153,7 @@
       },
       "ambientTools": {
         "at": "2026-10-06T18:56:11.944489+00:00",
-        "applyPatchExecutable": "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
+        "applyPatchExecutable": "~/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
         "resolvedTarget": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
         "origin": "Inherited Codex host command on PATH; not a Node built-in or project capability",
         "observedUse": "All adaptive primary runs use the inherited apply_patch command: commander-node 4 programs, commander-optional 5, esm-node 10, esm-optional 19. Required runs use project for edits and have zero apply_patch programs.",
@@ -1177,7 +1177,7 @@
       "source": "scriptact-live-cache-validation-20261007.json",
       "sha256": "480b96d40cbab2efcd09529d92ccfad13e561e545ad746aa01f1a1c1e6bc541b",
       "qualifications": {
-        "evidence": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
+        "evidence": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
         "pricing": {
           "kind": "frozen reference only; not provider billing",
           "capturedDate": "2026-09-30",
@@ -3807,672 +3807,672 @@
   "ledger": {
     "sourceLedgers": [
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-failure-54f/original/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-failure-54f/original/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
         "requests": 31,
         "mtime": 1790753442.6928022
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger/budget.json",
         "requests": 0,
         "mtime": 1790762504.6774728
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger-v2/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-repair-54i/synthetic-ledger-v2/budget.json",
         "requests": 1,
         "mtime": 1790762588.1730695
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/branch-smoke-v1/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/branch-smoke-v1/synthetic-ledger/budget.json",
         "requests": 3,
         "mtime": 1790987209.751246
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/execution-67s-v1/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/analysis-54w/scriptact/transport-preliminary/execution-67s-v1/synthetic-ledger/budget.json",
         "requests": 3,
         "mtime": 1790987304.0397818
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54j/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54j/budget.json",
         "requests": 3289,
         "mtime": 1790993542.1372645
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ceY1Ix/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ceY1Ix/budget.json",
         "requests": 0,
         "mtime": 1790763065.1044009
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hbtpYX/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hbtpYX/budget.json",
         "requests": 0,
         "mtime": 1790763065.100514
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-9B5yqI/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-9B5yqI/budget.json",
         "requests": 0,
         "mtime": 1790763065.0998664
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-mO1UR4/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-mO1UR4/budget.json",
         "requests": 0,
         "mtime": 1790763065.0976818
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-4fvuRS/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-4fvuRS/budget.json",
         "requests": 0,
         "mtime": 1790763065.1017542
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-G6GWti/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-G6GWti/budget.json",
         "requests": 0,
         "mtime": 1790763065.103622
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-NtzJYR/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-NtzJYR/budget.json",
         "requests": 0,
         "mtime": 1790763065.1062396
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-T45EjN/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-T45EjN/budget.json",
         "requests": 0,
         "mtime": 1790763065.0932713
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ICUxCZ/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ICUxCZ/budget.json",
         "requests": 0,
         "mtime": 1790763065.1055274
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ykgagj/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-ykgagj/budget.json",
         "requests": 0,
         "mtime": 1790763065.1058795
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-oIb5DU/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-oIb5DU/budget.json",
         "requests": 0,
         "mtime": 1790763065.1031013
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-xvLacO/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-xvLacO/budget.json",
         "requests": 0,
         "mtime": 1790763065.1051223
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hg90LH/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/wire-contract-probe/local-review-hg90LH/budget.json",
         "requests": 0,
         "mtime": 1790763065.1022096
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/branch-smoke-v1/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/branch-smoke-v1/synthetic-ledger/budget.json",
         "requests": 3,
         "mtime": 1790973989.1897125
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/execution-67s-v1/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/resume-54v/transport-audit/execution-67s-v1/synthetic-ledger/budget.json",
         "requests": 3,
         "mtime": 1790974273.7698073
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-54h/original-54g/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-observation-54h/original-54g/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
         "requests": 37,
         "mtime": 1790756537.940004
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54g/budget.json",
         "requests": 37,
         "mtime": 1790756216.3074567
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54h/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54h/budget.json",
         "requests": 27,
         "mtime": 1790761427.3886528
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-ai-sdk-openai-CBMVde/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-ai-sdk-openai-CBMVde/budget.json",
         "requests": 1,
         "mtime": 1790754088.3683548
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-raw-fetch-Kn6osY/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-raw-fetch-Kn6osY/budget.json",
         "requests": 1,
         "mtime": 1790754088.4035993
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-ai-sdk-openai-W8sHaW/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-ai-sdk-openai-W8sHaW/budget.json",
         "requests": 1,
         "mtime": 1790754088.2306554
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-raw-fetch-snTU4u/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-raw-fetch-snTU4u/budget.json",
         "requests": 1,
         "mtime": 1790754088.471571
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-ai-sdk-openai-YEN17Z/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-clean-eof-ai-sdk-openai-YEN17Z/budget.json",
         "requests": 1,
         "mtime": 1790754088.5060618
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-raw-fetch-Ejwbaz/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-raw-fetch-Ejwbaz/budget.json",
         "requests": 1,
         "mtime": 1790754088.266112
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-ai-sdk-openai-P0yW5N/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-clean-eof-ai-sdk-openai-P0yW5N/budget.json",
         "requests": 1,
         "mtime": 1790754088.301539
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-ai-sdk-openai-Auqj5Y/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-reset-ai-sdk-openai-Auqj5Y/budget.json",
         "requests": 1,
         "mtime": 1790754088.4373846
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-raw-fetch-aiauTG/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-completed-raw-fetch-aiauTG/budget.json",
         "requests": 1,
         "mtime": 1790754088.3349452
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-raw-fetch-lrenZd/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-raw-fetch-lrenZd/budget.json",
         "requests": 1,
         "mtime": 1790754088.5425112
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-raw-fetch-RaRuyF/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/original-reset-raw-fetch-RaRuyF/budget.json",
         "requests": 1,
         "mtime": 1790754088.1936896
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-ai-sdk-openai-T8s1zU/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-gateway-audit/ledgers/repaired-completed-ai-sdk-openai-T8s1zU/budget.json",
         "requests": 1,
         "mtime": 1790754088.5782187
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-hedgeho9-sol-54f/budget.json",
         "requests": 31,
         "mtime": 1790753442.6928022
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-runtime-integration/green-built/ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/stream-runtime-integration/green-built/ledger/budget.json",
         "requests": 4,
         "mtime": 1790754201.750218
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v4/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v4/synthetic-ledger/budget.json",
         "requests": 1,
         "mtime": 1790858215.4633734
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v3/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-controls-v3/synthetic-ledger/budget.json",
         "requests": 0,
         "mtime": 1790858036.5902596
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v1/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v1/synthetic-ledger/budget.json",
         "requests": 4,
         "mtime": 1790856108.123568
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v2/synthetic-ledger/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/transport-client-disconnect-54u/probe-cross-network/execution-v2/synthetic-ledger/budget.json",
         "requests": 5,
         "mtime": 1790857859.5251312
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway/budget.json",
         "requests": 53,
         "mtime": 1790748354.261376
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-gpt6-sol/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/parallel-54/gateway-gpt6-sol/budget.json",
         "requests": 7,
         "mtime": 1790750546.9560325
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-required/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-required/gateway/budget.json",
         "requests": 118,
         "mtime": 1791312297.5095625
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required/gateway/budget.json",
         "requests": 31,
         "mtime": 1791309722.0533805
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node-isolated/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node-isolated/gateway/budget.json",
         "requests": 38,
         "mtime": 1791315455.6890757
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required-retry/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-required-retry/gateway/budget.json",
         "requests": 36,
         "mtime": 1791310755.4378748
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node-isolated/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node-isolated/gateway/budget.json",
         "requests": 57,
         "mtime": 1791314924.6076934
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-node/gateway/budget.json",
         "requests": 19,
         "mtime": 1791309619.1250944
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-node/gateway/budget.json",
         "requests": 45,
         "mtime": 1791314036.510947
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-optional/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/commander-optional/gateway/budget.json",
         "requests": 25,
         "mtime": 1791309715.249052
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-optional/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007/esm-optional/gateway/budget.json",
         "requests": 66,
         "mtime": 1791313144.6752925
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/chai-baseline-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/chai-baseline-03/gateway/budget.json",
         "requests": 71,
         "mtime": 1791295590.5932167
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-candidate/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-candidate/gateway/budget.json",
         "requests": 9,
         "mtime": 1791297606.3170228
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-candidate/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-candidate/gateway/budget.json",
         "requests": 16,
         "mtime": 1791297680.2983556
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-baseline/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/shell-unique-baseline/gateway/budget.json",
         "requests": 12,
         "mtime": 1791296358.0406294
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-baseline/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-context-20261006/commander-snapshot-baseline/gateway/budget.json",
         "requests": 18,
         "mtime": 1791296595.6635675
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/budget.json",
         "requests": 1620,
         "mtime": 1790731163.5403745
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-04/gateway/budget.json",
         "requests": 4,
         "mtime": 1791021663.6507938
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-03/gateway/budget.json",
         "requests": 2,
         "mtime": 1791021555.2727144
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-02/gateway/budget.json",
         "requests": 1,
         "mtime": 1791021498.0448718
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-05/gateway/budget.json",
         "requests": 11,
         "mtime": 1791022225.8394344
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway-generation-01/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway-generation-01/budget.json",
         "requests": 27,
         "mtime": 1791094609.5720215
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-07/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-07/gateway/budget.json",
         "requests": 6,
         "mtime": 1791023322.46192
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-09/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-09/gateway/budget.json",
         "requests": 6,
         "mtime": 1791029417.5130281
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-08/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-08/gateway/budget.json",
         "requests": 6,
         "mtime": 1791024708.2807512
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-06/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/acceptance-06/gateway/budget.json",
         "requests": 6,
         "mtime": 1791022373.1042647
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-desktop-20261003/gateway/budget.json",
         "requests": 263,
         "mtime": 1791090524.9858851
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/gateway/budget.json",
         "requests": 111,
         "mtime": 1791145483.38745
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-03/gateway/budget.json",
         "requests": 194,
         "mtime": 1791138910.6674476
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-05/gateway/budget.json",
         "requests": 36,
         "mtime": 1791237877.5867555
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/commander-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/commander-01/gateway/budget.json",
         "requests": 133,
         "mtime": 1791195303.7571423
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/gateway/budget.json",
         "requests": 126,
         "mtime": 1791127629.437364
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/gateway/budget.json",
         "requests": 39,
         "mtime": 1791128997.6638885
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-shell-node-04/gateway/budget.json",
         "requests": 40,
         "mtime": 1791231793.5907352
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/gateway/budget.json",
         "requests": 152,
         "mtime": 1791140691.9557433
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/gateway/budget.json",
         "requests": 224,
         "mtime": 1791131514.9277
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/gateway/budget.json",
         "requests": 52,
         "mtime": 1791125269.1358654
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/gateway/budget.json",
         "requests": 156,
         "mtime": 1791143830.3227003
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/gateway/budget.json",
         "requests": 82,
         "mtime": 1791152889.1762323
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/gateway/budget.json",
         "requests": 254,
         "mtime": 1791166087.7485464
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/gateway/budget.json",
         "requests": 116,
         "mtime": 1791175774.6304944
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-02/gateway/budget.json",
         "requests": 148,
         "mtime": 1791170957.067877
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/gateway/budget.json",
         "requests": 127,
         "mtime": 1791172149.8532374
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/gateway/budget.json",
         "requests": 20,
         "mtime": 1791178676.6158001
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-02/gateway/budget.json",
         "requests": 283,
         "mtime": 1791223363.4898572
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/gateway/budget.json",
         "requests": 266,
         "mtime": 1791174817.9685125
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/gateway/budget.json",
         "requests": 44,
         "mtime": 1791168078.0486007
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/gateway/budget.json",
         "requests": 19,
         "mtime": 1791151504.7657511
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-03/gateway/budget.json",
         "requests": 211,
         "mtime": 1791225095.721438
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/cheerio-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/cheerio-02/gateway/budget.json",
         "requests": 166,
         "mtime": 1791233721.9696283
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-01/gateway/budget.json",
         "requests": 161,
         "mtime": 1791181761.999753
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-01/gateway/budget.json",
         "requests": 118,
         "mtime": 1791187510.6185868
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-09/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-09/gateway/budget.json",
         "requests": 71,
         "mtime": 1791227943.6499822
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-06/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-06/gateway/budget.json",
         "requests": 69,
         "mtime": 1791239255.1409497
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-10/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-10/gateway/budget.json",
         "requests": 63,
         "mtime": 1791235389.8949199
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-shell-node-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-shell-node-01/gateway/budget.json",
         "requests": 72,
         "mtime": 1791214233.2745297
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/async-02/gateway/budget.json",
         "requests": 169,
         "mtime": 1791211630.2287827
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-01/gateway/budget.json",
         "requests": 135,
         "mtime": 1791243358.6717775
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-06/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-06/gateway/budget.json",
         "requests": 59,
         "mtime": 1791147510.0271304
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/gateway/budget.json",
         "requests": 259,
         "mtime": 1791161677.8679078
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-01/gateway/budget.json",
         "requests": 51,
         "mtime": 1791205683.5829976
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/gateway/budget.json",
         "requests": 36,
         "mtime": 1791148039.3225477
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/gateway/budget.json",
         "requests": 194,
         "mtime": 1791133773.4172869
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/jinja-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/jinja-01/gateway/budget.json",
         "requests": 86,
         "mtime": 1791151183.748357
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-01/gateway/budget.json",
         "requests": 272,
         "mtime": 1791123877.6534321
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-02/gateway/budget.json",
         "requests": 24,
         "mtime": 1791141209.9354944
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/gateway/budget.json",
         "requests": 1,
         "mtime": 1791132699.2857997
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/gateway/budget.json",
         "requests": 206,
         "mtime": 1791136102.7039394
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/nunjucks-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/nunjucks-02/gateway/budget.json",
         "requests": 160,
         "mtime": 1791201281.367694
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-shell-node-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-shell-node-03/gateway/budget.json",
         "requests": 49,
         "mtime": 1791226212.9700093
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/gateway/budget.json",
         "requests": 318,
         "mtime": 1791178274.4035852
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/shelljs-01/gateway/budget.json",
         "requests": 125,
         "mtime": 1791217427.971052
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/gateway/budget.json",
         "requests": 409,
         "mtime": 1791164317.1110373
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/gateway/budget.json",
         "requests": 167,
         "mtime": 1791154195.6861508
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/pygments-01/gateway/budget.json",
         "requests": 146,
         "mtime": 1791167460.4361238
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/gateway/budget.json",
         "requests": 266,
         "mtime": 1791157900.7087717
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/gateway/budget.json",
         "requests": 210,
         "mtime": 1791159292.95712
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-shell-node-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/fs-extra-esm-shell-node-01/gateway/budget.json",
         "requests": 32,
         "mtime": 1791243825.8500059
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-shell-node-01/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-it-shell-node-01/gateway/budget.json",
         "requests": 41,
         "mtime": 1791207217.5892942
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-04/gateway/budget.json",
         "requests": 206,
         "mtime": 1791230903.3046951
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-02/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-02/gateway/budget.json",
         "requests": 61,
         "mtime": 1791183458.0714736
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-05/gateway/budget.json",
         "requests": 88,
         "mtime": 1791203679.4593375
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-05/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/chai-05/gateway/budget.json",
         "requests": 50,
         "mtime": 1791237206.1138754
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-04/gateway/budget.json",
         "requests": 40,
         "mtime": 1791197050.4426754
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-03/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mocha-03/gateway/budget.json",
         "requests": 112,
         "mtime": 1791190180.8260262
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/gateway/budget.json",
         "requests": 129,
         "mtime": 1791134559.9873147
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-candidate/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-candidate/gateway/budget.json",
         "requests": 11,
         "mtime": 1791301420.982005
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-baseline-isolated/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-baseline-isolated/gateway/budget.json",
         "requests": 18,
         "mtime": 1791301157.6793826
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-candidate/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-candidate/gateway/budget.json",
         "requests": 28,
         "mtime": 1791300779.855552
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-baseline/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r1-commander-baseline/gateway/budget.json",
         "requests": 19,
         "mtime": 1791300631.7785416
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-baseline/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r3-text-baseline/gateway/budget.json",
         "requests": 11,
         "mtime": 1791301422.5305655
       },
       {
-        "path": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-candidate-isolated/gateway/budget.json",
+        "path": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/runtime-review-20261006/r2-files-candidate-isolated/gateway/budget.json",
         "requests": 9,
         "mtime": 1791301092.304035
       }
@@ -4517,7 +4517,7 @@
     "exposedTaskIdentities": 146
   },
   "preservation": {
-    "archiveDirectory": "/Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07",
+    "archiveDirectory": "~/Documents/VelarOS-Evaluation-Archive/2026-10-07",
     "statistics": {
       "evidence": {
         "storedBytes": 5954161448,

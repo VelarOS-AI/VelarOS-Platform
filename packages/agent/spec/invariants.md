@@ -1,6 +1,6 @@
 # Act 不变量
 
-旧合同迁移理由见 `docs/engineering/agent-test-migration.md`；编号延续已有登记。
+旧合同迁移理由见 `../../../docs/architecture/platform-runtime.md`；编号延续已有登记。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |

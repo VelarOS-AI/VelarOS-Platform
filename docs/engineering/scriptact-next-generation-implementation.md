@@ -1,10 +1,10 @@
 # ScriptAct 下一代实现与证据
 
-2026 年 10 月 2 日，10 月 3 日补充交付。优先级为任务完成率、完成时间、完整费用。设计见[下一代优化方案](scriptact-next-generation-design.md)。本文保存各轮冻结证据；最终主仓库提交、合同清理、统一检查和模型成绩见[交付报告](scriptact-next-generation-delivery.md)。下文各轮的隔离状态和启动快照属于当时记录。
+2026 年 10 月 2 日，10 月 3 日补充交付。优先级为任务完成率、完成时间、完整费用。设计见[Platform 运行主链](../architecture/platform-runtime.md)。本文保存各轮冻结证据；最终主仓库提交、合同清理、统一检查和模型成绩见[Platform 运行主链](../architecture/platform-runtime.md)。下文各轮的隔离状态和启动快照属于当时记录。
 
 ## 当前交付状态
 
-Model、Context、评测工具及 ScriptAct 主链已分别提交；当前工作集、批量合同、失败召回、条件复用、全文预算与实际维护闭环在主仓库 `09adc2e8`。协议修复校准在 `b76fc7ef`，最终合同与格式清理在 `35316b1b`。合同使用数组 `exports`，常驻合同使用 `{module, exports?}` 对象列表。原 E8 两组各 12/12 通过，最终主代码六题回归 6/6 通过，完整费用保持未知。各原尝试、历史失败和未知费用保留，提交、差量与终态结果统一在[交付报告](scriptact-next-generation-delivery.md)核对。本轮有限交付结束。
+Model、Context、评测工具及 ScriptAct 主链已分别提交；当前工作集、批量合同、失败召回、条件复用、全文预算与实际维护闭环在主仓库 `09adc2e8`。协议修复校准在 `b76fc7ef`，最终合同与格式清理在 `35316b1b`。合同使用数组 `exports`，常驻合同使用 `{module, exports?}` 对象列表。原 E8 两组各 12/12 通过，最终主代码六题回归 6/6 通过，完整费用保持未知。各原尝试、历史失败和未知费用保留，提交、差量与终态结果统一在[Platform 运行主链](../architecture/platform-runtime.md)核对。本轮有限交付结束。
 
 E6 全部 24 次原模型尝试和最终独立复核已结束：两组各业务通过 12/12、严格通过 9/12、未知 3/12；增强诊断实际触发为零，候选总 primary 时间慢 17.26%。整组完整参考费用与实际账单未知，该轮未证明收益。
 
@@ -222,7 +222,7 @@ deadline 的不可变任务状态在进程终止约三分钟前已经记录 comp
 
 下一候选的首要设计是让失败反馈指向已公开的具体规则和实际产物位置。沿用现有 check.label、artifact 身份与指纹，宿主将公开 constraint、真实失败类别和有界实际位置接入报告；领域负责这些诊断的真实性，Runtime 保留失败优先投影与完整报告召回。新增公开类型只有在现有合同不能表达时才考虑。两组采用同一产品源码、相同任务与业务验收，单独比较现有逐项反馈和可行动诊断，先证明修复成功，再比较整题时间。共同的服务预检、正文证明覆盖和阶段诊断应用于两组，其收益另行表述。
 
-最终冻结比较为 [comparison-final-b](../../.velaros-workspace/bench/scriptact-feedback-20261002T0133Z/independent-r2/comparison-final-b-20261002T043102590714Z.json)，SHA256 `16393adc479f5a336681199c6a0f25bc613f072171eb04d423f82e0b0db7224f`。独立全量分类为 [C closeout v2](../../.velaros-workspace/bench/scriptact-feedback-20261002T0133Z/outcome-review-c/closeout-v2-20261002T044701530820Z/report.json)，SHA256 `b0bb4ee67ca30c11980fa843579d7f05919c7c6af0e7a834f0de515c8a1a3f9e`；root 已逐字核对其 79 个引用及 NEW 表达原型 46 个引用。
+最终冻结比较为 comparison-final-b（归档内路径 `.velaros-workspace/bench/scriptact-feedback-20261002T0133Z/independent-r2/comparison-final-b-20261002T043102590714Z.json`），SHA256 `16393adc479f5a336681199c6a0f25bc613f072171eb04d423f82e0b0db7224f`。独立全量分类为 C closeout v2（归档内路径 `.velaros-workspace/bench/scriptact-feedback-20261002T0133Z/outcome-review-c/closeout-v2-20261002T044701530820Z/report.json`），SHA256 `b0bb4ee67ca30c11980fa843579d7f05919c7c6af0e7a834f0de515c8a1a3f9e`；root 已逐字核对其 79 个引用及 NEW 表达原型 46 个引用。
 
 ## E6 可行动反馈原型与运行前准备
 

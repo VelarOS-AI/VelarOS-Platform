@@ -28,4 +28,4 @@ Runtime INV-74、77、78、既有 INV-44/48，Context INV-15，以及领域模�
 
 ## Consequences
 
-最新帧的状态可独立判断；代价是重复小型元数据，仍需真实模型任务核对完整成本。完整依赖覆盖的观察可减少实际采集；host probe 的覆盖完整性仍由领域负责。领域核查增加可审查的交付事实，调用和核查成本计入整题测量。详细方案见 [优化设计](../engineering/scriptact-optimization-design.md)。
+最新帧的状态可独立判断；代价是重复小型元数据，仍需真实模型任务核对完整成本。完整依赖覆盖的观察可减少实际采集；host probe 的覆盖完整性仍由领域负责。领域核查增加可审查的交付事实，调用和核查成本计入整题测量。详细方案见 [Platform 运行主链](../architecture/platform-runtime.md)。

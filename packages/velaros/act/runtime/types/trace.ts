@@ -22,6 +22,8 @@ export interface RuntimeMetric {
 /** 会话内的原始记录，正文只按总字符预算截取，完整内容可经 context.read 召回。 */
 export interface ActTraceRecord {
   readonly ref: { readonly sessionId: string; readonly id: string }
+  /** 原始归档时间；旧宿主可省略，消费者不能用重读时刻改写历史时间。 */
+  readonly createdAt?: string
   readonly sequence: number
   readonly title: string
   readonly chars: number

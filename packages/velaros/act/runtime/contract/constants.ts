@@ -1,3 +1,6 @@
+/** 2026-10-07 同模型任务对照：tools 10/12、text 7/12；调用方可通过 protocol.transport 覆盖。 */
+export const DefaultScriptProtocolTransport = 'tools' as const
+
 /** MCP 连接和请求的缺省时限。 */
 export const McpLimits = Object.freeze({
   /** 建立连接的缺省时限，毫秒。 */

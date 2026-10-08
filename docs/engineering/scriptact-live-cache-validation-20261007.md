@@ -53,4 +53,4 @@
 
 清理 npm 下载缓存，以及超过 24 小时的 pip HTTP 与 Electron 下载缓存，共约 **7.2 GiB**；可用空间由清理前约 2.1 GiB 回升到约 9.3 GiB。清理清单与命令日志保存在本轮证据目录，源码、未提交改动与测试原始证据继续保留。
 
-结构化结果：[scriptact-live-cache-validation-20261007.json](scriptact-live-cache-validation-20261007.json)。原始证据：`/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1`。
+结构化结果：[scriptact-live-cache-validation-20261007.json](scriptact-live-cache-validation-20261007.json)。原始证据：`~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1`。

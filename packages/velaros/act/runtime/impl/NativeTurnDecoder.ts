@@ -1,49 +1,101 @@
 import type { ActDecodedTurn, ActPreview, ActTurnDecoder } from '@velaros-ai/agent'
-import { isEmpty, optionalWhenLazy } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isEmpty, isUndefined, optionalWhen } from '@velaros-ai/core'
 import {
   modelRequestEncoder,
   type ModelResponseFormat,
   type ModelToolCall,
 } from '@velaros-ai/kernel'
 
-import { NativeExecutionSchema } from '../contract/surface.js'
-import type { NativeExecutionInput } from '../types/native-tools.js'
+import { GoalLimits } from '../../system/contract/constants.js'
+import {
+  NativeBlobSchema,
+  NativeDoneSchema,
+  NativeExecutionSchema,
+  NativeObservationSchema,
+} from '../contract/surface.js'
+import type {
+  NativeBlobInput,
+  NativeDoneInput,
+  NativeExecutionInput,
+  NativeObservationInput,
+} from '../types/native-tools.js'
+import type { ScriptProtocolRecord } from '../types/program.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
-import { protocolConfig } from '../utils/script-protocol.js'
+import { nativeToolName } from '../utils/native-protocol.js'
+import { scriptInputCopy } from '../utils/program-context.js'
+import { protocolConfig, protocolFailure } from '../utils/script-protocol.js'
+import { compileScriptRecords } from '../utils/script-records.js'
 
-/** 普通工具调用只描述程序，执行仍经过完整响应接收和持久化门。 */
+/** 原生 JSON 与文本传输共用声明语义；完整响应通过后才执行。 */
 export interface NativeTurnDecoderApi extends ActTurnDecoder {}
 
 export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public readonly instructions: string
   public readonly response: ModelResponseFormat
   private readonly config
+  private readonly inputs: Readonly<Record<string, unknown>>
   private text = ''
   private calls: ModelToolCall[] = []
+  private records: ScriptProtocolRecord[] = []
+  private done = false
+  private completion?: string
   private chars = 0
   private ended = false
 
-  public constructor(options: ScriptProtocolOptions = {}) {
+  public constructor(
+    options: ScriptProtocolOptions = {},
+    inputs: Readonly<Record<string, unknown>> = {},
+    private readonly requireDecision: () => boolean = () => true
+  ) {
     this.config = protocolConfig(options)
-    this.instructions =
-      '通过 exec 执行 JavaScript ESM，命令用 execa，文件用 Node 标准库，差异用 diff。依赖步骤在同一程序中顺序 await；检查执行结果后继续，任务完成时用普通文本答复。'
+    this.inputs = scriptInputCopy(inputs)
+    const name = (kind: ScriptProtocolRecord['kind'] | 'done') => nativeToolName(kind, this.config)
+    if (new Set(this.config.allowed.map(name)).size !== this.config.allowed.length)
+      throw protocolFailure('原生工具名称必须唯一')
+    const descriptions = {
+      execute:
+        '执行一次程序。JSON 参数 code 是源码，options 是程序选项；options.async/retain 控制后台执行与结果保留。依赖步骤在同一程序中顺序 await；检查执行结果后继续。',
+      observe:
+        '登记或整体替换当前持续只读观察，下个正常业务轮运行；每份响应最多一次。options.clear:true 退订，options.edits 局部修改；引用、编辑、快照或清除时 code 为 ""。',
+      blobs: 'JSON 参数 name/text 绑定原文，供同一响应的程序通过 velaros:program 的 blobs 读取。',
+      done: '通过 JSON 参数 message 返回用户答复，completion 提供完成依据。作为本响应最后一个工具调用，申请运行时验收任务完成。',
+    }
     this.response = {
       type: 'tools',
-      tools: [
-        {
-          name: 'exec',
-          description:
-            '在工作目录执行 JavaScript ESM，支持顶层 await、Node 标准库、预装 npm 包和按需导入的应用能力。console.log 返回输出。',
-          schema: NativeExecutionSchema,
-        },
-      ],
+      tools: this.config.allowed.map((kind) => ({
+        name: name(kind),
+        description: descriptions[kind],
+        schema:
+          kind === 'done'
+            ? NativeDoneSchema
+            : kind === 'blobs'
+              ? NativeBlobSchema
+              : kind === 'observe'
+                ? NativeObservationSchema
+                : NativeExecutionSchema,
+      })),
     }
+    this.instructions = [
+      '通过已提供的原生工具调用提交本轮操作，普通文本用于进度说明。工具参数按各自 JSON Schema 填写。',
+      this.config.allowed.includes('done')
+        ? `完成后调用 ${name('done')}，通过 message 返回答复。`
+        : '',
+      !isEmpty(Object.keys(this.inputs))
+        ? `宿主参数可通过 options.inputRef 引用：${Object.keys(this.inputs)
+            .map((key) => `host:${key}`)
+            .join('、')}。`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
   }
 
   public reset(): void {
     this.text = ''
     this.calls = []
+    this.records = []
+    this.done = false
+    this.completion = undefined
     this.chars = 0
     this.ended = false
   }
@@ -56,33 +108,63 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
 
   public acceptTool(call: ModelToolCall): readonly ActPreview[] {
     this.consume(JSON.stringify(call).length)
-    if (
-      !this.config.allowed.includes('execute') ||
-      call.name !== 'exec' ||
-      !call.id ||
-      call.id.length > 256 ||
-      this.calls.some((item) => item.id === call.id) ||
-      this.calls.length >= this.config.maxBlocks
-    )
-      throw new AppError('SCRIPT_PROTOCOL', '原生执行入口或调用身份无效')
-    let input: NativeExecutionInput
+    const kind = this.config.allowed.find((kind) => nativeToolName(kind, this.config) === call.name)
+    if (!kind || !call.id || call.id.length > 256 || this.calls.some((item) => item.id === call.id))
+      throw protocolFailure('原生执行入口或调用身份无效')
+    if (this.done) throw protocolFailure('完成声明之后不能再声明控制操作')
+    if (kind !== 'done' && this.records.length >= this.config.maxBlocks)
+      throw protocolFailure('程序与原文调用数量超过预算')
+    const schema =
+      kind === 'done'
+        ? NativeDoneSchema
+        : kind === 'blobs'
+          ? NativeBlobSchema
+          : kind === 'observe'
+            ? NativeObservationSchema
+            : NativeExecutionSchema
+    let input: NativeExecutionInput | NativeObservationInput | NativeBlobInput | NativeDoneInput
     try {
       input = modelRequestEncoder.output(
-        { type: 'json', name: call.name, description: '执行源码', schema: NativeExecutionSchema },
+        { type: 'json', name: call.name, description: '控制声明', schema },
         call.input
-      ) as NativeExecutionInput
+      ) as typeof input
     } catch (error) {
-      throw new AppError(
-        'SCRIPT_PROTOCOL',
-        `工具入参需要 code 字符串：${error instanceof Error ? error.message : String(error)}`
+      throw protocolFailure(
+        `工具入参不符合声明合同：${error instanceof Error ? error.message : String(error)}`
       )
     }
-    const index = this.calls.length
     this.calls.push({ ...call, input })
-    const kind = 'execute'
+    if (kind === 'done') {
+      const { completion, message } = input as NativeDoneInput
+      if (
+        !isUndefined(completion) &&
+        (!completion.trim() || completion.trim().length > GoalLimits.reasonChars)
+      )
+        throw protocolFailure(`完成依据需要 1 到 ${GoalLimits.reasonChars} 个字符`)
+      this.done = true
+      this.completion = completion?.trim()
+      if (message) {
+        const text = `${this.text && !this.text.endsWith('\n') ? '\n' : ''}${message}`
+        this.text += text
+        return [{ type: 'text', text }]
+      }
+      return []
+    }
+    const index = this.records.length
+    let record: ScriptProtocolRecord
+    if (kind === 'blobs') {
+      const { name, text } = input as NativeBlobInput
+      record = { kind, args: [name], body: text }
+    } else {
+      const { code, options = {} } = input as NativeExecutionInput | NativeObservationInput
+      if (JSON.stringify(options).length > this.config.maxHeaderChars)
+        throw protocolFailure('JSON 程序选项超过协议字符预算')
+      record = { kind, args: [options], body: code }
+    }
+    this.records.push(record)
     return [
       { type: 'program', index, kind, phase: 'start', text: '' },
-      { type: 'program', index, kind, phase: 'delta', text: input.code },
+      { type: 'program', index, kind, phase: 'delta', text: record.body },
       { type: 'program', index, kind, phase: 'end', text: '' },
     ]
   }
@@ -90,29 +172,32 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public finish(): ActDecodedTurn {
     this.consume(0)
     this.ended = true
-    if (isEmpty(this.calls) && !this.text.trim())
-      throw new AppError('SCRIPT_PROTOCOL', '模型响应为空')
+    const submission = compileScriptRecords(this.records, this.config, this.inputs)
+    if (
+      this.requireDecision() &&
+      !this.done &&
+      isUndefined(submission.observe) &&
+      isEmpty(submission.executions)
+    )
+      throw protocolFailure(
+        `缺少本轮控制决策：请调用 ${this.config.allowed
+          .filter((kind) => kind !== 'blobs')
+          .map((kind) => nativeToolName(kind, this.config))
+          .join(' / ')}。`
+      )
     return {
       message: this.text,
-      done: isEmpty(this.calls),
-      submission: optionalWhenLazy(!isEmpty(this.calls), () => ({
-        executions: this.calls.map((call) => ({
-          async: false,
-          program: {
-            language: 'node',
-            source: (call.input as NativeExecutionInput).code,
-            retainTurns: this.config.defaultRetain,
-          },
-        })),
-      })),
+      done: this.done,
+      completion: this.completion,
+      // 每个原生调用都需要持久配对回执，包括只含 blobs/done 的响应。
+      submission: optionalWhen(!isEmpty(this.calls), submission),
       events: [],
     }
   }
 
   private consume(chars: number): void {
-    if (this.ended) throw new AppError('SCRIPT_PROTOCOL', '完整响应只能接收一次')
+    if (this.ended) throw protocolFailure('完整响应只能接收一次')
     this.chars += chars
-    if (this.chars > this.config.maxChars)
-      throw new AppError('SCRIPT_PROTOCOL', '响应超过协议字符预算')
+    if (this.chars > this.config.maxChars) throw protocolFailure('响应超过协议字符预算')
   }
 }

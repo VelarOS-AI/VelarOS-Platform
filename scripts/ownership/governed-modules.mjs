@@ -97,6 +97,7 @@ export const GovernedModules = [
         'ModelToolRuntime.ts',
         'ModelToolActivation.ts',
         'ContextMaintenance.ts',
+        'CompletionReview.ts',
         'ContextPatchStore.ts',
         'SessionGoal.ts',
         'RuntimeSession.ts',

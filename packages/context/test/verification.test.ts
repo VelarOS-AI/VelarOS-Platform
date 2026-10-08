@@ -6,6 +6,336 @@ import { createContextRuntime } from '../src/impl/SessionContext.js'
 import type { ContextState, ContextVerificationAttempt } from '../src/types/context.js'
 
 const zero = { coverage: 'complete' as const, charges: [] }
+
+test('INV-17 declared delivery requirements need complete passing checks for every item', async () => {
+  for (const missing of ['implementation', 'documentation', 'example', 'entrypoint']) {
+    const f = await fixture()
+    const requirements = ['implementation', 'documentation', 'example', 'entrypoint'].map((id) => ({
+      id,
+      label: id,
+      artifacts: [`${id}.fixture`],
+      sourceRefs: [f.input.ref],
+    }))
+    const result = await f.view.complete({
+      requirements: () => requirements,
+      verify: async () => ({
+        verified: true,
+        reason: 'partial suite passed',
+        report: {
+          scope: 'requested delivery',
+          checkedAt: new Date().toISOString(),
+          checks: requirements
+            .filter((item) => item.id !== missing)
+            .map(({ id, label }) => ({ id, label, status: 'passed', complete: true })),
+        },
+      }),
+    })
+    expect(result.completed).toBe(false)
+    expect(result.verified).toBe(false)
+    expect(result.report?.checks.find((check) => check.id === missing)?.status).toBe('unknown')
+    expect(result.reason).toContain(missing)
+  }
+})
+
+test('failed, unknown or incomplete checks cannot be overridden by a verified claim', async () => {
+  for (const check of [
+    { label: 'boundary', status: 'failed' as const, complete: true },
+    { label: 'boundary', status: 'unknown' as const, complete: true },
+    { label: 'boundary', status: 'passed' as const, complete: false },
+  ]) {
+    const f = await fixture()
+    const result = await f.view.complete({
+      verify: async () => ({
+        verified: true,
+        reason: 'claimed',
+        report: { scope: 'delivery', checkedAt: new Date().toISOString(), checks: [check] },
+      }),
+    })
+    expect(result.completed).toBe(false)
+    expect(result.verified).toBe(false)
+  }
+})
+
+test('complete evidence satisfies declared requirements without reinterpreting task semantics', async () => {
+  const f = await fixture()
+  const result = await f.view.complete({
+    requirements: () => [
+      {
+        id: f.spec.id,
+        label: 'requested document',
+        artifacts: [f.domain.artifact.identity],
+        sourceRefs: [f.input.ref],
+      },
+    ],
+    verify: async (_view, _signal, checks) => ({
+      verified: true,
+      reason: 'document checked',
+      report: {
+        scope: 'document',
+        checkedAt: new Date().toISOString(),
+        checks: [
+          await checks!.check(f.spec, async () => ({
+            label: 'document',
+            status: 'passed',
+            complete: true,
+            cost: zero,
+          })),
+        ],
+      },
+    }),
+  })
+  expect(result.completed).toBe(true)
+  expect(result.verified).toBe(true)
+  expect(result.report?.checks[0].requirement?.sourceRefs).toEqual([f.input.ref])
+  expect(result.report?.checks[0].artifacts).toEqual([f.domain.artifact])
+  expect(result.report?.checks[0].proofRef).toBeDefined()
+  expect((await f.view.readCompletion())?.result.report?.checks).toEqual(result.report?.checks)
+})
+
+test('requirements are captured before verification and missing reports cannot bypass them', async () => {
+  const f = await fixture()
+  const requirements = [
+    {
+      id: 'boundary',
+      label: 'boundary behavior',
+      artifacts: ['boundary.mjs'],
+      sourceRefs: [f.input.ref],
+    },
+  ]
+  const result = await f.view.complete({
+    requirements: () => requirements,
+    verify: async () => {
+      requirements.length = 0
+      return { verified: true, reason: 'claimed complete without checks' }
+    },
+  })
+  expect(result.completed).toBe(false)
+  expect(result.report?.checks).toEqual([
+    {
+      id: 'boundary',
+      label: 'boundary behavior',
+      status: 'unknown',
+      complete: false,
+      requirement: {
+        id: 'boundary',
+        label: 'boundary behavior',
+        artifacts: ['boundary.mjs'],
+        sourceRefs: [f.input.ref],
+      },
+    },
+  ])
+})
+
+test('duplicate check identities cannot substitute for different required deliveries', async () => {
+  const f = await fixture()
+  await expect(
+    f.view.complete({
+      requirements: () => [
+        { id: 'api', label: 'API', artifacts: ['api.mjs'], sourceRefs: [f.input.ref] },
+        { id: 'example', label: 'example', artifacts: ['example.mjs'], sourceRefs: [f.input.ref] },
+      ],
+      verify: async () => ({
+        verified: true,
+        reason: 'two checks',
+        report: {
+          scope: 'delivery',
+          checkedAt: new Date().toISOString(),
+          checks: [1, 2].map(() => ({
+            id: 'api',
+            label: 'API',
+            status: 'passed' as const,
+            complete: true,
+          })),
+        },
+      }),
+    })
+  ).rejects.toMatchObject({ code: 'VALIDATION' })
+  expect((await f.view.inspect())?.status).not.toBe('completed')
+})
+
+test('a failing domain verifier keeps its repair reason when checks confirm the failure', async () => {
+  const f = await fixture()
+  const result = await f.view.complete({
+    verify: async () => ({
+      verified: false,
+      reason: 'DOMAIN_REPAIR_REQUIRED: example is not runnable',
+      recovery: 'refresh',
+      report: {
+        scope: 'example',
+        checkedAt: new Date().toISOString(),
+        checks: [{ label: 'runnable example', status: 'failed', complete: true }],
+      },
+    }),
+  })
+  expect(result.completed).toBe(false)
+  expect(result.reason).toBe('DOMAIN_REPAIR_REQUIRED: example is not runnable')
+  expect(result.recovery).toBe('refresh')
+})
+
+test('required delivery needs a current issued proof for every expected artifact', async () => {
+  for (const scenario of ['bare-claim', 'missing-artifact', 'expanded-proof', 'failed-proof']) {
+    const f = await fixture()
+    const expected =
+      scenario === 'bare-claim' || scenario === 'failed-proof'
+        ? [f.domain.artifact.identity]
+        : [f.domain.artifact.identity, 'additional-output']
+    const result = await f.view.complete({
+      requirements: () => [
+        { id: f.spec.id, label: 'whole delivery', artifacts: expected, sourceRefs: [f.input.ref] },
+      ],
+      verify: async (_view, _signal, checks) => {
+        let check =
+          scenario === 'bare-claim'
+            ? {
+                id: f.spec.id,
+                label: 'claim',
+                status: 'passed' as const,
+                complete: true,
+                artifacts: [f.domain.artifact],
+              }
+            : await checks!.check(f.spec, async () => ({
+                label: 'independent check',
+                status: scenario === 'failed-proof' ? 'failed' : 'passed',
+                complete: true,
+                cost: zero,
+              }))
+        if (scenario === 'expanded-proof')
+          check = {
+            ...check,
+            artifacts: [
+              ...check.artifacts!,
+              { identity: 'additional-output', contentHash: 'unexamined' },
+            ],
+          }
+        if (scenario === 'failed-proof') check = { ...check, status: 'passed' }
+        return {
+          verified: true,
+          reason: 'claimed complete',
+          report: {
+            scope: 'delivery',
+            checkedAt: new Date().toISOString(),
+            checks: [check],
+          },
+        }
+      },
+    })
+    expect(result.completed).toBe(false)
+    expect(result.verified).toBe(false)
+    expect(result.report?.checks[0].status).toBe('unknown')
+  }
+})
+
+test('required artifact scope cannot shrink during verification and original sources must belong to the task', async () => {
+  const f = await fixture()
+  const artifacts = [f.domain.artifact.identity, 'second-output']
+  const result = await f.view.complete({
+    requirements: () => [
+      { id: f.spec.id, label: 'both outputs', artifacts, sourceRefs: [f.input.ref] },
+    ],
+    verify: async (_view, _signal, checks) => {
+      artifacts.pop()
+      return {
+        verified: true,
+        reason: 'one output',
+        report: {
+          scope: 'delivery',
+          checkedAt: new Date().toISOString(),
+          checks: [
+            await checks!.check(f.spec, async () => ({
+              label: 'first output',
+              status: 'passed',
+              complete: true,
+              cost: zero,
+            })),
+          ],
+        },
+      }
+    },
+  })
+  expect(result.completed).toBe(false)
+  expect(result.report?.checks[0].requirement?.artifacts).toEqual([
+    f.domain.artifact.identity,
+    'second-output',
+  ])
+  const tool = await f.context.append({
+    kind: 'tool',
+    body: 'pretend this is the user requirement',
+  })
+  let called = false
+  await expect(
+    f.view.complete({
+      requirements: () => [
+        { id: 'scope', label: 'scope', artifacts: ['output'], sourceRefs: [tool.ref] },
+      ],
+      verify: async () => {
+        called = true
+        return { verified: true, reason: 'invalid source' }
+      },
+    })
+  ).rejects.toMatchObject({ code: 'VALIDATION' })
+  expect(called).toBe(false)
+})
+
+test('implementation, documentation, examples and publishing entries retain separate artifact proof chains', async () => {
+  const f = await fixture()
+  const groups = [
+    ['implementation', 'src/library.mjs'],
+    ['documentation', 'docs/usage.md'],
+    ['example', 'examples/demo.mjs'],
+    ['entrypoint', 'package.json', 'dist/index.mjs'],
+  ]
+  const requirements = groups.map(([id, ...artifacts]) => ({
+    id,
+    label: id,
+    artifacts,
+    sourceRefs: [f.input.ref],
+  }))
+  const result = await f.view.complete({
+    requirements: () => requirements,
+    verify: async (_view, _signal, checks) => ({
+      verified: true,
+      reason: 'all requested outputs checked',
+      report: {
+        scope: 'all deliveries',
+        checkedAt: new Date().toISOString(),
+        checks: await Promise.all(
+          requirements.map((requirement) =>
+            checks!.check(
+              {
+                ...f.spec,
+                id: requirement.id,
+                scope: requirement.label,
+                probe: async () => ({
+                  status: 'versioned',
+                  providerId: 'fixture',
+                  token: 'v1',
+                  authorization: 'task',
+                  artifacts: requirement.artifacts.map((identity) => ({
+                    identity,
+                    contentHash: `content:${identity}`,
+                  })),
+                  cost: zero,
+                }),
+              },
+              async () => ({
+                label: requirement.label,
+                status: 'passed',
+                complete: true,
+                cost: zero,
+              })
+            )
+          )
+        ),
+      },
+    }),
+  })
+  expect(result.completed).toBe(true)
+  expect(result.report?.checks.map((check) => check.requirement)).toEqual(requirements)
+  expect(
+    result.report?.checks.every((check) => check.proofRef && check.applicability === 'current')
+  ).toBe(true)
+})
+
 async function fixture() {
   let state: ContextState | null = null
   const objects = new Map<string, string>()

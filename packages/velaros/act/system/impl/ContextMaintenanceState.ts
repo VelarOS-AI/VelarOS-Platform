@@ -319,16 +319,24 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     }
     if (JSON.stringify(result).length > maxChars) return undefined
     if (snapshot.baseRevision !== this.inputRevision) return result
-    const inputBudget = this.recentPages.size === 0 ? maxChars : Math.floor(maxChars / 2)
-    for (const { page, start, end } of contextMaterialPages(this.inputPages, this.inputVisible)) {
-      const text = page.text.slice(start - page.offset, end - page.offset)
-      const item = {
-        ref: page.record.ref,
-        offset: start,
-        totalChars: page.totalChars,
-        text,
-        nextOffset: start + text.length < page.totalChars ? start + text.length : null,
+    const pendingInputs = contextMaterialPages(this.inputPages, this.inputVisible).map(
+      ({ page, start, end }) => {
+        const text = page.text.slice(start - page.offset, end - page.offset)
+        return {
+          ref: page.record.ref,
+          offset: start,
+          totalChars: page.totalChars,
+          text,
+          nextOffset: start + text.length < page.totalChars ? start + text.length : null,
+        }
       }
+    )
+    // 接口说明变大后仍优先完整交付放得下的用户输入；超大输入继续与近期材料分页共享预算。
+    const inputsFit = JSON.stringify({ ...result, inputs: pendingInputs }).length <= maxChars
+    const inputBudget =
+      this.recentPages.size === 0 || inputsFit ? maxChars : Math.floor(maxChars / 2)
+    for (const item of pendingInputs) {
+      const { text, offset: start, totalChars } = item
       let lower = 0
       let upper = text.length
       while (lower < upper) {
@@ -336,16 +344,16 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         const candidate = {
           ...item,
           text: text.slice(0, length),
-          nextOffset: start + length < page.totalChars ? start + length : null,
+          nextOffset: start + length < totalChars ? start + length : null,
         }
         if (JSON.stringify({ ...result, inputs: [...inputs, candidate] }).length <= inputBudget)
           lower = length
         else upper = length - 1
       }
       item.text = text.slice(0, lower)
-      item.nextOffset = start + lower < page.totalChars ? start + lower : null
+      item.nextOffset = start + lower < totalChars ? start + lower : null
       if (
-        (!item.text && page.totalChars) ||
+        (!item.text && totalChars) ||
         JSON.stringify({ ...result, inputs: [...inputs, item] }).length > inputBudget
       )
         continue

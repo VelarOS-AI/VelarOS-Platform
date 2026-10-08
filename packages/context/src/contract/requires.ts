@@ -2,6 +2,7 @@ import type { ContextRuntime } from '../impl/SessionContext.js'
 import type {
   ContextCompletionBinding,
   ContextCompletionResult,
+  ContextDeliveryRequirement,
   ContextVerificationCheck,
   ContextVerificationCost,
   ContextVerificationFingerprint,
@@ -47,6 +48,10 @@ import type {
 
 /** 数据库无关的唯一持久化端口；适配器负责事务、一致性、持久化和连接生命周期。 */
 export interface ContextStorage {
+  /** 本地适配器可登记本实例的进程所有者；其他存储沿用有限租约。 */
+  readonly leaseOwner?: string
+  /** 仅在同一宿主上能证明所有者已退出时返回 false；未知必须保留租约。 */
+  leaseOwnerActive?(owner: string): Optional<boolean>
   /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用。省略时由同存储实例的签发器防冲突。 */
   allocateReferenceId?(sessionId: string): Promise<string>
   /** 同一持久命名空间内的共享对象与消息端口；省略时不发现 system.store，不能回退到另一份隐式存储。 */
@@ -156,6 +161,11 @@ export interface ContextBuildOptions {
 
 /** 领域验收器只声明其实际检查的结果。 */
 export interface ContextCompletionPort {
+  /** 验收前固定必需交付项；同 id 的当前核查证明必须覆盖列出的全部产物。 */
+  requirements?(
+    view: ModelView,
+    signal: AbortSignal
+  ): readonly ContextDeliveryRequirement[] | Promise<readonly ContextDeliveryRequirement[]>
   /** 校验当前证据对应的结果；没有此端口时交付保持 unverified。 */
   verify(
     view: ModelView,

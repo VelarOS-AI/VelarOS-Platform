@@ -14,7 +14,7 @@ Platform 提供两个有明确消费者的合同：Kernel 的可装载模块合�
 
 `velaros.mod.json` 的 `module` 节由 Kernel 校验。`agent`、`ui` 是可选的不透明载荷，需要具体接入方提供解释器。清单解析成功只证明信封成立；实际能力由运行定义和宿主装配确定。
 
-当前 Agent 包负责 ActLoop、ActRunService 和 AgentSupervisor。ScriptAct 的解析、模型工具、上下文策略与能力装配集中在 Velaros 的 Act 职责组。参见 [当前主干](../agent/agent-mod-trunk.md)。
+当前 Agent 包负责 ActLoop、ActRunService 和 AgentSupervisor。ScriptAct 的解析、模型工具、上下文策略与能力装配集中在 Velaros 的 Act 职责组。参见 [Platform 运行主链](../architecture/platform-runtime.md)。
 
 ## 开发入口
 

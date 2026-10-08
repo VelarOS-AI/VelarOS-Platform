@@ -235,7 +235,7 @@ test('advanced search uses native Node calls with evidence ownership and report 
     assert.equal(request.response.type, 'tools')
     assert.deepEqual(
       request.response.tools.map((tool) => tool.name),
-      ['exec']
+      ['blobs', 'exec', 'done']
     )
     if (f.calls === 1) {
       yield {

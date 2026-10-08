@@ -2,7 +2,7 @@
 
 2026 年 10 月 1 日。当前视图、领域模板、核查报告、原子自动收尾和可信观察复用均已实现。机制回归证明了少采集、保留完整请求范围和避免过早完成；第一份组合候选的三项独立小任务更快，最终候选的新独立任务则更慢、更贵。当前证据支持机制收益与正确性改进，尚不能证明稳定的整体性能提升。
 
-设计依据见 [优化方案](scriptact-optimization-design.md) 和 [ADR 0026](../decisions/0026-scriptact-current-state-and-verification.md)。
+设计依据见 [Platform 运行主链](../architecture/platform-runtime.md) 和 [ADR 0026](../decisions/0026-scriptact-current-state-and-verification.md)。
 
 ## 实际落地结构
 

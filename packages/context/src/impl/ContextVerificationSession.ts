@@ -26,6 +26,7 @@ import {
   mergeVerificationCosts,
   verificationExecutionCheck,
   verificationFingerprint,
+  verificationProofMatches,
   verificationSpecKey,
 } from '../utils/verification.js'
 import { awaitContextOperation } from '../utils/view.js'
@@ -462,7 +463,7 @@ export class ContextVerificationSession implements ContextVerificationSessionApi
       )
       let status: ContextCompletionApplicability['checks'][number]['status'] = 'unknown'
       if (record.taskId !== JSON.parse(boundary || '[null,null]')[1]) status = 'historical'
-      else if (spec && proof) {
+      else if (spec && proof && verificationProofMatches(check, proof.check)) {
         if (
           verificationSpecKey(spec) !== verificationSpecKey(proof.spec) ||
           boundary !== proof.boundary

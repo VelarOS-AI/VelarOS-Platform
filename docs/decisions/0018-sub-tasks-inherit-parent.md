@@ -51,5 +51,5 @@ Desktop 接上子任务（`velaros:agents`）后第一次真跑：父任务照�
 
 ## Consequences
 
-模型派子任务只写要它做什么；几个子任务可以同时做同一类事。`docs/engineering/act-store-delta.md` 记下的「子任务由隐式继承父空间改为
+模型派子任务只写要它做什么；几个子任务可以同时做同一类事。`../architecture/act-system-space.md` 记下的「子任务由隐式继承父空间改为
 `start.stores` 显式共享」，由本决定改回继承。

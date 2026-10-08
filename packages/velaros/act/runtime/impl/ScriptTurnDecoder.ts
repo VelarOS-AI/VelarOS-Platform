@@ -1,12 +1,10 @@
 import type { ActDecodedTurn, ActPreview } from '@velaros-ai/agent'
-import { isTrue, isUndefined } from '@velaros-ai/core'
-import { isBoolean, isEmpty, isObject, isPlainObject, isString } from '@velaros-ai/core'
+import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { GoalLimits } from '../../system/contract/constants.js'
-import type { ScriptProtocolSubmission } from '../types/program.js'
+import type { ScriptProtocolRecord, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
-import type { ScriptSubmission } from '../types/session.js'
 import { scriptInputCopy } from '../utils/program-context.js'
 import {
   parseDeclaration,
@@ -15,8 +13,7 @@ import {
   protocolFailure,
   protocolInstructions,
 } from '../utils/script-protocol.js'
-
-import { standardModules } from './StandardModules.js'
+import { compileScriptRecords } from '../utils/script-records.js'
 
 /** 文本协议使用主循环规定的接收契约。 */
 export interface ScriptTurnDecoderApi {
@@ -45,18 +42,8 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   /** done 声明附带的完成依据。 */
   private completion?: string
   private ended = false
-  private records: Array<{
-    kind: 'blobs' | 'observe' | 'execute'
-    args: readonly unknown[]
-    body: string
-    line: number
-  }> = []
-  private active?: {
-    kind: 'blobs' | 'observe' | 'execute'
-    args: readonly unknown[]
-    body: string
-    line: number
-  }
+  private records: ScriptProtocolRecord[] = []
+  private active?: ScriptProtocolRecord
   private tail = ''
   private events: ActPreview[] = []
 
@@ -143,101 +130,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
         this.active.line
       )
     this.ended = true
-    const blobs: Record<string, string> = Object.create(null)
-    for (const record of this.records.filter((record) => record.kind === 'blobs')) {
-      const name = record.args[0]
-      if (record.args.length !== 1 || !isString(name) || !name || name.length > 256)
-        throw protocolFailure('blobs 必须提供一个非空名称', record.line)
-      if (Object.hasOwn(blobs, name)) throw protocolFailure(`原文名称重复：${name}`, record.line)
-      blobs[name] = record.body
-    }
-    let observe: ScriptProtocolSubmission['observe']
-    const executions: Array<ScriptProtocolSubmission['executions'][number]> = []
-    for (const record of this.records.filter((record) => record.kind !== 'blobs')) {
-      if (record.args.length > 1) throw protocolFailure('程序声明最多接受一个选项对象', record.line)
-      const options = !isEmpty(record.args) ? record.args[0] : {}
-      if (!isPlainObject(options)) throw protocolFailure('程序选项必须是对象', record.line)
-      const {
-        async: background = false,
-        retain,
-        inputRef,
-        clear,
-        format,
-        ...fields
-      } = options as Record<string, unknown>
-      if (record.kind === 'observe' && !isUndefined(observe))
-        throw protocolFailure('一份响应最多更新一次观察', record.line)
-      if (
-        (record.kind === 'observe' &&
-          (Object.hasOwn(options, 'async') || Object.hasOwn(options, 'retain'))) ||
-        !isBoolean(background)
-      )
-        throw protocolFailure('调度选项无效', record.line)
-      if (!isUndefined(clear)) {
-        if (
-          !isTrue(clear) ||
-          record.kind !== 'observe' ||
-          Object.keys(options).length !== 1 ||
-          !isEmpty(record.body)
-        )
-          throw protocolFailure('清除观察使用 observe({clear:true}) 和空段', record.line)
-        observe = null
-        continue
-      }
-      if (!isUndefined(inputRef)) {
-        if (
-          'input' in fields ||
-          !isString(inputRef) ||
-          !inputRef.startsWith('host:') ||
-          !Object.hasOwn(this.inputs, inputRef.slice(5))
-        )
-          throw protocolFailure('宿主参数引用无效或与 input 冲突', record.line)
-        fields.input = this.inputs[inputRef.slice(5)]
-      }
-      let program: Record<string, unknown>
-      if (format === 'program') {
-        if (!isEmpty(Object.keys(fields)))
-          throw protocolFailure('完整程序载荷不能同时使用程序头字段', record.line)
-        try {
-          program = JSON.parse(record.body)
-        } catch {
-          throw protocolFailure('完整程序载荷必须是 JSON 对象', record.line)
-        }
-        if (!isPlainObject(program)) throw protocolFailure('完整程序载荷必须是对象', record.line)
-      } else {
-        if (!isUndefined(format)) throw protocolFailure('程序载荷格式无效', record.line)
-        if ('source' in fields || 'retainTurns' in fields)
-          throw protocolFailure('源码放在段内，租期使用 retain', record.line)
-        const reference = 'sourceRef' in fields || 'edits' in fields || 'snapshot' in fields
-        if (reference && !isEmpty(record.body))
-          throw protocolFailure('引用或编辑模式必须使用空段', record.line)
-        program = { ...fields }
-        if (!reference) program.source = record.body
-      }
-      if (!isEmpty(Object.keys(blobs))) {
-        if (
-          program.blobs &&
-          isObject(program.blobs) &&
-          Object.keys(program.blobs).some((name) => Object.hasOwn(blobs, name))
-        )
-          throw protocolFailure('原文绑定与程序内 blobs 重名', record.line)
-        if (program.blobs && !isPlainObject(program.blobs))
-          throw protocolFailure('blobs 必须是对象', record.line)
-        program.blobs = { ...(program.blobs as Optional<Record<string, string>>), ...blobs }
-      }
-      let parsed: ScriptSubmission
-      if (record.kind === 'execute' && (!isUndefined(retain) || this.config.defaultRetain !== 2))
-        program.retainTurns = retain ?? program.retainTurns ?? this.config.defaultRetain
-      try {
-        parsed = standardModules.parseScript({
-          [record.kind]: program,
-        })
-      } catch (error) {
-        throw protocolFailure(error instanceof Error ? error.message : String(error), record.line)
-      }
-      if (record.kind === 'observe') observe = parsed.observe
-      else executions.push({ program: parsed.execute!, async: background })
-    }
+    const { observe, executions } = compileScriptRecords(this.records, this.config, this.inputs)
     if (this.requireDecision() && !this.done && isUndefined(observe) && isEmpty(executions))
       throw protocolFailure(protocolDecisionInstructions(this.marker, this.config))
     const submission: ScriptProtocolSubmission = { observe, executions }

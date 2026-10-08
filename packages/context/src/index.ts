@@ -53,6 +53,7 @@ export type {
   ContextCompletionRecord,
   ContextCompletionResult,
   ContextContent,
+  ContextDeliveryRequirement,
   ContextEvidence,
   ContextFeedback,
   ContextGap,

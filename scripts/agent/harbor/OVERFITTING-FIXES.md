@@ -33,8 +33,8 @@
 
 证据目录：`.velaros-workspace/bench/overfit-fixes-51/`。
 
-- [验证与交付摘要](../../../.velaros-workspace/bench/overfit-fixes-51/final-checks.json)
-- [历史数据校验](../../../.velaros-workspace/bench/overfit-fixes-51/historical-integrity.json)
-- [历史暴露与同题拒绝验证](../../../.velaros-workspace/bench/overfit-fixes-51/exposure-history-check.json)
-- [追加生成的历史报告](../../../.velaros-workspace/bench/overfit-fixes-51/historical-report.md)
-- [工具发现范围与本地耗时](../../../.velaros-workspace/bench/overfit-fixes-51/tool-discovery.json)
+- 验证与交付摘要（归档内路径 `.velaros-workspace/bench/overfit-fixes-51/final-checks.json`）
+- 历史数据校验（归档内路径 `.velaros-workspace/bench/overfit-fixes-51/historical-integrity.json`）
+- 历史暴露与同题拒绝验证（归档内路径 `.velaros-workspace/bench/overfit-fixes-51/exposure-history-check.json`）
+- 追加生成的历史报告（归档内路径 `.velaros-workspace/bench/overfit-fixes-51/historical-report.md`）
+- 工具发现范围与本地耗时（归档内路径 `.velaros-workspace/bench/overfit-fixes-51/tool-discovery.json`）

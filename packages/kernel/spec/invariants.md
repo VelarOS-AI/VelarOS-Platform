@@ -15,7 +15,7 @@
 
 文字档在模块卡片的健康栏里显示为「未验证」，不算通过。
 
-编号只增不重排。本表按方案 `docs/engineering/refactor-plans/kernel.md` §2.7 落成；远程节点那几条（INV-17 到 INV-20）
+编号只增不重排。本表按方案 `../../../docs/architecture/module-ownership.md` §2.7 落成；远程节点那几条（INV-17 到 INV-20）
 本仓没有实现测试，由 Termel 仓的 `remote-node.e2e.test.ts` 跨仓覆盖，这里按「文字」登记并在检验器一列留空，
 等远程节点的本仓测试补齐再改成「测试」。
 

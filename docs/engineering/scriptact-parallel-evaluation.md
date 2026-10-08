@@ -32,7 +32,7 @@ U 的同一道 Element Web 再验证已完成并结算，双方官方 reward=1�
 
 验证修复周转优化已完成并通过独立复核：70 项集成检查通过，四组同输入验证 5.127→0.177 秒；R/Q 完整自动诊断每批约 0.224/0.251 秒，同输入产物可复用。验收 `throughput-optimization/final-validation.json`，SHA `b5688784f3e0543476be226787b6c4da7004742ecb8db4bcad53cde38662411a`；独审 SHA `9cf50a0d537cd16dc40a43da8552f930e133cfc77aa94d3261c4de5aa50fb812`。本轮源任务终态将自动生成完整诊断，控制器终态再刷新结算后的诊断。
 
-核心链路与实测费用拆解见 [ScriptAct 核心与缓存断点联合优化](scriptact-cache-output-optimization.md)。Q 正式构建及 Runtime/Act 622/622、Model 180/180、Agent 40/40 回归通过；`parallel-54q` 官方重放双方得分 1，源任务、重放、账本与资源已完成结算。
+核心链路与实测费用拆解见 [Platform 运行主链](../architecture/platform-runtime.md)。Q 正式构建及 Runtime/Act 622/622、Model 180/180、Agent 40/40 回归通过；`parallel-54q` 官方重放双方得分 1，源任务、重放、账本与资源已完成结算。
 
 第 7 道固定开发题 Vuls：ScriptAct / Codex 解题 **325.514 / 355.544 秒**，派发至官方重放清理结算 **427.745 / 454.652 秒**；已知参考小计 **$0.5800784 / $0.4560336**，Codex 一笔未知用量，完整费用比较和双方实际扣费未知。28 条签名请求物理结算，原 138 条及 11 条未知保持，累计 166 条、12 条未知。Codex 一次 ECONNRESET 的上游生命周期约 65 秒，客户端在 14.812 秒断开，后续请求与旧生命周期重叠；不能据此推断 65 秒客户端等待、直接扣除时间或证明核心提速。最终对账 `settlement-audit-54q/final-settlement.json` SHA `700970c047b0fbe8435e9fa13fce44c67bc6fbd903c650f7fa2490a3df124c6b`。完整轨迹核心诊断已封存；R 依据通用 Shell 生成盲点修复并封存，固定开发题第 8 题 Navidrome 配对已完成。
 
@@ -96,7 +96,7 @@ Flipt 配对 `parallel-54j-v2` 于 2026-09-30 10:29 UTC 启动、10:47 UTC 完�
 
 候选 I 已封存，指纹 `b40f751cf989b23582023c87c8424ab97c277b837bb49aa18e9974569d8c2d44`。它继承 H 的共享正文计量，并修复“当前帧缩容误判历史中完整正文缺失”：只使用本次实际历史内完整交付的引用、块名与内容哈希证明，正文退役或请求超额仍按原边界处理。65 项 Runtime 回归、独立 5 个边界反例与 3 个真实 compose→provider compiler 反例通过。
 
-[Responses 终端交付修复](scriptact-responses-terminal-delivery.md)让完整响应在协议终端到达后结束 SDK 输入，保留原有用量、延续状态和失败语义。171 项 Model 测试、实际归档 SDK 3.0.119 的 16 项终端测试、474 个独立分块边界及构建产物独立检查通过；各组存在重叠，不相加。人工尾流中的终端后等待从 501.67 毫秒降至 1.19 毫秒，不能据此解释原线上差值。正式七包构建、3,954 文件封印、两种 Linux 归档通过，相对 H 的变更限定在 Model/Runtime 的 23 份包文件。依赖锁、模型和推理配置、上下文策略与运行参数保持。
+[Platform 运行主链](../architecture/platform-runtime.md)让完整响应在协议终端到达后结束 SDK 输入，保留原有用量、延续状态和失败语义。171 项 Model 测试、实际归档 SDK 3.0.119 的 16 项终端测试、474 个独立分块边界及构建产物独立检查通过；各组存在重叠，不相加。人工尾流中的终端后等待从 501.67 毫秒降至 1.19 毫秒，不能据此解释原线上差值。正式七包构建、3,954 文件封印、两种 Linux 归档通过，相对 H 的变更限定在 Model/Runtime 的 23 份包文件。依赖锁、模型和推理配置、上下文策略与运行参数保持。
 
 日志与独立审核分别在 `context-efficiency-review-54g/`、`readonly-required-history-audit.json`、`readonly-responses-terminal-audit/`、`latency-repair-54i/`，总索引为 `validation-54i.json`。新 Proton 镜像已实际导入并确认 Alpine 3.18.3 / musl / amd64，准备请求增量为 0，检查容器已清理；官方 Oracle 和双方新候选安装仍是付费派发前置条件。
 

@@ -1,6 +1,6 @@
 # 高级搜索：正式运行链路
 
-搜索是普通脚本能力。主模型在 execute 中调用 `velaros:search.search`；搜索模型使用同一个 ScriptAct 文本协议、Agent Loop、脚本执行器与存储，使用统一五分区上下文，缺省配置较大的近期历史窗口。Runtime 校验真实来源、控制预算和发布报告。完整上下文设计见 [context-management.md](./context-management.md)。
+搜索是普通脚本能力。主模型在 execute 中调用 `velaros:search.search`；搜索模型使用同一个 ScriptAct 文本协议、Agent Loop、脚本执行器与存储，使用统一五分区上下文，缺省配置较大的近期历史窗口。Runtime 校验真实来源、控制预算和发布报告。完整上下文设计见 [长程上下文：段内只追加，按剩余轮数封段](long-running-context.md)。
 
 ## 调用和返回
 
@@ -62,7 +62,7 @@ ComposedRuntime 装配 AdvancedSearch；AdvancedSearch 建立共享 RuntimeSessi
 
 机制验收位于 `packages/velaros/act/runtime/test/advanced-search.test.mjs` 与 `context-management.test.mjs`，包含正式能力调用、存储、执行、续查、范围拒绝、最后一轮、并发预算、模型挂起、输入归档、材料引用、检查点和多模态编码。真实模型质量评估需要宿主提供模型配置。
 
-异常收尾和预算派发边界见 [搜索续接加固](../engineering/act-search-lifecycle-delta.md)。
+异常收尾和预算派发边界见 [高级搜索：正式运行链路](advanced-search.md)。
 
 
 `profiles()` 返回 `{name, default, limits}`，档位预算由宿主决定。`read({ref,mode:"snapshot"})` 返回保存正文的 `text/offset/totalChars`；`mode:"current"` 返回 `items`，每项用 `ok` 区分真实正文与缺口，`complete` 说明选择范围是否完整。两种读取都不会发起模型调用。

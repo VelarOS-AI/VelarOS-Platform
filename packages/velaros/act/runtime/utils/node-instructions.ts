@@ -24,6 +24,8 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     'console.log 自动成为执行结果；宿主返回 stdout、stderr、退出码和完整输出日志路径。输出片段会标明缺口，按需继续读取完整日志再判断结果。根据实际结果继续工作并验证任务。',
     '持续完成用户请求的全部范围。结束前核对原始需求、最终产物与实际验证结果；有改动时审阅最终差异和受影响的调用方，检查既有行为与兼容约束。验证应对应最终交付版本，后续改动影响验证范围时补验。只把验证覆盖到的结论报告为已验证，明确未完成事项和证据缺口。',
+    '多项交付以当前用户要求逐项维护完成依据和待办；上下文整理后仍保留这些要求与证据入口，用户修订时更新为当前范围。核查具体内容是否满足要求，存在文件或命令退出成功只证明对应事实。对后续阶段、错误分支与兼容行为按任务合同选取反例。',
+    '独立的读取、计算和过滤可在一个程序中组合，批量输出决策所需结果；依赖关系顺序 await。有外部副作用的步骤保存可核对的身份和回执；断流或恢复后先核对实际状态，再决定是否继续，效果未知的步骤不可直接重放。',
     `运行时目录：$${NodeEnvironmentVariables.directory.name}/index.json。execution 提供本次 Node 版本、执行文件、工作目录和命令搜索路径；外部命令以实际解析结果为准。packages 提供标准包版本与原包查询入口；skills 提供本轮所选 Skill 的用途和资源入口，说明按需加载；capabilities 是已授权的宿主模块，operationDirectory 下的 <操作名>.d.ts 提供接口与示例。保存脚本和 Node 子进程共用当前环境。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes('velaros:project')

@@ -179,7 +179,7 @@ test('done with a completion reason ends the active goal in the same reply', asy
   assert(!events.some((e) => e.type === 'error'), JSON.stringify(events))
 })
 
-test('INV-48 native final text preserves an active goal until an explicit goal operation', async (t) => {
+test('INV-48 native done without a completion claim preserves an active goal until an explicit goal operation', async (t) => {
   for (const reply of [
     '阶段成果已保存，仍有后续工作。',
     'All requested work is complete.',
@@ -208,7 +208,11 @@ test('INV-48 native final text preserves an active goal until an explicit goal o
                 },
               },
             }
-          } else yield { type: 'text', text: reply }
+          } else
+            yield {
+              type: 'tool-call',
+              value: { id: `done-${frames.length}`, name: 'done', input: { message: reply } },
+            }
           yield { type: 'finish', reason: 'stop' }
         },
       }
@@ -241,7 +245,10 @@ test('native replies finish ordinary tasks and preserve paused goals', async (t)
             JSON.parse(request.compiledPrompt.split('runtime：\n')[1].split('\n')[0]).goalControl,
             undefined
           )
-          yield { type: 'text', text: '已回答当前问题。' }
+          yield {
+            type: 'tool-call',
+            value: { id: 'done', name: 'done', input: { message: '已回答当前问题。' } },
+          }
           yield { type: 'finish', reason: 'stop' }
         },
       }
@@ -297,7 +304,10 @@ test('INV-48 native goal completion is discoverable from the first actual reques
       } else {
         assert.equal(raw.status, 'complete')
         assert.equal(displayed.goalControl, undefined)
-        yield { type: 'text', text: '完成。' }
+        yield {
+          type: 'tool-call',
+          value: { id: 'done', name: 'done', input: { message: '完成。' } },
+        }
       }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -622,4 +632,30 @@ test('INV-78 authorization reset removes old domain report projections while pre
   const state = await f.storage.load('goal')
   const original = state.records.find((record) => record.title.startsWith('task:completion:'))
   assert.deepEqual(JSON.parse(await f.storage.get('goal', original.objectId)).result.report, report)
+})
+
+test('INV-48 native done with a claim completes the goal through the same acceptance gate', async (t) => {
+  const { session } = await fixture(t, {
+    id: 'native-completion-claim',
+    nativeTools: true,
+    limits,
+    estimate,
+    async *stream() {
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'complete',
+          name: 'done',
+          input: { completion: '已核对交付与实际验证', message: '完成。' },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  })
+  const events = await Array.fromAsync(
+    session.submit('完成本次任务', undefined, { goal: '完成本次任务' })
+  )
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal((await session.getGoal()).status, 'complete')
+  assert.equal((await session.getGoal()).reason, '已核对交付与实际验证')
 })

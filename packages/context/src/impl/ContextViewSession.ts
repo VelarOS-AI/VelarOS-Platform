@@ -35,6 +35,7 @@ import {
   sameContextRef,
 } from '../utils/state.js'
 import { hourlyRetryMs, recentHourlyTokens, rolledHourly } from '../utils/usage.js'
+import { completionVerification, verificationRequirements } from '../utils/verification.js'
 import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
 
@@ -119,6 +120,8 @@ export interface ContextViewApi {
   ): Promise<ContextCompletionResult>
   /** 上次执行中断后，把按持久日志收拾出的结算事实合入检查点；不复活取消终态。 */
   recover(feedback: readonly ContextFeedback[]): Promise<void>
+  /** 原子取得恢复租约；持有期间只有此调用方可以核对和结算旧回执。 */
+  acquireRecovery(): Promise<() => Promise<void>>
   /** 宿主保存结束或暂停阶段，撤销当前租约。 */
   end(status?: ContextTaskStatus): Promise<void>
 }
@@ -127,6 +130,7 @@ export interface ContextViewApi {
 export class ContextViewSession implements ContextViewApi {
   public readonly limits: ContextViewLimits
   private leaseId?: string
+  private recoveryId?: string
   private building = false
   private readonly builder: ContextEvidenceBuilder
   private readonly verification: ContextVerificationSession
@@ -142,6 +146,45 @@ export class ContextViewSession implements ContextViewApi {
       id: source.id,
       capabilities: { ...source.capabilities },
     }))
+  }
+
+  private leaseActive(lease: ContextTaskState['lease']): boolean {
+    if (!lease || lease.expiresAt <= Date.now()) return false
+    // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：只有明确 false 能提前接管，undefined 必须继续保留租约。
+    return !lease.owner || this.options.storage.leaseOwnerActive?.(lease.owner) !== false
+  }
+
+  public async acquireRecovery(): Promise<() => Promise<void>> {
+    const id = (await createContextReference(this.options.storage, this.options.sessionId)).id
+    await this.change(
+      {
+        apply: (task) => {
+          if (!task) throw contextFailure('TASK_STATE', '任务不存在')
+          if (this.leaseActive(task.lease))
+            throw contextFailure('TASK_BUSY', '活动任务不能从外部恢复')
+          return {
+            ...task,
+            revision: task.revision + 1,
+            lease: {
+              id,
+              expiresAt: Date.now() + this.limits.leaseMs,
+              owner: this.options.storage.leaseOwner,
+            },
+          }
+        },
+      },
+      false
+    )
+    this.leaseId = id
+    this.recoveryId = id
+    return async () => {
+      if (this.recoveryId !== id) return
+      try {
+        await this.end()
+      } finally {
+        if (this.recoveryId === id) this.recoveryId = undefined
+      }
+    }
   }
 
   public async inspect(): Promise<Nullable<ContextTaskState>> {
@@ -187,7 +230,7 @@ export class ContextViewSession implements ContextViewApi {
     await this.change(
       {
         apply: (current) => {
-          if (current?.lease && current.lease.expiresAt > Date.now())
+          if (current && this.leaseActive(current.lease))
             throw contextFailure('TASK_BUSY', '另一个运行持有任务租约')
           if (
             current?.status === 'executing' ||
@@ -204,7 +247,11 @@ export class ContextViewSession implements ContextViewApi {
             revision,
             step: prior?.step ?? 0,
             status: 'ready',
-            lease: { id, expiresAt: Date.now() + this.limits.leaseMs },
+            lease: {
+              id,
+              expiresAt: Date.now() + this.limits.leaseMs,
+              owner: this.options.storage.leaseOwner,
+            },
             goals: prior?.goals.some((ref) => sameContextRef(ref, goal))
               ? prior.goals
               : [...(prior?.goals ?? []), goal],
@@ -663,9 +710,27 @@ export class ContextViewSession implements ContextViewApi {
       verifier && task.id
         ? await this.verification.open(task.id, commit?.binding, signal)
         : undefined
-    let validation = verifier
-      ? await awaitContextOperation(verifier.verify(task.view, signal, checks), signal)
-      : { verified: false, reason: '未配置领域验收器，结果为未验证交付' }
+    const requirements = verificationRequirements(
+      await awaitContextOperation(
+        Promise.resolve(verifier?.requirements?.(task.view, signal) ?? []),
+        signal
+      )
+    )
+    for (const requirement of requirements)
+      for (const ref of requirement.sourceRefs) {
+        const source = await awaitContextOperation(
+          this.options.context.read(ref, { limit: 1 }),
+          signal
+        )
+        if (source.record.kind !== 'user' || !task.goals.some((goal) => sameContextRef(goal, ref)))
+          throw contextFailure('VALIDATION', '必需交付项必须引用当前任务的原始用户要求')
+      }
+    let validation = completionVerification(
+      verifier
+        ? await awaitContextOperation(verifier.verify(task.view, signal, checks), signal)
+        : { verified: false, reason: '未配置领域验收器，结果为未验证交付' },
+      requirements
+    )
     let completionRef: Optional<ContextRef>
     if (validation.report) {
       checkVerificationReport(validation.report)
@@ -776,9 +841,9 @@ export class ContextViewSession implements ContextViewApi {
         apply: (task) => {
           if (!task) throw contextFailure('TASK_STATE', '任务不存在')
           if (
-            task.lease &&
-            task.lease.expiresAt > Date.now() &&
-            (task.lease.id !== this.leaseId || task.status === 'executing')
+            this.leaseActive(task.lease) &&
+            (task.lease!.id !== this.leaseId ||
+              (task.status === 'executing' && task.lease!.id !== this.recoveryId))
           )
             throw contextFailure('TASK_BUSY', '活动任务不能从外部恢复')
           const mandatory = [

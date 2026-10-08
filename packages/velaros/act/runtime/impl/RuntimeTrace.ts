@@ -219,6 +219,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         remaining -= text?.length ?? 0
         activityRecords.push({
           ref: record.ref,
+          createdAt: record.createdAt,
           sequence: record.sequence,
           title: record.title,
           chars: record.chars,
@@ -573,6 +574,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       remaining -= text?.length ?? 0
       return {
         ref: record.ref,
+        createdAt: record.createdAt,
         sequence: record.sequence,
         title: record.title,
         chars: record.chars,

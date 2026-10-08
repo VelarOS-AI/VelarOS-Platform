@@ -359,6 +359,24 @@ test('INV-4: renewal losing a compare-and-swap race cannot overwrite the new own
   await assert.rejects(f.view.assertCanWrite('winner'), { code: 'LEASE_LOST' })
 })
 
+test('INV-18 one recovering owner fences both another recovery and a new execution', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'] })
+  const f = await fixture(t)
+  await f.view.startStep('interrupted')
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const first = createContextView(f.options)
+  const second = createContextView(f.options)
+  const contenders = await Promise.allSettled([first.acquireRecovery(), second.acquireRecovery()])
+  assert.equal(contenders.filter((value) => value.status === 'fulfilled').length, 1)
+  const winner = contenders[0].status === 'fulfilled' ? first : second
+  const loser = winner === first ? second : first
+  await assert.rejects(loser.begin(f.user.ref), { code: 'TASK_BUSY' })
+  await assert.rejects(loser.recover([]), { code: 'TASK_BUSY' })
+  await winner.recover([])
+  await contenders.find((value) => value.status === 'fulfilled').value()
+  await loser.begin(f.user.ref)
+})
+
 test('INV-4: recovery revokes an interrupted execution before another owner begins', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 0 })
   const f = await fixture(t)

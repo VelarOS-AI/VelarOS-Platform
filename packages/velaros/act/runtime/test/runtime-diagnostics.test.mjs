@@ -15,6 +15,8 @@ test('INV-42 storage diagnostics preserve optional methods, detached results and
   const record = await context.append({ kind: 'user', body: 'private input' })
   assert.equal((await context.read(record.ref)).text, 'private input')
   assert.equal(diagnostics.storage.stores, underlying.stores)
+  assert.equal(diagnostics.storage.leaseOwner, underlying.leaseOwner)
+  assert.equal(diagnostics.storage.leaseOwnerActive(underlying.leaseOwner), true)
   assert(metrics.some((metric) => metric.operation === 'appendRecord'))
   const metadata = await diagnostics.storage.loadMetadata('s')
   assert.equal(
@@ -73,6 +75,8 @@ test('observers cannot change business results and optional capabilities remain 
     assert.equal(diagnostics.storage.compareAndSwapMetadata, undefined)
     assert.equal(diagnostics.storage.records, undefined)
     assert.equal(diagnostics.storage.collect, undefined)
+    assert.equal(diagnostics.storage.leaseOwner, undefined)
+    assert.equal(diagnostics.storage.leaseOwnerActive, undefined)
   }
   await new Promise((resolve) => setImmediate(resolve))
 })

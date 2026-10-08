@@ -801,3 +801,23 @@ test('field recall verifies the host selector receipt and whole archive reads us
     code: 'UNAVAILABLE',
   })
 })
+
+for (const inputText of ['preserve '.repeat(160), '中文 "quoted" \\ path\n'.repeat(70)])
+  test('maintenance preserves whole fitting inputs before paging recent evidence', async (t) => {
+    const f = await fixture(t)
+    const input = await f.session.context.append({ kind: 'user', body: inputText })
+    await f.session.view.begin(input.ref)
+    await f.session.context.append({ kind: 'assistant', body: 'Earlier evidence. '.repeat(3000) })
+    const state = new ContextMaintenanceState('s', f.storage)
+    const snapshot = await state.snapshot(20000, new AbortController().signal)
+    const whole = state.material(snapshot, 30000)
+    const completeInputSize = JSON.stringify({ ...whole, recent: [] }).length
+    const budget = completeInputSize + 300
+    const material = state.material(snapshot, budget)
+    assert.equal(material.inputs.find((item) => item.ref.id === input.ref.id).text, inputText)
+    assert(JSON.stringify(material).length <= budget)
+    const paged = state.material(snapshot, Math.floor(completeInputSize / 2))
+    assert(paged.inputs.some((item) => item.nextOffset !== null))
+    assert(paged.recent.some((item) => item.text.length > 0))
+    assert(JSON.stringify(paged).length <= Math.floor(completeInputSize / 2))
+  })

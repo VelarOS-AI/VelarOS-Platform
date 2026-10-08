@@ -5,6 +5,7 @@ export { modulesModule } from '../system/index.js'
 export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
 export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
+export { DefaultScriptProtocolTransport } from './contract/constants.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type { NodeExecutionEnvironmentApi } from './contract/provides.js'
@@ -30,6 +31,11 @@ export type { CapabilityContext } from './contract/requires.js'
 export type { ProjectCapabilityModuleOptions } from './contract/requires.js'
 export type { ProjectImagesModuleOptions } from './contract/requires.js'
 export type { ContextMaintenanceOptions } from './contract/requires.js'
+export type {
+  CompletionArtifactSnapshot,
+  CompletionArtifactSource,
+  CompletionReviewOptions,
+} from './contract/requires.js'
 export type { EventDeliveryOptions } from './contract/requires.js'
 export type { NodeExecutionEnvironmentOptions, RuntimeNodeOptions } from './contract/requires.js'
 export type { NodeExecutionOutput } from './contract/requires.js'

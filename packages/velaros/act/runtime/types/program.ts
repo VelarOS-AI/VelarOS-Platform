@@ -23,3 +23,11 @@ export interface PreparedScript {
   /** 候选检查回执。 */
   readonly receipt: ScriptControlReceipt
 }
+
+/** 传输解码后的原文声明；语义编译对文本与 JSON 完全共用。 */
+export interface ScriptProtocolRecord {
+  readonly kind: 'blobs' | 'observe' | 'execute'
+  readonly args: readonly unknown[]
+  body: string
+  readonly line?: number
+}

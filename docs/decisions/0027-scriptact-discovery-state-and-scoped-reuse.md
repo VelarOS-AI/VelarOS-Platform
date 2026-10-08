@@ -28,7 +28,7 @@
 
 ## Validation
 
-Runtime INV-79、80、81、82，Context INV-16 与 Script 声明切片、依赖闭包回归覆盖这些边界。各项机制成本包括归档、发布、真实读取、probe、失败与取消。端到端收益由冻结独立任务、重复配对与完整计量决定；方案见 [下一代设计](../engineering/scriptact-next-generation-design.md)。
+Runtime INV-79、80、81、82，Context INV-16 与 Script 声明切片、依赖闭包回归覆盖这些边界。各项机制成本包括归档、发布、真实读取、probe、失败与取消。端到端收益由冻结独立任务、重复配对与完整计量决定；方案见 [Platform 运行主链](../architecture/platform-runtime.md)。
 
 ## Consequences
 

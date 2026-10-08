@@ -3,6 +3,7 @@ export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/t
 export type { WorkspaceEntry } from '../system/types/workspace.js'
 export { McpLimits } from './contract/constants.js'
 export { VelarosRunLimits, VelarosRuntimeContract } from './contract/constants.js'
+export { DefaultScriptProtocolTransport } from './contract/constants.js'
 export type { McpTransportKind } from './types/mcp.js'
 export type { McpToolAnnotations } from './types/mcp.js'
 export type { McpToolDescriptor } from './types/mcp.js'

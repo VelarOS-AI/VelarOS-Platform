@@ -22,6 +22,8 @@ export class RuntimeDiagnostics implements RuntimeDiagnosticsApi {
     this.storage = receive
       ? {
           stores: storage.stores,
+          leaseOwner: storage.leaseOwner,
+          leaseOwnerActive: storage.leaseOwnerActive?.bind(storage),
           load: (id) => this.measure(id, 'load', () => storage.load(id)),
           selectSnapshot: optionalWhen(
             Boolean(storage.selectSnapshot),

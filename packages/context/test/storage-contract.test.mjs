@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, test } from 'node:test'
@@ -23,6 +23,27 @@ describe('INV-12 storage adapters preserve persistence and lifecycle contracts',
   storageContract('SQLite', sqliteFixture)
   storeContract('SQLite', sqliteFixture)
   storageContract('opaque asynchronous test adapter', async () => volatileStorageBackend())
+})
+
+test('INV-18 local lease ownership only proves exit for an absent process on the same host', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  assert.equal(storage.leaseOwnerActive(storage.leaseOwner), true)
+  for (const identity of [
+    'broken',
+    'null',
+    '{}',
+    JSON.stringify({ host: 'foreign-host', pid: process.pid }),
+  ])
+    assert.equal(storage.leaseOwnerActive(identity), undefined)
+  const kill = t.mock.method(process, 'kill', () => {
+    throw Object.assign(new Error('absent'), { code: 'ESRCH' })
+  })
+  assert.equal(storage.leaseOwnerActive(JSON.stringify({ host: hostname(), pid: 123 })), false)
+  kill.mock.mockImplementation(() => {
+    throw Object.assign(new Error('denied'), { code: 'EPERM' })
+  })
+  assert.equal(storage.leaseOwnerActive(JSON.stringify({ host: hostname(), pid: 123 })), undefined)
 })
 
 test('SQLite initialization failure closes the connection it just opened', async (t) => {

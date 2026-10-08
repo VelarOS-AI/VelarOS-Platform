@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
 import { isAbsolute } from 'node:path'
 import { getBuiltinModule } from 'node:process'
 import type { DatabaseSync } from 'node:sqlite'
@@ -26,6 +27,35 @@ import { LocalStoreStorage } from './LocalStoreStorage.js'
 
 /** SQLite 原子提交小状态及独立记录索引；正文保持内容寻址和原有会话边界。 */
 export class LocalContextStorage implements ContextStorage {
+  public readonly leaseOwner = JSON.stringify({
+    host: hostname(),
+    pid: process.pid,
+    instance: randomUUID(),
+  })
+
+  /** SQLite 本地宿主的存活证明；PID 重用、权限不足和跨宿主都保守保留租约。 */
+  public leaseOwnerActive(owner: string): Optional<boolean> {
+    let identity: { host?: string; pid?: number }
+    try {
+      identity = JSON.parse(owner) as { host?: string; pid?: number }
+      // @arch-guard:suspend code-style/require-error-logging 理由：旧格式或未知持有者返回未知状态，调用方保守保留租约，不把解析失败当作持有者已退出。
+    } catch {
+      return
+    }
+    if (
+      !identity ||
+      identity.host !== hostname() ||
+      !Number.isSafeInteger(identity.pid) ||
+      identity.pid! <= 0
+    )
+      return
+    try {
+      process.kill(identity.pid!, 0)
+      return true
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === 'ESRCH' ? false : undefined
+    }
+  }
   /** 同连接的独立持久对象空间。 */
   public readonly stores: StoreStorage
   private readonly db: DatabaseSync

@@ -1,6 +1,6 @@
 # ScriptAct 文本协议：设计复核与执行约束
 
-状态：正式实现已接入现有 Platform 主链。实现细节与验证见 `../engineering/scriptact-text-protocol-delta.md`。
+状态：正式实现已接入现有 Platform 主链。实现细节与验证见 `scriptact-text-protocol.md`。
 
 主模型维护观察程序，并提交一次性执行程序。Runtime 负责程序版本、调度、能力边界、操作回执及下一轮可见材料。AI SDK 继续承担模型供应商适配、流接收、用量和多模态消息传输。
 
@@ -190,11 +190,11 @@ output(blobs.payload);
 - 宿主 `submit` 需接受文字与附件组合，并允许仅附件输入；兼容现有文字调用。
 - 供应商或模型不支持某种附件时显式报告，不能用图片路径文字假称模型已经看见图片。
 
-高级搜索通过 execute 中的 `velaros:search.search` 按需调用，使用共享 ScriptAct 协议与增量历史。协议、执行和上下文策略分别通过 ActProtocolPort、ActExecutionPort、ActContextPort 接入；模式相关的容量、租约与恢复规则见 [context-management.md](./context-management.md)。
+高级搜索通过 execute 中的 `velaros:search.search` 按需调用，使用共享 ScriptAct 协议与增量历史。协议、执行和上下文策略分别通过 ActProtocolPort、ActExecutionPort、ActContextPort 接入；模式相关的容量、租约与恢复规则见 [长程上下文：段内只追加，按剩余轮数封段](long-running-context.md)。
 
 ## 11. 正式实现和验证入口
 
-接入点、执行顺序、原始文本示例和宿主配置见 `platform-runtime.md`。源码归属、公开接口迁移、测试承诺调整与验证结果见 `../engineering/scriptact-text-protocol-delta.md`。
+接入点、执行顺序、原始文本示例和宿主配置见 `platform-runtime.md`。源码归属、公开接口迁移、测试承诺调整与验证结果见 `scriptact-text-protocol.md`。
 
 - `test/text-decoder.test.mjs`：任意分片、裸名称/函数形式、CRLF、闭合边界、原文保真、字面量参数、别名及预算。
 - `test/text-runtime.test.mjs`：真实隔离脚本、重复块、并行读取、串行写入、事件等待、冻结输入、图片、续期、曝光竞态、取消与恢复。

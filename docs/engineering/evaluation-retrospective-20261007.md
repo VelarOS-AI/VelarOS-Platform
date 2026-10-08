@@ -29,7 +29,7 @@
 
 ## 保留的数据及检索入口
 
-本机归档：[VelarOS-Evaluation-Archive/2026-10-07](/Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07)。结构化总索引：[evaluation-retrospective-20261007.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/docs/engineering/evaluation-retrospective-20261007.json)。
+本机归档：VelarOS-Evaluation-Archive/2026-10-07（`~/Documents/VelarOS-Evaluation-Archive/2026-10-07`）。结构化总索引：[evaluation-retrospective-20261007.json](evaluation-retrospective-20261007.json)。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -114,9 +114,9 @@ project 消融中的自由编辑组使用过宿主 `apply_patch`，后续隔离 
 在本机归档目录的 `manifest.jsonl` 中按 `logicalPath` 或原路径搜索。可以按需恢复一个 JSON、JSONL、日志、diff 或冻结候选代码文件：
 
 ```sh
-/usr/bin/python3 /Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07/restore_evidence.py \
+/usr/bin/python3 ~/Documents/VelarOS-Evaluation-Archive/2026-10-07/restore_evidence.py \
   curated/scriptact-standard-runtime-results-20261004.json \
-  /Users/mac/Documents/VelarOS-Evaluation-Archive/2026-10-07/restored-standard-runtime.json
+  ~/Documents/VelarOS-Evaluation-Archive/2026-10-07/restored-standard-runtime.json
 ```
 
 冻结代码使用同一命令的第四个参数 `frozen-runtimes`。还原后的 JSON/JSONL 恢复原有值与正文，排版可不同；遮蔽和原始解析异常以 manifest 为准。

@@ -5,6 +5,7 @@ import type {
   ContextCompletionPort,
   ContextSourcePort,
   ContextStorage,
+  ContextVerificationFingerprint,
   ContextViewLimits,
 } from '@velaros-ai/context'
 import type {
@@ -101,7 +102,37 @@ export interface VelarosContextOptions {
   /** 共享任务预算与证据上限。 */
   readonly limits?: Partial<ContextViewLimits>
   /** 领域完成验证；省略时明确标为未验证。 */
-  readonly completion?: ContextCompletionPort
+  readonly completion?: ContextCompletionPort | CompletionReviewOptions
+}
+
+/** 独立模型核查只读材料；正文必须完整，指纹覆盖本次读取的全部产物与授权。 */
+export interface CompletionArtifactSnapshot {
+  /** 完整依赖的可靠变化代次；无法覆盖时必须返回 unknown。 */
+  readonly fingerprint: ContextVerificationFingerprint
+  /** 本次真正读取的完整文本，identity 与指纹的产物成员一致。 */
+  readonly materials: ReadonlyArray<{ readonly identity: string; readonly text: string }>
+  /** 缺失、截断、权限或不稳定读取保持显式缺口，不伪造空文件。 */
+  readonly issues: readonly string[]
+}
+
+/** 宿主提供限定工作区内的纯文本产物快照；模型不能通过此口执行命令。 */
+export interface CompletionArtifactSource {
+  /** identities 为 file: 后接工作区路径；每次读取上限由调用者提供。 */
+  capture(
+    identities: readonly string[],
+    maxBytes: number,
+    signal: AbortSignal
+  ): Promise<CompletionArtifactSnapshot>
+}
+
+/** 普通任务的有界独立模型复核；不授予执行能力，也不将复核当作测试通过。 */
+export interface CompletionReviewOptions {
+  /** 在统一完成接口中选择有界、只读的独立模型复核。 */
+  readonly kind: 'model-review'
+  /** 宿主拥有的工作区读取与变化代次权威。 */
+  readonly artifacts: CompletionArtifactSource
+  /** 省略时复用主会话的驱动，仍使用独立请求和共同预算。 */
+  readonly model?: ModelDriver
 }
 
 /** 领域只登记固定纯计划及捕获操作；实际读取仍由授权 Kernel 派发。 */

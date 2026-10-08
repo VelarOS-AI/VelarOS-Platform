@@ -118,6 +118,8 @@ export type ObservationProbe =
 
 /** 宿主固定的控制声明名称与流接收限额。 */
 export interface ScriptProtocolOptions {
+  /** 显式选择文本或原生 JSON；省略时采用默认，驱动不支持工具时使用文本。 */
+  readonly transport?: 'text' | 'tools'
   /** 宿主选择面向标准 Node 的精简执行说明。 */
   readonly presentation?: 'node'
   /** 当前运行配置允许的控制声明。 */

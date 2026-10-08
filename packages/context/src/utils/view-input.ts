@@ -1,4 +1,11 @@
-import { isArray, isEmpty, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNonBlankString,
+  isPlainObject,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
 
 import {
   ContextVerificationLimits,
@@ -6,7 +13,12 @@ import {
   TaskCapsuleLimits,
   ViewIntentLimits,
 } from '../contract/constants.js'
-import type { ContextVerificationReport, TaskCapsule, ViewIntentInput } from '../types/context.js'
+import type {
+  ContextDeliveryRequirement,
+  ContextVerificationReport,
+  TaskCapsule,
+  ViewIntentInput,
+} from '../types/context.js'
 
 import { contextFailure } from './state.js'
 
@@ -149,6 +161,38 @@ export function checkTaskCapsule(value: unknown): asserts value is Partial<TaskC
   }
 }
 
+/** 必需项的产物身份必须明确且唯一，原始依据引用保持可回读身份。 */
+export function checkDeliveryRequirement(
+  value: unknown
+): asserts value is ContextDeliveryRequirement {
+  const text = (entry: unknown, max: number) => isNonBlankString(entry) && entry.length <= max
+  if (
+    !isPlainObject(value) ||
+    Object.keys(value).some((key) => !['id', 'label', 'artifacts', 'sourceRefs'].includes(key)) ||
+    !text(value.id, ContextVerificationLimits.scopeChars) ||
+    !text(value.label, ContextVerificationLimits.labelChars) ||
+    !isArray(value.artifacts) ||
+    isEmpty(value.artifacts) ||
+    value.artifacts.length > ContextVerificationLimits.artifacts ||
+    value.artifacts.some((item) => !text(item, ContextVerificationLimits.scopeChars)) ||
+    new Set(value.artifacts).size !== value.artifacts.length
+  )
+    throw contextFailure('VALIDATION', '必需交付项必须声明唯一身份、说明和全部产物身份')
+  if (
+    !isArray(value.sourceRefs) ||
+    isEmpty(value.sourceRefs) ||
+    value.sourceRefs.length > ContextVerificationLimits.evidenceRefs ||
+    value.sourceRefs.some(
+      (ref) =>
+        !isPlainObject(ref) ||
+        Object.keys(ref).some((key) => !['sessionId', 'id'].includes(key)) ||
+        !text(ref.sessionId, ContextVerificationLimits.labelChars) ||
+        !text(ref.id, ContextVerificationLimits.labelChars)
+    )
+  )
+    throw contextFailure('VALIDATION', '必需交付项的原始依据引用无效')
+}
+
 /** 核查报告是领域事实，验证形状与体积后才归档，不截断成看似完整的证明。 */
 export function checkVerificationReport(
   value: unknown
@@ -176,6 +220,7 @@ export function checkVerificationReport(
     fields(check, [
       'label',
       'status',
+      'requirement',
       'evidenceRefs',
       'artifact',
       'id',
@@ -194,6 +239,10 @@ export function checkVerificationReport(
       !['passed', 'failed', 'unknown'].includes(check.status)
     )
       fail()
+    if (!isUndefined(check.requirement)) {
+      checkDeliveryRequirement(check.requirement)
+      if (check.requirement.id !== check.id) fail()
+    }
     for (const key of ['id', 'scope', 'verifierId', 'verifierVersion', 'checkedAt'] as const)
       if (!isUndefined(check[key]) && !text(check[key], ContextVerificationLimits.scopeChars))
         fail()

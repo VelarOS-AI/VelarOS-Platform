@@ -75,6 +75,10 @@ const request = (source, timeoutMs = 10_000, operations = {}) => ({
 })
 const commandProgram = (command) =>
   `import {execaCommand} from 'execa'; await execaCommand(${JSON.stringify(command)}, {shell:true,stdout:'inherit',stderr:'inherit'});`
+const nativeDone = (message) => ({
+  type: 'tool-call',
+  value: { id: 'done', name: 'done', input: { message } },
+})
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
@@ -86,39 +90,24 @@ for (const explicit of [true, false])
     t.mock.method(globalThis, 'fetch', async (_url, init) => {
       const index = bodies.push(JSON.parse(init.body))
       assert(index <= 4)
-      const item =
-        index % 2 === 1
-          ? {
-              type: 'function_call',
-              id: `fc_node_${index}`,
-              call_id: `call_node_${index}`,
-              name: 'exec',
-              arguments: JSON.stringify({ code: "console.log('observed-native-output')" }),
-              status: 'completed',
-            }
-          : { type: 'message', id: `msg_final_${index}` }
+      const item = {
+        type: 'function_call',
+        id: `fc_node_${index}`,
+        call_id: `call_node_${index}`,
+        name: index % 2 === 1 ? 'exec' : 'done',
+        arguments: JSON.stringify(
+          index % 2 === 1 ? { code: "console.log('observed-native-output')" } : { message: 'Done.' }
+        ),
+        status: 'completed',
+      }
       const chunks = [
         {
           type: 'response.created',
           response: { id: `resp_${index}`, created_at: index, model: 'gpt-5.6-sol' },
         },
-        {
-          type: 'response.output_item.added',
-          output_index: 0,
-          item: index % 2 === 1 ? { ...item, arguments: '' } : item,
-        },
-        index % 2 === 1
-          ? {
-              type: 'response.function_call_arguments.delta',
-              item_id: item.id,
-              delta: item.arguments,
-            }
-          : { type: 'response.output_text.delta', item_id: item.id, delta: 'Done.' },
-        {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: index % 2 === 1 ? item : { ...item, status: 'completed' },
-        },
+        { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
+        { type: 'response.function_call_arguments.delta', item_id: item.id, delta: item.arguments },
+        { type: 'response.output_item.done', output_index: 0, item },
         {
           type: 'response.completed',
           response: {
@@ -250,24 +239,19 @@ test('provider code-only stream failures retry through the real SDK without repe
           item: { ...item, arguments: input, status: 'completed' },
         }
       )
-    } else
+    } else {
+      const item = { type: 'function_call', id: 'fc_done', call_id: 'call_done', name: 'done' }
+      const input = JSON.stringify({ message: 'Both requested writes are complete.' })
       parts.push(
-        {
-          type: 'response.output_item.added',
-          output_index: 0,
-          item: { type: 'message', id: 'msg_done' },
-        },
-        {
-          type: 'response.output_text.delta',
-          item_id: 'msg_done',
-          delta: 'Both requested writes are complete.',
-        },
+        { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
+        { type: 'response.function_call_arguments.delta', item_id: item.id, delta: input },
         {
           type: 'response.output_item.done',
           output_index: 0,
-          item: { type: 'message', id: 'msg_done' },
+          item: { ...item, arguments: input, status: 'completed' },
         }
       )
+    }
     parts.push(
       index === 2
         ? {
@@ -359,7 +343,7 @@ for (const reportUsage of [false, true])
                 },
               },
             }
-          else yield { type: 'text', text: 'The one requested write completed.' }
+          else yield nativeDone('The one requested write completed.')
           yield { type: 'finish', reason: 'stop' }
         },
       },
@@ -411,7 +395,7 @@ test('native Node calls preserve a restricted runner and expose only the allowed
         assert.doesNotMatch(request.instructions, /snapshotPlans/)
         assert.deepEqual(
           request.response.tools.map((tool) => tool.name),
-          ['exec']
+          ['blobs', 'exec', 'done']
         )
         if (++turn === 1)
           yield {
@@ -436,7 +420,7 @@ test('native Node calls preserve a restricted runner and expose only the allowed
               },
             },
           }
-        } else yield { type: 'text', text: '已读取来源，写入受到宿主的只读限制。' }
+        } else yield nativeDone('已读取来源，写入受到宿主的只读限制。')
         yield { type: 'finish', reason: 'stop' }
       },
     },
@@ -462,7 +446,7 @@ test('native decoder rejects ungranted Shell and honors configured response budg
   decoder.acceptTool({ id: 'one', name: 'exec', input: { code: 'console.log(1)' } })
   assert.throws(
     () => decoder.acceptTool({ id: 'two', name: 'exec', input: { code: 'console.log(2)' } }),
-    /原生执行入口/
+    { code: 'SCRIPT_PROTOCOL', message: /调用数量超过预算/ }
   )
   assert.throws(() => new NativeTurnDecoder({ maxChars: 8 }).push('ninechars'), /超过协议字符预算/)
 })
@@ -523,7 +507,7 @@ test('INV-10 native result leases survive their configured scope without re-exec
                   },
                 },
               }
-            else yield { type: 'text', text: '已核对全部步骤。' }
+            else yield nativeDone('已核对全部步骤。')
             yield { type: 'finish', reason: 'stop' }
           },
         },
@@ -609,7 +593,7 @@ test('fresh native output shares unused result capacity and reaches the next req
           assert(outputs.some((output) => output.result?.process?.stdout === source))
           for (let index = 1; index < 5; index++)
             assert(outputs.some((output) => output.result?.process?.stdout === `receipt-${index}`))
-          yield { type: 'text', text: '已读取完整源码与同批回执。' }
+          yield nativeDone('已读取完整源码与同批回执。')
         }
         yield { type: 'finish', reason: 'stop' }
       },
@@ -636,7 +620,7 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
       assert.equal(request.response.type, 'tools')
       assert.deepEqual(
         request.response.tools.map((tool) => tool.name),
-        ['exec']
+        ['blobs', 'observe', 'exec', 'done']
       )
       turn++
       if (turn === 1)
@@ -660,7 +644,7 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
             },
           },
         }
-      } else yield { type: 'text', text: '文件已生成并检查。' }
+      } else yield nativeDone('文件已生成并检查。')
       yield { type: 'finish', reason: 'stop' }
     },
   }
@@ -774,7 +758,7 @@ test('native independent calls retain a failed command and execute the remaining
                   },
                 },
               }
-            } else yield { type: 'text', text: '一项命令失败，另两项检查均已完成。' }
+            } else yield nativeDone('一项命令失败，另两项检查均已完成。')
             yield { type: 'finish', reason: 'stop' }
           },
         },
@@ -842,7 +826,7 @@ test('native abnormal process termination stops later calls', async (t) => {
                   type: 'tool-call',
                   value: { id, name: 'exec', input: { code: commandProgram('true') } },
                 }
-            else yield { type: 'text', text: '执行环境中断，后续调用已取消。' }
+            else yield nativeDone('执行环境中断，后续调用已取消。')
             yield { type: 'finish', reason: 'stop' }
           },
         },
@@ -944,7 +928,7 @@ test('native response with a later invalid tool input performs no earlier write'
             type: 'tool-call',
             value: { id: 'b', name: 'exec', input: { wrong: 'console.log(1)' } },
           }
-        } else yield { type: 'text', text: '结束。' }
+        } else yield nativeDone('结束。')
         yield { type: 'finish', reason: 'stop' }
       },
     },
@@ -991,7 +975,7 @@ test('cancelling a later native model turn preserves the completed call and neve
         else if (turn === 2) {
           controller.abort()
           return
-        } else yield { type: 'text', text: '已核对先前的执行结果。' }
+        } else yield nativeDone('已核对先前的执行结果。')
         yield { type: 'finish', reason: 'stop' }
       },
     },

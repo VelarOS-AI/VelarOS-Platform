@@ -52,9 +52,9 @@
 
 ## 本地证据与交付范围
 
-- [边界探针](../../../.velaros-workspace/bench/overfit-audit-50/probe.mjs)：从仓库根运行 `node .velaros-workspace/bench/overfit-audit-50/probe.mjs`，本轮通过。
-- [探针结果与源码/构建文件哈希](../../../.velaros-workspace/bench/overfit-audit-50/edge-cases.json)：数组、尾段与正式非编码 Runtime 三类边界；模型响应由本地桩提供，provider 请求为 0。
-- [历史任务暴露摘要](../../../.velaros-workspace/bench/overfit-audit-50/task-exposure.json)：保留九轮清单的原始任务角色说明。
+- 边界探针（归档内路径 `.velaros-workspace/bench/overfit-audit-50/probe.mjs`）：从仓库根运行 `node .velaros-workspace/bench/overfit-audit-50/probe.mjs`，本轮通过。
+- 探针结果与源码/构建文件哈希（归档内路径 `.velaros-workspace/bench/overfit-audit-50/edge-cases.json`）：数组、尾段与正式非编码 Runtime 三类边界；模型响应由本地桩提供，provider 请求为 0。
+- 历史任务暴露摘要（归档内路径 `.velaros-workspace/bench/overfit-audit-50/task-exposure.json`）：保留九轮清单的原始任务角色说明。
 - 首次正式 Runtime 探针误把帧正文 `compiledPrompt` 当作系统说明，断言失败；改为检查正式字段 `request.instructions` 后通过。未为此改变产品实现。
 
 本轮新增审计文档与本地证据，没有修改产品行为或历史测评数据，新增 API 费用为 0。修复优先级为 F1、F2，再补 R1 的自动归属校验；R2 按实际工程覆盖需要扩展。原有本地回归通过不能替代这些跨场景检查，也不能据此认定整题请求、时间或费用已有改善。

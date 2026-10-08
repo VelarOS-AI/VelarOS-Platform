@@ -3,7 +3,7 @@
   "sourceBase": "d3c7abb5",
   "configuredModel": "gpt-5.6-sol",
   "reasoning": "high",
-  "evidence": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
+  "evidence": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/cache-live-20261007-bkDuB1",
   "comparison": [
     {
       "id": "ledger-key",

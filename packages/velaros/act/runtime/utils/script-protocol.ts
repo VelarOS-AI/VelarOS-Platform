@@ -4,7 +4,7 @@ import { isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { ScriptProtocolLimits } from '../contract/constants.js'
+import { DefaultScriptProtocolTransport, ScriptProtocolLimits } from '../contract/constants.js'
 import type { ScriptDeclaration, ScriptProtocolOptions } from '../types/runtime.js'
 
 import { scriptInputCopy } from './program-context.js'
@@ -93,6 +93,7 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     Object.keys(options).some(
       (key) =>
         ![
+          'transport',
           'allowed',
           'defaultRetain',
           'names',
@@ -151,7 +152,10 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     throw protocolFailure('缺省租约无效')
   if (!isUndefined(options.presentation) && options.presentation !== 'node')
     throw protocolFailure('执行说明配置无效')
+  if (!isUndefined(options.transport) && !['text', 'tools'].includes(options.transport))
+    throw protocolFailure('协议传输需要 text 或 tools')
   const configured = {
+    transport: options.transport ?? DefaultScriptProtocolTransport,
     names,
     markerPrefix,
     ...limits,
@@ -191,19 +195,56 @@ export function protocolDecisionInstructions(
   return lines.join('\n')
 }
 
+/** 两种传输共享运行语义；字段路径、载荷编码与调用示例由各传输说明。 */
+export function protocolProgramRules(options: ScriptProtocolOptions): string {
+  const { allowed, maxBlocks } = protocolConfig(options)
+  return [
+    `完整响应全部校验后才执行，最多 ${maxBlocks} 个程序或原文操作；实际结果在后续模型请求返回。`,
+    allowed.includes('execute')
+      ? '程序默认顺序等待；依赖步骤在同一程序内 await。后台结果未知时不得重跑。'
+      : '',
+    allowed.includes('observe')
+      ? '会话维护一份持续只读观察，每响应至多更新一次，下个业务轮采集；可靠依赖版本未变可复用。更新校验成功才替换，失败保留原版；清除停止采集，历史保留。'
+      : '',
+    allowed.includes('blobs')
+      ? '命名原文唯一，同批程序共享并各自保存；新程序需提供自己的绑定。'
+      : '',
+    allowed.includes('execute') || allowed.includes('observe')
+      ? '引用仅用当前会话归档；编辑原文需唯一匹配，冲突后按当前版本重改。'
+      : '',
+    allowed.includes('done')
+      ? '完成申请放在响应最后，通过 Runtime 验收才完成；活动目标需要非空完成依据。'
+      : '',
+    '每轮给出明确决策；等待已受理后台任务可只写进度，需要用户回答时使用当前交互能力。',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 /** 会话内不变的完整语法进入稳定前缀；帧标记与宿主输入引用只由帧尾提供。 */
 export function protocolRules(options: ScriptProtocolOptions): string {
   const { names, maxBlocks, allowed, defaultRetain } = protocolConfig(options)
   if (options.presentation === 'node')
     return [
-      `用本帧标记后的 ${names.execute}() 开始 Node.js ESM；以独立一行的同一标记闭合，结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。`,
+      '文本控制头独占一行：当前帧标记、空格、声明。载荷末尾独立一行写同一标记闭合，禁止嵌套。',
+      allowed.includes('execute') ? `${names.execute}(options?) 的段内是 Node.js ESM 源码。` : '',
+      allowed.includes('execute')
+        ? `执行头选项：async:true 后台受理；retain:1..32 按曝光次数保留结果，"segment" 随历史封段退役，"task" 至任务结束；默认 ${defaultRetain}。`
+        : '',
       allowed.includes('observe')
-        ? `${names.observe}() 注册持续只读 Node 观察；可通过普通程序参数提供 input、blobs 或 sourceRef。`
+        ? `${names.observe}(options?) 的完整只读源码登记或整体替换当前观察。退订用 ${names.observe}({clear:true}) 和空段；编辑用 ${names.observe}({edits:[{oldText:"原文",newText:"新文"}]}) 和空段，省略 sourceRef 时编辑当前观察。`
+        : '',
+      allowed.includes('observe')
+        ? `刷新用 ${names.observe}({sourceRef:"当前观察引用",refresh:true}) 和空段；快照用 ${names.observe}({snapshot:{provider:"提供者",plan:"计划名",input:{}}}) 和空段，值按授权目录与领域合同填写。`
         : '',
       allowed.includes('blobs')
-        ? `${names.blobs}("名称") 的闭合段绑定原文，可从 velaros:program 导入 blobs。`
+        ? `${names.blobs}("名称") 的段内是原文，反引号与插值逐字保留；闭合行前的换行作分隔符，原文尾换行需额外空行。用 import {blobs} from "velaros:program" 导入对象，blobs["名称"] 即原文字串。`
         : '',
-      '执行选项通过头部对象传入；async:true 后台执行，inputRef 引用宿主参数，sourceRef 复用已保存程序（段内留空）。每个实际程序只提交一次。',
+      allowed.includes('execute') || allowed.includes('observe')
+        ? '程序选项均写控制头：input 与 inputRef:"host:名称" 互斥；modules、blobs:{名称:额外原文}。sourceRef 复用归档源码，edits:[{oldText,newText,module?}] 精确编辑；引用或编辑配空段。format:"program" 的段内放完整程序 JSON，程序字段只放载荷。import {input} from "velaros:program" 读取输入。'
+        : '',
+      allowed.includes('done') ? `完成后使用单行 ${names.done}("完成依据")，随后写用户答复。` : '',
+      '当前标记与示例见帧尾。',
     ]
       .filter(Boolean)
       .join('\n')
@@ -215,7 +256,7 @@ export function protocolRules(options: ScriptProtocolOptions): string {
       ? `${names.blobs}("名称") 的段内是原始文本，自动注入本响应所有程序的 blobs[名称]，不用转义反引号或插值；名称唯一。尾行前的一次换行是分隔符，需要保留原文末尾换行时在尾行前再加一个空行。`
       : '',
     allowed.includes('observe')
-      ? `${names.observe}(options?) 更新稳定观察程序，每份响应至多一次；观察缺省每个新业务回合采集，宿主认可完整依赖的可靠代次时可复用原结果；只能读取、计算、output，不得产生已知写效果。注释说明持续观察目的与退役条件。refresh:true 请求下一正常业务轮真实采集，整份响应接受后才生效，不恢复 paused；需要当前状态时可用 ${names.observe}({sourceRef:"本帧源码引用",refresh:true}) 和空段。`
+      ? `${names.observe}(options?) 的完整源码登记或整体替换当前观察，每份响应至多一次；观察缺省每个新业务回合采集，宿主认可完整依赖的可靠代次时可复用原结果；只能读取、计算、output，不得产生已知写效果。注释说明持续观察目的与退役条件。refresh:true 请求下一正常业务轮真实采集，整份响应接受后才生效，不恢复 paused；需要当前状态时可用 ${names.observe}({sourceRef:"本帧源码引用",refresh:true}) 和空段。`
       : '',
     allowed.includes('observe')
       ? `${names.observe}({snapshot:{provider:"目录中的提供者",plan:"固定计划名",input:{领域输入}}}) 配空段登记纯快照；与 sourceRef、edits、程序正文互斥。输入合同从目录所列领域操作发现。每轮仍真实授权捕获，完整同值只省纯派生/程序运行，不能证明期间没有 ABA，也不授予写入凭据；clear 或逻辑任务结束退役，重启先实际捕获与派生。`
@@ -224,7 +265,7 @@ export function protocolRules(options: ScriptProtocolOptions): string {
       ? `${names.execute}(options?) 运行一次，可多段；默认顺序等待，async:true 后台受理，retain:1..32 控制结果实际曝光次数，retain:"segment" 在段内保留、随历史封段退役，retain:"task" 保留至逻辑任务结束；主动释放立即生效，默认 ${defaultRetain}；租约不保证全文驻留，也不重新执行。后台结果未知时不得重跑整个脚本。`
       : '',
     hasProgram
-      ? `带参数时传一个对象，例如 ${allowed.includes('execute') ? `${names.execute}({retain:"task",input:{stage:1}})` : `${names.observe}({input:{stage:1}})`}。程序选项：input 为字面量参数，inputRef 为宿主参数引用，两者互斥；modules/blobs 保持现有程序合同。sourceRef 可引用已保存的程序，edits:[{oldText,newText,module?}] 对同一底稿精确修改；引用或 edits 模式段内留空。${allowed.includes('observe') ? `观察省略 sourceRef 的 edits 绑定本帧观察版本。${names.observe}({clear:true}) 配空段明确清除观察。` : ''}完整多模块程序可用 format:"program"，段内提供程序 JSON。`
+      ? `带参数时传一个对象，例如 ${allowed.includes('execute') ? `${names.execute}({retain:"task",input:{stage:1}})` : `${names.observe}({input:{stage:1}})`}。程序选项：input 为字面量参数，inputRef 为宿主参数引用，两者互斥；modules/blobs 保持现有程序合同。sourceRef 复用归档源码，edits:[{oldText,newText,module?}] 对同一底稿精确修改；引用或 edits 模式段内留空。${allowed.includes('observe') ? `观察省略 sourceRef 的 edits 绑定本帧观察版本。${names.observe}({clear:true}) 配空段明确清除观察。` : ''}完整多模块程序可用 format:"program"，段内提供程序 JSON。`
       : '',
     allowed.includes('done')
       ? `${names.done} 或 ${names.done}() 是单行完成声明，放在当前帧标记后；提交完成答复时先输出此行，再写 Markdown 总结与验证结果，不能再声明控制操作。runtime.goal 为 active 且目标已经达成时，在同一行传字符串完成依据，Runtime 据此结束目标，目标没有达成不能只发完成声明。Runtime 校验后才完成任务。`
@@ -246,7 +287,13 @@ export function protocolInstructions(
   if (options.presentation === 'node')
     return [
       `当前帧标记：${marker}。允许：${allowed.map((kind) => names[kind]).join(', ')}。`,
-      `Node：\n${marker} ${names.execute}()\n// Node.js ESM\n${marker}\n任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`,
+      allowed.includes('execute') || allowed.includes('observe')
+        ? `Node：\n${marker} ${allowed.includes('execute') ? names.execute : names.observe}()\n// Node.js ESM\n${marker}`
+        : '',
+      allowed.includes('done')
+        ? `任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`
+        : '',
+
       !isEmpty(Object.keys(inputs))
         ? `宿主参数：${Object.keys(inputs)
             .map((name) => `host:${name}`)

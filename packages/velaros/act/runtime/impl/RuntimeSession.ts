@@ -12,6 +12,7 @@ import type {
 } from '@velaros-ai/agent'
 import { createActRunService } from '@velaros-ai/agent'
 import type {
+  ContextCompletionPort,
   ContextCompletionResult,
   ContextFeedback,
   ContextInvocationJournalApi,
@@ -104,6 +105,7 @@ import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
+import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
 import {
   recoverScriptSubmission,
@@ -111,7 +113,7 @@ import {
   stableProgramJson,
 } from '../utils/program-context.js'
 import { failedInvocationRecovery, invocationFeedbackDetails } from '../utils/results.js'
-import { protocolConfig, protocolRules } from '../utils/script-protocol.js'
+import { protocolConfig, protocolProgramRules, protocolRules } from '../utils/script-protocol.js'
 import { completeSnapshot } from '../utils/snapshot-observation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -218,7 +220,9 @@ export interface RuntimeSessionDependencies {
   /** 统一调用日志，可按本步查询真实效果。 */
   readonly journal: ContextInvocationJournalApi
   /** 上下文来源与验收的宿主配置。 */
-  readonly contextOptions?: VelarosContextOptions
+  readonly contextOptions?: Omit<VelarosContextOptions, 'completion'> & {
+    readonly completion?: ContextCompletionPort
+  }
   /** 注册本会话的源码与结果访问端口，装配层负责生命周期。 */
   register(access: RuntimeSessionAccess): void
   /** 可选的共享模型驱动。 */
@@ -383,9 +387,7 @@ export class RuntimeSession implements VelarosSession {
         ? {
             ...dependencies.protocol,
             presentation: 'node',
-            allowed:
-              dependencies.protocol?.allowed ??
-              (dependencies.node ? ['execute', 'done'] : ['observe', 'blobs', 'execute', 'done']),
+            allowed: dependencies.protocol?.allowed ?? ['blobs', 'observe', 'execute', 'done'],
           }
         : dependencies.protocol
     )
@@ -442,12 +444,21 @@ export class RuntimeSession implements VelarosSession {
       dependencies.journal
     )
     const modules = dependencies.allowedModules()
-    const nativeTools = Boolean(
-      this.executionRunner.environment === 'node' &&
-      dependencies.model?.nativeTools &&
-      this.config.allowed.includes('execute') &&
-      this.config.allowed.includes('done')
+    if (
+      dependencies.protocol?.transport === 'tools' &&
+      dependencies.model &&
+      !dependencies.model.nativeTools
     )
+      throw new AppError(
+        'UNAVAILABLE',
+        '当前模型驱动不支持原生工具，请选择 protocol.transport: "text"'
+      )
+    const nativeTools =
+      this.config.transport === 'tools' && Boolean(dependencies.model?.nativeTools)
+    const requireDecision = () =>
+      this.jobs.size === 0 && this.finalizers.size === 0 && !dependencies.agents?.pending(id)
+    const nativeDecoder = () =>
+      new NativeTurnDecoder(this.config, dependencies.inputs?.() ?? {}, requireDecision)
     const instructions = `${
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
@@ -472,7 +483,7 @@ export class RuntimeSession implements VelarosSession {
             maintain: Boolean(dependencies.maintain),
             observe: this.config.allowed.includes('observe'),
           })
-    }\n\n${nativeTools ? '' : protocolRules(this.config)}\n${this.executionRunner.environment === 'node' ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
+    }\n\n${protocolProgramRules(this.config)}\n${nativeTools ? nativeProtocolRules(this.config) : protocolRules(this.config)}\n${this.executionRunner.environment === 'node' ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
@@ -482,7 +493,7 @@ export class RuntimeSession implements VelarosSession {
         if (!dependencies.model) return
         await this.restoreFrameMarkers(signal)
         const decoder = nativeTools
-          ? new NativeTurnDecoder(this.config)
+          ? nativeDecoder()
           : new ScriptTurnDecoder(
               this.createFrameMarker(),
               this.config,
@@ -539,7 +550,7 @@ export class RuntimeSession implements VelarosSession {
         instructions,
         protocol: {
           open: () => {
-            if (nativeTools) return new NativeTurnDecoder(this.config)
+            if (nativeTools) return nativeDecoder()
             if (!this.preparedFrameMarker) throw new AppError('INVARIANT', '本帧控制身份尚未登记')
             return new ScriptTurnDecoder(
               this.preparedFrameMarker,
@@ -2119,15 +2130,22 @@ export class RuntimeSession implements VelarosSession {
         this.expectedObservation
       ).id
     })
-    const succeeded = await this.executeBatch(input, signal, acceptedTurnId, calls.length > 0)
+    const succeeded = await this.executeBatch(input, signal, acceptedTurnId)
     if (!calls.length) return succeeded
     const receipt = await this.programs.receipt(control)
+    let executionIndex = 0
     return {
       succeeded,
-      results: calls.map((call, index) => {
-        const execution = receipt?.executions?.find(
-          (item) => item.executionId === identities[index]
-        )
+      results: calls.map((call) => {
+        const executionId =
+          call.name === nativeToolName('execute', this.config)
+            ? identities[executionIndex++]
+            : undefined
+        const execution = executionId
+          ? receipt?.executions?.find((item) => item.executionId === executionId)
+          : call.name === nativeToolName('observe', this.config)
+            ? receipt?.observe
+            : undefined
         // 持久回执保存状态和归档身份；组帧时按已展示正文绑定工具回包，避免在此复制大输出。
         const output =
           execution && 'resultRef' in execution
@@ -2149,8 +2167,7 @@ export class RuntimeSession implements VelarosSession {
   private async executeBatch(
     input: ScriptProtocolSubmission,
     signal: AbortSignal,
-    acceptedTurnId: string,
-    nativeCalls = false
+    acceptedTurnId: string
   ): Promise<boolean> {
     const control = scriptControlIdentity(
       this.id,
@@ -2267,7 +2284,7 @@ export class RuntimeSession implements VelarosSession {
             await this.programs.job({ ...job, status, resultRef: outcome.resultRef })
             if (failure) {
               failed = true
-              if (!nativeCalls || status !== 'failed' || !isCompletedProcessFailure(outcome))
+              if (status !== 'failed' || !isCompletedProcessFailure(outcome))
                 controller.abort(new AppError('CANCELLED', '本批程序失败'))
             }
           } catch (error) {
@@ -2688,136 +2705,143 @@ export class RuntimeSession implements VelarosSession {
           })
     const programs =
       id === this.id ? this.programs : new ProgramContext(id, context, this.dependencies.storage)
-    const task = await view.inspect()
-    if (!task) return
-    const snapshot = await this.dependencies.storage.load(id)
-    const currentExecutions = new Set(task.mandatory.map((item) => item.executionId))
-    for (const entry of snapshot?.records ?? [])
-      if (entry.title.startsWith('script:execution:')) {
-        const execution = JSON.parse((await this.dependencies.storage.get(id, entry.objectId))!)
-        if (execution.taskId === task.id) currentExecutions.add(execution.executionId)
-      }
-    const records = (await this.dependencies.journal.list(id)).filter(
-      (record) =>
-        (!task.startedSequence || currentExecutions.has(record.prepared.executionId)) &&
-        !(
-          record.prepared.mode === 'observe' &&
-          record.receipt?.outcome === 'succeeded' &&
-          record.receipt.observation?.completed
-        )
-    )
-    const feedback: ContextFeedback[] = []
-    for (const record of records) {
-      const checked =
-        (await this.dependencies.kernel.reconcile(id, record.prepared.id, signal)) ?? record
-      const resolved = checked.reconciliation
-      feedback.push({
-        id: checked.prepared.id,
-        executionId: checked.prepared.executionId,
-        operation: `${checked.prepared.binding.moduleId}.${checked.prepared.operation}`,
-        outcome: resolved?.outcome ?? checked.receipt?.outcome ?? 'unknown',
-        effect: resolved?.effect ?? checked.receipt?.effect ?? 'unknown',
-        ...(resolved
-          ? {
-              code: 'RECOVERED',
-              detail: [resolved.evidence, invocationFeedbackDetails(checked.receipt).detail]
-                .filter(Boolean)
-                .join('\n'),
-            }
-          : invocationFeedbackDetails(checked.receipt)),
-      })
-    }
-    for (const old of task.mandatory.filter((item) => item.operation === 'script.execute')) {
-      const children = feedback.filter((item) => item.executionId === old.executionId)
-      if (
-        old.effect === 'unknown' &&
-        !isEmpty(children) &&
-        children.every((item) => item.effect !== 'unknown' && item.outcome !== 'unknown')
+    if (!(await view.inspect())) return
+    const release = await view.acquireRecovery()
+    try {
+      const task = (await view.inspect())!
+      const snapshot = await this.dependencies.storage.load(id)
+      const currentExecutions = new Set(task.mandatory.map((item) => item.executionId))
+      for (const entry of snapshot?.records ?? [])
+        if (entry.title.startsWith('script:execution:')) {
+          const execution = JSON.parse((await this.dependencies.storage.get(id, entry.objectId))!)
+          if (execution.taskId === task.id) currentExecutions.add(execution.executionId)
+        }
+      const records = (await this.dependencies.journal.list(id)).filter(
+        (record) =>
+          (!task.startedSequence || currentExecutions.has(record.prepared.executionId)) &&
+          !(
+            record.prepared.mode === 'observe' &&
+            record.receipt?.outcome === 'succeeded' &&
+            record.receipt.observation?.completed
+          )
       )
+      const feedback: ContextFeedback[] = []
+      for (const record of records) {
+        const checked =
+          (await this.dependencies.kernel.reconcile(id, record.prepared.id, signal)) ?? record
+        const resolved = checked.reconciliation
         feedback.push({
-          ...old,
-          effect: children.some((item) => item.effect === 'committed' || item.effect === 'partial')
-            ? 'partial'
-            : 'none',
-          code: 'RECOVERED',
-          detail: '子操作的效果已按日志确定，原脚本的失败事实保持',
+          id: checked.prepared.id,
+          executionId: checked.prepared.executionId,
+          operation: `${checked.prepared.binding.moduleId}.${checked.prepared.operation}`,
+          outcome: resolved?.outcome ?? checked.receipt?.outcome ?? 'unknown',
+          effect: resolved?.effect ?? checked.receipt?.effect ?? 'unknown',
+          ...(resolved
+            ? {
+                code: 'RECOVERED',
+                detail: [resolved.evidence, invocationFeedbackDetails(checked.receipt).detail]
+                  .filter(Boolean)
+                  .join('\n'),
+              }
+            : invocationFeedbackDetails(checked.receipt)),
         })
-    }
-    // 恢复只核对日志与保存的结果，不从进程中断位置自动续跑。
-    for (const job of (await programs.state()).jobs ?? []) {
-      if (!['queued', 'running', 'unknown'].includes(job.status)) continue
-      const operations = feedback.filter((item) => item.executionId === job.executionId)
-      const unknown = operations.some(
-        (item) => item.effect === 'unknown' || item.outcome === 'unknown'
-      )
-      const effect = unknown
-        ? 'unknown'
-        : operations.some((item) => ['committed', 'partial'].includes(item.effect))
-          ? 'partial'
-          : 'none'
-      const record = (await this.dependencies.storage.load(id))?.records.findLast(
-        (item) => item.title === `script:${job.executionId}:result`
-      )
-      const persisted = record ? await this.dependencies.storage.get(id, record.objectId) : null
-      const result = persisted ? JSON.parse(persisted) : undefined
-      const succeeded = Boolean(
-        result?.checked &&
-        !result.result?.failed &&
-        !result.result?.unsettled?.length &&
-        !unknown &&
-        operations.every((item) => item.outcome === 'succeeded')
-      )
-      let resultRef = record?.ref.id
-      if (!resultRef) {
-        const output = await context.append({
-          kind: 'audit',
-          title: `script:${job.executionId}:result`,
-          body: JSON.stringify({
-            executionId: job.executionId,
-            code: 'INTERRUPTED',
-            result: { failed: { code: 'INTERRUPTED', message: '上次执行中断，脚本没有重跑' } },
-            effect,
-            replayed: false,
-            recovery: failedInvocationRecovery(
-              records.filter((item) => item.prepared.executionId === job.executionId)
-            ),
-          }),
-          sources: [{ sessionId: id, id: job.sourceRef }],
-        })
-        await programs.add(
-          output.ref,
-          { sessionId: id, id: job.sourceRef },
-          job.executionId,
-          ScriptLeaseLimits.defaultTurns
-        )
-        resultRef = output.ref.id
       }
-      feedback.push({
-        id: job.executionId,
-        executionId: job.executionId,
-        operation: 'script.execute',
-        outcome: succeeded
-          ? 'succeeded'
-          : job.status === 'queued' && isEmpty(operations)
-            ? 'cancelled'
-            : 'failed',
-        effect,
-        code: 'RECOVERED',
-        detail: '上次执行中断：已按持久日志收拾，脚本没有重跑',
-      })
-      await programs.job({
-        ...job,
-        resultRef,
-        status: unknown
+      for (const old of task.mandatory.filter((item) => item.operation === 'script.execute')) {
+        const children = feedback.filter((item) => item.executionId === old.executionId)
+        if (
+          old.effect === 'unknown' &&
+          !isEmpty(children) &&
+          children.every((item) => item.effect !== 'unknown' && item.outcome !== 'unknown')
+        )
+          feedback.push({
+            ...old,
+            effect: children.some(
+              (item) => item.effect === 'committed' || item.effect === 'partial'
+            )
+              ? 'partial'
+              : 'none',
+            code: 'RECOVERED',
+            detail: '子操作的效果已按日志确定，原脚本的失败事实保持',
+          })
+      }
+      // 恢复只核对日志与保存的结果，不从进程中断位置自动续跑。
+      for (const job of (await programs.state()).jobs ?? []) {
+        if (!['queued', 'running', 'unknown'].includes(job.status)) continue
+        const operations = feedback.filter((item) => item.executionId === job.executionId)
+        const unknown = operations.some(
+          (item) => item.effect === 'unknown' || item.outcome === 'unknown'
+        )
+        const effect = unknown
           ? 'unknown'
-          : succeeded
+          : operations.some((item) => ['committed', 'partial'].includes(item.effect))
+            ? 'partial'
+            : 'none'
+        const record = (await this.dependencies.storage.load(id))?.records.findLast(
+          (item) => item.title === `script:${job.executionId}:result`
+        )
+        const persisted = record ? await this.dependencies.storage.get(id, record.objectId) : null
+        const result = persisted ? JSON.parse(persisted) : undefined
+        const succeeded = Boolean(
+          result?.checked &&
+          !result.result?.failed &&
+          !result.result?.unsettled?.length &&
+          !unknown &&
+          operations.every((item) => item.outcome === 'succeeded')
+        )
+        let resultRef = record?.ref.id
+        if (!resultRef) {
+          const output = await context.append({
+            kind: 'audit',
+            title: `script:${job.executionId}:result`,
+            body: JSON.stringify({
+              executionId: job.executionId,
+              code: 'INTERRUPTED',
+              result: { failed: { code: 'INTERRUPTED', message: '上次执行中断，脚本没有重跑' } },
+              effect,
+              replayed: false,
+              recovery: failedInvocationRecovery(
+                records.filter((item) => item.prepared.executionId === job.executionId)
+              ),
+            }),
+            sources: [{ sessionId: id, id: job.sourceRef }],
+          })
+          await programs.add(
+            output.ref,
+            { sessionId: id, id: job.sourceRef },
+            job.executionId,
+            ScriptLeaseLimits.defaultTurns
+          )
+          resultRef = output.ref.id
+        }
+        feedback.push({
+          id: job.executionId,
+          executionId: job.executionId,
+          operation: 'script.execute',
+          outcome: succeeded
             ? 'succeeded'
             : job.status === 'queued' && isEmpty(operations)
               ? 'cancelled'
               : 'failed',
-      })
+          effect,
+          code: 'RECOVERED',
+          detail: '上次执行中断：已按持久日志收拾，脚本没有重跑',
+        })
+        await programs.job({
+          ...job,
+          resultRef,
+          status: unknown
+            ? 'unknown'
+            : succeeded
+              ? 'succeeded'
+              : job.status === 'queued' && isEmpty(operations)
+                ? 'cancelled'
+                : 'failed',
+        })
+      }
+      await view.recover(feedback)
+    } finally {
+      await release()
     }
-    await view.recover(feedback)
   }
 
   public close(): Promise<void> {

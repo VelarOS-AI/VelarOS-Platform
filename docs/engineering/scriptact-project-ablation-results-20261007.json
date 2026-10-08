@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "createdAt": "2026-10-06T19:42:00.274104+00:00",
-  "campaign": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007",
+  "campaign": "~/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/project-ablation-20261007",
   "plan": {
     "schema": 1,
     "createdAt": "2026-10-06T17:56:18.439624+00:00",
@@ -1098,15 +1098,15 @@
         "retryPolicy": "No quality-based retry; preserve the result",
         "removedPathEntries": [
           "/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path",
-          "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU",
+          "~/.codex/tmp/arg0/codex-arg0BcWMHU",
           "/Applications/ChatGPT.app/Contents/Resources",
           "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
         ],
-        "executionPath": "/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/mac/.bun/bin:/Users/mac/.local/bin:/Users/mac/.dotnet:/Users/mac/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:/Users/mac/.bun/bin:/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "executionPath": "~/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:~/.bun/bin:~/.local/bin:~/.dotnet:~/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:~/.bun/bin:~/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
         "executionPathSha256": "b7e389717a3a30641aff77b633fab99c07906fdc00ef1ce977ed9d5ec9b246b7",
         "availableCommands": {
           "node": "/usr/local/bin/node",
-          "npm": "/Users/mac/.local/bin/npm",
+          "npm": "~/.local/bin/npm",
           "git": "/opt/homebrew/bin/git",
           "rg": "/opt/homebrew/bin/rg",
           "apply_patch": null
@@ -1310,15 +1310,15 @@
         "retryPolicy": "No quality-based retry; preserve the result",
         "removedPathEntries": [
           "/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path",
-          "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU",
+          "~/.codex/tmp/arg0/codex-arg0BcWMHU",
           "/Applications/ChatGPT.app/Contents/Resources",
           "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
         ],
-        "executionPath": "/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/mac/.bun/bin:/Users/mac/.local/bin:/Users/mac/.dotnet:/Users/mac/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:/Users/mac/.bun/bin:/Users/mac/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "executionPath": "~/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:~/.bun/bin:~/.local/bin:~/.dotnet:~/.bun/bin:/opt/homebrew/opt/python@3.12/libexec/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/corplink/mdm/opt/corplink-mdm/bin:~/.bun/bin:~/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
         "executionPathSha256": "b7e389717a3a30641aff77b633fab99c07906fdc00ef1ce977ed9d5ec9b246b7",
         "availableCommands": {
           "node": "/usr/local/bin/node",
-          "npm": "/Users/mac/.local/bin/npm",
+          "npm": "~/.local/bin/npm",
           "git": "/opt/homebrew/bin/git",
           "rg": "/opt/homebrew/bin/rg",
           "apply_patch": null
@@ -1407,7 +1407,7 @@
   },
   "ambientTools": {
     "at": "2026-10-06T18:56:11.944489+00:00",
-    "applyPatchExecutable": "/Users/mac/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
+    "applyPatchExecutable": "~/.codex/tmp/arg0/codex-arg0BcWMHU/apply_patch",
     "resolvedTarget": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
     "origin": "Inherited Codex host command on PATH; not a Node built-in or project capability",
     "observedUse": "All adaptive primary runs use the inherited apply_patch command: commander-node 4 programs, commander-optional 5, esm-node 10, esm-optional 19. Required runs use project for edits and have zero apply_patch programs.",

@@ -1,6 +1,6 @@
 # ScriptAct 并行评测与修复方案
 
-状态：2026-09-30，根基修复与联合验收已通过，第 54 轮进入本机双任务槽并行接入。参见 [根基修复报告](../../../docs/engineering/scriptact-foundation-fixes.md)和 [当前执行状态](CURRENT.md)。
+状态：2026-09-30，根基修复与联合验收已通过，第 54 轮进入本机双任务槽并行接入。参见 [Platform 运行主链](../../../docs/architecture/platform-runtime.md)和 [当前执行状态](CURRENT.md)。
 
 用户目标：以最快速度集中暴露和修复问题，在可复现、独立的任务上验证 ScriptAct 相对 Codex 等 agent 的优势。美元预算不再作为批次停止条件；质量、请求数量、整题耗时及总成本继续作为优化目标。修复必须针对通用根因，并防止对已测题目过拟合。
 

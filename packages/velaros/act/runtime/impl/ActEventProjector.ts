@@ -63,7 +63,7 @@ class ActEventProjector implements ActEventProjectorApi {
     }
     // 完成检查没通过的原因留给宿主解释收尾；之后通过就清掉
     if (event.type === 'verification') {
-      const { verification: _verification, ...rest } = run
+      const { verification: _verification, verificationReport: _report, ...rest } = run
       run = event.completed
         ? rest
         : {
@@ -73,6 +73,8 @@ class ActEventProjector implements ActEventProjectorApi {
               : { reason: event.reason, recovery: event.recovery },
           }
       if (event.report) run = { ...run, verificationReport: structuredClone(event.report) }
+      const { type: _type, runId: _runId, ...completion } = event
+      run = { ...run, completion: structuredClone(completion) }
     }
     // 限速等待与无进展暂停只给提示，状态仍以 state 事件为准
     if (event.type === 'throttled')

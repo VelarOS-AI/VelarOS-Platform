@@ -120,7 +120,7 @@ output 在 `velaros`，input/blobs 在 `velaros:program`。绑定释放、权限
 
 当前系统合同代际为 20，Runtime 合同代际为 16；实际值由各自 contract/constants.ts 维护。系统操作统一从 memory/modules/store 成员访问，持久原文通过 memory.read 读取。
 
-共享状态的具体文件、接口与验证见 [共享状态差量报告](../engineering/act-store-delta.md)。
+共享状态的具体文件、接口与验证见 [Act 模型自管理空间](act-system-space.md)。
 
 ## 长期记忆与工作记忆
 
@@ -219,7 +219,7 @@ watch 为每个 Agent 在每个 store 中独立保存关注项及确认位置。
 
 LocalContextStorage 使用 store_catalog、store_creations 管理目录与创建回执，store_heads、store_objects、store_changes、store_consumers、store_commits 管理空间数据。目录的 scope 是宿主边界，数据表的 store 是具体空间标识；写入与新订阅要求空间已创建且处于活动状态。
 
-具体改动和验证见 [store 升级差量](../engineering/act-store-delta.md)。
+具体改动和验证见 [Act 模型自管理空间](act-system-space.md)。
 
 ## 当前任务的稳定 store 引用
 
@@ -242,4 +242,4 @@ LocalContextStorage 使用 store_catalog、store_creations 管理目录与创建
 
 ## 持久协作
 
-store 同时提供结构化对象、逐条事件和共享材料。对象关注与消息订阅分开，投递确认与处理确认分开。子任务通过持久请求与父任务交互，环境更新只在收束后的续跑边界生效。完整 API、原子性范围、运行中及空闲唤醒、恢复和验证见 [协作交付差量](../engineering/act-cooperation-delta.md)。
+store 同时提供结构化对象、逐条事件和共享材料。对象关注与消息订阅分开，投递确认与处理确认分开。子任务通过持久请求与父任务交互，环境更新只在收束后的续跑边界生效。完整 API、原子性范围、运行中及空闲唤醒、恢复和验证见 [Act 模型自管理空间](act-system-space.md)。

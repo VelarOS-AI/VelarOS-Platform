@@ -620,7 +620,7 @@ test('cancelling an async job stops later dispatch and releases the task lease',
   assert(!(await f.programs.state()).jobs.some((job) => ['queued', 'running'].includes(job.status)))
 })
 
-test('a synchronous runtime failure cancels the unstarted remainder of its batch', async (t) => {
+test('a fully settled process failure keeps its failed receipt and runs independent batch programs', async (t) => {
   const f = await fixture(t, async function* (request, f) {
     if (f.calls === 1) {
       yield {
@@ -633,8 +633,9 @@ test('a synchronous runtime failure cancels the unstarted remainder of its batch
     } else yield* done(request)
   })
   assertDone(await collect(f))
-  assert.equal(f.writes.length, 0)
-  assert(f.frames[1].jobs.some((job) => job.status === 'cancelled'))
+  assert.equal(f.writes.length, 1)
+  assert(f.frames[1].jobs.some((job) => job.status === 'failed'))
+  assert(f.frames[1].jobs.some((job) => job.status === 'succeeded'))
 })
 
 test('the next run recovers persisted queued and completed jobs without replaying source', async (t) => {
@@ -734,10 +735,10 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
     async function* (request, f) {
       system ??= request.instructions
       assert.equal(request.instructions, system)
-      assert.match(system, /sourceRef 复用已保存程序/)
-      assert.match(system, /每个实际程序只提交一次/)
+      assert.match(system, /sourceRef 复用归档源码/)
+      assert.match(system, /结果未知时不得重跑/)
       assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
-      assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用已保存程序/)
+      assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用归档源码/)
       const protocol = request.compiledPrompt.split('本帧协议').at(-1)
       const tag = marker(request)
       assert(protocol.includes(`${tag} run()`))
@@ -789,7 +790,7 @@ test('INV-63 missing closure between blob and program rejects the whole response
     const tag = marker(request)
     if (f.calls === 1) {
       firstMarker = tag
-      assert(request.instructions.includes('闭合段绑定原文'))
+      assert(request.instructions.includes('段内是原文'))
       yield {
         type: 'text',
         text: `${block(request, 'execute()', write)}${tag} blobs("payload")\nrecovered\n${tag} execute()\n`,

@@ -833,21 +833,27 @@ let failed = false
 if (!OutputOption) {
   const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
   const program = ts.createProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
-  const declaration = program
-    .getSourceFile(path)
-    .statements.find(
-      (node) => ts.isInterfaceDeclaration(node) && node.name.text === 'NativeExecutionInput'
-    )
   const checker = program.getTypeChecker()
-  const generatedSchema = operationSchema(checker, checker.getTypeAtLocation(declaration))
-  const schema = generatedSchema.$ref
-    ? {
-        ...generatedSchema.definitions[generatedSchema.$ref.slice('#/definitions/'.length)],
-        definitions: generatedSchema.definitions,
-      }
-    : generatedSchema
+  const declarations = ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone'].map(
+    (name) => {
+      const declaration = program
+        .getSourceFile(path)
+        .statements.find(
+          (node) => ts.isInterfaceDeclaration(node) && node.name.text === `${name}Input`
+        )
+      if (!declaration) throw new Error(`Missing native tool contract: ${name}Input`)
+      const generatedSchema = operationSchema(checker, checker.getTypeAtLocation(declaration))
+      const schema = generatedSchema.$ref
+        ? {
+            ...generatedSchema.definitions[generatedSchema.$ref.slice('#/definitions/'.length)],
+            definitions: generatedSchema.definitions,
+          }
+        : generatedSchema
+      return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(schema)} as const\n`
+    }
+  )
   const target = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
-  const text = `${SurfaceFileHeader}\n\n/** exec 入口的正式入参合同。 */\nexport const NativeExecutionSchema = ${JSON.stringify(schema)} as const\n`
+  const text = `${SurfaceFileHeader}\n\n${declarations.join('\n')}`
   if (!ts.sys.fileExists(target) || readFileSync(target, 'utf8') !== text) {
     if (ShouldWrite) writeFileSync(target, text)
     else {

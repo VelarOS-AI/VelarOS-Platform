@@ -1,19 +1,20 @@
 # Repository topology
 
-VelarOS Platform is a flat Bun workspace with eight published packages. `velaros.domainPackages` in the root manifest owns package identity; `docs/generated/package-catalog.json` is its generated projection.
+VelarOS Platform is a flat Bun workspace with nine published packages. `velaros.domainPackages` in the root manifest owns package identity; `docs/generated/package-catalog.json` is its generated projection.
 
 ## Packages and dependencies
 
-| Package | Responsibility |
-| --- | --- |
-| `packages/core` | Domain-neutral primitives; platform, text-files and path-rules units |
-| `packages/kernel` | Operation contracts, module bindings, permissions, invocation receipts and host-neutral transport |
-| `packages/model` | Provider adapters, request compilation, token accounting and multimodal requests |
-| `packages/script` | ScriptAct program validation, versioned programs, isolated JavaScript execution and Kernel calls |
-| `packages/context` | Immutable inputs and evidence, task state, context projections, storage ports and the SQLite adapter |
-| `packages/agent` | ActLoop, durable ActRunService and bounded AgentSupervisor |
-| `packages/velaros` | Runtime assembly, model tools, system operations and domain capability implementations |
-| `packages/agent-lab` | Deterministic and real-model evaluation infrastructure |
+| Package               | Responsibility                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/core`       | Domain-neutral primitives; platform, text-files and path-rules units                                 |
+| `packages/kernel`     | Operation contracts, module bindings, permissions, invocation receipts and host-neutral transport    |
+| `packages/model`      | Provider adapters, request compilation, token accounting and multimodal requests                     |
+| `packages/script`     | ScriptAct program validation, versioned programs, isolated JavaScript execution and Kernel calls     |
+| `packages/context`    | Immutable inputs and evidence, task state, context projections, storage ports and the SQLite adapter |
+| `packages/agent`      | ActLoop, durable ActRunService and bounded AgentSupervisor                                           |
+| `packages/velaros`    | Runtime assembly, model tools, system operations and domain capability implementations               |
+| `packages/agent-lab`  | Deterministic and real-model evaluation infrastructure                                               |
+| `packages/skill-jsts` | Installable JavaScript and TypeScript Skill with a fixed package environment                         |
 
 Velaros composes Agent, Context, Script, Model and Kernel through their public contracts. Agent consumes Model, Context and Kernel contracts; protocol decoding, execution and context preparation enter through its injected ports. These lower layers do not import Velaros. Core remains below domain runtimes.
 
@@ -33,16 +34,16 @@ VelarOS UI owns shared components, HTML artifacts and its component catalog. Vel
 
 ## Shared infrastructure
 
-| Path | Responsibility |
-| --- | --- |
-| `scripts/build/` | Build dependency ordering and reproducible generation |
-| `scripts/release/` | Package identity, safe packing, consumer verification and publishing |
-| `scripts/ownership/` | Module registration and shared structural checks |
-| `scripts/script/` | Generated operation declarations, schemas and Act catalog |
-| `scripts/<domain>/`, `tests/<domain>/` | Domain checks and cross-package tests |
-| `baselines/<domain>/` | Reviewed compatibility and gate baselines |
-| `eslint/` | Shared and domain lint rules |
-| `docs/` | Current guides, architecture decisions and dated validation records |
+| Path                                   | Responsibility                                                       |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `scripts/build/`                       | Build dependency ordering and reproducible generation                |
+| `scripts/release/`                     | Package identity, safe packing, consumer verification and publishing |
+| `scripts/ownership/`                   | Module registration and shared structural checks                     |
+| `scripts/script/`                      | Generated operation declarations, schemas and Act catalog            |
+| `scripts/<domain>/`, `tests/<domain>/` | Domain checks and cross-package tests                                |
+| `baselines/<domain>/`                  | Reviewed compatibility and gate baselines                            |
+| `eslint/`                              | Shared and domain lint rules                                         |
+| `docs/`                                | Current guides, architecture decisions and dated validation records  |
 
 ## Changing topology
 

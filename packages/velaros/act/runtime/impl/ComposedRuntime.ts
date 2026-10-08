@@ -52,6 +52,7 @@ import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
 import { BudgetedModelDriver } from './BudgetedModelDriver.js'
 import { ChildTaskMaterials } from './ChildTaskMaterials.js'
+import { CompletionReview } from './CompletionReview.js'
 import { ContextMaintenance } from './ContextMaintenance.js'
 import { EffectScheduler } from './EffectScheduler.js'
 import { ModelToolRuntime } from './ModelToolRuntime.js'
@@ -87,6 +88,8 @@ class ComposedRuntime implements VelarosRuntime {
   private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'storage' | 'closed' = 'openings'
   private readonly maintenance?: ContextMaintenance
   private readonly taskModels = new Map<string, ModelDriver>()
+  private readonly completionReviews = new Map<string, CompletionReview>()
+  private readonly closingReviews = new Map<string, Promise<void>>()
   private readonly search?: AdvancedSearchApi
   private readonly agents?: AgentSupervisorApi
   private readonly tools: ModelToolRuntime
@@ -531,6 +534,10 @@ class ComposedRuntime implements VelarosRuntime {
         journal: this.journal,
         contextOptions: {
           ...this.options.context!,
+          completion:
+            this.options.context?.completion && 'verify' in this.options.context.completion
+              ? this.options.context.completion
+              : undefined,
           limits: { ...this.options.context?.limits, ...VelarosAgentBudget, ...profile.budget },
         },
         kernel: this.kernel,
@@ -745,9 +752,11 @@ class ComposedRuntime implements VelarosRuntime {
       id.startsWith('search:') ||
       id.startsWith('agent:') ||
       id.startsWith('context:') ||
+      id.startsWith('verification:') ||
       id.startsWith('store-material:')
     )
       throw new AppError('CLOSED', '运行时已关闭或会话身份无效')
+    await this.closingReviews.get(id)
     await new RuntimeWorkspaceBinding(this.options.storage, this.options.workspace).bind(id)
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     await this.kernel.start()
@@ -773,6 +782,18 @@ class ComposedRuntime implements VelarosRuntime {
         this.scopes.set(id, { kind: 'main' })
         this.tools.root(id)
         if (this.options.model) this.taskModels.set(id, this.options.model)
+        const completion = this.options.context?.completion
+        if (completion && 'kind' in completion && completion.kind === 'model-review')
+          this.completionReviews.set(
+            id,
+            new CompletionReview({
+              sessionId: id,
+              storage: this.options.storage,
+              tools: this.tools,
+              model: this.options.model,
+              options: completion,
+            })
+          )
         session = new RuntimeSession(id, {
           node: this.options.node,
           instructions: this.options.instructions,
@@ -793,7 +814,17 @@ class ComposedRuntime implements VelarosRuntime {
           protocol: this.options.protocol,
           inputs: this.options.inputs ? () => this.options.inputs!(id) : undefined,
           journal: this.journal,
-          contextOptions: this.options.context,
+          contextOptions: {
+            ...this.options.context,
+            completion:
+              this.options.context?.completion &&
+              'kind' in this.options.context.completion &&
+              this.options.context.completion.kind === 'model-review'
+                ? this.completionReviews.get(id)
+                : this.options.context?.completion && 'verify' in this.options.context.completion
+                  ? this.options.context.completion
+                  : undefined,
+          },
           kernel: this.kernel,
           runner: this.options.runner,
           storage: this.options.storage,
@@ -817,6 +848,15 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   private releaseMain(id: string): void {
+    const review = this.completionReviews.get(id)
+    if (review) {
+      this.completionReviews.delete(id)
+      const closing = review.close()
+      this.closingReviews.set(id, closing)
+      void closing.then(() => {
+        if (this.closingReviews.get(id) === closing) this.closingReviews.delete(id)
+      })
+    }
     this.sessions.delete(id)
     this.programAccess.delete(id)
     this.scopes.delete(id)
@@ -878,9 +918,11 @@ class ComposedRuntime implements VelarosRuntime {
       ...[...this.sessions.values()].map((session) => session.close()),
     ])
     await Promise.allSettled([...this.openings.values()])
+    const reviews = [...this.completionReviews.values()].map((review) => review.close())
     this.shutdownPhase = 'sessions'
     for (const result of await sessions)
       if (result.status === 'rejected') failures.push(result.reason)
+    await Promise.allSettled([...reviews, ...this.closingReviews.values()])
     try {
       this.shutdownPhase = 'modules'
       await this.kernel.drain()

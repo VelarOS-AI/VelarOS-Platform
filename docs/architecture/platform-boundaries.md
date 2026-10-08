@@ -21,7 +21,7 @@ VelarOS Terminal is one such product host and owns its final Host composition. H
 transport, MCP adaptation, Act sessions, and model profiles are Platform domain responsibilities;
 products supply native lifecycle, persistence, credentials, policy, and UI adapters. The complete owner
 decision and clean-break migration are recorded in
-[`0001-agent-product-common-kernel.md`](../decisions/0001-agent-product-common-kernel.md).
+[Platform boundaries](platform-boundaries.md).
 
 ## Contract authority
 

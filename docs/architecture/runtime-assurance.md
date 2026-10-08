@@ -20,7 +20,7 @@ not silently extend that remote protocol.
 
 `ProviderRequestCompiler` in Model compiles the actual next request, including the five context partitions, ordered history, instructions and native image parts. It checks the complete request budget and produces an auditable provider projection. Raw accepted responses, scripts and invocation receipts remain traceable through `runtime.trace`.
 
-The main Act driver uses AI SDK ordinary text streaming. Model actions are explicit ScriptAct blocks; business operations are discovered through the script module contracts. General Model consumers may use structured or native tool requests through their own declared contracts. See [the actual runtime chain](platform-runtime.md) and [text protocol](scriptact-text-protocol.md).
+Act supports native JSON tools and framed text through the same Runtime. The selected transport controls request tools, instructions and decoding; executable programs are accepted only after the complete response passes validation. Business operations are discovered through the current host catalog and module contracts. See [the actual runtime chain](platform-runtime.md) and [text protocol](scriptact-text-protocol.md).
 
 Observability cannot alter authority. Debug snapshots and traces may contain user or model content; hosts control access, retention and export redaction. Credentials and executable clients are not trace payloads. Request fingerprints identify evidence and do not replace the underlying request or grant permission.
 

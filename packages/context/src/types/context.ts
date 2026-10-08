@@ -425,7 +425,11 @@ export interface ContextTaskState {
   readonly status: ContextTaskStatus
   readonly goals: readonly ContextRef[]
   readonly capsule: TaskCapsule
-  readonly lease: Nullable<{ readonly id: string; readonly expiresAt: number }>
+  readonly lease: Nullable<{
+    readonly id: string
+    readonly expiresAt: number
+    readonly owner?: string
+  }>
   readonly executionId: string
   readonly intents: readonly RegisteredViewIntent[]
   readonly mandatory: readonly ContextFeedback[]
@@ -496,10 +500,20 @@ export interface ContextVerificationReport {
   readonly checks: readonly ContextVerificationCheck[]
 }
 
+/** 宿主从当前要求确定的必需项，关联预期产物身份与原始用户依据。 */
+export interface ContextDeliveryRequirement {
+  readonly id: string
+  readonly label: string
+  readonly artifacts: readonly string[]
+  readonly sourceRefs: readonly ContextRef[]
+}
+
 /** 单项核查的原始事实；适用性由宿主再次探测，不从历史 passed 推断。 */
 export interface ContextVerificationCheck {
   readonly label: string
   readonly status: 'passed' | 'failed' | 'unknown'
+  /** 验收开始前固定的必需项；宿主报告不能在检查中缩小这份范围。 */
+  readonly requirement?: ContextDeliveryRequirement
   readonly evidenceRefs?: readonly ContextRef[]
   readonly artifact?: {
     readonly identity: string

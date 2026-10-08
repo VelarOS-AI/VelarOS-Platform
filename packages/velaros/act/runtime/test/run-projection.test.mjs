@@ -121,8 +121,37 @@ test('INV-78 successful domain reports survive terminal states, replay and mutab
   assert.deepEqual(live.snapshot().runs, replay.snapshot().runs)
   assert.equal(live.snapshot().runs.run.verificationReport.checks[0].label, '打开文件')
   assert.equal(live.snapshot().runs.run.verification, undefined)
+  assert.equal(live.snapshot().runs.run.completion.verified, true)
+  assert.equal(live.snapshot().runs.run.completion.report.checks[0].label, '打开文件')
   live.snapshot().runs.run.verificationReport.checks.length = 0
   assert.equal(live.snapshot().runs.run.verificationReport.checks.length, 1)
+})
+
+test('a newer completion decision clears an older report while retaining its own status', () => {
+  const projector = createActEventProjector()
+  projector.applyLive({
+    type: 'verification',
+    runId: 'run',
+    completed: false,
+    verified: false,
+    reason: 'incomplete',
+    report: {
+      scope: 'example',
+      checkedAt: new Date().toISOString(),
+      checks: [{ label: 'example', status: 'failed' }],
+    },
+  })
+  projector.applyLive({
+    type: 'verification',
+    runId: 'run',
+    completed: false,
+    verified: false,
+    reason: 'STALE_VIEW',
+    recovery: 'refresh',
+  })
+  const current = projector.snapshot().runs.run
+  assert.equal(current.verificationReport, undefined)
+  assert.equal(current.completion.reason, 'STALE_VIEW')
 })
 
 test('current terminal states keep their identity and ignore late events in live and durable projections', () => {
