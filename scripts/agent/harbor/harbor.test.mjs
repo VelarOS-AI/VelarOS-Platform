@@ -278,7 +278,7 @@ test('gateway distinguishes upstream transport failures from budget exhaustion a
   assert.equal(ledger.state.requests[0].failure.upstreamStatus, null)
   assert(ledger.state.requests[0].durationMs >= 0)
   const exhausted = await send()
-  assert.equal(exhausted.status, 429)
+  assert.equal(exhausted.status, 402)
   assert.equal((await exhausted.json()).error.code, 'CAMPAIGN_STOP')
   assert.equal(dispatched, 1)
   assert.equal(ledger.state.requests.length, 1)
