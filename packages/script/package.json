@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/script",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -42,7 +42,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts test/contract-compiler.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/script"
   },
   "dependencies": {

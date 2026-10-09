@@ -36,7 +36,8 @@ class ScriptContractCompiler implements ScriptContractCompilerApi {
   }
 
   public compile(source: string, specifier: string): ScriptCompiledContract {
-    const path = resolve('skill-contract.d.ts')
+    // TypeScript 传给 CompilerHost 的路径统一使用正斜杠，包括 Windows 盘符路径。
+    const path = resolve('skill-contract.d.ts').replaceAll('\\', '/')
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
     for (const statement of file.statements)
       if (
