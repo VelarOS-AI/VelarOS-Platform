@@ -12,6 +12,8 @@ export type {
   MarkItDownLocatorApi,
   OfficeDocumentRendererApi,
   OfficeOperationsApi,
+  OfficeOperationsDocumentsApi,
+  OfficeOperationsMarkdownApi,
 } from './contract/provides.js'
 
 // ── 注入面：空间与宿主要塞进来的东西 ────────────────────────────

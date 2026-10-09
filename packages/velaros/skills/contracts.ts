@@ -3,6 +3,7 @@ export type { SkillCompositionApi } from './contract/provides.js'
 export { VelarSkillsModule } from './contract/surface.js'
 export { skillComposition } from './impl/SkillComposition.js'
 export type {
+  PluginSkillSource,
   SkillActivation,
   SkillCapability,
   SkillContribution,

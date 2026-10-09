@@ -65,6 +65,8 @@ class SkillRegistry implements SkillRegistryApi {
   private readonly files = new SkillPackageFiles()
   private readonly queue = createKeyedSerialQueue()
   private readonly builtins: BuiltinSkills
+  private pluginKey = ''
+  private pluginRecords: Promise<readonly SkillRecord[]> = Promise.resolve([])
   private readonly root: string
   private readonly listeners = new Set<() => void>()
   private readonly log = Log.tag('SkillRegistry')
@@ -76,7 +78,7 @@ class SkillRegistry implements SkillRegistryApi {
   }
 
   public async list(): Promise<readonly SkillRecord[]> {
-    const builtins = await this.builtins.list()
+    const builtins = await this.managedSkills()
     const installed = (await this.readIndex()).skills
     if (
       installed.some((item) =>
@@ -97,8 +99,10 @@ class SkillRegistry implements SkillRegistryApi {
 
   public subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
+    const releasePlugins = this.options.plugins?.subscribe(listener)
     return () => {
       this.listeners.delete(listener)
+      releasePlugins?.()
     }
   }
 
@@ -113,8 +117,8 @@ class SkillRegistry implements SkillRegistryApi {
       const directory = join(staging, 'package')
       await this.files.copy(request.directory, directory, signal)
       const manifest = await this.files.manifest(directory, this.options.nodeVersion, true)
-      if ((await this.builtins.list()).some((item) => item.manifest.name === manifest.name))
-        throw new AppError('PERMISSION', '内置 Skill 由产品更新管理')
+      if ((await this.managedSkills()).some((item) => item.manifest.name === manifest.name))
+        throw new AppError('PERMISSION', '此 Skill 由所属产品或插件管理')
       if (!isEmpty(Object.keys(manifest.dependencies)))
         await this.options.installer.install(
           directory,
@@ -134,6 +138,8 @@ class SkillRegistry implements SkillRegistryApi {
       await writeFile(join(staging, 'receipt.json'), JSON.stringify(receipt), { mode: 0o600 })
       return await this.locked(async () => {
         signal.throwIfAborted()
+        if ((await this.managedSkills()).some((item) => item.manifest.name === manifest.name))
+          throw new AppError('PERMISSION', '此 Skill 由所属产品或插件管理')
         const index = await this.readIndex()
         const record: SkillRecord = {
           manifest,
@@ -161,8 +167,8 @@ class SkillRegistry implements SkillRegistryApi {
   }
 
   public async remove(name: string): Promise<void> {
-    if ((await this.builtins.list()).some((item) => item.manifest.name === name))
-      throw new AppError('PERMISSION', '内置 Skill 由产品更新管理')
+    if ((await this.managedSkills()).some((item) => item.manifest.name === name))
+      throw new AppError('PERMISSION', '此 Skill 由所属产品或插件管理')
     await this.locked(async () => {
       const index = await this.readIndex()
       if (!index.skills.some((skill) => skill.manifest.name === name))
@@ -191,7 +197,7 @@ class SkillRegistry implements SkillRegistryApi {
         return { ...record, grants: [...item.grants] }
       })
       for (const skill of skills) {
-        if (skill.builtin) continue
+        if (skill.builtin || skill.plugin) continue
         const receipt = parseSkillReceipt(
           JSON.parse(await readFile(join(dirname(skill.directory), 'receipt.json'), 'utf8'))
         )
@@ -336,7 +342,11 @@ class SkillRegistry implements SkillRegistryApi {
         capabilities.add(module)
       }
       for (const name of skill.manifest.contribution.packages) {
-        const pkg = await this.files.packagePath(skill.directory, name, !skill.builtin)
+        const pkg = await this.files.packagePath(
+          skill.directory,
+          name,
+          !skill.builtin && !skill.plugin
+        )
         const previous = packages.get(name)
         if (previous) {
           if (
@@ -359,6 +369,32 @@ class SkillRegistry implements SkillRegistryApi {
       }
     }
     return [...packages.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  private async managedSkills(): Promise<readonly SkillRecord[]> {
+    const sources = (await this.options.plugins?.list()) ?? []
+    const key = JSON.stringify(sources)
+    if (key !== this.pluginKey) {
+      this.pluginKey = key
+      this.pluginRecords = Promise.all(
+        sources.map(async (source) => {
+          const [record] = await new BuiltinSkills(
+            [source.directory],
+            this.options.nodeVersion
+          ).list()
+          const hash = createHash('sha256')
+            .update(`${source.generation}:${record!.generation}`)
+            .digest('hex')
+          const generation = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`
+          const { builtin: _builtin, ...skill } = record!
+          return { ...skill, plugin: source.plugin, generation }
+        })
+      )
+    }
+    const records = [...(await this.builtins.list()), ...(await this.pluginRecords)]
+    if (new Set(records.map((record) => record.manifest.name)).size !== records.length)
+      throw new AppError('CONFLICT', '产品与插件的 Skill 身份重复')
+    return records
   }
 
   private async readIndex(): Promise<SkillIndex> {

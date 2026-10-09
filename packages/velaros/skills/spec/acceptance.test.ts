@@ -893,3 +893,54 @@ test('INV-7 未选择的专项包缺少依赖时基础环境仍可使用', async
     registry.acquire(skillComposition.select(await registry.list(), [], ['optional-language']))
   ).rejects.toMatchObject({ code: 'NOT_FOUND' })
 })
+
+test('INV-8 插件注册保持独立选择，内部说明按需读取，插件代次变更撤销旧授权', async () => {
+  const f = await fixture()
+  const directory = await source(f.root, 'plugin-guide', '1.0.0', {
+    instructions: 'SKILL.md',
+    hostCapabilities: ['velaros:computer'],
+  })
+  await writeFile(join(directory, 'SKILL.md'), 'Detailed instructions should be loaded on demand.')
+  let sources = [{ plugin: 'example', generation: 'first', directory }]
+  let listener = () => {}
+  const registry = createSkillRegistry({
+    directory: f.store,
+    nodeVersion: '24.15.0',
+    installer: { install: async () => {} },
+    lock: createExclusiveSqliteLock(() => new Database(join(f.store, 'lock.sqlite'))),
+    plugins: {
+      list: async () => sources,
+      subscribe: (next) => {
+        listener = next
+        return () => {
+          listener = () => {}
+        }
+      },
+    },
+  })
+  let changes = 0
+  const release = registry.subscribe(() => {
+    changes++
+  })
+  const [record] = await registry.list()
+  expect(record!.plugin).toBe('example')
+  expect(record!.builtin).toBeUndefined()
+  expect(skillComposition.select(await registry.list(), [])).toEqual([])
+  const lease = await registry.acquire(
+    skillComposition.select(await registry.list(), [], ['plugin-guide'])
+  )
+  expect(lease.environment.skills[0]!.instructions).toBe('SKILL.md')
+  await expect(registry.remove('plugin-guide')).rejects.toThrow('插件管理')
+  await registry.assertGranted('plugin-guide', record!.generation, 'velaros:computer')
+  sources = [{ plugin: 'example', generation: 'second', directory }]
+  listener()
+  expect(changes).toBe(1)
+  await expect(
+    registry.assertGranted('plugin-guide', record!.generation, 'velaros:computer')
+  ).rejects.toThrow('已失效')
+  sources = []
+  expect(await registry.list()).toEqual([])
+  await lease.release()
+  expect(await registry.collect()).toHaveLength(1)
+  release()
+})

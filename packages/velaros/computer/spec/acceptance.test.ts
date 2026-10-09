@@ -51,7 +51,7 @@ describe('运行时', () => {
     })
   })
 
-  test('INV-8 helper 定位只认自包含 venv，找不到就判未安装', () => {
+  test('INV-8 helper 定位只认自包含 Python，找不到就判资源未就绪', () => {
     // 资源根指向一个不存在的目录：没有平台包、没有 venv，一定判未安装。
     const locator = createComputerHelperLocator({ resourceRoots: ['/velaros-spec/nowhere'] })
     expect(locator.resolve()).toBeNull()
@@ -238,7 +238,7 @@ export default await typeText({ text: 'hi' })`
     ] as const) {
       const failure = await failureOf(missing.call(operation, input))
       expect(failure.code, operation).toBe('PERMISSION')
-      expect(failure.message, operation).toContain('插件市场')
+      expect(failure.message, operation).toContain('宿主应用')
       expect(failure.message, operation).toContain('不要')
     }
     expect(missing.clicks).toEqual([])

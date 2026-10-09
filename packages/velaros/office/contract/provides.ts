@@ -4,7 +4,11 @@
  */
 
 // ── 模型面：velaros:office 的九个操作 ─────────────────────────────
-export type { OfficeOperationsApi } from '../impl/OfficeOperations.js'
+export type {
+  OfficeOperationsApi,
+  OfficeOperationsDocumentsApi,
+  OfficeOperationsMarkdownApi,
+} from '../impl/OfficeOperations.js'
 
 // ── 运行时：MarkItDown 定位与给 Document Renderer 的窄渲染面 ──────
 export type { MarkItDownLocatorApi } from '../impl/runtime/MarkItDownLocator.js'

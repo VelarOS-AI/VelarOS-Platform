@@ -1,4 +1,4 @@
-/** 按平台与资源根推导 helper 脚本、自带 venv 解释器与平台包目录的位置。 */
+/** 按平台与资源根推导 helper 脚本、自包含 Python 与平台包目录的位置。 */
 
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -30,7 +30,7 @@ export function helperScriptName(platform: NodeJS.Platform): Nullable<string> {
   }
 }
 
-/** 平台包的目录名：`<前缀>-<平台>-<架构>`，与打包脚本和插件产物一致。 */
+/** 平台包的目录名：`<前缀>-<平台>-<架构>`，与宿主打包脚本一致。 */
 export function platformPackageName(platform: NodeJS.Platform): string {
   return `${ComputerResourceLayout.packageNamePrefix}-${platform}-${process.arch}`
 }
@@ -55,8 +55,7 @@ export function readEnvironmentResourceRoots(): string[] {
  * 按优先级列出要搜的资源根。
  *
  * `VELAROS_COMPUTER_RESOURCE_ROOT` 一旦设置就**整组接管**（测试与打包排障需要一个确定的、不受宿主状态影响的根集）；
- * 否则依次是宿主登记的按需安装根（装完即时生效）→ VelarOS 共享资源根（平台约定，本单元自算，宿主忘了登记也能发现
- * 插件市场装下的包）→ 应用打包资源 → 开发期 `out/resources`。
+ * 否则依次是宿主登记的资源根 → VelarOS 共享资源根 → 应用打包资源 → 开发期 `out/resources`。
  */
 export function buildDefaultResourceRoots(resources: ComputerResourcePort): string[] {
   const environmentRoots = readEnvironmentResourceRoots()
@@ -75,9 +74,9 @@ export function buildDefaultResourceRoots(resources: ComputerResourcePort): stri
 }
 
 /**
- * 平台包里自包含 venv 的解释器路径；显式 `VELAROS_COMPUTER_PYTHON` 覆盖时直接放行。
+ * 平台包里自包含 Python 的路径，兼容已有 venv 布局；显式 `VELAROS_COMPUTER_PYTHON` 可覆盖。
  *
- * 「只认自包含 venv」是安全门不是打包偏好：回落到系统 Python 意味着要靠 `pip install` 自行补依赖，
+ * 自包含解释器是执行边界：回落到系统 Python 意味着要靠 `pip install` 自行补依赖，
  * 那等于让智能体往用户机器上装东西，解释器与第三方包的来源完全不可控。
  */
 export function resolvePythonCommand(
@@ -87,6 +86,11 @@ export function resolvePythonCommand(
   const configured = process.env.VELAROS_COMPUTER_PYTHON?.trim()
   if (configured) return configured
 
+  const portablePython =
+    platform === 'win32'
+      ? join(packageRoot, 'python', 'python.exe')
+      : join(packageRoot, 'python', 'bin', 'python3')
+  if (existsSync(portablePython)) return portablePython
   const venvPython =
     platform === 'win32'
       ? join(packageRoot, 'venv', 'Scripts', 'python.exe')

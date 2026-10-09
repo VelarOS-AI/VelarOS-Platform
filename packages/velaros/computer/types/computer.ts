@@ -201,16 +201,16 @@ export interface ComputerAvailability {
 
 /** 当前平台上 Python helper 脚本与解释器的解析结果。 */
 export interface ComputerHelperLaunchSpec {
-  /** Python 解释器命令；来自随插件分发的自包含 venv。 */
+  /** Python 解释器命令；来自宿主分发的自包含 Python。 */
   pythonCommand: string
   /** 平台 helper 脚本的绝对路径。 */
   helperScript: string
   /** helper 脚本目录，作为 cwd 以便共享模块导入能解析。 */
   runtimeDir: string
-  /** 平台包根目录（含 venv、helper、package.json），供插件目录服务使用。 */
+  /** 平台包根目录（含 Python、helper、package.json），供宿主管理资源。 */
   packageRoot: string
   /** 平台包版本（读取 package.json，缺省 0.0.0）。 */
   version: string
-  /** 是否命中了随包/随插件的 venv 解释器。 */
+  /** 是否命中了随包解释器（兼容字段名）。 */
   bundledVenv: boolean
 }

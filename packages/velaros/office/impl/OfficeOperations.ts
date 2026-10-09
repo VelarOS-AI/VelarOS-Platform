@@ -50,7 +50,23 @@ import { officePreviewOperations } from './operations/OfficePreviewOperations.js
  * OFFICE_CONVERSION_FAILED 外部转换失败（message 里有命令输出的结尾，LaTeX 就照着改源码再编）、OFFICE_MARKITDOWN_UNAVAILABLE 没装 MarkItDown。
  * 要把 PDF 变成 Word：readPdf 读出文字，再用 createWord 按页写成标题与段落。
  */
-export interface OfficeOperationsApi {
+export interface OfficeOperationsApi
+  extends OfficeOperationsDocumentsApi, OfficeOperationsMarkdownApi {
+  /** @AgentView 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
+   * @OperationEffect write
+   */
+  wordToPdf(input: OfficeWordToPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
+  /** @AgentView 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
+   * @OperationEffect write
+   */
+  latexToPdf(input: OfficeLatexInput, ctx: OfficeOperationContext): Promise<OfficeLatexCompiled>
+}
+
+/**
+ * @AgentView
+ * 生成和预览 Word、PowerPoint、Excel，读取和编辑 PDF。路径受当前工作区约束，覆盖文件需显式 overwrite。
+ */
+export interface OfficeOperationsDocumentsApi {
   /** @AgentView 生成 Word 文档（.docx），或把新内容接在已有文档末尾。
    * @OperationEffect write
    */
@@ -73,14 +89,6 @@ export interface OfficeOperationsApi {
    * @OperationEffect none
    */
   readPdf(input: OfficeReadPdfInput, ctx: OfficeOperationContext): Promise<OfficePdfText>
-  /** @AgentView 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
-   * @OperationEffect write
-   */
-  wordToPdf(input: OfficeWordToPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
-  /** @AgentView 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
-   * @OperationEffect write
-   */
-  latexToPdf(input: OfficeLatexInput, ctx: OfficeOperationContext): Promise<OfficeLatexCompiled>
   /** @AgentView 编辑 PDF 写成新文件：挑页、重排、删页、旋转、贴文字、改文档信息。
    * @OperationEffect write
    */
@@ -89,6 +97,13 @@ export interface OfficeOperationsApi {
    * @OperationEffect write
    */
   preview(input: OfficePreviewInput, ctx: OfficeOperationContext): Promise<OfficePreview>
+}
+
+/**
+ * @AgentView
+ * 使用已安装的 MarkItDown 插件转换文档，完整内容可按 outputPath 写入文件。
+ */
+export interface OfficeOperationsMarkdownApi {
   /** @AgentView 用 MarkItDown 把 PDF、Office、HTML、CSV、JSON、EPub 这类文档转成 Markdown 来读（要装了 MarkItDown）。
    * @OperationEffect write
    */

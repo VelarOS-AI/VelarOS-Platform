@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
@@ -45,6 +45,23 @@ async function installFakePackage(): Promise<string> {
 }
 
 describe('helper 定位器的资源来源', () => {
+  supportedTest('优先使用应用自带的可迁移 Python', async () => {
+    const root = await installFakePackage()
+    const packageRoot = join(
+      root,
+      'computer-use',
+      `computeruse-${process.platform}-${process.arch}`
+    )
+    const python =
+      process.platform === 'win32'
+        ? join(packageRoot, 'python', 'python.exe')
+        : join(packageRoot, 'python', 'bin', 'python3')
+    await mkdir(dirname(python), { recursive: true })
+    await writeFile(python, '')
+    const locator = createComputerHelperLocator({ resourceRoots: [root] })
+    expect(locator.resolve()?.pythonCommand).toBe(python)
+  })
+
   supportedTest('按宿主注入的安装根找到平台包', async () => {
     const root = await installFakePackage()
     const resources: ComputerResourcePort = {

@@ -43,7 +43,7 @@ async function clickOrRetake(snapshotId, x, y) {
   }
 }
 
-// 桌面控制不可用（插件没装、没给系统权限）时调用会抛错：把 message 原样告诉用户，不要自己去装依赖。
+// 桌面控制不可用（运行时缺失、没给系统权限）时调用会抛错：把 message 原样告诉用户，不要自己去装依赖。
 async function whyUnavailable() {
   try {
     await screenshot()

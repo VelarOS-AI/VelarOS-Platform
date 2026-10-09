@@ -3,7 +3,7 @@ import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { NodeCodeRunnerOptions, NodeRuntimePackage } from '@velaros-ai/script'
 import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 
-import type { SkillMutation } from '../types/skills.js'
+import type { PluginSkillSource, SkillMutation } from '../types/skills.js'
 
 import type { SkillEnvironmentLease, SkillRegistryApi } from './provides.js'
 
@@ -27,6 +27,13 @@ export interface SkillRegistryOptions {
   readonly packages?: readonly NodeRuntimePackage[]
   /** 宿主提供的只读内置 Skill 包目录，身份不由安装清单决定。 */
   readonly builtins?: readonly string[]
+  /** 插件作为整体安装；内部 Skill 由宿主实时提供，独立 Skill 安装器不能覆盖它们。 */
+  readonly plugins?: {
+    /** 只返回已安装并启用的插件内部 Skill。 */
+    list(): Promise<readonly PluginSkillSource[]>
+    /** 插件安装、启停和移除后通知目录失效。 */
+    subscribe(listener: () => void): () => void
+  }
 }
 
 /** npm CLI 运行在应用自带 Node 上，安装权限和进程回收由宿主负责。 */

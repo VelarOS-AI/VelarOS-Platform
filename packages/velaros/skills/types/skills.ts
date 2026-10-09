@@ -32,6 +32,16 @@ export interface SkillRecord {
   readonly installedAt: string
   /** 随产品提供，只通过产品更新替换。 */
   readonly builtin?: boolean
+  /** 所属插件；安装、启停与版本由宿主插件注册处统一管理。 */
+  readonly plugin?: string
+}
+
+/** 宿主已启用插件贡献的内部 Skill，目录与资源由插件生命周期持有。 */
+export interface PluginSkillSource {
+  readonly plugin: string
+  /** 插件完整安装内容的不可变代次；运行资源更新也会使旧 Skill 授权失效。 */
+  readonly generation: string
+  readonly directory: string
 }
 
 /** @AgentView 安装本地目录到本机库，默认关闭依赖脚本。 */
@@ -54,6 +64,8 @@ export interface SkillGuide {
 
 /** @AgentView 已安装 Skill 的发现信息。available 表示当前轮次可加载这个版本。 */
 export interface SkillSummary {
+  /** 所属插件，安装和启停由插件统一管理。 */
+  readonly plugin?: string
   /** 随产品提供，版本由产品更新管理。 */
   readonly builtin?: boolean
   readonly name: string

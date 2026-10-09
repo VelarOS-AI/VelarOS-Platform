@@ -46,6 +46,7 @@ export function skillSummary(
   selected: readonly SkillActivation[]
 ): SkillSummary {
   const summary: SkillSummary = {
+    plugin: record.plugin,
     name: record.manifest.name,
     version: record.manifest.version,
     description: record.manifest.description,

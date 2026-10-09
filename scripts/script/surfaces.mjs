@@ -63,10 +63,28 @@ export const CodeSurfaces = [
     templates: 'template.js',
   },
   {
+    namespace: 'office-documents',
+    directory: 'velaros',
+    unit: 'office',
+    interfaces: ['OfficeOperationsDocumentsApi'],
+    templates: 'documents-template.js',
+  },
+  {
+    namespace: 'markitdown',
+    directory: 'velaros',
+    unit: 'office',
+    interfaces: ['OfficeOperationsMarkdownApi'],
+    templates: 'markitdown-template.js',
+  },
+  {
     namespace: 'office',
     directory: 'velaros',
     unit: 'office',
-    interfaces: ['OfficeOperationsApi'],
+    interfaces: [
+      'OfficeOperationsApi',
+      'OfficeOperationsDocumentsApi',
+      'OfficeOperationsMarkdownApi',
+    ],
     templates: 'template.js',
   },
   {

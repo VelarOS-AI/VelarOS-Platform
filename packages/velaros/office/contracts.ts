@@ -6,5 +6,9 @@
  * 没有任何 Node 依赖——浏览器、渲染进程与 IPC 契约都能 import。文档生成、转换与渲染的实现由根入口提供。
  */
 export * from './contract/constants.js'
-export { VelarOfficeModule } from './contract/surface.js'
+export {
+  VelarMarkitdownModule,
+  VelarOfficeDocumentsModule,
+  VelarOfficeModule,
+} from './contract/surface.js'
 export type * from './types/office.js'

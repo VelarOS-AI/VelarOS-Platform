@@ -39,6 +39,8 @@ declare module 'velaros:skills' {
 
   /** 已安装 Skill 的发现信息。available 表示当前轮次可加载这个版本。 */
   interface SkillSummary {
+    /** 所属插件，安装和启停由插件统一管理。 */
+    readonly plugin?: string
     /** 随产品提供，版本由产品更新管理。 */
     readonly builtin?: boolean
     readonly name: string

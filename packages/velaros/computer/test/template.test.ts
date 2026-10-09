@@ -76,7 +76,7 @@ export default await whyUnavailable()
 `
     )
     expect(result.failed).toBeUndefined()
-    expect(result.value).toContain('插件市场')
+    expect(result.value).toContain('宿主应用')
     expect(result.value).toContain('不要')
   }, 60_000)
 })

@@ -20,6 +20,7 @@ export { skillComposition } from './impl/SkillComposition.js'
 export { createSkillRegistry } from './impl/SkillRegistry.js'
 export { skillsOperations } from './impl/SkillsOperations.js'
 export type {
+  PluginSkillSource,
   SkillActivation,
   SkillCapability,
   SkillContribution,

@@ -120,19 +120,14 @@ export interface ComputerHelperLocatorOptions {
   resourceRoots?: string[]
   /** 覆盖平台，主要供测试使用。 */
   platform?: NodeJS.Platform
-  /** 宿主自己的资源来源：按需安装根与停用开关；不给就只认平台约定的那几个根，且认为没有被停用。 */
+  /** 宿主自己的资源来源：资源根与停用开关；不给就只认平台约定的那几个根，且认为没有被停用。 */
   resources?: ComputerResourcePort
 }
 
-/** 宿主可以登记的资源 id，目前只有桌面控制插件自己。 */
+/** 桌面控制运行资源的标识。 */
 export type ComputerResourceId = 'computeruse'
 
-/**
- * 资源来源端口：宿主告诉本单元按需安装根在哪、哪些插件被用户停用了。
- *
- * 以前这是本单元里一张模块级的可变登记表，宿主（Desktop）把安装根登记在**它自己**的表里，
- * 本单元的那张永远是空的——装好的插件因此找不到。现在由宿主在创建定位器时把自己的表包成这个端口传进来。
- */
+/** 宿主提供资源根与启用状态，定位器只读取此端口。 */
 export interface ComputerResourcePort {
   /** 宿主登记的额外资源安装根，按登记顺序优先于平台约定的共享根。 */
   extraResourceRoots(): string[]

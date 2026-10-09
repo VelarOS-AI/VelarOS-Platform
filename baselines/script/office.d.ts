@@ -6,7 +6,23 @@
  * OFFICE_CONVERSION_FAILED 外部转换失败（message 里有命令输出的结尾，LaTeX 就照着改源码再编）、OFFICE_MARKITDOWN_UNAVAILABLE 没装 MarkItDown。
  * 要把 PDF 变成 Word：readPdf 读出文字，再用 createWord 按页写成标题与段落。
  */
+
+/**
+ * 生成和预览 Word、PowerPoint、Excel，读取和编辑 PDF。路径受当前工作区约束，覆盖文件需显式 overwrite。
+ */
+
+/**
+ * 使用已安装的 MarkItDown 插件转换文档，完整内容可按 outputPath 写入文件。
+ */
 declare module 'velaros:office' {
+  /** 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
+   */
+  export function wordToPdf(input: OfficeWordToPdfInput): Promise<OfficeWritten>
+
+  /** 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
+   */
+  export function latexToPdf(input: OfficeLatexInput): Promise<OfficeLatexCompiled>
+
   /** 生成 Word 文档（.docx），或把新内容接在已有文档末尾。
    */
   export function createWord(input: OfficeWordInput): Promise<OfficeWritten>
@@ -23,14 +39,6 @@ declare module 'velaros:office' {
    */
   export function readPdf(input: OfficeReadPdfInput): Promise<OfficePdfText>
 
-  /** 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
-   */
-  export function wordToPdf(input: OfficeWordToPdfInput): Promise<OfficeWritten>
-
-  /** 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
-   */
-  export function latexToPdf(input: OfficeLatexInput): Promise<OfficeLatexCompiled>
-
   /** 编辑 PDF 写成新文件：挑页、重排、删页、旋转、贴文字、改文档信息。
    */
   export function editPdf(input: OfficeEditPdfInput): Promise<OfficeWritten>
@@ -42,6 +50,40 @@ declare module 'velaros:office' {
   /** 用 MarkItDown 把 PDF、Office、HTML、CSV、JSON、EPub 这类文档转成 Markdown 来读（要装了 MarkItDown）。
    */
   export function toMarkdown(input: OfficeMarkdownInput): Promise<OfficeMarkdown>
+
+  /** Word 转 PDF：inputPath 是 .docx 或 .doc，outputPath 没写扩展名补 .pdf；文件已在时要 overwrite: true 才覆盖。要本机装了 LibreOffice。 */
+  interface OfficeWordToPdfInput {
+    inputPath: string
+    outputPath: string
+    overwrite?: boolean
+  }
+
+  /** 写出的一个文件：path 是绝对路径，bytes 是字节数；created 为假表示覆盖（或追加）了已有的文件。 */
+  interface OfficeWritten {
+    path: string
+    bytes: number
+    created: boolean
+  }
+
+  /**
+   * 编译 LaTeX 成 PDF：latexSource 是完整源码，先写成 .tex（sourcePath，缺省与 PDF 同名同目录）再编译到 outputPath。
+   * compiler 缺省 auto（按 tectonic、latexmk、xelatex、pdflatex 的顺序找本机装了的）；runs 是 xelatex、pdflatex 编几轮（缺省 2，最多 3），
+   * 另两个编译器自己决定轮数。.tex 或 PDF 已在时要 overwrite: true 才覆盖。
+   */
+  interface OfficeLatexInput {
+    outputPath: string
+    latexSource: string
+    sourcePath?: string
+    compiler?: LatexCompiler
+    runs?: number
+    overwrite?: boolean
+  }
+
+  /** 编译出的 PDF：写出的 PDF，加上 .tex 源码写在哪（sourcePath）与用的是哪个编译器。 */
+  interface OfficeLatexCompiled extends OfficeWritten {
+    sourcePath: string
+    compiler: string
+  }
 
   /**
    * 生成 Word（.docx）：outputPath 必填（最多 1200 个字符，没写扩展名补 .docx）；正文给 content（Markdown 或纯文本，自动排成标题、段落、列表、表格）
@@ -64,13 +106,6 @@ declare module 'velaros:office' {
     includeTableOfContents?: boolean
     overwrite?: boolean
     appendMode?: boolean
-  }
-
-  /** 写出的一个文件：path 是绝对路径，bytes 是字节数；created 为假表示覆盖（或追加）了已有的文件。 */
-  interface OfficeWritten {
-    path: string
-    bytes: number
-    created: boolean
   }
 
   /**
@@ -125,33 +160,6 @@ declare module 'velaros:office' {
     pageCount: number
     pages: OfficePdfPage[]
     hasMore: boolean
-  }
-
-  /** Word 转 PDF：inputPath 是 .docx 或 .doc，outputPath 没写扩展名补 .pdf；文件已在时要 overwrite: true 才覆盖。要本机装了 LibreOffice。 */
-  interface OfficeWordToPdfInput {
-    inputPath: string
-    outputPath: string
-    overwrite?: boolean
-  }
-
-  /**
-   * 编译 LaTeX 成 PDF：latexSource 是完整源码，先写成 .tex（sourcePath，缺省与 PDF 同名同目录）再编译到 outputPath。
-   * compiler 缺省 auto（按 tectonic、latexmk、xelatex、pdflatex 的顺序找本机装了的）；runs 是 xelatex、pdflatex 编几轮（缺省 2，最多 3），
-   * 另两个编译器自己决定轮数。.tex 或 PDF 已在时要 overwrite: true 才覆盖。
-   */
-  interface OfficeLatexInput {
-    outputPath: string
-    latexSource: string
-    sourcePath?: string
-    compiler?: LatexCompiler
-    runs?: number
-    overwrite?: boolean
-  }
-
-  /** 编译出的 PDF：写出的 PDF，加上 .tex 源码写在哪（sourcePath）与用的是哪个编译器。 */
-  interface OfficeLatexCompiled extends OfficeWritten {
-    sourcePath: string
-    compiler: string
   }
 
   /**
@@ -224,6 +232,9 @@ declare module 'velaros:office' {
     truncated: boolean
     written?: OfficeWritten
   }
+
+  /** LaTeX 编译器：auto 按 tectonic、latexmk、xelatex、pdflatex 的顺序找本机装了的，也可以点名一个。 */
+  type LatexCompiler = 'auto' | 'tectonic' | 'latexmk' | 'xelatex' | 'pdflatex'
 
   /**
    * 一个内容块，kind 说是哪种：heading 标题（text 最多 500 个字符，level 1 到 3，缺省 1）；paragraph 段落（text 最多 20000 个字符，或 runs 富文本；
@@ -318,9 +329,6 @@ declare module 'velaros:office' {
     page: number
     text: string
   }
-
-  /** LaTeX 编译器：auto 按 tectonic、latexmk、xelatex、pdflatex 的顺序找本机装了的，也可以点名一个。 */
-  type LatexCompiler = 'auto' | 'tectonic' | 'latexmk' | 'xelatex' | 'pdflatex'
 
   /**
    * 贴在 PDF 上的一段文字（水印、批注）：text 最多 2000 个字符，只写得了拉丁字母、数字和常见西文标点（用的是标准字体 Helvetica，中文等其他文字会被拒绝）。page 指原 PDF 的页码，allPages 为真就每页都贴，两样都不给也是每页都贴。

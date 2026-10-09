@@ -26,10 +26,10 @@ INV-10（工具 schema 由源码生成）随工具面一起作废，编号不复
 | INV-4 | 坐标换算与绑定校验只在 helper 里发生一次：本单元把截图内坐标与绑定原样交下去，自己不按屏幕几何再算一遍；回执里 x、y 是模型给的那套，全局坐标另列 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 模型面只发布桌面控制真正需要的动作：截图、移动、点击、输入、按键五个；不发布「不看图拿屏幕几何」这类能被截图结果替代的操作 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 释放之后的运行时不再有任何状态迁移：后续调用一律按 `sidecarDisposed` 拒绝 | 测试 | `spec/acceptance.test.ts` |
-| INV-8 | helper 定位不联网、不装依赖：只认按需安装的平台包里的自包含 venv，找不到就判「未安装」 | 测试 | `spec/acceptance.test.ts` |
+| INV-8 | helper 定位不联网、不装依赖：只认宿主平台包里的自包含 Python，兼容 venv 布局，找不到就判资源未就绪 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | 文件分工与对外边界不塌：五个操作在一个操作文件里、空间端口的每个方法都有操作在调；合同、类型、常量分开且接口成员有中文说明；实现一类一文件、类实现接口、按登记分层引用 | 门禁 | `check:module-ownership` |
 | INV-11 | 模型面是 `velaros:computer`：声明从源码生成、只放出五个操作，随包发布的声明（`VelarComputerModule`）与生成物是同一份；模型写的程序照这份声明调到真实操作 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 截图经交图通道交给模型，返回值里只有几何与 `snapshotId`、没有图的字节；宿主没有交图通道时 screenshot 整个不可用，不去拉起 helper | 测试 | `spec/acceptance.test.ts` |
-| INV-13 | 桌面控制不可用时每个动作都在做事之前拒绝（`PERMISSION`）：message 按原因引导用户（系统权限、插件没装），并明说不要自己用 pip 或命令装依赖 | 测试 | `spec/acceptance.test.ts` |
+| INV-13 | 桌面控制不可用时每个动作都在做事之前拒绝（`PERMISSION`）：message 按原因引导用户（系统权限、宿主运行资源缺失），并明说不要自己用 pip 或命令装依赖 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 声明里写给模型的上限就是常量表 `ComputerInputLimits` 里的数：改常量不改说明（或反过来）过不了验收；超出上限的入参在做事之前拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe） | 测试 | `spec/acceptance.test.ts` |
