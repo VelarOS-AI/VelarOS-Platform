@@ -92,7 +92,7 @@
     },
     "packages/kernel": {
       "name": "@velaros-ai/kernel",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "bin": {
         "velaros-kernel-daemon": "./bin/velaros-kernel-daemon.mjs",
       },
@@ -111,7 +111,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",

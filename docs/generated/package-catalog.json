@@ -137,7 +137,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",
@@ -152,7 +152,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",
