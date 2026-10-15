@@ -11,6 +11,7 @@ import {
   parseInvocationBlobs,
   readInvocationBlobs,
   readTraceArtifact,
+  visitTraceArtifact,
 } from './trace-artifact.mjs'
 
 async function fixture(t) {
@@ -27,7 +28,94 @@ const invocation = (status) => ({
   truncated: false,
   summary: { status, output: 'literal user data {"artifactSchema":2}', input: '{}' },
 })
+
+test('streamed visits preserve root/child order and verify hashes before projecting bodies', async (t) => {
+  const directory = await fixture(t)
+  const data = {
+    traces: [
+      { ...turn('root', 'pending'), turnId: 'root-1' },
+      { ...turn('root', 'succeeded'), turnId: 'root-2' },
+    ],
+    branches: [{ sessionId: 'child', turns: [{ ...turn('child', 'failed'), turnId: 'child-1' }] }],
+  }
+  const projectInvocation = ({ id, summary }) => ({ id, summary: { status: summary.status } })
+  const expected = [
+    ['root', 'root-1', null, { id: 'same-call', summary: { status: 'pending' } }],
+    ['root', 'root-2', null, { id: 'same-call', summary: { status: 'succeeded' } }],
+    ['child', 'child-1', 0, { id: 'same-call', summary: { status: 'failed' } }],
+  ]
+  const writer = createTraceArtifactWriter(directory)
+  for (const value of [
+    data,
+    (await writer.encode(data)).value,
+    (await writer.encode(data, { externalTurns: true })).value,
+  ]) {
+    const path = join(directory, 'visits.json')
+    await writeFile(path, JSON.stringify(value))
+    const actual = []
+    await visitTraceArtifact(
+      path,
+      async (record, { branchIndex }) => {
+        await Promise.resolve()
+        actual.push([record.sessionId, record.turnId, branchIndex, record.invocations[0]])
+      },
+      { projectInvocation }
+    )
+    assert.deepEqual(actual, expected)
+    for (const projectInvocation of [() => ({ id: 'other' }), () => null])
+      await assert.rejects(
+        visitTraceArtifact(path, () => {}, { projectInvocation }),
+        /identity/
+      )
+  }
+  const path = join(directory, 'visits.json')
+  const value = JSON.parse(await readFile(path, 'utf8'))
+  await writeFile(join(directory, 'trace-turns', value.data.traces[0].sha256 + '.json'), '{}')
+  await assert.rejects(
+    visitTraceArtifact(path, () => {}, { projectInvocation }),
+    /hash mismatch/
+  )
+})
 const turn = (sessionId, status) => ({ sessionId, invocations: [invocation(status)] })
+
+test('final manifests resolve hashed complete turns in JS and Python and reject changed or missing bodies', async (t) => {
+  const directory = await fixture(t)
+  const writer = createTraceArtifactWriter(directory)
+  const data = {
+    traces: [
+      { ...turn('root', 'succeeded'), turnId: 'r1', request: { body: '完整\n\\"'.repeat(1000) } },
+    ],
+    branches: [{ sessionId: 'child', turns: [{ ...turn('child', 'succeeded'), turnId: 'c1' }] }],
+  }
+  const artifact = await writer.encode(data, { externalTurns: true })
+  assert.equal(artifact.value.artifactSchema, 3)
+  assert.equal((await writer.encode(data, { externalTurns: true })).bytesWritten, 0)
+  const path = join(directory, 'traces.json')
+  await writeFile(path, JSON.stringify(artifact.value))
+  assert.deepEqual(await readTraceArtifact(path), data)
+  await writeFile(join(directory, 'expected.json'), JSON.stringify(data))
+  execFileSync('python3', [
+    '-c',
+    `
+import json,sys
+from pathlib import Path
+sys.path.insert(0, 'scripts/agent/harbor')
+from trace_artifact import read_trace_artifact
+p=Path(sys.argv[1])
+assert read_trace_artifact(p/'traces.json') == json.loads((p/'expected.json').read_text())
+`,
+    directory,
+  ])
+  const reference = artifact.value.data.traces[0]
+  const bodyPath = join(directory, 'trace-turns', reference.sha256 + '.json')
+  const original = await readFile(bodyPath)
+  await writeFile(bodyPath, '{}')
+  await assert.rejects(readTraceArtifact(path), /hash mismatch/)
+  await assert.rejects(writer.encode(data, { externalTurns: true }), /hash mismatch/)
+  await writeFile(bodyPath, original)
+  await rm(bodyPath)
+  await assert.rejects(readTraceArtifact(path), { code: 'ENOENT' })
+})
 
 test('entities preserve every field, content version and session; legacy artifacts remain readable', async (t) => {
   const directory = await fixture(t)

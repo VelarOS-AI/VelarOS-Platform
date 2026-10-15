@@ -1,0 +1,30 @@
+{
+  "id": "json5-reviver-source-context",
+  "split": "holdout",
+  "repository": "https://github.com/json5/json5",
+  "commit": "b935d4a280eafa8835e6182551b63809e61243b0",
+  "environment": {
+    "runtime": "node",
+    "project": "json5",
+    "acceptance": "test_json5_reviver_source.mjs",
+    "regressionRunner": "tap-json",
+    "regressionEntry": "node_modules/tap/bin/run.js",
+    "regression": [
+      "test"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      "package.json5",
+      "package-lock.json"
+    ],
+    "build": {
+      "entry": "node_modules/rollup/bin/rollup",
+      "args": [
+        "-c"
+      ]
+    },
+    "baselineFailure": "primitive source preserves token"
+  },
+  "prompt": "Extend JSON5.parse in this real JSON5 checkout so a reviver can recover the exact source spelling of primitive values, including integers that lose precision when first parsed as Number. Preserve existing parsing, errors, return values, reviver traversal, this binding, deletion/replacement behavior, optional/non-function revivers, CommonJS exports, browser/ESM builds and generic public types. Keep package.json, package.json5 when present, dependency declarations and all existing test files/fixtures byte-for-byte unchanged; add maintained tests in new files. Do not publish or commit.\n\nEvery reviver invocation receives a third argument: a fresh ordinary object with an optional own source property. For an original primitive value which is still SameValue-equal to that parsed value when the callback is invoked, context.source is the exact original UTF-16 string slice for that value's token, excluding surrounding whitespace/comments/separators. Preserve signs, decimal/exponent/hex spelling, quoted strings with their original quote/escape/line-continuation spelling, booleans, null, NaN and Infinity. This applies at the root, in arrays and in objects. Property-name tokens are not value source. With duplicate property names, the surviving final property's source corresponds to its final value token even when earlier and later values compare equal. Escaped property names and own keys such as __proto__ must retain current safe behavior.\n\nObjects and arrays do not receive an own source property. Nor do values changed by earlier reviver callbacks: if a sibling was replaced, or traversal enters a replacement object/array, do not attach source from the original parsed structure. Use SameValue semantics, including NaN and signed zero, rather than coercive comparison. Reassigning a primitive to an equal SameValue value may retain its source. Preserve existing traversal behavior for mutations; do not change unrelated JSON5 reviver semantics to match another parser. Adding/changing/deleting own properties on one context object must not affect later contexts. A nested JSON5.parse call made by a reviver must not corrupt the outer parse's remaining context values. An invalid document still fails before any reviver is invoked. Calls without a reviver must retain existing results and behavior.\n\nUpdate the shipped TypeScript callback declaration to expose a read-only optional source string while keeping existing two-argument revivers and parse<T> calls type-compatible. Document the third argument, exact-token semantics, composite and changed-value cases, reentrancy and its use for precision recovery. Add examples/reviver-source.js as a repeatable offline demonstration with assertions that recovers a large decimal integer from context.source and checks a JSON5-specific spelling. Execute it with a supported Node runtime; production library code must preserve the package's declared compatibility target.\n\nRun all original tests and lint checks, the maintained new tests and the actual distribution build. Verify an independently installed package from a tarball in a fresh temporary consumer using CommonJS, the built ESM distribution and strict TypeScript callback/generic consumption. Preserve the package metadata and dependency set. Packaging must use an exclusive temporary output directory, and include a repeatable verification command or script. Report actual validation and gaps, and continue until code, types, documentation, example and validation are complete.\n\nThe frozen environment uses Node 24. Its original TAP 12 loader fails under the default legacy esm preload. Run the unchanged TAP suite with node node_modules/tap/bin/run.js --no-esm --100 test, preserving its original coverage thresholds, plus npm run lint-report and npm run build. Add runtime coverage under new files in test/ so the maintained suite includes it. This loader compatibility adjustment applies equally to both participants."
+}

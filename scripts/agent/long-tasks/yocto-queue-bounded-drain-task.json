@@ -1,0 +1,17 @@
+{
+  "id": "yocto-queue-bounded-lazy-drain",
+  "split": "holdout",
+  "repository": "https://github.com/sindresorhus/yocto-queue.git",
+  "commit": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+  "environment": {
+    "runtime": "node",
+    "project": "yocto-queue",
+    "acceptance": "test_yocto_queue_bounded_drain.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/cli.js",
+    "regression": ["test.js"],
+    "preserve": ["test.js", "index.test-d.ts", "package.json"],
+    "baselineFailure": "drain(0) must not remove values"
+  },
+  "prompt": "Extend the existing yocto-queue Queue.prototype.drain() with an optional limit so consumers can process a bounded batch from this real FIFO queue. drain(limit = Infinity) must return a lazy, self-iterable drain iterator and retain the current generic value type. A limit is valid only when it is a nonnegative safe integer or positive Infinity; zero and negative zero are valid. Invalid values, including strings, null, booleans, negative numbers, NaN, fractional values, unsafe integers, bigint and coercible objects, must throw RangeError synchronously at the drain() call before creating a usable iterator or changing the queue. Omitted or explicit undefined uses Infinity.\n\nEach next() may dequeue at most one item and yields at most limit items from that iterator. Creating an iterator must not prefetch or remove anything. Preserve FIFO order and value identity, including undefined values. The iterator uses the live queue: outside dequeues, clears and enqueues between next() calls affect the next available value, and only values removed by this iterator count toward its limit. Appended values may be consumed until the iterator reaches its limit or first observes an empty queue. Once done, it stays done even if later values are enqueued. Existing unlimited drain() behavior and the ordinary non-consuming queue iterator remain compatible. Early return(), throwing into the iterator, or breaking a for-of loop closes only that iterator and preserves all remaining queue values; throw() propagates the original error. Multiple drain iterators share the queue correctly. Maintain head/tail and size so clear, peek, enqueue and dequeue continue to work after partial or complete draining. Avoid materializing the entire queue for a bounded drain.\n\nUpdate the public generic drain(limit?: number): IterableIterator<ValueType> declaration. Add permanent AVA tests for validation timing, zero/default/Infinity, limits and identities, lazy live interleaving, early closure, multiple iterators and later normal queue operations. Preserve all original assertions and package metadata; add public type assertions to the existing tsd suite or another discovered type test. Document limit validation, lazy removal, closure and live-queue behavior in README and add an offline runnable example that asserts its results. Run the configured npm test (AVA and tsd), all maintained new tests, the example and diff checks, then report actual commands/results and any limitations. XO is installed but disabled in the configured test script; the original checkout's XO crashes on Node 24 with util.isDate is not a function. Record any attempt accurately and keep the frozen dependencies. Make routine implementation choices autonomously."
+}

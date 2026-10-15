@@ -1,0 +1,31 @@
+{
+  "id": "d3-array-rolling-extent",
+  "split": "holdout",
+  "repository": "https://github.com/d3/d3-array",
+  "commit": "be0ae0d2b36ab91b833294ad2cfc5d5905acbd0f",
+  "environment": {
+    "runtime": "node",
+    "project": "d3-array",
+    "acceptance": "test_d3_array_rolling_extent.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "node_modules/mocha/bin/mocha.js",
+    "regression": [
+      "test/**/*-test.js"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      "yarn.lock",
+      "rollup.config.js"
+    ],
+    "build": {
+      "entry": "node_modules/rollup/dist/bin/rollup",
+      "args": [
+        "-c",
+        "--bundleConfigAsCjs"
+      ]
+    },
+    "baselineFailure": "rollingExtent is publicly exported"
+  },
+  "prompt": "Add rollingExtent(values, window, valueof) to this real d3-array package as a public named export. It computes the numeric minimum and maximum of every complete trailing window, in input order, for finite synchronous iterables. Keep the existing functions and distribution contracts. Preserve package.json, yarn.lock, dependency declarations, all original tests/fixtures, and existing build configuration byte-for-byte; add maintained tests in new files. Do not publish or commit.\n\nwindow must be a positive safe integer number. Otherwise throw RangeError before accessing the input iterator. valueof may be omitted or undefined, or be a function; any other value throws TypeError before accessing the iterator. Validate window before valueof. Without valueof, input items are the candidate values. With valueof, call it exactly once for every input item as valueof(item, index, originalIterable), using zero-based indexes. Consume the input only once. Do not mutate input arrays, typed arrays or caller objects.\n\nCandidate values may be numbers, null or undefined. Ignore null, undefined and NaN when finding extrema, but their positions still count toward the window width. Reject every other candidate type with TypeError; do not coerce strings, booleans, BigInts or objects. Infinity and -Infinity are valid numbers. If iteration yields n items, return max(0, n - window + 1) newly allocated pairs. Each pair is [minimum, maximum], or [undefined, undefined] when its window has no eligible number. Equal extrema retain the earliest eligible value in that window, including the observable sign of zero; when that occurrence leaves, the next eligible equal value becomes first. Return fresh pairs that do not alias each other across windows or invocations. Empty input and input shorter than window produce []. A very large valid window must not allocate its full size before observing the input.\n\nPropagate accessor and iterator failures by original thrown-value identity. When the accessor throws or produces an invalid candidate, close the input iterator through its return method if present, preserving the original failure even if closing also throws. A short input still invokes the accessor once per observed item and validates those items. Achieve amortized O(n) processing and O(min(n, window)) auxiliary storage, excluding input and returned pairs; avoid re-scanning each full window, retaining the full input, or keeping expired entries indefinitely. Explain the data structure and limitations in the documentation.\n\nDocument the API and edge cases in docs/rollingExtent.md and link it from README.md. Add examples/rolling-extent.mjs as an executable offline example with assertions for object accessors, ignored values and a streaming generator. Add maintained Mocha tests in a new test file and run all unchanged original tests plus the new tests and ESLint. Build both normal and minified browser bundles with the existing Rollup configuration; verify the new public ESM export and both real browser bundles. Retain a repeatable package verification script and actually install a packed tarball into a fresh external temporary consumer, checking its public ESM import and browser bundle behavior. Packaging must use an exclusive temporary directory and must not run publish hooks. Report actual commands, results and remaining limits; finish after implementation, documentation, example and validation are complete.\n\nThe frozen execution environment uses Node.js 24.15.0. Its module loader no longer accepts the original configuration's JSON import-assertion syntax. The verified unchanged-configuration build command is node node_modules/rollup/dist/bin/rollup -c --bundleConfigAsCjs. Use this invocation in repeatable checks; preserve rollup.config.js byte-for-byte."
+}

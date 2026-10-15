@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 
 import {
   buildNodeProject,
+  validateMaintainedNodeProject,
   copyNodeDependencies,
   jestReport,
   mochaReport,
@@ -18,9 +19,11 @@ import {
 import { regressionVerdict } from './regression.mjs'
 import {
   acceptanceArguments,
+  copyTaskWorkspace,
   applyTaskEnvironment,
   regressionArguments,
   regressionEnvironment,
+  restoreTaskPaths,
   taskEnvironment,
   taskPrompt,
 } from './task-environment.mjs'
@@ -35,6 +38,75 @@ const config = {
   preserve: ['test', 'package.json', 'package-lock.json'],
   baselineFailure: 'output must use stream',
 }
+
+test('maintained validation keeps added tests while original regression restoration stays independent', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'long-task-maintained '))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const original = join(root, 'original')
+  await mkdir(join(original, 'test'), { recursive: true })
+  await mkdir(join(original, 'node_modules'))
+  await writeFile(join(original, 'test/old.json'), '["old"]')
+  await writeFile(join(original, 'paths.json'), '["old"]')
+  await writeFile(
+    join(original, 'validate.cjs'),
+    `const fs=require('node:fs');const assert=require('node:assert/strict');assert.equal(process.argv[2],'literal argument');const paths=JSON.parse(fs.readFileSync('paths.json'));const covered=fs.readdirSync('test').flatMap(name=>JSON.parse(fs.readFileSync('test/'+name)));assert(paths.every(path=>covered.includes(path)),'Uncovered maintained behavior');fs.writeFileSync('receipt.txt',paths.join(','));`
+  )
+  const task = {
+    prompt: 'Extend the project and pass its complete validation command.',
+    environment: {
+      ...config,
+      maintainedValidation: { entry: 'validate.cjs', args: ['literal argument'] },
+    },
+  }
+  const environment = taskEnvironment(task)
+  const check = (workspace) =>
+    validateMaintainedNodeProject(environment, workspace, process.execPath)
+  assert.equal((await check(original)).exitCode, 0)
+  const actor = join(root, 'actor')
+  await copyTaskWorkspace(original, actor, 'node')
+  await writeFile(join(actor, 'paths.json'), '["old","added"]')
+  assert.notEqual((await check(actor)).exitCode, 0)
+  await writeFile(join(actor, 'test/new.json'), '["added"]')
+  const maintained = join(root, 'maintained')
+  await copyTaskWorkspace(actor, maintained, 'node')
+  await copyNodeDependencies(original, maintained)
+  assert.equal((await check(maintained)).exitCode, 0)
+  assert.equal(await readFile(join(maintained, 'receipt.txt'), 'utf8'), 'old,added')
+  const regression = join(root, 'regression')
+  await copyTaskWorkspace(actor, regression, 'node')
+  await restoreTaskPaths(original, regression, ['test'])
+  await assert.rejects(readFile(join(regression, 'test/new.json')), { code: 'ENOENT' })
+  assert.notEqual((await check(regression)).exitCode, 0)
+  assert.equal(await readFile(join(original, 'paths.json'), 'utf8'), '["old"]')
+  assert.equal(await readFile(join(actor, 'receipt.txt'), 'utf8'), 'old')
+  assert(
+    taskPrompt(task, process.execPath).includes(
+      JSON.stringify([process.execPath, 'validate.cjs', 'literal argument'])
+    )
+  )
+})
+
+test('maintained validation is mandatory when declared and rejects ambiguous commands', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'long-task-maintained-missing-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  assert.equal(await validateMaintainedNodeProject(config, workspace, process.execPath), null)
+  const environment = taskEnvironment({
+    environment: { ...config, maintainedValidation: { entry: 'missing.cjs', args: [] } },
+  })
+  const result = await validateMaintainedNodeProject(environment, workspace, process.execPath)
+  assert.notEqual(result.exitCode, 0)
+  for (const entry of ['/outside.cjs', '../outside.cjs', '.git/hooks/check', '-e'])
+    assert.throws(() =>
+      taskEnvironment({ environment: { ...config, maintainedValidation: { entry, args: [] } } })
+    )
+  for (const command of [
+    { entry: 'check.cjs', args: ['bad\0arg'] },
+    { entry: 'check.cjs', args: [], optional: true },
+  ])
+    assert.throws(() =>
+      taskEnvironment({ environment: { ...config, maintainedValidation: command } })
+    )
+})
 
 test('project checks retain a complete large report when a Node process exits immediately', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'long-task-report-'))

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -27,7 +28,7 @@ async function until(check) {
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
 }
-async function fixture(t, handle) {
+async function fixture(t, handle, options = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'gateway-stream-'))
   const ledger = new BudgetLedger(directory, 'unlimited', { model: 'fixture-model' })
   const releases = []
@@ -42,7 +43,7 @@ async function fixture(t, handle) {
   await once(upstream, 'listening')
   const gateway = budgetServer({
     ledger,
-    apiKey: 'synthetic-provider',
+    apiKey: options.apiKey ?? 'synthetic-provider',
     token: 'synthetic-signing',
     upstream: `http://127.0.0.1:${upstream.address().port}`,
   }).listen(0, '127.0.0.1')
@@ -138,6 +139,56 @@ test('failed and incomplete terminals remain failures while later usage is retai
       assert(row.estimatedUsd > 0)
     })
   }
+})
+
+test('failed terminal evidence preserves field shape and machine codes without saving diagnostic prose or credentials', async (t) => {
+  const message = 'synthetic-provider rejected this private request'
+  const f = await fixture(t, async (res) => {
+    res.end(
+      sse({
+        type: 'response.failed',
+        response: { status: 'failed', error: { code: 'server_error', message }, private: 'hidden' },
+      })
+    )
+  })
+  await assert.rejects(async () => (await f.send()).text())
+  const row = f.ledger.state.requests[0]
+  assert.equal(row.stream.terminalFailure.sequenceNumber, 'absent')
+  assert.equal(row.stream.terminalFailure.code.machineCode, 'server_error')
+  assert.deepEqual(row.stream.terminalFailure.message, {
+    state: 'string',
+    chars: message.length,
+    sha256: createHash('sha256').update(message).digest('hex'),
+    machineCode: null,
+  })
+  assert.equal(row.usage, null)
+  const saved = JSON.stringify(row)
+  for (const text of [message, 'synthetic-provider', 'hidden']) assert(!saved.includes(text))
+})
+
+test('malformed failure evidence stays bounded and a credential-shaped code is never retained', async (t) => {
+  const f = await fixture(
+    t,
+    async (res) => {
+      res.end(
+        sse({
+          type: 'response.failed',
+          sequence_number: 'unknown',
+          response: {
+            error: { code: 'fixtureCredential', message: { private: 'must-stay-hidden' } },
+          },
+        })
+      )
+    },
+    { apiKey: 'fixtureCredential' }
+  )
+  await assert.rejects(async () => (await f.send()).text())
+  const diagnostic = f.ledger.state.requests[0].stream.terminalFailure
+  assert.equal(diagnostic.sequenceNumber, 'other')
+  assert.equal(diagnostic.code.machineCode, null)
+  assert(!JSON.stringify(diagnostic).includes('fixtureCredential'))
+  assert.deepEqual(diagnostic.message, { state: 'other' })
+  assert(!JSON.stringify(diagnostic).includes('must-stay-hidden'))
 })
 
 test('fragmented UTF-8 and multiline SSE retain terminal identity and usage', async (t) => {

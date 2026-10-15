@@ -42,6 +42,35 @@ function safeErrorCode(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(value) ? value : null
 }
 
+// 只保留失败字段的形状、摘要和机器码；正文与凭据仍不进入费用账。
+function observedTerminalFailure(record, secrets) {
+  const error = record?.response?.error ?? record?.error
+  const describe = (object, key) => {
+    if (object == null || !Object.hasOwn(object, key)) return { state: 'absent' }
+    const value = object[key]
+    if (value === null) return { state: 'null' }
+    if (typeof value !== 'string') return { state: 'other' }
+    const machine = safeErrorCode(value)
+    return {
+      state: 'string',
+      chars: value.length,
+      sha256: createHash('sha256').update(value).digest('hex'),
+      machineCode:
+        machine && !secrets.some((secret) => secret && machine.includes(secret)) ? machine : null,
+    }
+  }
+  return {
+    sequenceNumber: !Object.hasOwn(record, 'sequence_number')
+      ? 'absent'
+      : Number.isSafeInteger(record.sequence_number) && record.sequence_number >= 0
+        ? 'valid'
+        : 'other',
+    responseStatus: observedOption(record.response, 'status', ['failed']),
+    code: describe(error, 'code'),
+    message: describe(error, 'message'),
+  }
+}
+
 // 只记录白名单值，区分省略、null 与未知值；不能把任意请求正文混进费用账。
 function observedOption(object, key, allowed) {
   if (object == null || !Object.hasOwn(object, key)) return { state: 'absent' }
@@ -391,7 +420,19 @@ export function budgetServer({
   perAttemptConcurrency = 1,
   maxQueue = 64,
   generationPolicy = null,
+  catalogContextTokens = null,
 }) {
+  if (
+    catalogContextTokens !== null &&
+    (!Number.isSafeInteger(catalogContextTokens) || catalogContextTokens < 1024)
+  )
+    throw new Error('Invalid evaluation context allocation')
+  if (
+    ledger.state.requests.length &&
+    (ledger.state.catalogContextTokens ?? null) !== catalogContextTokens
+  )
+    throw new Error('Existing ledger context allocation differs; use a new ledger directory')
+  ledger.state.catalogContextTokens = catalogContextTokens
   generationPolicy = normalizedGenerationPolicy(generationPolicy)
   if (
     ledger.state.requests.length &&
@@ -440,6 +481,40 @@ export function budgetServer({
   }
   let activeUpstreamRequests = 0
   const activeAttempts = new Map()
+  const activeReservations = new Set()
+  const budgetWaiters = new Map()
+  // 活跃请求的预占可能在真实结算后释放；已结算且缺用量的预占始终保留。
+  const canWaitForBudget = (identity) => {
+    if (!activeReservations.size) return false
+    const own = ledger.state.requests.filter(
+      (item) => item.identity?.attemptId === identity?.attemptId
+    )
+    if (ledger.maxRequestsPerAttempt !== null && own.length >= ledger.maxRequestsPerAttempt)
+      return false
+    const afterActive = (rows) =>
+      rows
+        .filter((item) => !activeReservations.has(item.id))
+        .reduce((sum, item) => sum + item.budgetUsd, ledger.reservationUsd)
+    return (
+      (ledger.state.limitUsd === null ||
+        afterActive(ledger.state.requests) <= ledger.state.limitUsd) &&
+      (ledger.perAttemptBudgetUsd === null ||
+        (identity && afterActive(own) <= ledger.perAttemptBudgetUsd))
+    )
+  }
+  const waitForBudget = (identity, signal) =>
+    new Promise((resolve, reject) => {
+      const finish = (error) => {
+        budgetWaiters.delete(settled)
+        signal.removeEventListener('abort', aborted)
+        error ? reject(error) : resolve()
+      }
+      const settled = () => finish()
+      const aborted = () => finish(signal.reason)
+      budgetWaiters.set(settled, identity?.attemptId)
+      signal.addEventListener('abort', aborted, { once: true })
+      if (signal.aborted) aborted()
+    })
   return createServer(async (req, res) => {
     const access = authenticateAttempt(req.headers.authorization, token)
     if (!access) {
@@ -455,6 +530,9 @@ export function budgetServer({
           activeUpstreamRequests: access.identity
             ? (activeAttempts.get(access.identity.attemptId) ?? 0)
             : activeUpstreamRequests,
+          budgetWaiters: [...budgetWaiters.values()].filter(
+            (id) => !access.identity || id === access.identity.attemptId
+          ).length,
           activeModelDiscoveryRequests: (ledger.state.discoveryRequests ?? []).filter(
             (item) =>
               item.status === 'running' &&
@@ -500,7 +578,25 @@ export function budgetServer({
         } else {
           const value = await response.json()
           if (!Array.isArray(value.data)) throw new Error('Invalid upstream model catalog')
-          const data = value.data.filter((model) => model?.id === ledger.model)
+          const data = value.data
+            .filter((model) => model?.id === ledger.model)
+            .map((model) =>
+              catalogContextTokens === null
+                ? model
+                : {
+                    ...model,
+                    context_length: catalogContextTokens,
+                    context_window: catalogContextTokens,
+                  }
+            )
+          record.contextAllocation =
+            catalogContextTokens === null
+              ? null
+              : {
+                  kind: 'evaluation-resource-cap',
+                  tokens: catalogContextTokens,
+                  nativeModelCapacity: 'not-inferred',
+                }
           record.status = 'completed'
           record.modelCount = data.length
           res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
@@ -604,35 +700,49 @@ export function budgetServer({
       )
       if (res.destroyed) return
       if (authenticationBlocker) throw authenticationError()
-      reservation = ledger.reserve(
-        {
-          endpoint: req.url,
-          reasoningEffort: body.reasoning?.effort ?? body.reasoning_effort ?? null,
-          outputLimit,
-          ...(generationPolicy ? { requestedOutputLimit, clientWireOptions } : {}),
-          serviceTier: body.service_tier,
-          stream: Boolean(body.stream),
-          // 在网关规范化之后观察；仅作比较证据，不改变实际模型请求。
-          wireOptions: observedWireOptions(body),
-          inputItems: (body.input ?? body.messages)?.length ?? null,
-          cacheKeyHash:
-            typeof body.prompt_cache_key === 'string'
-              ? createHash('sha256').update(body.prompt_cache_key).digest('hex')
+      const reserve = () =>
+        ledger.reserve(
+          {
+            endpoint: req.url,
+            reasoningEffort: body.reasoning?.effort ?? body.reasoning_effort ?? null,
+            outputLimit,
+            ...(generationPolicy ? { requestedOutputLimit, clientWireOptions } : {}),
+            serviceTier: body.service_tier,
+            stream: Boolean(body.stream),
+            // 在网关规范化之后观察；仅作比较证据，不改变实际模型请求。
+            wireOptions: observedWireOptions(body),
+            inputItems: (body.input ?? body.messages)?.length ?? null,
+            cacheKeyHash:
+              typeof body.prompt_cache_key === 'string'
+                ? createHash('sha256').update(body.prompt_cache_key).digest('hex')
+                : null,
+            explicitCacheBreakpoints: Array.isArray(body.input)
+              ? body.input.reduce(
+                  (count, item) =>
+                    count +
+                    (Array.isArray(item.content)
+                      ? item.content.filter((part) => part.prompt_cache_breakpoint).length
+                      : 0),
+                  0
+                )
               : null,
-          explicitCacheBreakpoints: Array.isArray(body.input)
-            ? body.input.reduce(
-                (count, item) =>
-                  count +
-                  (Array.isArray(item.content)
-                    ? item.content.filter((part) => part.prompt_cache_breakpoint).length
-                    : 0),
-                0
-              )
-            : null,
-        },
-        access.identity
-      )
+          },
+          access.identity
+        )
+      const admissionSignal = AbortSignal.any([disconnected.signal, authenticationStopped.signal])
+      for (;;) {
+        admissionSignal.throwIfAborted()
+        try {
+          reservation = reserve()
+          break
+        } catch (error) {
+          if (error.code !== 'CAMPAIGN_BUDGET_EXHAUSTED' || !canWaitForBudget(access.identity))
+            throw error
+          await waitForBudget(access.identity, admissionSignal)
+        }
+      }
       reservation.queueWaitMs = performance.now() - queuedAt
+      activeReservations.add(reservation.id)
       activeUpstreamRequests++
       if (access.identity)
         activeAttempts.set(
@@ -703,6 +813,7 @@ export function budgetServer({
             const type = record?.type ?? event
             if (type === 'response.failed' || type === 'error' || record?.error) {
               terminal(type === 'response.failed' ? type : 'error', 'failed', record.response)
+              streamState.terminalFailure ??= observedTerminalFailure(record, [apiKey, token])
             } else if (type === 'response.incomplete' && streamState.terminalStatus !== 'failed') {
               terminal(type, 'incomplete', record.response)
             } else if (
@@ -883,6 +994,7 @@ export function budgetServer({
         )
     } finally {
       if (reservation) {
+        activeReservations.delete(reservation.id)
         activeUpstreamRequests--
         if (access.identity) {
           const remaining = (activeAttempts.get(access.identity.attemptId) ?? 1) - 1
@@ -892,6 +1004,7 @@ export function budgetServer({
       }
       res.removeListener('close', onDisconnect)
       releaseDispatch?.()
+      for (const settled of [...budgetWaiters.keys()]) settled()
     }
   })
 }

@@ -1,0 +1,35 @@
+{
+  "id": "fs-extra-durable-copy-planning",
+  "split": "validation",
+  "repository": "https://github.com/jprichardson/node-fs-extra",
+  "commit": "1e223d3b1e26b7ebef7f402acf0e3b5533cc5833",
+  "environment": {
+    "runtime": "node",
+    "project": "fs-extra",
+    "acceptance": "test_fs_extra_resumable_copy.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "test.js",
+    "regression": [
+      "lib/**/__tests__/*.test.js"
+    ],
+    "preserve": [
+      "lib/__tests__",
+      "lib/copy/__tests__",
+      "lib/empty/__tests__",
+      "lib/ensure/__tests__",
+      "lib/fs/__tests__",
+      "lib/json/__tests__",
+      "lib/mkdirs/__tests__",
+      "lib/move/__tests__",
+      "lib/output-file/__tests__",
+      "lib/path-exists/__tests__",
+      "lib/remove/__tests__",
+      "lib/util/__tests__",
+      "package.json",
+      "test.js",
+      "test.mjs"
+    ],
+    "baselineFailure": "planCopy and applyCopyPlan must be public"
+  },
+  "prompt": "Build a production-quality resumable copy workflow for this real fs-extra repository, suitable for Desktop project migration and package installation. Add maintained public planCopy(source, destination, options?, callback?) and applyCopyPlan(plan, options?, callback?) APIs. Both support Promise and Node error-first callback forms and are exported from CommonJS, ESM named exports and ESM default exports, preserving function identity. Preserve all existing APIs, dependencies and tests.\n\nplanCopy must inspect a source directory and an existing or absent destination, without mutating either. It returns a JSON-serializable version:1 plan with a deterministic lowercase SHA-256 id, absolute source and destination roots, and deterministic operations. Each operation exposes path (portable relative path using /) and action ('mkdir', 'copy', 'symlink', 'remove'). File contents, link targets and relevant destination state must be fingerprinted in the plan so stale or forged plans are rejected. The same trees and options produce exactly the same plan on repeated calls; JSON round-tripping preserves its validity. Default behavior updates differing source paths while preserving extra destination paths. options.mirror:true also removes destination extras. Equal file bytes and matching link text require no rewrite. Preserve relative and dangling symbolic links as links, never follow them while traversing. Paths may contain spaces, Unicode, quotes and newlines. Reject same/overlapping source and destination roots, including aliases through real paths, with code ERR_COPY_PLAN_INVALID before mutations. Reject unsupported entry types and options clearly.\n\napplyCopyPlan must validate plan structure, id, relative-path boundaries, source fingerprints and destination preconditions before its first mutation; source or destination drift rejects with ERR_COPY_PLAN_STALE and leaves the destination unchanged. Forged ids, traversal, absolute operation paths and inconsistent operation metadata reject with ERR_COPY_PLAN_INVALID. Destination parent symlinks cannot redirect an operation outside the bound root. Apply changes in deterministic dependency order, using atomic replacement for file contents and cleaning owned temporary files. Existing destination files may be replaced by directories and vice versa. Destination must contain exactly the planned source entries afterward, plus preserved extras when mirror is false. Return {planId, status:'completed', completedOperations, totalOperations}; both counts equal plan.operations.length when complete. Never modify the source.\n\noptions.journalPath is an optional absolute path outside both trees. The journal is a durable JSON document with version:1, planId, status ('running' or 'completed'), and a completed array of operation indexes. Create/update it using atomic writes and fsync at each completed-operation boundary, retaining sufficient precondition and result evidence to resume the same plan after process death. Before invoking onProgress, the file operation and its journal record must be durably committed. Reapplying a completed journal is an idempotent no-op: preserve file mtimes, do not invoke onProgress again, and return the same completed counts. An interrupted journal resumes only unfinished operations; preserve already committed results. A changed committed output, corrupt journal, mismatched plan id, or incompatible resume state must be rejected rather than silently accepted. A journal under either tree, a symlink journal file or a journal directory symlink must fail before writes. Do not overwrite unrelated pre-existing journal data. Explain the precise supported crash boundary and filesystem limitations; do not claim whole-tree atomicity.\n\noptions.onProgress(event) is an optional awaited callback after each committed operation, with {planId, operationIndex, operation, completedOperations, totalOperations}. It runs exactly once per newly committed operation, with strictly increasing completedOperations. Its thrown/rejected error is propagated unchanged after the current committed operation; later operations are not started. A later apply with the journal resumes without replaying completed progress callbacks. options.signal supports cooperative AbortSignal cancellation in planning and applying: pre-aborted signals reject with their exact reason before filesystem mutations or progress, cancellation from onProgress stops before the next operation, and aborting an async pending callback settles without unhandled late rejection or continuing filesystem writes. Remove listeners and close handles when settled. Document partial results and source/destination conflict semantics.\n\nDeliver focused maintained tests, including ordinary copying, conflicts, mirrors, malformed plans, both API forms, links and traversal, listener cleanup, callback cancellation, and a real subprocess killed after a committed progress event then resumed by another process. Add a documented runnable offline examples/resumable-copy.js demonstration using temporary directories and cleanup; update README and dedicated API docs. Run all original unit tests, ESM checks, lint, the example and new durability tests. Verify packaging by creating an exclusive temporary package output and testing CommonJS plus ESM consumption outside the source tree; include a repeatable verification command or script. Keep runtime dependencies unchanged. Report actual checks, any gaps and limitations. Make routine implementation choices autonomously, and continue until the complete feature, docs, example and validation are delivered."
+}

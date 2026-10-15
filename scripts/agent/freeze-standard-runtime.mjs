@@ -37,6 +37,7 @@ async function linkModules(from, to, manifest) {
       ...manifest.dependencies,
       ...manifest.devDependencies,
       ...manifest.optionalDependencies,
+      ...manifest.peerDependencies,
     })
   )
   const entries = await readdir(from, { withFileTypes: true }).catch((error) => {

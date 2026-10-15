@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 import { createTraceArtifactWriter } from '../harbor/trace-artifact.mjs'
 import { readCapabilityUsage, summarizeCapabilityUsage } from './capability-usage.mjs'
@@ -10,6 +12,41 @@ import { readCapabilityUsage, summarizeCapabilityUsage } from './capability-usag
 const invocation = (id, status = 'succeeded') => ({
   id,
   summary: { moduleId: 'velaros:agents', operation: 'start', status },
+})
+
+test('modern trace statistics process more history than the allowed heap and preserve final invocation states', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'capability-memory-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const writer = createTraceArtifactWriter(directory)
+  const refs = []
+  for (let index = 0; index < 32; index++) {
+    const data = {
+      traces: [
+        {
+          ...turn('root', [invocation('same-id', index === 31 ? 'succeeded' : 'running')]),
+          turnId: 'turn-' + index,
+          request: { body: String(index) + 'x'.repeat(3 * 1024 ** 2) },
+        },
+      ],
+    }
+    refs.push((await writer.encode(data, { externalTurns: true })).value.data.traces[0])
+  }
+  const path = join(directory, 'traces.json')
+  await writeFile(path, JSON.stringify({ artifactSchema: 3, data: { traces: refs } }))
+  const script = `import {readCapabilityUsage} from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, 'capability-usage.mjs')).href)}; console.log(JSON.stringify(await readCapabilityUsage(process.argv[1])));`
+  const result = JSON.parse(
+    execFileSync(
+      process.execPath,
+      ['--max-old-space-size=64', '--input-type=module', '-e', script, path],
+      { encoding: 'utf8', timeout: 30000 }
+    )
+  )
+  assert.equal(result.rootTurns, 32)
+  assert.equal(result.uniqueCalls, 1)
+  assert.equal(result.complete, true)
+  assert.deepEqual(result.operations, [
+    { moduleId: 'velaros:agents', operation: 'start', status: 'succeeded', count: 1 },
+  ])
 })
 const turn = (sessionId, invocations, gaps = []) => ({ sessionId, invocations, gaps })
 

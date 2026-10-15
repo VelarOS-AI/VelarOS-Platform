@@ -223,6 +223,56 @@ test('remote catalog is identity-bound, restricted to the frozen model and separ
   assert.equal(JSON.stringify(f.ledger.state).includes('mock-provider-key'), false)
 })
 
+test('a frozen context allocation is disclosed separately from native model capacity', async (t) => {
+  const f = await fixture(
+    t,
+    async (_body, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ data: [{ id: proxy.campaignModel, display_name: 'Test model' }] }))
+    },
+    { catalogContextTokens: 131072 }
+  )
+  const response = await f.catalog('allocated')
+  assert.equal(response.status, 200)
+  assert.deepEqual((await response.json()).data, [
+    {
+      id: proxy.campaignModel,
+      display_name: 'Test model',
+      context_length: 131072,
+      context_window: 131072,
+    },
+  ])
+  assert.deepEqual(f.ledger.state.discoveryRequests[0].contextAllocation, {
+    kind: 'evaluation-resource-cap',
+    tokens: 131072,
+    nativeModelCapacity: 'not-inferred',
+  })
+  assert.equal(f.ledger.state.requests.length, 0)
+  assert.throws(
+    () =>
+      proxy.budgetServer({
+        ledger: f.ledger,
+        apiKey: 'mock',
+        token: 'mock',
+        catalogContextTokens: -1,
+      }),
+    /Invalid evaluation/
+  )
+  f.ledger.state.requests.push({ status: 'fixture' })
+  assert.throws(
+    () =>
+      proxy.budgetServer({
+        ledger: f.ledger,
+        apiKey: 'mock',
+        token: 'mock',
+        catalogContextTokens: 65536,
+      }),
+    /context allocation differs/
+  )
+  assert.equal(f.ledger.state.catalogContextTokens, 131072)
+  f.ledger.state.requests.pop()
+})
+
 test('catalog authentication failure blocks subsequent paid work without reserving model usage', async (t) => {
   let calls = 0
   const f = await fixture(

@@ -11,7 +11,23 @@ export async function connectDebugger(
   const targets = await fetchFn(new URL('/json/list', origin), {
     signal: AbortSignal.timeout(openTimeoutMs),
   }).then((response) => response.json())
-  const page = targets.find((target) => target.type === 'page' && target.url.includes('/#/'))
+  const pages = targets.filter((target) => {
+    if (target.type !== 'page') return false
+    let url
+    try {
+      url = new URL(target.url)
+    } catch {
+      return false
+    }
+    if (url.protocol === 'file:') return url.pathname.endsWith('/renderer/index.html')
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) &&
+      url.hash.startsWith('#/')
+    )
+  })
+  if (pages.length > 1) throw new Error('Desktop renderer is ambiguous')
+  const [page] = pages
   if (!page?.webSocketDebuggerUrl) throw new Error('Desktop renderer is unavailable')
   const socket = new WebSocketClass(page.webSocketDebuggerUrl)
   let sequence = 0

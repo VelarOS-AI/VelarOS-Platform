@@ -147,6 +147,26 @@ class EvidenceIndexTest(unittest.TestCase):
         row["sha256"] = digest; row["sessionId"] = "other"; blob.write_text(json.dumps(row) + '\n')
         self.assertEqual(self.collect()["status"], "unknown")
 
+    def test_final_turn_files_are_bound_to_the_evidence_index(self):
+        agent = self.trials[1, "source"] / "agent"
+        (agent / "trace-invocations.jsonl").write_text('')
+        turn = {"sessionId": "fixture", "turnId": "turn-1", "invocations": [],
+                "request": {"body": json.dumps({"providerRequest": {"messages": []}})}}
+        raw = json.dumps(turn).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        body = agent / "trace-turns" / (digest + ".json")
+        body.parent.mkdir()
+        body.write_bytes(raw)
+        self.set_trace({"artifactSchema": 3, "data": {"traces": [
+            {"sessionId": "fixture", "id": "turn-1", "sha256": digest}]}})
+        index = self.collect()
+        self.assertEqual(index["status"], "complete")
+        self.assertTrue(any(item["role"] == "scriptact_turn" and item["sha256"] == digest for item in index["artifacts"]))
+        body.write_text('{}')
+        self.assertEqual(self.collect()["status"], "unknown")
+        body.unlink()
+        self.assertEqual(self.collect()["status"], "unknown")
+
     def test_missing_sdk_body_and_partial_trace_are_unknown(self):
         self.set_trace({"traces": [{"request": {}}]})
         self.assertEqual(self.collect()["status"], "partial")

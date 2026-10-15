@@ -107,7 +107,7 @@ export async function cdpClient(origin) {
       const key = '__nativeDebugSnapshot_' + randomUUID()
       const request = JSON.stringify({ sessionId, branch })
       const expression =
-        '(async()=>{const {rendererIpc}=await import("/src/ipc/index.ts");const r=await rendererIpc.chat.getDebugTrace(' +
+        '(async()=>{const r=await window.electron.ipcRenderer.invoke("chat:get-debug-trace",' +
         request +
         ');if(!r.ok)throw Error(r.error.message);const text=JSON.stringify(r.data);globalThis[' +
         JSON.stringify(key) +

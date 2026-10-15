@@ -1,0 +1,28 @@
+{
+  "id": "p-queue-settled-shutdown",
+  "split": "holdout",
+  "repository": "https://github.com/sindresorhus/p-queue",
+  "commit": "70518bfadac2dadb63aa6428fd2788500add4436",
+  "prompt": "Add a safe queue-shutdown API to this real p-queue repository. A service must reject work which has not started while allowing in-flight jobs to finish normally. Add public clearAndReject(reason?: unknown): number. It removes all currently queued work, rejects each still-unsettled queued add() promise with the exact supplied reason, and returns the number of promises newly rejected. Omitted or undefined reason creates one Error with a nonempty message for that invocation, shared by all promises rejected in that call. Preserve any other reason by identity, including null, false, zero, strings, symbols and objects. Running jobs keep their normal result, timeout and cancellation behavior. Do not execute a removed task function. Duplicate task IDs must not merge jobs or lose rejections.\n\nThe method must synchronously update queue.size, preserve pending/runningTasks, pause and concurrency settings, and preserve rate-limiting history exactly as existing clear(), including strict rolling-window limits. Existing onEmpty(), onSizeLessThan() and onIdle() waiters must behave like clear(): empty/size waiters can resolve immediately, while idle waits for running work. Emit the existing clear notifications, without emitting active, completed or error events for jobs that never ran. Reentrant additions from clear notifications are new work and must remain available under normal queue rules; the call only rejects the original queued set.\n\nRemove queued AbortSignal listeners when rejecting work. A later signal abort must not start work, emit more queue notifications, change pending or change the rejection reason. Jobs already rejected by queued abort are not newly rejected and do not count, even with a custom queueClass which lacks the optional remove() method and retains a stale queue entry. Support existing custom queue classes through the current queue interface, without requiring a new method. Subsequent calls on an empty queue return zero, and the same instance must remain usable with priorities, addAll(), task IDs and later abort signals.\n\nPreserve clear() exactly: it still discards waiting jobs without settling their returned promises, and later clearAndReject() must not reject those discarded promises. Preserve the original public API, dependency declarations, version, export map and original tests. Implement the method in the TypeScript source so the normal build emits its public declaration. Add maintained tests for rejection identity/counts, running versus waiting work, queued abort cleanup, custom queues, waiter/event behavior, reentrant additions, rate limits and legacy clear. Document usage, defaults, promise handling, and running-work behavior in README. Add a self-contained offline examples/clear-and-reject.mjs, runnable with node after the normal build and without arguments, demonstrating shutdown rejection while a running task completes. Run the full original Node test suite, your new tests, the TypeScript build and the actual example. Report actual results and remaining gaps. Do not publish or commit.",
+  "environment": {
+    "runtime": "node",
+    "project": "p-queue",
+    "acceptance": "test_p_queue_clear_and_reject.mjs",
+    "regressionRunner": "node-json",
+    "regressionEntry": "node_modules/tsx/dist/esm/index.mjs",
+    "regression": [
+      "test/*.ts"
+    ],
+    "preserve": [
+      "test",
+      "test-d",
+      "package.json",
+      "tsconfig.json"
+    ],
+    "build": {
+      "entry": "node_modules/typescript/bin/tsc",
+      "args": []
+    },
+    "baselineFailure": "exports clearAndReject"
+  }
+}

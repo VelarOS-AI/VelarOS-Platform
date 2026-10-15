@@ -3,16 +3,19 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 import { toTrajectory } from '../harbor/atif.mjs'
 import { runCapturedCommand } from './command-output.mjs'
+import { freezeHarness } from './freeze-harness.mjs'
+import { executionIsolation } from './execution-isolation.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
 import {
   buildNodeProject,
+  validateMaintainedNodeProject,
   copyNodeDependencies,
   nodeRegressionReport,
   nodeDependencyState,
@@ -21,27 +24,35 @@ import {
 import {
   acquireTaskResources,
   archiveTaskResources,
+  checkTaskCopyBudget,
   checkTaskResourceBudget,
+  createTaskProcessGuard,
   registerTaskResources,
 } from './resource-lifecycle.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
+import { freezeRuntimeCompletion, runtimeCompletionOptions } from './runtime-completion.mjs'
 import {
   runtimeCapabilityOptions,
+  runtimeContextPolicy,
   runtimeEditingPrompt,
   runtimeSubmissionOptions,
 } from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
+  copyPythonEnvironment,
+  bindPythonCheckout,
   createTaskRoot,
   copyTaskWorkspace,
   acceptanceArguments,
   applyTaskEnvironment,
   pythonTaskPath,
+  pythonProcessEnvironment,
   regressionArguments,
   regressionEnvironment,
   taskEnvironment,
   taskPrompt,
   taskTemporaryEnvironment,
+  verifyCommandEnvironment,
 } from './task-environment.mjs'
 
 const execute = promisify(execFile)
@@ -49,6 +60,8 @@ const root = resolve(import.meta.dirname, '../../..')
 const campaign = resolve(process.argv[2])
 const configPath = resolve(process.argv[12] ?? join(campaign, 'config.json'))
 const config = JSON.parse(await readFile(configPath, 'utf8'))
+const isolation = executionIsolation()
+assert(!config.desktop, 'An external Desktop process cannot inherit the evaluation signal boundary')
 assert.equal(typeof config.model, 'string')
 assert.equal(typeof config.credentials, 'string')
 assert.equal(config.pricing.model, config.model)
@@ -62,6 +75,11 @@ for (const key of [
 ])
   assert(Number.isSafeInteger(config[key]) && config[key] > 0, `Missing positive campaign ${key}`)
 assert(config.inputWindowTokens + config.outputTokens < config.contextTokens)
+runtimeContextPolicy(config)
+assert(
+  !config.desktop || config.runtimeRetainedFrameRatio === undefined,
+  'Retained frame ablation requires direct Runtime configuration'
+)
 const attemptId = process.argv[3] ?? 'rich-01'
 const candidateName = process.argv[4] ?? 'candidate-v1'
 const participants = process.argv[5] === 'scriptact' ? ['scriptact'] : ['scriptact', 'codex']
@@ -103,9 +121,23 @@ let prepared = false
 let preparationFailure
 try {
   await checkTaskResourceBudget(resources)
+  const commandPreflight = await verifyCommandEnvironment(commandEnvironment, Boolean(node))
+  commandEnvironment.commands = commandPreflight.commands
+  await writeFile(join(output, 'command-preflight.json'), JSON.stringify(commandPreflight, null, 2))
+  if (participants.includes('codex')) {
+    const workspace = join(taskRoot, 'process-preflight')
+    const directory = join(output, 'process-preflight')
+    await mkdir(workspace)
+    await mkdir(directory)
+    const guard = await createTaskProcessGuard(resources, workspace, directory)
+    assert.equal((await guard.stop()).scopeEmpty, true)
+  }
   const temporaryEnvironment = await taskTemporaryEnvironment(taskRoot)
   Object.assign(process.env, temporaryEnvironment)
   const source = join(taskRoot, 'source', environment.project)
+  await checkTaskCopyBudget(resources, [
+    { source: join(campaign, 'sources', environment.project), destination: source },
+  ])
   await execute('git', [
     'clone',
     '-q',
@@ -118,18 +150,20 @@ try {
     task.commit
   )
   if (node) await copyNodeDependencies(join(campaign, 'sources', environment.project), source)
-  else await cp(join(campaign, environment.python), join(taskRoot, 'python'), { recursive: true })
+  else await copyPythonEnvironment(join(campaign, environment.python), join(taskRoot, 'python'))
   await checkTaskResourceBudget(resources)
   const python = node ? undefined : join(taskRoot, 'python/bin/python')
   const executable = node ?? python
   const originalGrader = join(import.meta.dirname, environment.acceptance)
   // 原项目测试可以生成文件；只在独立基线副本执行，冻结源码保持逐字不变。
   const baselineSource = join(taskRoot, 'baseline', environment.project)
+  await checkTaskCopyBudget(resources, [{ source, destination: baselineSource }])
   await copyTaskWorkspace(source, baselineSource, environment.runtime)
   if (node) await copyNodeDependencies(source, baselineSource)
+  else await bindPythonCheckout(python, baselineSource)
   await checkTaskResourceBudget(resources)
   const env = {
-    ...process.env,
+    ...(node ? process.env : pythonProcessEnvironment(python)),
     PYTHONPATH: pythonTaskPath(baselineSource),
     PYTHONDONTWRITEBYTECODE: '1',
   }
@@ -141,6 +175,23 @@ try {
       baselineBuild.exitCode,
       0,
       'The original project build must pass before a paid run'
+    )
+  }
+  const baselineMaintained = await validateMaintainedNodeProject(
+    environment,
+    baselineSource,
+    node,
+    env
+  )
+  if (baselineMaintained) {
+    await writeFile(
+      join(output, 'baseline-maintained-validation.json'),
+      JSON.stringify(baselineMaintained, null, 2)
+    )
+    assert.equal(
+      baselineMaintained.exitCode,
+      0,
+      'The original maintained validation command must pass before a paid run'
     )
   }
   const baselineRegression = await runCapturedCommand(
@@ -243,24 +294,11 @@ try {
   const files = {}
   const hash = (value) => createHash('sha256').update(value).digest('hex')
   const harness = join(output, 'harness/agent')
-  async function collect(directory, sourceRoot, destinationRoot) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name)
-      if (entry.isDirectory() && !['__pycache__', 'node_modules'].includes(entry.name))
-        await collect(path, sourceRoot, destinationRoot)
-      else if (entry.isFile() && /\.(mjs|py|json)$/u.test(path)) {
-        const destination = join(destinationRoot, relative(sourceRoot, path))
-        await mkdir(dirname(destination), { recursive: true })
-        await cp(path, destination)
-        files[destination] = hash(await readFile(destination))
-      }
-    }
-  }
   const agentScripts = resolve(import.meta.dirname, '..')
-  await collect(agentScripts, agentScripts, harness)
+  Object.assign(files, await freezeHarness(agentScripts, harness))
   // 受控进程与打包器的所属脚本一起冻结，包含它们的本地依赖。
   const releaseScripts = join(root, 'scripts/release')
-  await collect(releaseScripts, releaseScripts, join(output, 'harness/release'))
+  Object.assign(files, await freezeHarness(releaseScripts, join(output, 'harness/release')))
   // 从冻结副本验证真实执行链；缺少依赖时在任何模型请求之前失败。
   const frozenCommands = await import(pathToFileURL(join(harness, 'long-tasks/command-output.mjs')))
   const harnessPreflight = await frozenCommands.runCapturedCommand(
@@ -274,6 +312,80 @@ try {
   files[codex] = hash(await readFile(codex))
   files[commandEnvironment.node] = hash(await readFile(commandEnvironment.node))
   const candidate = join(campaign, candidateName)
+  const runtimeCompletion = await freezeRuntimeCompletion(config.runtimeCompletion, output)
+  let runtimeCompletionPreflight
+  if (runtimeCompletion) {
+    assert(!config.desktop, 'Runtime completion host configuration is only for direct Runtime runs')
+    files[runtimeCompletion.module] = runtimeCompletion.sha256
+    const workspace = join(taskRoot, 'completion-preflight')
+    await mkdir(workspace)
+    const text = 'Real workspace artifact for completion host readiness.'
+    await writeFile(join(workspace, 'readiness.txt'), text)
+    const createValidationHost = runtimeCompletion.validation
+      ? (await import(pathToFileURL(join(candidate, 'packages/velaros/dist/act/runtime/index.js'))))
+          .createNodeCompletionValidationHost
+      : undefined
+    const completion = await runtimeCompletionOptions(runtimeCompletion, workspace, {
+      createValidationHost,
+      executable: commandEnvironment.node,
+    })
+    const result = await completion.artifacts.capture(
+      ['file:readiness.txt'],
+      4096,
+      new AbortController().signal
+    )
+    assert.deepEqual(result.issues, [])
+    if (runtimeCompletion.validation) {
+      const validation = await completion.validation.execute(
+        {
+          requirementIds: ['readiness'],
+          artifacts: [{ identity: 'file:readiness.txt', sha256: hash(Buffer.from(text)) }],
+          fingerprint: result.fingerprint,
+          timeoutMs: 15000,
+          maxOutputBytes: 4096,
+          code: `import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const files=JSON.parse(process.env.VELAR_REVIEW_INPUTS);assert.equal(await readFile(new URL(files['file:readiness.txt']),'utf8'),${JSON.stringify(text)});console.log('frozen-validation-ready');`,
+        },
+        AbortSignal.timeout(20000)
+      )
+      await writeFile(
+        join(output, 'runtime-validation-preflight.json'),
+        JSON.stringify(validation, null, 2) + '\n',
+        { flag: 'wx' }
+      )
+      assert.equal(
+        validation.status,
+        'passed',
+        'Frozen independent validation host must pass before model dispatch'
+      )
+      assert.equal(validation.stdout.trim(), 'frozen-validation-ready')
+    }
+    // 可选字段显式为 undefined 与缺省同义；仍要求实际完整正文及其原字节指纹。
+    assert.deepEqual(
+      result.materials.map(({ identity, text }) => ({ identity, text })),
+      [{ identity: 'file:readiness.txt', text }]
+    )
+    assert.equal(result.materials[0].metadata, undefined)
+    assert.equal(result.fingerprint.status, 'versioned')
+    assert.equal(result.fingerprint.artifacts.length, 1)
+    assert.equal(result.fingerprint.artifacts[0].identity, 'file:readiness.txt')
+    assert.equal(result.fingerprint.artifacts[0].contentHash, hash(text))
+    runtimeCompletionPreflight = { kind: completion.kind, artifactReadVerified: true }
+    await writeFile(
+      join(output, 'runtime-completion-preflight.json'),
+      JSON.stringify({ ...runtimeCompletionPreflight, result }, null, 2)
+    )
+  }
+  if (config.desktop) {
+    for (const key of ['endpointFile', 'settingsFile', 'cdp', 'artifactManifest'])
+      assert.equal(typeof config.desktop[key], 'string', `Missing Desktop ${key}`)
+    const desktopArtifacts = JSON.parse(await readFile(config.desktop.artifactManifest, 'utf8'))
+    assert(desktopArtifacts.files.length > 0, 'Desktop build identity is required')
+    files[config.desktop.artifactManifest] = hash(await readFile(config.desktop.artifactManifest))
+    for (const item of desktopArtifacts.files) {
+      assert.equal(hash(await readFile(item.path)), item.sha256, 'Desktop artifacts changed')
+      files[item.path] = item.sha256
+    }
+  }
   // 能力由本次配置冻结，不继承历史供应商假设。
   const providerCapabilities = config.providerCapabilities ?? {}
   const modelWirePreflight = await verifyCampaignDriver(
@@ -297,13 +409,18 @@ try {
     'ATIF-v1.8'
   )
   const grader = join(harness, 'long-tasks', environment.acceptance)
-  const controller = join(harness, 'long-tasks/run.mjs')
+  const controller = join(harness, 'long-tasks/launch.mjs')
+  const worker = join(harness, 'long-tasks/run.mjs')
   const manifest = {
     schema: 1,
+    campaignId: config.campaignId ?? 'long-runtime-20261004',
     createdAt: new Date().toISOString(),
     attemptId,
     participants,
     controller,
+    worker,
+    campaignDirectory: campaign,
+    executionIsolation: isolation,
     task,
     environment,
     taskRoot,
@@ -318,11 +435,19 @@ try {
     codexVersion,
     dependencyLock,
     baselineRegression: { cases: baselineRegression.cases, verdict: baselineRegression.verdict },
+    baselineMaintainedValidation: baselineMaintained
+      ? { exitCode: baselineMaintained.exitCode, output: 'baseline-maintained-validation.json' }
+      : null,
     executionEnvironments,
     candidate,
     candidateId,
     candidateSourceCommit,
     candidateSourceDirty: candidateIdentity.sourceDirty ?? null,
+    ...(config.desktop ? { desktop: config.desktop } : {}),
+    ...(config.runtimeRetainedFrameRatio === undefined
+      ? {}
+      : { runtimeRetainedFrameRatio: config.runtimeRetainedFrameRatio }),
+    ...(runtimeCompletion ? { runtimeCompletion, runtimeCompletionPreflight } : {}),
     scriptactSessionId: `scriptact-${randomUUID()}`,
     scriptactCapabilities,
     scriptactTaskMode,
@@ -350,7 +475,11 @@ try {
       }[scriptactCapabilities],
       limitations: [
         'Task is newly authored and frozen on a real upstream project; model training exposure is unknown',
-        'Runtime host comparison; this attempt does not exercise Desktop renderer integration',
+        config.desktop
+          ? 'Desktop Hook, renderer, ChatService and product Runtime, including independent completion review'
+          : runtimeCompletion
+            ? 'Runtime host with independent completion review and a frozen production artifact adapter; Desktop renderer integration is separate'
+            : 'Runtime host without independent completion review; Desktop renderer integration is separate',
       ],
     },
     prompt: taskPrompt(task, executable),
@@ -394,6 +523,7 @@ try {
       controller,
       participants,
       baselinePassed: baselineRegression.verdict.suitePassed,
+      baselineMaintainedPassed: baselineMaintained ? baselineMaintained.exitCode === 0 : null,
       baselineKnownFailures: baselineRegression.verdict.knownFailures,
       baselineRejectedByFeatureChecks: true,
     })

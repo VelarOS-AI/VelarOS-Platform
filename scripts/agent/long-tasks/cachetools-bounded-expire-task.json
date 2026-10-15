@@ -1,0 +1,22 @@
+{
+  "id": "cachetools-bounded-expiration",
+  "split": "holdout",
+  "repository": "https://github.com/tkem/cachetools",
+  "commit": "be68aedd0e5ae7f803d541d189636cdfbc532d95",
+  "prompt": "Add bounded explicit expiration to this real cachetools repository. A service periodically collects expired entries and handles their removal in batches; it must be able to remove at most a chosen number on each explicit sweep without truncating only the returned list after already deleting everything. Extend both TTLCache.expire and TLRUCache.expire to expire(time=None, *, limit=None), preserving their existing list of (key, value) pairs and all default behavior. This is an additive public API; update shipped type stubs as well.\n\nlimit=None retains the current unlimited behavior. A nonnegative Python int (including int subclasses, excluding bool) limits the number of actual current entries removed and returned. limit=0 returns [] without reading the timer or changing cache entries, size accounting, eviction order or expiry structures. Other types raise TypeError and negative ints raise ValueError before reading the timer or mutating cache state, including on an empty cache. limit is keyword-only; the existing positional time argument remains supported. Do not coerce floats, strings, __index__ objects or booleans. For a positive/unlimited sweep with time=None, take one timer snapshot; an explicit time does not invoke the timer. Custom comparable time domains such as datetime/timedelta must continue to work.\n\nOnly entries with expiry <= the chosen time are removed. A finite sweep removes the earliest-expiring current entries up to the limit. Equal expiry times may use any existing tie order; keys need not support ordering. Return each removed key and its actual stored value, once, retaining value identity. Repeated sweeps at the same time continue from remaining entries until empty. Do not change remaining deadlines or LRU order. In TLRUCache, overwritten/deleted heap tombstones are not current entries: they must not count toward the limit, be returned, delete a newer value for the same key or prevent removal of eligible live entries. Keep weighted getsizeof/current size accounting correct. This API bounds entry removals and result size; it does not promise a hard wall-clock or heap housekeeping work bound.\n\nExpired entries left physically stored by a bounded sweep remain logically inaccessible through normal reads/membership/iteration. Existing implicit expiration in insertion, len(), currsize, repr(), popitem() and other existing operations remains unlimited. Callers wanting bounded explicit sweeps must understand that a later ordinary operation can purge more. Preserve subclass compatibility for existing expire(self, time=None) overrides during all existing operations: do not pass a new keyword from those old internal call sites. Cache updates, deletes, clear, copy/pickle behavior, eviction order and decorators must remain compatible. Do not add dependencies or change versions.\n\nDeliver focused maintained tests for both cache types covering zero/invalid limits before timer access, boundaries, multiple batches, explicit time and one implicit timer snapshot, custom time values, weighted values, TLRU overwritten/deleted entries, arbitrary keys, continuing cache operations and legacy subclass overrides. Update API documentation with limits and implicit-cleanup caveats and a runnable offline examples/bounded_expire.py demonstrating batches for both cache types. Run the original tests and the new tests, run the example, and report actual validation and remaining gaps.",
+  "environment": {
+    "project": "cachetools",
+    "python": "cachetools-env",
+    "acceptance": "test_cachetools_bounded_expire.py",
+    "regressionRunner": "pytest",
+    "regression": [
+      "tests"
+    ],
+    "preserve": [
+      "tests",
+      "pyproject.toml",
+      "tox.ini"
+    ],
+    "baselineFailure": "test_exports_bounded_expire"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "id": "eventemitter3-wait-for",
+  "split": "holdout",
+  "repository": "https://github.com/primus/eventemitter3",
+  "commit": "b0144e940ace8add8f335a8adfbed9284eb419f3",
+  "environment": {
+    "project": "eventemitter3",
+    "runtime": "node",
+    "regressionEntry": "node_modules/mocha/bin/mocha.js",
+    "acceptance": "test_eventemitter3_wait_for.mjs",
+    "regression": [
+      "test/*.js",
+      "test/*.mjs"
+    ],
+    "regressionRunner": "mocha-json",
+    "preserve": [
+      "test",
+      "package.json",
+      "rollup.config.mjs"
+    ],
+    "baselineFailure": "waitFor exists on both public entrypoints",
+    "build": {
+      "entry": "node_modules/rollup/dist/bin/rollup",
+      "args": [
+        "-c"
+      ]
+    },
+    "maintainedValidation": {
+      "entry": "node_modules/c8/bin/c8.js",
+      "args": [
+        "--reporter=lcov",
+        "--reporter=text",
+        "mocha",
+        "test/test.js"
+      ]
+    }
+  },
+  "prompt": "Add EventEmitter.prototype.waitFor(event, options) to this real eventemitter3 package as a Promise-based one-event wait. Preserve the existing CJS, ESM, browser, listener ordering and typed-event contracts. Keep package.json, original tests, and rollup.config.mjs byte-for-byte; add tests in new files. Do not publish or commit.\n\nwaitFor returns a Promise resolving to a fresh array containing every argument from the next emission of event, preserving argument identity. The event listener must be registered synchronously before waitFor returns, so an immediate emit is observable. Each wait settles only once. Multiple simultaneous waits are independent; completing one wait must never remove unrelated listeners. String and symbol event names are valid, including the empty string and names such as __proto__ and error. All invalid inputs reject the returned Promise instead of throwing synchronously.\n\noptions may be omitted or undefined, otherwise it must be an ordinary object (including a null-prototype object), with only the own string keys signal and timeout. Arrays, null, functions and unknown own keys are invalid. event must be a string or symbol and is validated first. timeout may be omitted or undefined, or an integer number between 0 and 2147483647 inclusive; other values reject with TypeError. A timeout uses a real timer and rejects an Error with code ERR_EVENTEMITTER_TIMEOUT and a nonempty message. Zero timeout runs on the timer turn: synchronous emit immediately after waitFor wins. Clear the pending timeout on every settlement path.\n\nsignal may be omitted or undefined, or an AbortSignal-compatible object with boolean aborted and callable addEventListener/removeEventListener. Reject invalid signal shapes with TypeError. An already-aborted signal rejects with its reason by identity without registering event/abort listeners or a timer. Aborting an active wait rejects with the exact reason, including null. Remove the abort listener and event listener on success, abort and timeout. Never alter unrelated listeners or the signal. Consumer code may attach rejection handlers after waitFor returns, as with normal Promises.\n\nExpose accurate generic types: an event mapped to a tuple or listener function must infer the corresponding argument tuple in Promise<EventArgs>. Export EventEmitter.WaitForOptions for the options type. The declaration must remain usable by TypeScript consumers with only lib ES2020, without requiring Node types or DOM globals; its structural signal contract must also accept a native AbortSignal in a DOM-enabled consumer. Keep the runtime browser-safe without Node imports or globals, eval, or new Function.\n\nAdd docs/waitFor.md and link it from README.md. Document listener lifetime, timeout validation, cancellation identity and independent concurrent waits. Add examples/wait-for.mjs as an executable offline example asserting successful args, abort and timeout. Add maintained Mocha tests in new files, including synchronous emission, concurrent waits, unrelated listeners, signal cleanup, timeout races and invalid-input rejection. Add repeatable strict TypeScript checks for typed tuples, function events, wrong event names, and wrong argument tuple expectations, including a DOM-free consumer. TypeScript 5.9.3 is already installed in the frozen environment; preserve the original dependency declarations.\n\nRun the original npm test and npm run test-esm, all original and new tests, the offline example, and the existing Rollup build. Retain a repeatable package verification script and actually pack with lifecycle scripts disabled into an exclusive temporary directory, install into a fresh external private consumer, and verify public CJS/ESM imports plus normal and minified UMD browser bundles with dynamic code generation disabled. Report actual commands, results and limitations. Finish after the feature, maintained tests, types, documentation, example and real package verification are complete."
+}

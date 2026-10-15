@@ -1,5 +1,24 @@
 import assert from 'node:assert/strict'
 
+// 保留比例是预先冻结的独立消融条件；缺省使用候选自身默认值。
+export function runtimeContextPolicy(config) {
+  const { inputWindowTokens, runtimeRetainedFrameRatio } = config
+  assert(Number.isSafeInteger(inputWindowTokens) && inputWindowTokens >= 1024)
+  if (runtimeRetainedFrameRatio !== undefined)
+    assert(
+      Number.isFinite(runtimeRetainedFrameRatio) &&
+        runtimeRetainedFrameRatio >= 0 &&
+        runtimeRetainedFrameRatio <= 1,
+      'Invalid frozen Runtime retained frame ratio'
+    )
+  return {
+    windowTokens: inputWindowTokens,
+    ...(runtimeRetainedFrameRatio === undefined
+      ? {}
+      : { retainedFrameRatio: runtimeRetainedFrameRatio }),
+  }
+}
+
 // 只改变可选业务能力；执行、上下文整理、模型限制与评分流程共用同一候选。
 export function runtimeCapabilityOptions(mode = 'on-demand') {
   assert(['on-demand', 'node', 'project'].includes(mode), 'Unknown ScriptAct capability mode')

@@ -1,0 +1,23 @@
+{
+  "id": "p-limit-per-call-queued-abort",
+  "split": "holdout",
+  "repository": "https://github.com/sindresorhus/p-limit",
+  "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+  "prompt": "Implement per-call queued cancellation in this real p-limit repository. A client rendering changing search results must be able to withdraw an obsolete queued request without clearing unrelated jobs. Add limit.withSignal(signal, fn, ...args): Promise<Awaited<ReturnType<typeof fn>>>. It shares the same concurrency, FIFO ordering, activeCount, pendingCount and clearQueue behavior as ordinary limit calls. signal must be an AbortSignal; invalid values and a non-function fn reject with TypeError without invoking user code or changing the queue. An already-aborted signal rejects with the exact signal.reason, including a non-Error reason. Until the actual invocation of fn begins, aborting must promptly reject that call with the exact reason, remove it from pending accounting, and release any reserved slot so other work progresses. In particular, abort immediately after submitting to an idle limiter must prevent the deferred fn from being invoked. Once fn has begun, this API no longer cancels it: its actual resolution or rejection wins and the library does not pass the signal as an extra argument. Users can close over that signal for cooperative running work. Aborting any queued item must preserve the FIFO order of all surviving jobs and never exceed the current concurrency. Changing concurrency, sync throws, rejected thenables, reentrant scheduling and interleaving ordinary calls must continue working. Preserve caller AsyncLocalStorage context for each fn invocation. Detach abort listeners when an entry starts, is aborted, or is cleared; clearing with the existing default rejectOnClear=false leaves discarded promises pending and later abort must not revive/settle them, while rejectOnClear=true rejects discarded entries with the existing AbortError contract. Do not change the behavior of ordinary limit, map or limitFunction calls. Keep the API additive and the dependency versions unchanged. Deliver implementation, exported TypeScript declarations that infer argument tuples and sync/async return values, maintained AVA and type tests covering early abort, middle-of-queue abort, after-start abort, clearQueue modes, dynamic concurrency and context preservation, README documentation, and a runnable offline examples/queued-abort.js. Run original AVA and type tests plus new tests. Report actual validation and remaining gaps.",
+  "environment": {
+    "runtime": "node",
+    "project": "p-limit",
+    "acceptance": "test_p_limit_queued_abort.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": [
+      "test.js"
+    ],
+    "preserve": [
+      "test.js",
+      "index.test-d.ts",
+      "package.json"
+    ],
+    "baselineFailure": "exports per-call queued cancellation"
+  }
+}

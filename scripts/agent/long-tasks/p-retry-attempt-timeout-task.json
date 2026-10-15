@@ -1,0 +1,17 @@
+{
+  "id": "p-retry-cooperative-attempt-timeout",
+  "split": "development",
+  "repository": "https://github.com/sindresorhus/p-retry",
+  "commit": "1472907affe8d6107aba5884abc36d6361b3042e",
+  "prompt": "Implement per-attempt timeouts in this real p-retry repository. A client retrying a remote request needs a bounded attempt and a cooperative AbortSignal without losing the existing retry policy. Add options.attemptTimeout in milliseconds: omitted or Infinity disables the attempt deadline, a positive finite number enables it, and all other values reject with TypeError before input or callbacks run. Export TimeoutError extends Error with name 'TimeoutError', readonly attemptNumber and attemptTimeout fields. A deadline failure uses that class and participates in the ordinary failure callbacks and retry budget, including shouldConsumeRetry=false. Pass input a second argument {signal}, an AbortSignal owned by that attempt; each attempt gets a fresh signal, and the first argument remains the 1-based attempt number. When the attempt deadline fires, abort its signal with the very same TimeoutError passed through the retry callbacks and settle the attempt even if input ignores cancellation. A parent options.signal abort must promptly reject the overall retry with its exact reason while input or any asynchronous failure callback is pending, abort the active attempt signal, prevent later callbacks and attempts, and take precedence over late input or callback results. A successful or failed attempt must dispose its deadline and parent listeners; successful attempt signals must not become aborted later. Observe late input/callback rejections so they never become unhandled. Existing AbortError, TypeError, backoff, maxRetryTime, retries and makeRetriable behavior must remain compatible. Explain that a deadline cannot forcibly stop an uncooperative input, so callers should pass the supplied signal to their I/O. Deliver implementation, public TypeScript types for the second argument and TimeoutError, focused tests including cancellation during all three async callbacks and late rejection, README usage/semantics, and a runnable offline examples/attempt-timeout.js showing a timed-out first attempt and a successful retry. Keep the original tests and public exports; run the original AVA and type tests plus your new tests. Do not change dependency versions. Report actual validation and any remaining gaps.",
+  "environment": {
+    "runtime": "node",
+    "project": "p-retry",
+    "acceptance": "test_p_retry_attempt_timeout.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": ["test.js"],
+    "preserve": ["test.js", "index.test-d.ts", "package.json"],
+    "baselineFailure": "exports a TimeoutError class"
+  }
+}

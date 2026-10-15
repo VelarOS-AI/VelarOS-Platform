@@ -1,0 +1,25 @@
+{
+  "id": "tar-stream-bounded-extraction",
+  "split": "holdout",
+  "repository": "https://github.com/mafintosh/tar-stream",
+  "commit": "d49f05b495b432d57042d461bd91036b58439c6a",
+  "prompt": "Add bounded extraction to this real tar-stream package. An archive ingestion service needs limits before it hands each entry to application code. Extend extract options with maxEntries, maxEntrySize and maxTotalSize. Each may be omitted, undefined or Infinity for unlimited, or a nonnegative safe integer number (including zero). Reject every other value synchronously with TypeError from extract(), without coercion. Validate in the order maxEntries, maxEntrySize, maxTotalSize and preserve the existing Writable options.\n\nCount every emitted application entry, including empty files, directories and links. maxEntrySize limits that entry's final effective header.size, and maxTotalSize limits the sum of effective header sizes of emitted entries. TAR block padding, end markers, and GNU long-name/long-link and PAX local/global extension records do not count toward any of these limits. Apply the package's existing long-header and PAX overrides before checking an application entry; report its final effective name. Preserve existing extension parsing and format behavior. Whenever at least one limit is finite, an effective application entry size that is negative or not a safe integer must fail before emission with an Error whose code is TAR_INVALID_SIZE. Do this size validation before the limit checks. With all limits unlimited, preserve the old size/format behavior.\n\nExport an ExtractLimitError class extending Error, with name ExtractLimitError, code TAR_EXTRACT_LIMIT, and fields limit (the violated option name), maximum, actual and entryName. Its public constructor accepts (limit, maximum, actual, entryName). For maxEntries, actual is the attempted entry count; for maxEntrySize, it is the effective entry size; for maxTotalSize, it is the attempted total. If multiple limits are exceeded, report maxEntries first, then maxEntrySize, then maxTotalSize. Bound cumulative checks without unsafe arithmetic allowing an over-limit entry through. Limits are per extractor and are snapshotted when extract() is constructed; subsequently mutating the options object must not change them.\n\nReject at the offending application header, before emitting that entry or exposing its body. The extractor must emit its normal stream error, propagate that same error through an ordinary pipeline and close cleanly, and stop accepting later entries. This must work even if the caller has sent only the offending header and has not ended the input. Preserve accepted earlier entries and normal stream backpressure. Both the entry-event API and existing async iteration API must enforce the same limits; the feature must not buffer an archive or an entire entry to make its decision.\n\nDeliver the implementation, public ExtractOptions extending the existing WritableOptions, updated extract() typing, exported ExtractLimitError with readonly TypeScript fields, focused maintained tests in new test files, README usage and limitations, and examples/extraction-limits.js as an executable offline example that checks a normal bounded extraction and a rejected archive. Preserve package.json, package-lock.json, all original tests/fixtures, and dependency versions byte-for-byte. Run the original Brittle tests and Standard lint, your new tests, the offline example and a TypeScript consumer check. You may use an existing TypeScript compiler or install a pinned compiler into an exclusive temporary directory without changing project dependency files. Do not commit or publish. Report actual commands, results and remaining gaps; finish after the complete delivery has been validated.",
+  "environment": {
+    "runtime": "node",
+    "project": "tar-stream",
+    "acceptance": "test_tar_stream_extraction_limits.mjs",
+    "regressionRunner": "brittle-tap",
+    "regressionEntry": "node_modules/brittle/brittle-node.js",
+    "regression": [
+      "test/dual.js",
+      "test/extract.js",
+      "test/pack.js"
+    ],
+    "preserve": [
+      "test",
+      "package.json",
+      "package-lock.json"
+    ],
+    "baselineFailure": "ExtractLimitError is publicly exported"
+  }
+}

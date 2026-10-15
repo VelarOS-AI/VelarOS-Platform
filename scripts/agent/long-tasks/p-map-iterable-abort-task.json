@@ -1,0 +1,28 @@
+{
+  "id": "p-map-iterable-cancellation-lifecycle",
+  "split": "development",
+  "repository": "https://github.com/sindresorhus/p-map",
+  "commit": "d61b6a33cc1d5533ad5711b435959f3f78c3d2fe",
+  "environment": {
+    "runtime": "node",
+    "project": "p-map",
+    "acceptance": "test_p_map_iterable_abort.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": [
+      "test.js",
+      "test-multiple-pmapskips-performance.js",
+      "test-pmap-iterable-performance.js"
+    ],
+    "preserve": [
+      "test.js",
+      "test-multiple-pmapskips-performance.js",
+      "test-pmap-iterable-performance.js",
+      "assert-in-range.js",
+      "count-array-work.js",
+      "package.json"
+    ],
+    "baselineFailure": "pMapIterable observes AbortSignal"
+  },
+  "prompt": "Add AbortSignal support to pMapIterable in this real p-map checkout so an application can cancel an obsolete asynchronous preview or import while upstream reads or mapper work are pending. Extend the maintained public IterableOptions type with readonly signal?: AbortSignal | undefined and preserve the existing APIs, options, dependency set, exports, input ordering, preserveOrder:false, concurrency, backpressure, pMapSkip and pMapStop behavior. Keep all existing runtime tests, test support files and package.json byte-for-byte unchanged. In index.test-d.ts, update only the now-obsolete assertion that pMapIterable rejects the signal option to a positive AsyncIterable<string> expectation, and adjust its adjacent comment as needed; preserve every other existing type assertion and statement byte-for-byte. Keep all other existing type-test files unchanged. Add maintained coverage in new test files. Make normal implementation choices autonomously.\n\nThe signal is optional. When supplied, validate the standard AbortSignal interface along with the existing synchronous option validation; null, primitives, and objects lacking boolean aborted plus callable addEventListener/removeEventListener are TypeErrors before input iteration or mapper invocation. Do not require same-realm instanceof identity. Constructing the iterable and obtaining its result iterator remain lazy: they must not acquire or pull the input iterator, invoke the mapper, or leave an abort listener before consumption starts. A signal already aborted before the first next() rejects that next() with the exact signal.reason, including non-Error and falsy values, without acquiring the input iterator. Subsequent next() calls after the abort has been observed return done:true.\n\nFor both preserveOrder modes, abort promptly rejects the consumer's pending next() or its next call with the exact reason even when an upstream next(), promised input value, or mapper never settles. Once abort is observed, do not issue further input pulls, start mappers, or yield buffered values. Already-started user work cannot be forcibly canceled: observe its eventual settlement so late rejections are not unhandled, and document this boundary. Do not delay abort delivery waiting for that work.\n\nFor an acquired source that has not reported done, abort requests iterator.return() exactly once when available, so it can release resources. Observe synchronous throws or eventual rejections from that cleanup without replacing the abort reason, and do not wait for an uncooperative return() before rejecting the consumer. Avoid duplicate close calls when the pending work later finishes. Remove the abort listener when the result iterator is finished by normal exhaustion, consumer break/return/throw, mapper or input error, pMapStop, or abort. Multiple independently consumed iterators from the returned iterable have independent state and listener lifetimes, including when they share one signal. Keep existing error identities and behavior when no abort occurs; a signal fired after consumption has already finished must have no effect.\n\nDeliver maintained runtime and type tests covering these lifecycle boundaries, not only a pre-aborted array. Update readme and public API type documentation with cancellation timing, retained in-flight work, cleanup behavior and a realistic use case. Add an offline examples/abort-iterable.js demonstration with assertions and cleanup; actually execute it. Run the original runtime suite, all maintained tests, XO and the type tests. Verify an independently installed packed public package in a fresh temporary consumer, including named ESM import and strict TypeScript consumption with signal and preserveOrder:false. Use an exclusive temporary output for packaging, preserve runtime dependencies and original package metadata, and include a repeatable verification command or script. Report actual checks and any gaps; continue until the implementation, documentation, example and validation are complete."
+}

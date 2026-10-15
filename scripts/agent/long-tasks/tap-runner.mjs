@@ -1,10 +1,22 @@
 // 使用冻结项目自己的 TAP parser 读取原测试的逐项结果，崩溃与不完整计划保留为失败。
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
 const require = createRequire(resolve('package.json'))
 const Parser = require('tap-parser')
+// 不同 TAP 主版本的 CLI 开关不同；只关闭项目自身明确支持的旧 ESM loader。
+const help = spawnSync(process.execPath, [process.argv[2], '--help'], {
+  encoding: 'utf8',
+  timeout: 10000,
+  maxBuffer: 1_000_000,
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
+if (help.status !== 0) {
+  process.stderr.write(`TAP option discovery failed: ${help.error?.message ?? help.stderr}\n`)
+  process.exit(1)
+}
+const supportsEsm = /(?:^|\s)--(?:no-)?esm(?:\s|=|$)/u.test(help.stdout)
 const parser = new Parser({ strict: true })
 const cases = []
 const occurrences = new Map()
@@ -41,7 +53,7 @@ const child = spawn(
   process.execPath,
   [
     process.argv[2],
-    '--no-esm',
+    ...(supportsEsm ? ['--no-esm'] : []),
     '--no-coverage',
     '--reporter=tap',
     '--jobs=1',

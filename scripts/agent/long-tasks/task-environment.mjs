@@ -11,12 +11,25 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises'
-import { basename, delimiter, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { validateBaselineIssues } from './regression.mjs'
 
 const execute = promisify(execFile)
+
+// 评分器会启动真实打包器；在任何付费调用前用冻结 PATH 检查工具链。
+export async function verifyCommandEnvironment(commandEnvironment, packaging = true) {
+  assert.equal(typeof commandEnvironment.path, 'string')
+  const environment = { ...process.env, PATH: commandEnvironment.path }
+  const commands = {}
+  for (const command of packaging ? ['node', 'npm', 'bun', 'git'] : ['node', 'git']) {
+    const result = await execute(command, ['--version'], { env: environment, timeout: 10000 })
+    commands[command] = result.stdout.trim()
+  }
+  assert.equal(commands.node, commandEnvironment.nodeVersion)
+  return { path: commandEnvironment.path, commands }
+}
 
 // 独占工作根使用执行用户的组；BSD 临时目录的继承组不能改变项目权限测试的语义。
 export async function createTaskRoot(prefix = '/private/tmp/vlr-') {
@@ -49,7 +62,15 @@ export function taskEnvironment(task) {
   assert(value.runtime === undefined || node)
   assert(
     (node
-      ? ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json', 'tap-json']
+      ? [
+          'mocha-json',
+          'jest-json',
+          'ava-tap',
+          'brittle-tap',
+          'vitest-json',
+          'tap-json',
+          'node-json',
+        ]
       : ['pytest', 'unittest']
     ).includes(regressionRunner)
   )
@@ -85,8 +106,10 @@ export function taskEnvironment(task) {
   }
   if (node) {
     assert.equal(python, undefined)
-    assert.match(value.regressionEntry, /^[a-zA-Z0-9][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
-    assert(!value.regressionEntry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
+    if (regressionRunner !== 'node-json' || value.regressionEntry !== undefined) {
+      assert.match(value.regressionEntry, /^[a-zA-Z0-9][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
+      assert(!value.regressionEntry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
+    }
     assert(
       !preserve.some((path) => path.split('/')[0] === 'node_modules'),
       'Node dependencies have a separate frozen restoration'
@@ -107,6 +130,19 @@ export function taskEnvironment(task) {
       args: [...value.build.args],
       ...(value.build.optional === undefined ? {} : { optional: value.build.optional }),
     }
+  }
+  // 原项目的完整测试/交付门禁单独声明；它必须保留参与者新增测试，不能套用旧回归的恢复目录。
+  if (value.maintainedValidation !== undefined) {
+    assert(node, 'Maintained validation commands require a Node task')
+    const command = value.maintainedValidation
+    assert(command && typeof command === 'object' && !Array.isArray(command))
+    assert(Object.keys(command).every((key) => ['entry', 'args'].includes(key)))
+    assert.equal(typeof command.entry, 'string')
+    assert.match(command.entry, /^[a-zA-Z0-9_][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
+    assert(!command.entry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
+    assert(Array.isArray(command.args))
+    assert(command.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
+    result.maintainedValidation = { entry: command.entry, args: [...command.args] }
   }
   if (value.regressionPreloads !== undefined) {
     assert(node, 'Regression preloads require a Node task')
@@ -196,19 +232,32 @@ export async function restoreTaskPaths(source, destination, paths) {
       )
       if (!stat) await mkdir(parent)
     }
-    await rm(join(destination, path), { recursive: true, force: true })
-    await cp(join(source, path), join(destination, path), {
-      recursive: true,
-      verbatimSymlinks: true,
+    // 受保护路径也可能在冻结源码中不存在；此时恢复不存在的状态，不能制造锁文件。
+    const original = await lstat(join(source, path)).catch((error) => {
+      if (error.code !== 'ENOENT') throw error
+      return null
     })
+    await rm(join(destination, path), { recursive: true, force: true })
+    if (original)
+      await cp(join(source, path), join(destination, path), {
+        recursive: true,
+        verbatimSymlinks: true,
+      })
   }
 }
 
 // 使用项目自身的回归测试入口；新功能验收使用独立测试器。
 export function regressionArguments(environment, report) {
   if (environment.runtime === 'node') {
+    if (environment.regressionRunner === 'node-json')
+      return [
+        join(import.meta.dirname, 'node-native-runner.mjs'),
+        environment.regressionEntry ?? '-',
+        ...environment.regression,
+      ]
     const runner = {
       'ava-tap': 'ava',
+      'brittle-tap': 'brittle',
       'jest-json': 'jest',
       'vitest-json': 'vitest',
       'tap-json': 'tap',
@@ -268,6 +317,33 @@ export function pythonTaskPath(workspace) {
   return [join(workspace, 'src'), workspace].join(delimiter)
 }
 
+// Python 的派生 CLI 必须从同一私有环境解析，不能落到宿主或另一参与者的入口。
+export function pythonProcessEnvironment(python, base = process.env) {
+  return { ...base, PATH: [dirname(python), base.PATH].filter(Boolean).join(delimiter) }
+}
+
+// 两个参与者的外层进程和 Runtime Node 子进程必须使用同一冻结命令路径。
+export function executionCommandEnvironment(python, commandEnvironment) {
+  const base = { PATH: commandEnvironment?.path ?? process.env.PATH ?? '' }
+  return python ? pythonProcessEnvironment(python, base) : base
+}
+
+// 基线、评分和模型执行共用可重定位的独占环境，所有 Python CLI 均绑定当前副本。
+export async function copyPythonEnvironment(source, directory) {
+  await mkdir(directory)
+  await cp(source, directory, { recursive: true, verbatimSymlinks: true })
+  const python = join(directory, 'bin/python')
+  await execute(join(source, 'bin/python'), ['-m', 'venv', '--without-pip', directory])
+  for (const entry of await readdir(join(directory, 'bin'), { withFileTypes: true })) {
+    if (!entry.isFile() || /^python[\d.]*$/u.test(entry.name)) continue
+    const path = join(directory, 'bin', entry.name)
+    const original = await readFile(path, 'utf8')
+    const relocated = original.replace(/^#![^\r\n]*\/bin\/python[\d.]*\r?\n/u, `#!${python}\n`)
+    if (relocated !== original) await writeFile(path, relocated)
+  }
+  return python
+}
+
 // 给独占 venv 绑定当前检出；所有入口（含 Node 派生的 Python）都优先读取本次源码。
 export async function bindPythonCheckout(python, workspace) {
   const result = await execute(python, [
@@ -294,18 +370,7 @@ export async function createExecutionEnvironments({ source, taskRoot, participan
     assert(['scriptact', 'codex'].includes(participant))
     assert(!environments[participant])
     const directory = join(taskRoot, `python-${participant}`)
-    await mkdir(directory)
-    await cp(source, directory, { recursive: true, verbatimSymlinks: true })
-    const python = join(directory, 'bin/python')
-    // venv 的激活脚本和命令入口含绝对路径，单纯复制会把 pip 安装写回原环境。
-    await execute(join(source, 'bin/python'), ['-m', 'venv', '--without-pip', directory])
-    for (const entry of await readdir(join(directory, 'bin'), { withFileTypes: true })) {
-      if (!entry.isFile() || /^python[\d.]*$/u.test(entry.name)) continue
-      const path = join(directory, 'bin', entry.name)
-      const original = await readFile(path, 'utf8')
-      const relocated = original.replace(/^#![^\r\n]*\/bin\/python[\d.]*\r?\n/u, `#!${python}\n`)
-      if (relocated !== original) await writeFile(path, relocated)
-    }
+    const python = await copyPythonEnvironment(source, directory)
     environments[participant] = { python, prompt: taskPrompt(task, python) }
   }
   return environments
@@ -323,5 +388,8 @@ export function taskPrompt(task, executable) {
   const preloads = task.environment?.regressionPreloads?.length
     ? ` For project tests, set NODE_OPTIONS to preload ${task.environment.regressionPreloads.join(', ')} with --require and each file's absolute path in this checkout; this keeps test workers on the project's dependency versions.`
     : ''
-  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools}${preloads} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
+  const maintained = task.environment?.maintainedValidation
+    ? ` The project's complete validation command is this argv array: ${JSON.stringify([executable, task.environment.maintainedValidation.entry, ...task.environment.maintainedValidation.args])}. Run it on the final source and maintained tests, and report the actual outcome of its existing gates.`
+    : ''
+  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools}${preloads}${maintained} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
 }

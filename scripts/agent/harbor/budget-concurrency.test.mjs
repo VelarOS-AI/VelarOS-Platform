@@ -83,6 +83,77 @@ async function until(check) {
   }
 }
 
+test('temporary cost reservations wait for settlement and remain cancellable without weakening settled limits', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'gateway-budget-wait-'))
+  const ledger = new BudgetLedger(directory, 30, { perAttemptBudgetUsd: 30 })
+  const seen = [],
+    releases = new Map()
+  const upstream = createServer(async (req, res) => {
+    let body = ''
+    for await (const chunk of req) body += chunk
+    const { input } = JSON.parse(body)
+    seen.push(input)
+    await new Promise((resolve) => releases.set(input, resolve))
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify(input === 'unknown' ? {} : { usage }))
+  }).listen(0, '127.0.0.1')
+  await once(upstream, 'listening')
+  const gateway = budgetServer({
+    ledger,
+    token: 'fixture',
+    apiKey: 'fixture',
+    maxConcurrency: 4,
+    perAttemptConcurrency: 4,
+    upstream: `http://127.0.0.1:${upstream.address().port}`,
+  }).listen(0, '127.0.0.1')
+  await once(gateway, 'listening')
+  const url = `http://127.0.0.1:${gateway.address().port}`
+  const headers = { authorization: 'Bearer ' + attemptCredential(identity('one'), 'fixture') }
+  const send = (input, signal) =>
+    fetch(url + '/v1/responses', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: ledger.model, input }),
+      signal,
+    }).then(async (response) => ({ status: response.status, text: await response.text() }))
+  const health = () => fetch(url + '/health', { headers }).then((response) => response.json())
+  t.after(async () => {
+    for (const release of releases.values()) release()
+    await Promise.all([
+      new Promise((resolve) => gateway.close(resolve)),
+      new Promise((resolve) => upstream.close(resolve)),
+    ])
+    ledger.close()
+    rmSync(directory, { recursive: true, force: true })
+  })
+  const first = send('first')
+  await until(() => seen.length === 1)
+  const second = send('second')
+  const controller = new AbortController()
+  const cancelled = assert.rejects(send('cancelled', controller.signal))
+  await until(async () => (await health()).budgetWaiters === 2)
+  assert.deepEqual(seen, ['first'])
+  assert.equal(ledger.state.requests.length, 1)
+  controller.abort()
+  await cancelled
+  await until(async () => (await health()).budgetWaiters === 1)
+  releases.get('first')()
+  assert.equal((await first).status, 200)
+  await until(() => seen.length === 2)
+  releases.get('second')()
+  assert.equal((await second).status, 200)
+  assert.deepEqual(seen, ['first', 'second'])
+  assert(ledger.state.requests[1].queueWaitMs > 0)
+  const unknown = send('unknown')
+  await until(() => seen.length === 3)
+  releases.get('unknown')()
+  assert.equal((await unknown).status, 200)
+  const refused = await send('cannot-release-unknown')
+  assert.equal(refused.status, 402)
+  assert.equal(seen.length, 3)
+  assert.equal((await health()).budgetWaiters, 0)
+})
+
 test('unlimited is explicit, preserves charges across restart and freezes the model/pricing owner', () => {
   const directory = mkdtempSync(join(tmpdir(), 'gateway-unlimited-'))
   try {

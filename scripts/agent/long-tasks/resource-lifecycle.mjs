@@ -1,5 +1,7 @@
 // 评测独占资源的归属、空间预算、流式归档校验与回收；不扫描其他任务目录。
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import {
@@ -23,6 +25,8 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
 import { createGzip, createGunzip } from 'node:zlib'
+
+import { createOwnedWorkspaceProcessGuard } from '../native-desktop/owned-processes.mjs'
 
 const GiB = 1024 ** 3
 const ownerName = '.evaluation-owner.json'
@@ -67,6 +71,19 @@ async function owned(resource) {
   assert.deepEqual(await json(join(resource.output, 'resources.json')), resource)
 }
 
+// 只有登记为本次评测独占的工作区可以启用 cwd 回收；普通产品工作区不进入此边界。
+export async function createTaskProcessGuard(resource, workspace, directory) {
+  await owned(resource)
+  workspace = await realpath(workspace)
+  directory = await realpath(directory)
+  assert(
+    workspace === resource.root || workspace.startsWith(resource.root + sep),
+    'Process scope must be inside owned task root'
+  )
+  assert(directory.startsWith(resource.output + sep), 'Cleanup receipt must belong to this run')
+  return createOwnedWorkspaceProcessGuard({ workspace, directory, resourceId: resource.id })
+}
+
 export async function acquireTaskResources(resource) {
   await owned(resource)
   const path = join(resource.output, 'resources.lock')
@@ -88,6 +105,7 @@ async function* entries(root, directory = root) {
     const stat = await lstat(path)
     const value = { path: relative(root, path).split(sep).join('/'), mode: stat.mode & 0o777 }
     if (stat.isSymbolicLink()) yield { ...value, type: 'symlink', target: await readlink(path) }
+    else if (stat.isFIFO()) yield { ...value, type: 'fifo' }
     else if (stat.isDirectory()) {
       yield { ...value, type: 'directory' }
       yield* entries(root, path)
@@ -117,7 +135,13 @@ async function directoryBytes(directory) {
   return bytes
 }
 
-export async function checkTaskResourceBudget(resource) {
+export async function checkTaskResourceBudget(
+  resource,
+  { additionalRootBytes = 0, additionalEvidenceBytes = 0, signal } = {}
+) {
+  signal?.throwIfAborted()
+  for (const value of [additionalRootBytes, additionalEvidenceBytes])
+    assert(Number.isSafeInteger(value) && value >= 0, 'Invalid projected storage growth')
   await owned(resource)
   const rootBytes = await directoryBytes(resource.root)
   const evidenceBytes = await directoryBytes(resource.output)
@@ -125,9 +149,56 @@ export async function checkTaskResourceBudget(resource) {
   const volume = await statfs(resource.root)
   const archiveVolume = await statfs(resource.output)
   const free = Math.min(volume.bavail * volume.bsize, archiveVolume.bavail * archiveVolume.bsize)
-  assert(bytes <= resource.limits.maxTaskBytes, 'Evaluation task storage limit exceeded')
-  assert(free >= resource.limits.minFreeBytes, 'Insufficient free disk space for evaluation')
-  return { bytes, rootBytes, evidenceBytes, free }
+  const additionalBytes = additionalRootBytes + additionalEvidenceBytes
+  // JSONL 归档含 base64 和逐项元数据；按未来任务根预留压缩前的保守余量。
+  const archiveReserveBytes = Math.ceil((rootBytes + additionalRootBytes) * 1.5) + 8 * 1024 ** 2
+  const projectedBytes = bytes + additionalBytes + archiveReserveBytes
+  const requiredFreeBytes = resource.limits.minFreeBytes + additionalBytes + archiveReserveBytes
+  signal?.throwIfAborted()
+  assert(projectedBytes <= resource.limits.maxTaskBytes, 'Evaluation task storage limit exceeded')
+  assert(free >= requiredFreeBytes, 'Insufficient free disk space for evaluation')
+  return {
+    bytes,
+    rootBytes,
+    evidenceBytes,
+    free,
+    additionalBytes,
+    archiveReserveBytes,
+    projectedBytes,
+    requiredFreeBytes,
+  }
+}
+
+/** 复制前计入所有目标副本，取消后不再扫描或准入新的大块写入。 */
+export async function checkTaskCopyBudget(resource, copies, signal) {
+  signal?.throwIfAborted()
+  let additionalRootBytes = 0,
+    additionalEvidenceBytes = 0
+  for (const { source, destination, count = 1 } of copies) {
+    assert(Number.isSafeInteger(count) && count > 0)
+    let parent = resolve(destination)
+    const suffix = []
+    let target
+    for (;;) {
+      try {
+        target = join(await realpath(parent), ...suffix)
+        break
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+        assert.notEqual(dirname(parent), parent)
+        suffix.unshift(basename(parent))
+        parent = dirname(parent)
+      }
+    }
+    assert(
+      target.startsWith(resource.root + sep) || target.startsWith(resource.output + sep),
+      'Copy must belong to the evaluation'
+    )
+    const bytes = (await directoryBytes(source)) * count
+    if (target.startsWith(resource.root + sep)) additionalRootBytes += bytes
+    else additionalEvidenceBytes += bytes
+  }
+  return checkTaskResourceBudget(resource, { additionalRootBytes, additionalEvidenceBytes, signal })
 }
 
 /** 单次扫描不重叠；调用方取消任务后等待扫描收束再归档。 */
@@ -149,7 +220,7 @@ export function monitorTaskResources(resource, onFailure, intervalMs = 15_000) {
 }
 
 async function* records(root, digest) {
-  yield JSON.stringify({ type: 'format', version: 1 }) + '\n'
+  yield JSON.stringify({ type: 'format', version: 2 }) + '\n'
   let count = 0,
     totalBytes = 0
   for await (const entry of entries(root)) {
@@ -189,6 +260,7 @@ export async function verifyResourceArchive(path) {
   void pumping.catch(() => {})
   const lines = createInterface({ input: unzip, crlfDelay: Infinity })
   let header = false,
+    version,
     footer = false,
     file = null,
     hash = null,
@@ -202,7 +274,9 @@ export async function verifyResourceArchive(path) {
       assert(line.length < 100_000, 'Archive record is oversized')
       const record = JSON.parse(line)
       if (!header) {
-        assert.deepEqual(record, { type: 'format', version: 1 })
+        assert([1, 2].includes(record.version), 'Unsupported resource archive version')
+        assert.deepEqual(record, { type: 'format', version: record.version })
+        version = record.version
         header = true
       } else if (record.type === 'end-archive') {
         assert(!file)
@@ -228,7 +302,13 @@ export async function verifyResourceArchive(path) {
         bytes += size
         file = null
       } else {
-        assert(!file && ['file', 'directory', 'symlink'].includes(record.type))
+        assert(
+          !file &&
+            (version === 2
+              ? ['file', 'directory', 'symlink', 'fifo']
+              : ['file', 'directory', 'symlink']
+            ).includes(record.type)
+        )
         assert(
           typeof record.path === 'string' &&
             record.path &&
@@ -353,7 +433,14 @@ export async function restoreResourceArchive(archive, destination) {
         await mkdir(target, { mode: 0o700 })
         directories.push([target, entry.mode])
       } else if (entry.type === 'symlink') await symlink(entry.target, target)
-      else {
+      else if (entry.type === 'fifo') {
+        // 已结束测试留下的管道只恢复节点和权限，不打开或读取流。
+        assert.notEqual(process.platform, 'win32', 'FIFO archive restoration requires a POSIX host')
+        await promisify(execFile)('mkfifo', ['-m', entry.mode.toString(8), target], {
+          env: { PATH: '/usr/bin:/bin' },
+          timeout: 10000,
+        })
+      } else {
         file = await open(target, 'wx', 0o600)
         await file.chmod(entry.mode)
       }

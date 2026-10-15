@@ -77,8 +77,9 @@ class FakeSocket extends EventTarget {
   static instances = []
   readyState = 0
   sent = []
-  constructor() {
+  constructor(url) {
     super()
+    this.url = url
     FakeSocket.instances.push(this)
     queueMicrotask(() => {
       this.readyState = 1
@@ -99,6 +100,51 @@ const fetchFn = async () => ({
   json: async () => [
     { type: 'page', url: 'http://localhost/#/chat', webSocketDebuggerUrl: 'ws://localhost/debug' },
   ],
+})
+
+test('built renderer connects before its hash router initializes', async () => {
+  const wire = await connectDebugger('http://localhost', {
+    fetchFn: async () => ({
+      json: async () => [
+        {
+          type: 'page',
+          url: 'https://example.com/#/chat',
+          webSocketDebuggerUrl: 'ws://localhost/other',
+        },
+        {
+          type: 'page',
+          url: 'file:///test/build/electron/renderer/index.html',
+          webSocketDebuggerUrl: 'ws://localhost/debug',
+        },
+      ],
+    }),
+    WebSocketClass: FakeSocket,
+  })
+  assert.equal(FakeSocket.instances.at(-1).url, 'ws://localhost/debug')
+  wire.close()
+})
+
+test('ambiguous renderer targets fail without choosing an unrelated page', async () => {
+  await assert.rejects(
+    connectDebugger('http://localhost', {
+      fetchFn: async () => ({
+        json: async () => [
+          {
+            type: 'page',
+            url: 'file:///one/build/electron/renderer/index.html',
+            webSocketDebuggerUrl: 'ws://localhost/one',
+          },
+          {
+            type: 'page',
+            url: 'file:///two/build/electron/renderer/index.html',
+            webSocketDebuggerUrl: 'ws://localhost/two',
+          },
+        ],
+      }),
+      WebSocketClass: FakeSocket,
+    }),
+    /ambiguous/
+  )
 })
 
 test('closed debugger connections reject pending and later calls without a command timeout', async () => {

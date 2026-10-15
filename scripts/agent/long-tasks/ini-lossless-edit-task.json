@@ -1,0 +1,23 @@
+{
+  "id": "ini-lossless-batch-edit",
+  "split": "holdout",
+  "repository": "https://github.com/npm/ini",
+  "commit": "3c96c74fd42584bd655e17a4e63e2ef0a3b406ee",
+  "prompt": "Add a lossless batch editing API to this real ini package for tools updating human-maintained configuration files. Export edit(source, operations): string alongside all existing exports. source must be a string. operations is an array of {op:'set', section?:string, key:string, value:scalar|scalar[]} or {op:'remove', section?:string, key:string}; scalar is string, finite number, boolean or null. section omitted or '' means the global block; a nonempty section identifies the exact decoded section header before ini.parse's dotted-section expansion (so 'database.replica' identifies [database.replica], and a backslash in a section name is literal input to the existing safe/unsafe conventions). key identifies the decoded logical key with any array [] suffix removed. Keys and sections must be nonempty where required, single-line, contain no NUL, and must not be __proto__; key must not itself end with [] or contain '='; section must not contain ']' because those names are not representable in the existing parser's grammar. Reject invalid source, operation shapes, unsupported values, unsafe names or invalid op with TypeError, and never mutate operations or value arrays. Existing parse/stringify/encode/decode/safe/unsafe behavior must remain compatible.\n\nThe unchanged source and an empty operations list round-trip byte-for-byte, including an initial BOM, mixed LF/CRLF endings, blank lines, comments, ignored text, and a missing final newline. Apply operations in order. A set replaces all assignments of the matching logical key across repeated blocks of the same section, at the first assignment position. For one existing scalar assignment, replace only the encoded value: preserve indentation, original key spelling, whitespace around '=', inline comment and its preceding whitespace, and that line's ending. A bare flag is a scalar assignment and gains '=value' when set. An array value writes one key[]=value line per element; an empty array is equivalent to removal. If changing scalar/array shape or collapsing duplicates, use the first assignment's indentation and whitespace around '=' for generated lines, preserve its inline comment on the first generated line, and delete all other matching assignment lines including their inline comments. Standalone comments and every unrelated line remain byte-for-byte. Remove deletes all matching assignment lines, leaving section headers and standalone comments. A missing remove is a byte-for-byte no-op.\n\nInsert a new key at the end of the first matching section block (before the next header), or at the end of globals before the first header. If the named section is missing, append a header and assignments. Newly inserted lines use the first newline style in the source, or LF if absent; insert a newline separator when necessary, without adding an extra blank line. For replacements, keep the original first assignment's final-newline presence; extra generated lines have normal separators. New appended content ends with a newline. Encoded scalar/key/section content must follow this package's safe/unsafe semantics; quote and escape handling must distinguish actual comments from ;/# inside quoted or escaped values. Handle duplicate scalar keys, arrays, repeated sections, BOM, quoted keys and section names, dots, equals signs in values, Windows line endings and Unicode. Deliver focused maintained tests covering those cases and invalid input, README API/semantics and a runnable examples/edit.js. Keep dependency versions and existing tests. Run the original tests and new tests and report real results.",
+  "environment": {
+    "runtime": "node",
+    "project": "ini",
+    "acceptance": "test_ini_lossless_edit.mjs",
+    "regressionRunner": "tap-json",
+    "regressionEntry": "node_modules/tap/bin/run.js",
+    "regression": [
+      "test/*.js"
+    ],
+    "preserve": [
+      "test",
+      "tap-snapshots",
+      "package.json"
+    ],
+    "baselineFailure": "exports lossless batch edit"
+  }
+}

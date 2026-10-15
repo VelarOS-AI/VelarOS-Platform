@@ -1,0 +1,21 @@
+{
+  "id": "tabulate-display-width-truncation",
+  "split": "holdout",
+  "repository": "https://github.com/astanin/python-tabulate",
+  "commit": "268615a5c27dc40e5c22454c07b44d5c50410da0",
+  "prompt": "Extend this real python-tabulate repository with display-width-aware truncation for terminal dashboards. Add keyword arguments coloverflow='wrap' and truncation_marker='…' to tabulate(). coloverflow accepts 'wrap' or 'truncate', either as one mode for every displayed column or a list/tuple of modes; missing trailing modes default to 'wrap'. A displayed index column counts as column zero. Invalid modes, invalid mode containers, or a non-string/multiline/ANSI-containing truncation_marker raise ValueError. An empty marker is valid. Existing output with default options must remain unchanged.\n\n'wrap' keeps the existing maxcolwidths/maxheadercolwidths behavior. For a 'truncate' column, maxcolwidths limits each physical body-cell line and maxheadercolwidths limits each physical header line, in terminal display columns, after normal numeric formatting and missingval substitution. Omitted/None width leaves that part unbounded. Widths used for truncation must be positive integers (not bool). A line that fits is unchanged. A longer line becomes the longest prefix of whole display graphemes fitting width minus marker width, followed by the marker. If the marker itself is wider than the limit, retain the longest fitting whole-grapheme prefix of the marker and no input text. Preserve the existing explicit multiline handling, including internal empty physical lines; truncation never creates extra wrapped lines. Existing alignment, table formats, headers='firstrow'/'keys', disable_numparse, showindex, floatfmt/intfmt, missingval and multiline row alignment must still work. Support plain, grid, fancy_grid and pipe output; do not post-process an already-rendered table because border and alignment widths must be calculated from the clipped cells.\n\nWith wcwidth installed, use terminal display widths and preserve whole Unicode grapheme clusters, including combining marks, CJK characters, ZWJ emoji and flags. Without wcwidth, keep the package usable with its documented codepoint-width fallback. Preserve complete ANSI SGR sequences and OSC-8 hyperlinks in retained content; never cut an escape sequence. When clipping active styling or a hyperlink, close it before the cell padding/border so it does not leak into adjacent cells. Tests may assert semantic visible text and terminal state rather than one particular equivalent escape sequence. Unclipped content keeps its escape sequences unchanged. Non-terminal formats keep working; the new behavior is opt-in. Do not introduce a new runtime dependency or change dependency versions. Deliver implementation, maintained pytest cases for width/marker boundaries, headers and body independently, numeric formatting, multiline cells, ANSI and Unicode, README usage/limitations, and an offline examples/truncation.py. Run the original tests and new tests both with wcwidth and a targeted no-wcwidth fallback check; report actual validation and remaining gaps.",
+  "environment": {
+    "project": "python-tabulate",
+    "python": "python-tabulate-env",
+    "acceptance": "test_tabulate_overflow.py",
+    "regressionRunner": "pytest",
+    "regression": [
+      "test",
+      "tabulate"
+    ],
+    "preserve": [
+      "test"
+    ],
+    "baselineFailure": "test_exports_truncation"
+  }
+}

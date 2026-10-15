@@ -11,9 +11,23 @@ import {
 import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
 import {
   runtimeCapabilityOptions,
+  runtimeContextPolicy,
   runtimeEditingPrompt,
   runtimeSubmissionOptions,
 } from './runtime-capabilities.mjs'
+
+test('frozen context policy preserves candidate defaults and validates ablation budgets', () => {
+  assert.deepEqual(runtimeContextPolicy({ inputWindowTokens: 120000 }), { windowTokens: 120000 })
+  for (const ratio of [0, 0.125, 1])
+    assert.deepEqual(
+      runtimeContextPolicy({ inputWindowTokens: 120000, runtimeRetainedFrameRatio: ratio }),
+      { windowTokens: 120000, retainedFrameRatio: ratio }
+    )
+  for (const ratio of [-0.1, 1.1, '0.125', null, Infinity, NaN])
+    assert.throws(() =>
+      runtimeContextPolicy({ inputWindowTokens: 120000, runtimeRetainedFrameRatio: ratio })
+    )
+})
 
 for (const mode of ['on-demand', 'node', 'project'])
   for (const taskMode of ['request', 'goal'])
@@ -53,7 +67,15 @@ for (const mode of ['on-demand', 'node', 'project'])
                   },
                 },
               }
-            else yield { type: 'text', text: 'Completed the fixture.' }
+            else
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: `done-${requests.length}`,
+                  name: 'done',
+                  input: { message: 'Completed the fixture.' },
+                },
+              }
             yield { type: 'finish', reason: 'stop' }
           },
         },
@@ -83,7 +105,7 @@ for (const mode of ['on-demand', 'node', 'project'])
         undefined,
         runtimeSubmissionOptions(taskMode, objective)
       ))
-        assert.notEqual(event.type, 'error')
+        assert.notEqual(event.type, 'error', JSON.stringify(event))
       assert.equal(requests.length, taskMode === 'goal' ? 3 : 1)
       const goal = await session.getGoal()
       if (taskMode === 'goal') {
@@ -91,10 +113,9 @@ for (const mode of ['on-demand', 'node', 'project'])
         assert.equal(goal.status, 'complete')
         assert.equal(goal.reason, '已验证测试夹具')
       } else assert.equal(goal, null)
-      assert.deepEqual(
-        requests[0].response.tools.map((tool) => tool.name),
-        ['exec']
-      )
+      const tools = requests[0].response.tools.map((tool) => tool.name)
+      assert(tools.includes('exec'))
+      assert(tools.includes('done'))
       assert.equal(requests[0].instructions.includes('velaros:agents'), mode === 'on-demand')
       assert.equal(requests[0].instructions.includes('velaros:search'), mode === 'on-demand')
       assert.equal(requests[0].instructions.includes('velaros:project'), mode !== 'node')

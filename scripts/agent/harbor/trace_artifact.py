@@ -73,4 +73,23 @@ def read_trace_artifact(path):
     value = json.loads(path.read_text())
     if "artifactSchema" not in value:
         return value
+    if value["artifactSchema"] == 3:
+        def resolve_turn(reference):
+            _key(reference)
+            if len(reference) != 3:
+                raise ValueError("Invalid trace turn reference fields")
+            raw = (path.parent / "trace-turns" / (reference["sha256"] + ".json")).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
+                raise ValueError("Trace turn hash mismatch")
+            turn = json.loads(raw)
+            if turn.get("turnId") != reference["id"] or turn.get("sessionId") != reference["sessionId"]:
+                raise ValueError("Trace turn identity mismatch")
+            return turn
+
+        data = value["data"]
+        data = {**data, "traces": [resolve_turn(item) for item in data["traces"]]}
+        if "branches" in data:
+            data["branches"] = [{**branch, "turns": [resolve_turn(item) for item in branch["turns"]]}
+                                for branch in data["branches"]]
+        value = {"artifactSchema": 2, "data": data}
     return decode_trace_artifact(value, read_invocation_blobs(path.parent))

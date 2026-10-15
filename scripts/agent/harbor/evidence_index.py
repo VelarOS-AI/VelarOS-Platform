@@ -247,6 +247,25 @@ def _trace(index, agent, phase):
                 if key in blobs and blobs[key] != invocation:
                     raise ValueError("conflicting_invocation_blob")
                 blobs[key] = invocation
+        if source.get("artifactSchema") == 3:
+            def resolve_turn(reference):
+                invocation_key(reference)
+                if len(reference) != 3:
+                    raise ValueError("invalid_turn_reference")
+                turn_item, turn_raw = index.file(agent / "trace-turns" / (reference["sha256"] + ".json"), "scriptact_turn")
+                phase["artifact_ids"].append(turn_item["artifact_id"])
+                if turn_raw is None or _digest(turn_raw) != reference["sha256"]:
+                    raise ValueError("turn_hash_mismatch")
+                turn = json.loads(turn_raw)
+                if turn.get("turnId") != reference["id"] or turn.get("sessionId") != reference["sessionId"]:
+                    raise ValueError("turn_identity_mismatch")
+                return turn
+            data = source["data"]
+            data = {**data, "traces": [resolve_turn(item) for item in data["traces"]]}
+            if "branches" in data:
+                data["branches"] = [{**branch, "turns": [resolve_turn(item) for item in branch["turns"]]}
+                                    for branch in data["branches"]]
+            source = {"artifactSchema": 2, "data": data}
         # Official lossless decoder verifies every referenced material's hash/session identity.
         data = decode_trace_artifact(source, blobs)
         prefix = "data." if "artifactSchema" in source else ""

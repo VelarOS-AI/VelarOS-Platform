@@ -1,0 +1,22 @@
+{
+  "id": "fast-json-stable-stringify-replacer",
+  "split": "holdout",
+  "repository": "https://github.com/epoberezkin/fast-json-stable-stringify",
+  "commit": "49e230da2c84247b29ad4de02c9395793caefd15",
+  "prompt": "Add a function replacer option to this real fast-json-stable-stringify package so applications can deterministically serialize telemetry after redacting secrets or transforming values. Keep the public CommonJS export, the legacy function-as-cmp shorthand, existing cmp and cycles behavior, dependency versions, and original tests. Add opts.replacer: a function or undefined. Reject every other explicit value with TypeError before reading data properties or invoking data.toJSON. The replacer is called once for the root (key \"\", this is a holder whose empty-string property is the original input), then once for each visited member with its original holder as this and its key as a string. Visit object keys in the existing deterministic/cmp order and array indices in increasing order. For each visited value, call its toJSON(key) before its replacer; do not call toJSON again on an object returned by that replacer. Serialize returned replacements, including newly returned objects. In replacer mode, handle boxed string/number/boolean values like JSON.stringify. Replacer undefined results omit object properties, become null in arrays, and return undefined at the root. Preserve non-finite number handling, array holes, escaping, and exceptions including the exact thrown error identity. Snapshot each container's own enumerable string keys or array length before visiting its members, so callback changes follow that snapshot. A callback returning its received object is ordinary traversal, not a repeated callback on the same value.\n\nTrack active ancestors across both objects and arrays after transformation: filtering a cycle must succeed, shared siblings are not cycles, and cycles introduced or left by a replacer must throw TypeError unless cycles:true, which emits the existing \"__cycle__\" string at the repeated edge. The array-cycle fix also applies when no replacer is supplied. A cmp comparator continues to compare the current object's property values before child replacer calls; comparator calls must not cause extra replacer calls. Preserve existing output for ordinary no-replacer inputs.\n\nDeliver implementation, usable TypeScript declarations for opts.replacer, cmp and cycles plus the shorthand, maintained regression tests for callback order/this, root replacement, toJSON order, deletion/array nulls, container mutation, exceptions and object/array cycles, README usage and semantics, and a runnable offline example/replacer.js demonstrating deterministic secret redaction with actual assertions. Keep all original tests. Run original Tape tests and ESLint, your new tests, the standalone example, and a strict external TypeScript consumer using the package's public import. Create a local package tarball and install it with scripts disabled and dev dependencies omitted in a clean temporary consumer outside the checkout; actually run CommonJS and ESM public-import consumers there. These checks must work offline without checkout-relative imports or runtime dependencies on development packages. Do not add runtime dependencies, publish or commit. Report actual commands and remaining limits.",
+  "environment": {
+    "runtime": "node",
+    "project": "fast-json-stable-stringify",
+    "acceptance": "test_fast_json_stable_stringify_replacer.mjs",
+    "regressionRunner": "tap-json",
+    "regressionEntry": "node_modules/tape/bin/tape",
+    "regression": [
+      "test/*.js"
+    ],
+    "preserve": [
+      "test",
+      "package.json"
+    ],
+    "baselineFailure": "replacer transforms root and nested values"
+  }
+}

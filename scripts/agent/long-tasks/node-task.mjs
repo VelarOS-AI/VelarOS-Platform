@@ -7,8 +7,10 @@ import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 import { avaReport } from './ava-report.mjs'
+import { brittleReport } from './brittle-report.mjs'
 import { runCapturedCommand } from './command-output.mjs'
 import { vitestReport } from './vitest-report.mjs'
+import { nativeNodeReport } from './node-native-report.mjs'
 
 const execute = promisify(execFile)
 
@@ -39,6 +41,23 @@ export async function buildNodeProject(environment, workspace, node, env = proce
       timedOut: error.killed ?? false,
     }
   }
+}
+
+// 与预先声明的原项目完整命令对齐；旧测试回归另用冻结测试副本，不能替代此门禁。
+export async function validateMaintainedNodeProject(
+  environment,
+  workspace,
+  node,
+  env = process.env
+) {
+  if (!environment.maintainedValidation) return null
+  const { entry, args } = environment.maintainedValidation
+  return await runCapturedCommand(node, [entry, ...args], {
+    cwd: workspace,
+    env: { ...env, PATH: join(workspace, 'node_modules/.bin') + delimiter + (env.PATH ?? '') },
+    timeout: 180000,
+    maxBuffer: 8_000_000,
+  })
 }
 
 // 真实路径与工作区别名必须指向同一份用例清单；未落盘的报告夹具按字面路径处理。
@@ -290,10 +309,20 @@ export function jestReport(result, workspace) {
 
 export function nodeRegressionReport(result, workspace, runner) {
   assert(
-    ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json', 'tap-json'].includes(runner),
+    [
+      'mocha-json',
+      'jest-json',
+      'ava-tap',
+      'brittle-tap',
+      'vitest-json',
+      'tap-json',
+      'node-json',
+    ].includes(runner),
     'Unknown Node regression reporter'
   )
   if (runner === 'ava-tap') return avaReport(result)
+  if (runner === 'brittle-tap') return brittleReport(result)
+  if (runner === 'node-json') return nativeNodeReport(result, workspace)
   if (runner === 'tap-json') {
     const report = JSON.parse(result.stdout)
     assert.equal(report.schema, 'tap-regression-1')

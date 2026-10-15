@@ -1,5 +1,7 @@
 // 验证真实归档、还原和资源所有权边界，失败时保留原始材料。
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import {
   mkdtemp,
   mkdir,
@@ -20,6 +22,8 @@ import {
   acquireTaskResources,
   archiveTaskResources,
   checkTaskResourceBudget,
+  checkTaskCopyBudget,
+  createTaskProcessGuard,
   monitorTaskResources,
   registerTaskResources,
   restoreResourceArchive,
@@ -82,6 +86,33 @@ test('changed owner or replaced root cannot authorize deletion', async (t) => {
   assert((await lstat(f.root)).isDirectory())
 })
 
+test(
+  'process cleanup requires the registered workspace and receipt ownership',
+  {
+    skip: process.platform !== 'darwin',
+  },
+  async (t) => {
+    const f = await fixture(t)
+    const directory = join(f.output, 'codex')
+    await mkdir(directory)
+    await assert.rejects(
+      createTaskProcessGuard(f.resource, f.output, directory),
+      /inside owned task root/u
+    )
+    await assert.rejects(
+      createTaskProcessGuard(f.resource, join(f.root, 'workspace'), f.base),
+      /belong to this run/u
+    )
+    const guard = await createTaskProcessGuard(f.resource, join(f.root, 'workspace'), directory)
+    assert.equal((await guard.stop()).scopeEmpty, true)
+    await writeFile(join(f.root, '.evaluation-owner.json'), '{}')
+    await assert.rejects(
+      createTaskProcessGuard(f.resource, join(f.root, 'workspace'), directory),
+      /owner changed/u
+    )
+  }
+)
+
 test('corrupt archives do not restore files', async (t) => {
   const f = await fixture(t)
   await archiveTaskResources(f.resource)
@@ -117,7 +148,7 @@ test('a replacement directory with a copied owner record is preserved', async (t
 })
 
 test('the storage monitor reports growth over budget and drains before cleanup', async (t) => {
-  const f = await fixture(t, { maxTaskBytes: 2048 })
+  const f = await fixture(t, { maxTaskBytes: 8 * 1024 ** 2 + 2048 })
   await checkTaskResourceBudget(f.resource)
   const exceeded = Promise.withResolvers()
   const stop = monitorTaskResources(f.resource, exceeded.resolve, 5)
@@ -134,10 +165,50 @@ test('the storage monitor reports growth over budget and drains before cleanup',
 })
 
 test('raw evidence growth counts toward the attempt storage budget', async (t) => {
-  const f = await fixture(t, { maxTaskBytes: 2048 })
+  const f = await fixture(t, { maxTaskBytes: 8 * 1024 ** 2 + 2048 })
   await checkTaskResourceBudget(f.resource)
   await writeFile(join(f.output, 'provider-response.json'), Buffer.alloc(4096))
   await assert.rejects(checkTaskResourceBudget(f.resource), /storage limit/)
+  assert((await lstat(f.root)).isDirectory())
+})
+
+test('projected evidence and judge copies reserve space before creating destinations', async (t) => {
+  const f = await fixture(t, { maxTaskBytes: 8 * 1024 ** 2 + 2048 })
+  const initial = await checkTaskResourceBudget(f.resource)
+  assert(initial.archiveReserveBytes >= 8 * 1024 ** 2)
+  const source = join(f.base, 'external-source')
+  await mkdir(source)
+  await writeFile(join(source, 'evidence'), Buffer.alloc(4096))
+  const destination = join(f.root, 'judge')
+  await assert.rejects(checkTaskCopyBudget(f.resource, [{ source, destination }]), /storage limit/)
+  await assert.rejects(lstat(destination), { code: 'ENOENT' })
+  await assert.rejects(
+    checkTaskCopyBudget(f.resource, [{ source, destination: join(f.output, 'evidence') }]),
+    /storage limit/
+  )
+  await assert.rejects(
+    checkTaskCopyBudget(f.resource, [{ source, destination: f.base }]),
+    /must belong/
+  )
+})
+
+test('resource cancellation rejects finalization before scanning or admitting another copy', async (t) => {
+  const f = await fixture(t)
+  const controller = new AbortController()
+  const reason = new Error('storage monitor cancelled the producer')
+  controller.abort(reason)
+  await assert.rejects(
+    checkTaskCopyBudget(
+      f.resource,
+      [{ source: '/does-not-exist', destination: join(f.root, 'judge') }],
+      controller.signal
+    ),
+    (error) => error === reason
+  )
+  await assert.rejects(
+    checkTaskResourceBudget(f.resource, { signal: controller.signal }),
+    (error) => error === reason
+  )
   assert((await lstat(f.root)).isDirectory())
 })
 
@@ -162,3 +233,56 @@ test(
     }
   }
 )
+
+test(
+  'completed FIFO fixtures archive as metadata and restore without opening a stream',
+  { skip: process.platform === 'win32', timeout: 5000 },
+  async (t) => {
+    const f = await fixture(t)
+    const fifo = join(f.root, 'workspace/config pipe')
+    await promisify(execFile)('mkfifo', ['-m', '640', fifo], {
+      env: { PATH: '/usr/bin:/bin' },
+      timeout: 1000,
+    })
+    assert((await lstat(fifo)).isFIFO())
+    const archived = await archiveTaskResources(f.resource)
+    const path = join(f.output, 'execution-resources.jsonl.gz')
+    const records = gunzipSync(await readFile(path))
+      .toString()
+      .trim()
+      .split('\n')
+      .map(JSON.parse)
+    assert.equal(records[0].version, 2)
+    assert.deepEqual(
+      records.find((x) => x.path === 'workspace/config pipe'),
+      { path: 'workspace/config pipe', mode: 0o640, type: 'fifo' }
+    )
+    const destination = join(f.base, 'restored')
+    assert.deepEqual(await restoreResourceArchive(path, destination), archived)
+    assert((await lstat(join(destination, 'workspace/config pipe'))).isFIFO())
+    assert.equal((await lstat(join(destination, 'workspace/config pipe'))).mode & 0o777, 0o640)
+    assert.deepEqual(await readFile(join(destination, 'binary')), Buffer.from([0, 255, 8]))
+    records[0].version = 1
+    const invalid = join(f.output, 'fifo-in-legacy.gz')
+    await writeFile(invalid, gzipSync(records.map(JSON.stringify).join('\n') + '\n'))
+    await assert.rejects(verifyResourceArchive(invalid))
+  }
+)
+
+test('legacy version-one archives still verify and restore byte-for-byte', async (t) => {
+  const f = await fixture(t)
+  await archiveTaskResources(f.resource)
+  const path = join(f.output, 'execution-resources.jsonl.gz')
+  const records = gunzipSync(await readFile(path))
+    .toString()
+    .trim()
+    .split('\n')
+    .map(JSON.parse)
+  records[0] = { type: 'format', version: 1 }
+  const legacy = join(f.output, 'legacy.gz')
+  await writeFile(legacy, gzipSync(records.map(JSON.stringify).join('\n') + '\n'))
+  const verified = await verifyResourceArchive(legacy)
+  const destination = join(f.base, 'legacy-restored')
+  assert.deepEqual(await restoreResourceArchive(legacy, destination), verified)
+  assert.deepEqual(await readFile(join(destination, 'binary')), Buffer.from([0, 255, 8]))
+})

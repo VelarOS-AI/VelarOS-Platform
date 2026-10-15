@@ -14,19 +14,31 @@ import { createTraceExporter, snapshot } from '../harbor/trace-export.mjs'
 import { readTraceArtifact } from '../harbor/trace-artifact.mjs'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
+import { awaitGatewaySettlement } from '../mechanism-ab/settlement.mjs'
+import { runDesktopTask } from './desktop-host.mjs'
 import { runCapturedCommand } from './command-output.mjs'
+import { verifyIsolatedWorker } from './execution-isolation.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
 import {
   buildNodeProject,
+  validateMaintainedNodeProject,
   copyNodeDependencies,
   nodeRegressionReport,
   nodeDependencyState,
   nodeTestSummary,
 } from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
-import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
+import {
+  runtimeCapabilityOptions,
+  runtimeContextPolicy,
+  runtimeSubmissionOptions,
+} from './runtime-capabilities.mjs'
+import { runtimeCompletionOptions } from './runtime-completion.mjs'
+import { runtimeEventStatus } from './runtime-status.mjs'
 import {
   pythonTaskPath,
+  pythonProcessEnvironment,
+  executionCommandEnvironment,
   acceptanceArguments,
   applyTaskEnvironment,
   bindPythonCheckout,
@@ -36,19 +48,23 @@ import {
   restoreTaskPaths,
   taskEnvironment,
   taskTemporaryEnvironment,
+  verifyCommandEnvironment,
 } from './task-environment.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
 import {
   acquireTaskResources,
-  archiveTaskResources,
+  checkTaskCopyBudget,
   checkTaskResourceBudget,
+  createTaskProcessGuard,
   monitorTaskResources,
 } from './resource-lifecycle.mjs'
 import { preserveWorkspaceEvidence } from './workspace-evidence.mjs'
+import { monitorHostIo } from './host-health.mjs'
 
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
 const manifest = JSON.parse(await readFile(join(directory, 'freeze.json'), 'utf8'))
+const isolation = await verifyIsolatedWorker(directory, manifest)
 if (manifest.commandEnvironment) {
   const expected = manifest.commandEnvironment
   assert.equal(process.execPath, expected.node, 'Run the frozen Node executable')
@@ -56,6 +72,12 @@ if (manifest.commandEnvironment) {
   assert.equal(process.platform, expected.platform)
   assert.equal(process.arch, expected.arch)
   process.env.PATH = expected.path
+  if (expected.commands)
+    assert.deepEqual(
+      (await verifyCommandEnvironment(expected, Boolean(manifest.node))).commands,
+      expected.commands,
+      'Frozen toolchain versions changed'
+    )
 }
 const capabilities = runtimeCapabilityOptions(manifest.scriptactCapabilities)
 const submission = runtimeSubmissionOptions(manifest.scriptactTaskMode, manifest.task.prompt)
@@ -70,8 +92,8 @@ if (manifest.temporaryEnvironment) {
 }
 assert.equal(
   import.meta.filename,
-  manifest.controller ?? import.meta.filename,
-  'Run the frozen controller path printed by prepare.mjs'
+  manifest.worker,
+  'Run the frozen launcher path printed by prepare.mjs'
 )
 const recovery =
   process.argv[3] === '--resume-codex'
@@ -80,9 +102,8 @@ const recovery =
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const candidate = manifest.candidate
 const importAt = (file) => import(pathToFileURL(join(candidate, 'packages', file)))
-const { createRuntime, createNodeExecutionEnvironment } = await importAt(
-  'velaros/dist/act/runtime/index.js'
-)
+const { createRuntime, createNodeExecutionEnvironment, createNodeCompletionValidationHost } =
+  await importAt('velaros/dist/act/runtime/index.js')
 const { createLocalShellHost } = await importAt('velaros/dist/execution/local.js')
 const modelPackage = await importAt('model/dist/index.js')
 const credentials = JSON.parse(await readFile(manifest.credentials, 'utf8')).chat
@@ -135,6 +156,12 @@ const activity = async (value) => {
 }
 
 async function copySource(destination, output) {
+  if (manifest.resources)
+    await checkTaskCopyBudget(
+      manifest.resources,
+      [{ source: manifest.source, destination, count: 2 }],
+      cancellation.signal
+    )
   await copyTaskWorkspace(manifest.source, destination, environment.runtime)
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, destination)
   const build = await buildNodeProject(environment, destination, manifest.node)
@@ -163,7 +190,13 @@ async function copySource(destination, output) {
 async function check(command, args, cwd, name, output, processEnvironment = process.env) {
   const result = await runCapturedCommand(command, args, {
     cwd,
-    env: { ...processEnvironment, PYTHONPATH: pythonTaskPath(cwd), PYTHONDONTWRITEBYTECODE: '1' },
+    env: {
+      ...(environment.runtime === 'node'
+        ? processEnvironment
+        : pythonProcessEnvironment(command, processEnvironment)),
+      PYTHONPATH: pythonTaskPath(cwd),
+      PYTHONDONTWRITEBYTECODE: '1',
+    },
   })
   if (result.error) result.error = redact(result.error)
   await snapshot(join(output, name + '.json'), result)
@@ -171,11 +204,38 @@ async function check(command, args, cwd, name, output, processEnvironment = proc
 }
 
 async function grade(workspace, output) {
+  if (manifest.resources)
+    await checkTaskCopyBudget(
+      manifest.resources,
+      [
+        {
+          source: workspace,
+          destination: join(manifest.taskRoot, 'grading'),
+          count: environment.maintainedValidation ? 2 : 1,
+        },
+        {
+          source: manifest.source,
+          destination: join(manifest.taskRoot, 'grading'),
+          count: environment.maintainedValidation ? 2 : 1,
+        },
+      ],
+      cancellation.signal
+    )
+  let maintainedValidation = null
+  if (environment.maintainedValidation) {
+    const maintained = join(manifest.taskRoot, `maintained-${output.split('/').at(-1)}`)
+    await copyTaskWorkspace(workspace, maintained, environment.runtime)
+    await copyNodeDependencies(manifest.source, maintained)
+    const result = await validateMaintainedNodeProject(environment, maintained, manifest.node)
+    await snapshot(join(output, 'maintained-validation.json'), result)
+    maintainedValidation = { exitCode: result.exitCode, output: 'maintained-validation.json' }
+  }
   // 验收复制真实产物；原项目测试从冻结源码恢复，防止删测试制造通过。
   const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
   await copyTaskWorkspace(workspace, judge, environment.runtime)
   await restoreTaskPaths(manifest.source, judge, environment.preserve)
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, judge)
+  else await bindPythonCheckout(manifest.python, judge)
   const build = await buildNodeProject(environment, judge, manifest.node)
   if (build) await snapshot(join(output, 'build.json'), build)
   const acceptance = await check(
@@ -232,10 +292,12 @@ async function grade(workspace, output) {
         acceptanceSummary.errors === 0 &&
         acceptanceSummary.failed === 0))
   return {
+    ...(maintainedValidation ? { maintainedValidation } : {}),
     ...(build ? { build: { exitCode: build.exitCode, output: 'build.json' } } : {}),
     acceptance,
     regression,
     passed:
+      (!maintainedValidation || maintainedValidation.exitCode === 0) &&
       (!build || build.exitCode === 0) &&
       acceptancePassed &&
       (regression.verdict?.suitePassed ?? regression.exitCode === 0),
@@ -247,7 +309,17 @@ async function grade(workspace, output) {
   }
 }
 
-async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt }) {
+async function scriptAct({
+  workspace,
+  output,
+  apiKey,
+  baseURL,
+  signal,
+  python,
+  node,
+  prompt,
+  deadline,
+}) {
   const host = createLocalShellHost({ cwd: workspace })
   let runtime,
     session,
@@ -306,12 +378,17 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
         directory: join(output, 'node'),
         host,
         executable: manifest.commandEnvironment?.node,
-        environment: manifest.commandEnvironment
-          ? { PATH: manifest.commandEnvironment.path }
-          : undefined,
+        environment: executionCommandEnvironment(python, manifest.commandEnvironment),
       }),
       modelTools: { concurrency: manifest.concurrency },
-      context: { policy: { windowTokens: manifest.inputWindowTokens } },
+      context: {
+        policy: runtimeContextPolicy(manifest),
+        completion: await runtimeCompletionOptions(manifest.runtimeCompletion, workspace, {
+          createValidationHost: createNodeCompletionValidationHost,
+          executable: node,
+          signal,
+        }),
+      },
       environment: () => ({ cwd: workspace, ...(node ? { node } : { python }) }),
       limits: {
         turns: manifest.maxRequests ?? 10000,
@@ -329,12 +406,10 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
       identity,
       model: manifest.model,
     })
-    for await (const event of session.submit(prompt, signal, submission)) {
+    for await (const event of session.submit(prompt, signal, { ...submission, deadline })) {
       await appendFile(join(output, 'events.jsonl'), JSON.stringify(event) + '\n')
-      if (event.type === 'state') status = event.status
-      if (event.type === 'error') failure = event.message
+      ;({ status, failure } = runtimeEventStatus({ status, failure }, event))
       if (event.type === 'interaction') {
-        failure = 'Unattended task requested input'
         session.cancel()
       }
       if (event.type === 'turn') await exporter.export({ status, failure })
@@ -368,6 +443,16 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
 }
 
 const resources = manifest.resources
+const cancellation = new AbortController()
+let closeGatewayConnections = () => {}
+const hostHealth = monitorHostIo({
+  directory,
+  onFailure(error) {
+    cancellation.abort(error)
+    closeGatewayConnections()
+  },
+})
+process.once('exit', () => hostHealth.stop())
 const releaseResources = resources ? await acquireTaskResources(resources) : null
 let finished = false
 try {
@@ -421,10 +506,14 @@ try {
     maxConcurrency: manifest.concurrency,
     perAttemptConcurrency: manifest.concurrency,
     generationPolicy: manifest.generationPolicy,
+    catalogContextTokens: manifest.desktop ? manifest.contextTokens : null,
   })
+  closeGatewayConnections = () => {
+    server.close()
+    server.closeAllConnections()
+  }
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const baseURL = `http://127.0.0.1:${server.address().port}/v1`
-  const cancellation = new AbortController()
   const cancel = () => cancellation.abort(new Error('Controller interrupted'))
   process.once('SIGINT', cancel)
   process.once('SIGTERM', cancel)
@@ -436,11 +525,18 @@ try {
       ? ['codex']
       : (manifest.participants ?? ['scriptact', 'codex'])) {
       cancellation.signal.throwIfAborted()
+      hostHealth.assertHealthy()
+      hostHealth.setPhase(`${participant}:preparing`)
       if (resources) await checkTaskResourceBudget(resources)
       await verifyFrozen()
       const output = join(directory, participant)
       await mkdir(output)
-      const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
+      const {
+        python,
+        node,
+        prompt: taskPrompt,
+      } = manifest.executionEnvironments?.[participant] ?? manifest
+      process.env.PATH = executionCommandEnvironment(python, manifest.commandEnvironment).PATH
       const workspace = join(manifest.taskRoot, participant, environment.project)
       const baseline = await copySource(workspace, output)
       const sourceBinding = python ? await bindPythonCheckout(python, workspace) : null
@@ -455,7 +551,7 @@ try {
       await snapshot(join(output, 'workspace-baseline.json'), { commit: baseline })
       const apiKey = attemptCredential(
         {
-          campaignId: 'long-runtime-20261004',
+          campaignId: manifest.campaignId ?? 'long-runtime-20261004',
           candidateId: manifest.candidateId,
           participantId: participant,
           taskId: manifest.task.id,
@@ -466,26 +562,83 @@ try {
         token
       )
       await activity({ participant, state: 'started', workspace })
+      hostHealth.setPhase(`${participant}:executing`)
       const startedAt = Date.now()
-      const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(manifest.timeoutMs)])
-      const result =
-        participant === 'scriptact'
-          ? await scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt })
-          : await runCodex({
-              executable: manifest.codex,
-              workspace,
-              directory: output,
-              baseURL,
-              apiKey,
-              model: manifest.model,
-              prompt,
-              timeoutMs: manifest.timeoutMs,
-              contextTokens: manifest.contextTokens,
-              inputWindowTokens: manifest.inputWindowTokens,
-              signal,
-            })
+      const deadline = startedAt + manifest.timeoutMs
+      const prompt = `${taskPrompt}\n\nHost execution window: started ${new Date(startedAt).toISOString()} (Unix milliseconds ${startedAt}); hard deadline ${new Date(deadline).toISOString()} (Unix milliseconds ${deadline}); total ${manifest.timeoutMs} ms. Plan execution, verification and the final response within this window. External cancellation or other limits may end the run earlier.`
+      await snapshot(join(output, 'execution-window.json'), {
+        startedAt,
+        deadline,
+        timeoutMs: manifest.timeoutMs,
+        taskPrompt,
+        submittedPrompt: prompt,
+      })
+      const signal = AbortSignal.any([
+        cancellation.signal,
+        AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+      ])
+      const processGuard = resources
+        ? await createTaskProcessGuard(resources, workspace, output)
+        : undefined
+      let result
+      let runtimeCleanup
+      try {
+        result =
+          participant === 'scriptact'
+            ? manifest.desktop
+              ? await runDesktopTask({
+                  manifest,
+                  workspace,
+                  output,
+                  apiKey,
+                  baseURL,
+                  signal,
+                  prompt,
+                })
+              : await scriptAct({
+                  workspace,
+                  output,
+                  apiKey,
+                  baseURL,
+                  signal,
+                  python,
+                  node,
+                  prompt,
+                  deadline,
+                })
+            : await runCodex({
+                executable: manifest.codex,
+                workspace,
+                directory: output,
+                baseURL,
+                apiKey,
+                model: manifest.model,
+                prompt,
+                timeoutMs: manifest.timeoutMs,
+                contextTokens: manifest.contextTokens,
+                inputWindowTokens: manifest.inputWindowTokens,
+                signal,
+                processGuard,
+              })
+      } finally {
+        if (participant === 'scriptact') runtimeCleanup = await processGuard?.stop()
+      }
+      if (runtimeCleanup) result.ownedProcessCleanup = runtimeCleanup
       const solveMs = Date.now() - startedAt
-      await snapshot(join(output, 'solve.json'), { ...result, startedAt, solveMs })
+      hostHealth.setPhase(`${participant}:finalizing`)
+      hostHealth.assertHealthy()
+      const solve = { ...result, startedAt, solveMs }
+      await snapshot(join(output, 'solve.json'), solve)
+      await snapshot(
+        join(output, 'gateway-settlement.json'),
+        await awaitGatewaySettlement(baseURL, apiKey)
+      )
+      await snapshot(join(output, 'solve.json'), {
+        ...solve,
+        settledAt: Date.now(),
+        upstreamSettlementMs: Date.now() - startedAt - solveMs,
+        totalParticipantMs: Date.now() - startedAt,
+      })
       const installed = await (
         node
           ? nodeDependencyState(workspace, node)
@@ -502,10 +655,43 @@ try {
         ...installed,
       })
       await activity({ participant, state: 'grading', solveMs })
-      await preserveWorkspaceEvidence(workspace, output, baseline)
-      const grading = await grade(workspace, output)
+      hostHealth.setPhase(`${participant}:grading`)
+      let grading
+      try {
+        cancellation.signal.throwIfAborted()
+        if (resources)
+          await checkTaskCopyBudget(
+            resources,
+            [
+              { source: workspace, destination: join(output, 'source-evidence') },
+              {
+                source: workspace,
+                destination: join(manifest.taskRoot, 'grading'),
+                count: environment.maintainedValidation ? 2 : 1,
+              },
+              {
+                source: manifest.source,
+                destination: join(manifest.taskRoot, 'grading'),
+                count: environment.maintainedValidation ? 2 : 1,
+              },
+            ],
+            cancellation.signal
+          )
+        await preserveWorkspaceEvidence(workspace, output, baseline)
+        grading = await grade(workspace, output)
+      } catch (error) {
+        await snapshot(join(output, 'grading-deferred.json'), {
+          status: 'deferred',
+          reason: redact(error),
+          workspace,
+          originalSolvePreserved: true,
+          modelRerun: false,
+        })
+        throw error
+      }
       await snapshot(join(output, 'grade.json'), grading)
       await verifyFrozen()
+      hostHealth.assertHealthy()
       await activity({
         participant,
         state: 'finished',
@@ -516,6 +702,7 @@ try {
       if (ledger.state.authenticationBlocker) throw new Error('Gateway authentication blocked')
     }
   } finally {
+    hostHealth.setPhase('closing-gateway-and-resource-monitor')
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
     ledger.close()
@@ -523,8 +710,15 @@ try {
     process.off('SIGTERM', cancel)
     await stopMonitor?.()
   }
+  hostHealth.assertHealthy()
   finished = true
 } finally {
+  hostHealth.setPhase('releasing-and-archiving-resources')
   await releaseResources?.()
-  if (finished && resources) await archiveTaskResources(resources)
+  hostHealth.stop()
+  if (finished)
+    await snapshot(join(directory, 'isolation', `${isolation.launchId}.completed.json`), {
+      launchId: isolation.launchId,
+      finished,
+    })
 }

@@ -18,15 +18,22 @@ import { promisify } from 'node:util'
 
 import {
   createExecutionEnvironments,
+  copyPythonEnvironment,
   createTaskRoot,
   copyTaskWorkspace,
   bindPythonCheckout,
   pythonTaskPath,
+  pythonProcessEnvironment,
+  executionCommandEnvironment,
+  verifyCommandEnvironment,
   regressionArguments,
   restoreTaskPaths,
   taskEnvironment,
   taskTemporaryEnvironment,
 } from './task-environment.mjs'
+
+import { createNodeExecutionEnvironment } from '../../../packages/velaros/dist/act/runtime/index.js'
+import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
 
 const environment = {
   project: 'example',
@@ -36,6 +43,88 @@ const environment = {
   preserve: ['tests', 'pyproject.toml'],
   baselineFailure: 'Feature is not implemented',
 }
+
+test('frozen toolchain preflight detects a missing packer before dispatch and uses only its explicit PATH', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'evaluation-toolchain-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await symlink(process.execPath, join(root, 'node'))
+  for (const command of ['npm', 'git'])
+    await writeFile(join(root, command), '#!/bin/sh\necho fixture-version\n', { mode: 0o755 })
+  const frozen = { path: root, nodeVersion: process.version }
+  await assert.rejects(verifyCommandEnvironment(frozen), { code: 'ENOENT' })
+  assert.deepEqual((await verifyCommandEnvironment(frozen, false)).commands, {
+    node: process.version,
+    git: 'fixture-version',
+  })
+  await writeFile(join(root, 'bun'), '#!/bin/sh\necho frozen-packer\n', { mode: 0o755 })
+  assert.equal((await verifyCommandEnvironment(frozen)).commands.bun, 'frozen-packer')
+  await assert.rejects(
+    verifyCommandEnvironment({ ...frozen, nodeVersion: 'unexpected' }),
+    assert.AssertionError
+  )
+})
+
+test('baseline and judge CLI commands use their relocated Python environment and bound checkout', async (t) => {
+  const execute = promisify(execFile)
+  const root = await mkdtemp(join(tmpdir(), 'velaros-python-cli-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const source = join(root, 'source')
+  await execute('python3', ['-m', 'venv', '--without-pip', source])
+  const entry = join(source, 'bin/fixture-cli')
+  const original = `#!${join(source, 'bin/python')}\nimport sys, json, marker\nprint(json.dumps(dict(prefix=sys.prefix, value=marker.value)))\n`
+  await writeFile(entry, original, { mode: 0o755 })
+  const pathBefore = process.env.PATH
+  for (const stage of ['baseline', 'judge']) {
+    const directory = join(root, stage)
+    const python = await copyPythonEnvironment(source, directory)
+    const workspace = join(root, `${stage}-checkout`)
+    await mkdir(join(workspace, 'src'), { recursive: true })
+    await writeFile(join(workspace, 'src/marker.py'), `value = '${stage}'\n`)
+    await bindPythonCheckout(python, workspace)
+    const env = pythonProcessEnvironment(python, { ...process.env, PYTHONPATH: '' })
+    assert.equal(env.PATH.split(delimiter)[0], join(directory, 'bin'))
+    const result = await execute('fixture-cli', [], { cwd: root, env })
+    assert.deepEqual(JSON.parse(result.stdout), { prefix: await realpath(directory), value: stage })
+    const host = createLocalShellHost({ cwd: root })
+    try {
+      for (const correct of [false, true]) {
+        const commandEnvironment = { path: pathBefore }
+        const node = createNodeExecutionEnvironment({
+          cwd: root,
+          directory: join(root, `node-${stage}-${correct}`),
+          host,
+          executable: process.execPath,
+          environment: correct
+            ? executionCommandEnvironment(python, commandEnvironment)
+            : { PATH: pathBefore },
+        })
+        const actual = await node.execute(
+          {
+            cwd: root,
+            mode: 'execute',
+            environment: {},
+            source:
+              "import {execFileSync} from 'node:child_process'; process.stdout.write(execFileSync('fixture-cli',[],{encoding:'utf8'}));",
+          },
+          () => {},
+          new AbortController().signal
+        )
+        if (correct) {
+          assert.equal(actual.exitCode, 0, actual.stderr)
+          assert.deepEqual(JSON.parse(actual.stdout), {
+            prefix: await realpath(directory),
+            value: stage,
+          })
+        } else
+          assert.notEqual(actual.exitCode, 0, 'Old Runtime PATH wiring must miss the private CLI')
+      }
+    } finally {
+      await host.dispose()
+    }
+  }
+  assert.equal(process.env.PATH, pathBefore)
+  assert.equal(await readFile(entry, 'utf8'), original)
+})
 
 test('concurrent attempts isolate fixed temporary names in real child processes', async () => {
   const roots = await Promise.all([createTaskRoot(), createTaskRoot()])
@@ -190,6 +279,36 @@ test('nested test restoration preserves edited code and refuses a symlink parent
     )
     assert.equal(await readFile(join(outside, 'sentinel'), 'utf8'), 'keep')
     await assert.rejects(readFile(join(outside, 'tests/test_api.py')), { code: 'ENOENT' })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('restoration preserves source absence and dangling links without following destination links', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'velaros-absent-restore-'))
+  const source = join(root, 'source')
+  const judge = join(root, 'judge')
+  const outside = join(root, 'outside')
+  try {
+    await mkdir(source)
+    await mkdir(judge)
+    await mkdir(outside)
+    await writeFile(join(outside, 'sentinel'), 'keep')
+    await symlink(join(outside, 'sentinel'), join(judge, 'package-lock.json'))
+    await symlink('missing', join(source, 'dangling'))
+    await restoreTaskPaths(source, judge, ['package-lock.json', 'dangling'])
+    await assert.rejects(readlink(join(judge, 'package-lock.json')), { code: 'ENOENT' })
+    assert.equal(await readFile(join(outside, 'sentinel'), 'utf8'), 'keep')
+    assert.equal(await readlink(join(judge, 'dangling')), 'missing')
+    await restoreTaskPaths(source, judge, ['package-lock.json'])
+    await symlink(outside, join(judge, 'nested'))
+    await assert.rejects(
+      restoreTaskPaths(source, judge, ['nested/sentinel']),
+      /Untrusted restoration parent/u
+    )
+    assert.equal(await readFile(join(outside, 'sentinel'), 'utf8'), 'keep')
+    await writeFile(join(source, 'file'), 'not a directory')
+    await assert.rejects(restoreTaskPaths(source, judge, ['file/nested']), { code: 'ENOTDIR' })
   } finally {
     await rm(root, { recursive: true, force: true })
   }

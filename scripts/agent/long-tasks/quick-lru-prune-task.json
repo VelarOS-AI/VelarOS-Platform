@@ -1,0 +1,17 @@
+{
+  "id": "quick-lru-prune-expired",
+  "split": "holdout",
+  "repository": "https://github.com/sindresorhus/quick-lru.git",
+  "commit": "a2190ebdf8e455b95a7138803d274ff5ed57ebcd",
+  "environment": {
+    "runtime": "node",
+    "project": "quick-lru",
+    "acceptance": "test_quick_lru_prune.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": ["test.js"],
+    "preserve": ["test.js", "index.test-d.ts", "package.json"],
+    "baselineFailure": "prune is a public operation"
+  },
+  "prompt": "Add QuickLRU.prototype.prune() to this real QuickLRU package, so an application can eagerly remove expired entries without accessing or promoting live values. It takes no arguments and returns the number of distinct visible keys removed due to expiration. Capture the current time once per sweep. Expiry at that timestamp is expired; entries with no expiry or infinite maxAge remain live. Preserve key and value identity, including object keys and undefined values.\n\nHandle the two existing cache generations correctly. A current-generation entry is authoritative when the same key also appears in the older generation. Remove an expired older shadow silently without evicting its live current replacement. If the visible current entry is expired, remove both generations of that key so a stale older value cannot reappear, and count the visible key once. Notify onEviction once for each expired visible key with its visible value; physical shadow cleanup does not notify. Remove expired data before invoking callbacks, so a callback can install a fresh replacement for the same key and that replacement survives the sweep. A throwing callback propagates its error and must not leave its expired value accessible. Callback order is not part of the contract.\n\nPreserve the ordering, ages and generation placement of surviving entries: pruning must not promote survivors, rotate generations, or renew their TTLs. Maintain correct internal size accounting so later set, get, delete, resize and capacity-driven eviction behave normally. An empty or repeated sweep returns zero. All existing behavior without prune remains compatible.\n\nExpose prune(): number in the public generic declaration. Add permanent AVA tests covering current and old generations, shadowed duplicates, exact expiry, non-expiring entries, repeated calls, callbacks, callback replacement/error behavior, unchanged survivor order/TTL and subsequent normal capacity operations. Preserve all original assertions and package metadata; add type assertions to the existing tsd suite or a discovered new type test. Update README with the return value, expiry and callback semantics, and add a runnable offline example which asserts its results. Run the original suite, all maintained new tests, XO lint, tsd and the example, and accurately report commands, results and any limitations. Make routine implementation choices autonomously."
+}
