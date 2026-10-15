@@ -570,5 +570,240 @@
       "modelCalls": 0,
       "validationExitCode": 1
     }
-  ]
+  ],
+  "delivery": {
+    "completedAt": "2026-10-15T15:10:32.696523+00:00",
+    "channel": "stable",
+    "updatePolicy": "optional",
+    "nativePlatform": "darwin-arm64",
+    "platform": {
+      "sha": "f5f79d8d4df5d191f864f90847e11edab5a0b1c7",
+      "tag": "v0.6.61",
+      "version": "0.6.61",
+      "runtimeVersion": "0.6.3",
+      "files": [
+        "bun.lock",
+        "docs/engineering/stability-self-comparison-20261015.json",
+        "docs/engineering/stability-self-comparison-20261015.md",
+        "docs/generated/package-catalog.json",
+        "package.json",
+        "packages/velaros/act/runtime/test/host-instructions.test.mjs",
+        "packages/velaros/act/runtime/test/node-runtime.test.mjs",
+        "packages/velaros/act/runtime/utils/node-instructions.ts",
+        "packages/velaros/package.json",
+        "packages/velaros/project/contract/constants.ts",
+        "scripts/agent/harbor/budget-authentication.test.mjs",
+        "scripts/agent/harbor/budget-concurrency.test.mjs",
+        "scripts/agent/harbor/budget-proxy.mjs",
+        "scripts/agent/long-tasks/README.md",
+        "scripts/agent/long-tasks/eventemitter3-prepend-task.json",
+        "scripts/agent/long-tasks/node-task.mjs",
+        "scripts/agent/long-tasks/node-task.test.mjs",
+        "scripts/agent/long-tasks/p-filter-partition-task.json",
+        "scripts/agent/long-tasks/p-retry-hook-cancellation-task.json",
+        "scripts/agent/long-tasks/prepare.mjs",
+        "scripts/agent/long-tasks/resource-lifecycle.mjs",
+        "scripts/agent/long-tasks/resource-lifecycle.test.mjs",
+        "scripts/agent/long-tasks/run.mjs",
+        "scripts/agent/long-tasks/task-environment.mjs",
+        "scripts/agent/long-tasks/test_eventemitter3_prepend.mjs",
+        "scripts/agent/long-tasks/test_p_retry_hook_cancellation.mjs",
+        "scripts/agent/long-tasks/workspace-changes.test.mjs",
+        "scripts/agent/long-tasks/workspace-evidence.mjs"
+      ]
+    },
+    "qualityGates": {
+      "platform-release-check": {
+        "exitCode": 0,
+        "elapsedSeconds": 290.722
+      },
+      "harness-final": {
+        "exitCode": 0,
+        "elapsedSeconds": 4.273
+      },
+      "desktop-check-final": {
+        "exitCode": 0,
+        "elapsedSeconds": 57.275
+      },
+      "desktop-tests": {
+        "exitCode": 0,
+        "elapsedSeconds": 141.073
+      },
+      "workbench-check": {
+        "exitCode": 0,
+        "elapsedSeconds": 72.213
+      }
+    },
+    "durability": {
+      "model": "deterministic fixture; no paid provider calls",
+      "requestedDurationMs": 3600000,
+      "elapsedMs": 3601774,
+      "rounds": 803,
+      "totals": {
+        "partial-response": 803,
+        "committed": 803,
+        "receipt-lost": 803
+      },
+      "status": "completed"
+    },
+    "guidanceIdentity": {
+      "verifiedAt": "2026-10-15T14:41:56.380010+00:00",
+      "file": "dist/act/runtime/utils/node-instructions.js",
+      "candidateManifestSha256": "fb343822f73deb0a4e213bbabf85c3b3732800f5937f1e2458c61fce9feda950",
+      "sha256": "36b88fda9d7f0e90dc784ec4a5360aeec5df1195dfe2c83136a2fb1668e2859a",
+      "frozenCandidateMatchesInstalled": true,
+      "desktopAndWorkbenchAsarMatch": true
+    },
+    "products": {
+      "desktop": {
+        "version": "0.2.6",
+        "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc",
+        "releaseUrl": "https://github.com/VelarOS-AI/VelarOS-Releases/releases/tag/desktop-v0.2.6",
+        "artifacts": [
+          {
+            "fileName": "latest-mac-0.2.6.yml",
+            "format": "yml",
+            "sizeBytes": 527,
+            "sha256": "43f472b8a2fe76425376bce7a9a6161354125a87587c818f9e2ae50ef1c3a807",
+            "signatureStatus": "verified",
+            "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc"
+          },
+          {
+            "fileName": "VelarOS-Desktop-0.2.6-arm64-mac.zip",
+            "format": "zip",
+            "sizeBytes": 313587210,
+            "sha256": "2e140dd84b9438df7a98fec81330e8abc974f14cdf22224b35ee6c3a7618339b",
+            "signatureStatus": "notarized",
+            "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc"
+          },
+          {
+            "fileName": "VelarOS-Desktop-0.2.6-arm64-mac.zip.blockmap",
+            "format": "blockmap",
+            "sizeBytes": 312115,
+            "sha256": "db03701cae06da6d78ecda9f5aa682b3169eda94c4aeb84fd5412ab0c8e2c3b8",
+            "signatureStatus": "verified",
+            "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc"
+          },
+          {
+            "fileName": "VelarOS-Desktop-0.2.6-arm64.dmg",
+            "format": "dmg",
+            "sizeBytes": 311391530,
+            "sha256": "239a5f438c8588837d252a51b142bdb6bddce53185924429e4dca454c129b8a1",
+            "signatureStatus": "notarized",
+            "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc"
+          },
+          {
+            "fileName": "VelarOS-Desktop-0.2.6-arm64.dmg.blockmap",
+            "format": "blockmap",
+            "sizeBytes": 322732,
+            "sha256": "c90ea737424547e0d7dc9824c10564573143d2956c4525516f0e8b7b3880d8e1",
+            "signatureStatus": "verified",
+            "sourceCommit": "7e48c32384e3ced0a9779ef97800855ef3bd55dc"
+          }
+        ],
+        "verifiedDomains": [
+          "velaros.cn",
+          "global.velaros.cn"
+        ],
+        "officialDownload": {
+          "viaOfficialRedirect": true,
+          "networkEgress": "local",
+          "anonymous": true,
+          "fileName": "VelarOS-Desktop-0.2.6-arm64.dmg",
+          "sizeBytes": 311391530,
+          "sha256": "239a5f438c8588837d252a51b142bdb6bddce53185924429e4dca454c129b8a1",
+          "elapsedSeconds": 84.106
+        }
+      },
+      "workbench": {
+        "version": "0.4.5",
+        "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519",
+        "releaseUrl": "https://github.com/VelarOS-AI/VelarOS-Releases/releases/tag/workbench-v0.4.5",
+        "artifacts": [
+          {
+            "fileName": "latest-mac.yml",
+            "format": "yml",
+            "sizeBytes": 537,
+            "sha256": "ed8854f339dc065fd4fc3aabb657a4588a795894ada87fe7bd4d0a690ed948f7",
+            "signatureStatus": "verified",
+            "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519"
+          },
+          {
+            "fileName": "VelarOS-Workbench-0.4.5-mac-arm64.dmg",
+            "format": "dmg",
+            "sizeBytes": 301131620,
+            "sha256": "ea6acf8324751e7b95496f06f838317ce498215891d493bed74aeeb1c6eba838",
+            "signatureStatus": "notarized",
+            "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519"
+          },
+          {
+            "fileName": "VelarOS-Workbench-0.4.5-mac-arm64.dmg.blockmap",
+            "format": "blockmap",
+            "sizeBytes": 314014,
+            "sha256": "a8b0aa27e691af2212d86c8ca98bcf31bbffcc429625ddf80bd16b52ec461dd6",
+            "signatureStatus": "verified",
+            "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519"
+          },
+          {
+            "fileName": "VelarOS-Workbench-0.4.5-mac-arm64.zip",
+            "format": "zip",
+            "sizeBytes": 305595867,
+            "sha256": "aa485e25f705c987dbae4e81b0026f909d1a0483f8f190941dced0448482911d",
+            "signatureStatus": "notarized",
+            "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519"
+          },
+          {
+            "fileName": "VelarOS-Workbench-0.4.5-mac-arm64.zip.blockmap",
+            "format": "blockmap",
+            "sizeBytes": 315927,
+            "sha256": "e37eb6f510065c2f895c015464a7a1f8ad5881ed2499ae62d8523677b110aa50",
+            "signatureStatus": "verified",
+            "sourceCommit": "7a136b7bc2144ec663be02c9b5d61b0a8a2e5519"
+          }
+        ],
+        "verifiedDomains": [
+          "velaros.cn",
+          "global.velaros.cn"
+        ],
+        "officialDownload": {
+          "viaOfficialRedirect": true,
+          "networkEgress": "local",
+          "anonymous": true,
+          "fileName": "VelarOS-Workbench-0.4.5-mac-arm64.dmg",
+          "sizeBytes": 301131620,
+          "sha256": "ea6acf8324751e7b95496f06f838317ce498215891d493bed74aeeb1c6eba838",
+          "elapsedSeconds": 77.279
+        }
+      }
+    },
+    "knownPackagingWarning": {
+      "product": "workbench",
+      "kind": "BrowserWindow PNG path missing",
+      "presentInPreviousRelease": true,
+      "macBundleIconPresent": true,
+      "realRendererLaunchPassed": true
+    },
+    "evidenceSha256": {
+      "website-desktop-frontend-verified.json": "4cd7b166300775a9aa09e881e968e11bc01c86af98b0b111c6cc8c0110a2fbc3",
+      "website-workbench-frontend-verified.json": "b0abca54917abe141e5f50e076579713a4e3e506a3bb09cb847c8ffd6ab5fc20",
+      "desktop-launch-proof.json": "9317f566fbd10a0032bc3de35ef05564e4435831c68ce330cd0abe02d495d173",
+      "workbench-remote-verify.json": "2289f26b4171a61796ada7f007c0b8d49065a373df98f268c7ef0552cf9baf3c",
+      "release-quality-gates.json": "4b80527e047779bf1dd42e4345b334d6aff3735999c5fa2e8146d114ee3ed4a7",
+      "durability-release/summary.json": "7f19dc4faaafa7a4377f19e5bca2fba66b97f1e46b63ef2d3402e3480abce396",
+      "durability-release.json": "dfbba500e24f833b203489cada87553684261e627a8fb94de742f08631084f42",
+      "candidate-to-release-guidance.json": "8b25dbdf0d53e1af66abadc451fe42f7432badee05cc39ef9b8e59fb186e5dd6",
+      "desktop-python-cache-audit.json": "c4ec567951997fb270f4830f310c3a765436fed1694586ad9658a708dada9580",
+      "desktop-python-rebuilt.json": "669cbc0ec2bac1be41730fc36a3be77d297a675ee07db6b83ac42b0d8689cd4d",
+      "desktop-included-runtime.json": "8461def2d2335ebbb2940ce88fefe6800f7280f73118a0d45fa6d9f2e08814de",
+      "workbench-included-runtime.json": "eccdbba5647c84a6d428fd0e8eb06897fc2013d0a1fca14df9e97c961b81fc43",
+      "desktop-release-verified.json": "5dc4ad459a446b38539bc24abce4a3bf6eeadbeb761b924fec4a10d4687ae086",
+      "workbench-release-verified.json": "b24ea6a2d481db9daa3db9e8aa980bd7941379be593b42a0a2cb75abb142a18e",
+      "workbench-launch-proof.json": "b85d9a5db7dbd45a72f9500735376ea786202b173edde9568006fa9a819c50c6",
+      "workbench-startup-warning.json": "74741dd0f6a41fb8fc74c82291104f2a581a1ec114cbff516d66e54ed9ad0d7e",
+      "website-desktop-verified.json": "d6594863f8b905ba3dc3414f65433bcf3d70025c10dcaf5eba50bf58fdb6bd00",
+      "website-workbench-verified.json": "b4ad59360b3d2a66fdce314cdb479e5f4172111bb14d145f621607a50a1c6863",
+      "website-desktop-download-verified.json": "a35d224cabb7ad7bb0d73d4050fd81449858c45c1bcdcf7856edbcd1f8045e00",
+      "website-workbench-download-verified.json": "a82c835c8d97b52cc6eb080655b4655d9158c47b8aef82f30ef849b1ea07729f"
+    }
+  }
 }
