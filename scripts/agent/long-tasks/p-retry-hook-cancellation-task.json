@@ -1,0 +1,26 @@
+{
+  "id": "p-retry-pending-hook-cancellation",
+  "split": "holdout",
+  "repository": "https://github.com/sindresorhus/p-retry",
+  "commit": "1472907affe8d6107aba5884abc36d6361b3042e",
+  "environment": {
+    "runtime": "node",
+    "project": "p-retry",
+    "acceptance": "test_p_retry_hook_cancellation.mjs",
+    "regressionRunner": "ava-tap",
+    "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
+    "regression": [
+      "test.js"
+    ],
+    "preserve": [
+      "test.js",
+      "index.test-d.ts",
+      "package.json"
+    ],
+    "baselineFailure": "abort must settle while a hook is pending",
+    "maintainedValidation": {
+      "npmScript": "test"
+    }
+  },
+  "prompt": "Fix AbortSignal cancellation while p-retry is awaiting an asynchronous onFailedAttempt, shouldRetry or shouldConsumeRetry callback. Applications use these hooks for policy or telemetry I/O; a callback that never settles currently prevents cancellation. Once a supplied signal aborts during a pending hook, the returned pRetry promise must reject promptly with the exact signal.reason object, without waiting for the hook. No later hooks, delays or input attempts may start. Do not attempt to terminate user callback work: it may settle later, but its late rejection must not become unhandled and its late success must not restart retries. Cancellation triggered synchronously by a hook before it returns a pending promise must also be observed. Already aborted signals retain existing no-work behavior.\n\nPreserve normal synchronous and asynchronous hooks, hook order, frozen RetryContext fields, shouldConsumeRetry:false behavior, retry budgets, successful return values and exact error identities. Hooks must run at most once per original failure. Preserve AbortError semantics and the current handling of ordinary input work; this change concerns waits on the three policy hooks. Clean up listeners on every settled hook so successful repeated retries do not accumulate abort handlers. Keep the public API and dependency versions unchanged.\n\nAdd permanent regression tests discovered by the configured npm test, including a genuinely pending hook, late rejection, callback-triggered abort, normal success and listener cleanup. Update readme.md to describe cancellation of hook waits and the lifetime of user work. Add a runnable offline examples/abort-hook.js with assertions demonstrating prompt cancellation. Run the complete configured npm test and the example, and report actual commands and outcomes. Do not commit or publish."
+}

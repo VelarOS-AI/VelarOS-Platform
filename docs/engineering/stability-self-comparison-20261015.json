@@ -1,0 +1,574 @@
+{
+  "schema": 1,
+  "createdAt": "2026-10-15T13:45:38.326619+00:00",
+  "baselineCommit": "ae3ea20653d795f86339277e4ea7a4313c7f865d",
+  "candidateManifests": {
+    "baseline": "0630751d7c750d41c39c9c89fd1cad6065ff656fed8296c6362f5b608522be51",
+    "r1": "fb343822f73deb0a4e213bbabf85c3b3732800f5937f1e2458c61fce9feda950"
+  },
+  "model": "gpt-5.6-sol",
+  "reasoning": "high",
+  "costBasis": "Frozen 2026-10-07 reference pricing; not a current quote or provider invoice.",
+  "limitations": [
+    "Small, ordered sample; upstream resets and environment repair affect elapsed time.",
+    "p-filter and EventEmitter are development replays after infrastructure interruption.",
+    "p-retry environment failed the configured baseline entry; dependency changes disqualify full delivery.",
+    "Product r1 was frozen before new-task execution and unchanged throughout all paired runs."
+  ],
+  "runs": [
+    {
+      "attempt": "p-filter-baseline-01",
+      "taskId": "p-filter-single-pass-partition",
+      "candidateId": "candidate-baseline-0630751d7c75",
+      "metricsSha256": "f0c13a57d7aa7a38c7d8c7ff619f7df7716e354bf45dfbd050131fefb20629b6",
+      "sourceEvidenceManifestSha256": "a9ab61feccab95e21f008910e1be1b931442d37bef8c3b1f9b0cbcec8151bc01",
+      "terminal": "completed",
+      "solveMs": 176471,
+      "requests": 9,
+      "missingUsageRequests": 0,
+      "knownReferenceUsd": 0.41321199999999997,
+      "totalReferenceUsd": 0.41321199999999997,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "11 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "3 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "New permanent type assertions are not discovered by the default tsd entry.",
+      "auditSha256": "28735b965d00301f395f9117dc642fcb48fdd781787ee3bc49322a38178c888c",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/partition.js"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [
+        {
+          "file": "test-d/partition.test-d.ts",
+          "discovered": false
+        }
+      ],
+      "dependencyFingerprintUnchanged": false
+    },
+    {
+      "attempt": "p-filter-candidate-01",
+      "taskId": "p-filter-single-pass-partition",
+      "candidateId": "candidate-r1-fb343822f73d",
+      "metricsSha256": "7f1a2b46906a391be676544f8201ef7b41c080e157c54eab506f0bb522f99355",
+      "sourceEvidenceManifestSha256": "aa6e33b5a95a4f3d5173ccb2ca51213fb178ac0e2dc8cb1a550b0d91e681b0c8",
+      "terminal": "failed",
+      "solveMs": 337616,
+      "requests": 14,
+      "missingUsageRequests": 1,
+      "knownReferenceUsd": 0.5366512000000001,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "11 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "3 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "Budget admission interrupted the request; preserve failed terminal and any additional audit failures.",
+      "auditSha256": "32a249975d981df1565e6d3af68bc1564eea2194ff89b6cc73819d00d75f2b3e",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 1
+        },
+        {
+          "argv": [
+            "node",
+            "examples/partition.js"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [
+        {
+          "file": "index.test-d.tsx",
+          "discovered": true
+        }
+      ],
+      "dependencyFingerprintUnchanged": false
+    },
+    {
+      "attempt": "emitter-candidate-01",
+      "taskId": "eventemitter3-prepend-listeners",
+      "candidateId": "candidate-r1-fb343822f73d",
+      "metricsSha256": "e144096ffc627ab96a980b8539b15e71c6940ccf0f1bd2f82a9971d58bae88d0",
+      "sourceEvidenceManifestSha256": "7bad633f0cb97de2d6c32c6b4b5ddf938199a16996aff56d941a16af0b841eea",
+      "terminal": "failed",
+      "solveMs": 207248,
+      "requests": 10,
+      "missingUsageRequests": 1,
+      "knownReferenceUsd": 0.38024879999999994,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "8 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "40 passed, 0 failed, 0 skipped",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "Budget admission interrupted the request; preserve failed terminal and any additional audit failures.",
+      "auditSha256": "dc083e3ccdc72eec88ed83c5632b29bc2e8f3c99c389067a0617c89435ad7aaa",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "npm",
+            "run",
+            "test-esm"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/prepend.cjs"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/mocha/bin/_mocha",
+            "--reporter",
+            "json",
+            "test/test.js"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [],
+      "dependencyFingerprintUnchanged": true
+    },
+    {
+      "attempt": "p-filter-baseline-02",
+      "taskId": "p-filter-single-pass-partition",
+      "candidateId": "candidate-baseline-0630751d7c75",
+      "metricsSha256": "e0a3cf09c19ace261bd9639f57cfa3fba773f9fc50decd103658ba8989511388",
+      "sourceEvidenceManifestSha256": "6ffe2d9650264362e1a418c9961bc6c8b96542621cb02e87896780a6f7888596",
+      "terminal": "completed",
+      "solveMs": 517137,
+      "requests": 16,
+      "missingUsageRequests": 2,
+      "knownReferenceUsd": 0.6220720000000001,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "11 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "3 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "New permanent type assertions are not discovered by the default tsd entry.",
+      "auditSha256": "dd44fd3877c793c75296b4f3f88d85f217573f329593e477d67dae32e1719b87",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/partition.js"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [
+        {
+          "file": "test-d/partition.test-d.ts",
+          "discovered": false
+        }
+      ],
+      "dependencyFingerprintUnchanged": false
+    },
+    {
+      "attempt": "p-filter-candidate-02",
+      "taskId": "p-filter-single-pass-partition",
+      "candidateId": "candidate-r1-fb343822f73d",
+      "metricsSha256": "bca21fce5a7aceca0369b910cce31879bd23e1f1f1864dbc49940f354995c4ae",
+      "sourceEvidenceManifestSha256": "146d990e449f9f10cf407203f5cc53952494416be1d7db9b528176cd0bb7ae75",
+      "terminal": "completed",
+      "solveMs": 305319,
+      "requests": 13,
+      "missingUsageRequests": 0,
+      "knownReferenceUsd": 0.5063384,
+      "totalReferenceUsd": 0.5063384,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "11 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "3 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "New permanent type assertions are not discovered by the default tsd entry.",
+      "auditSha256": "cd8b043ca4c5e5e0672e4f02afabda46b37575c130057261cc8dc2963203734e",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/partition.js"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [
+        {
+          "file": "partition.test-d.ts",
+          "discovered": false
+        }
+      ],
+      "dependencyFingerprintUnchanged": false
+    },
+    {
+      "attempt": "emitter-baseline-01",
+      "taskId": "eventemitter3-prepend-listeners",
+      "candidateId": "candidate-baseline-0630751d7c75",
+      "metricsSha256": "6a89255a185f316bd20f42d0b18ad4cc3b3b028ac2537775b073b24b96a0bddf",
+      "sourceEvidenceManifestSha256": "2b74a55b75ff5d9578f255589e29db932342ea247e5dc57eaedb1113f314f0b6",
+      "terminal": "completed",
+      "solveMs": 250385,
+      "requests": 12,
+      "missingUsageRequests": 0,
+      "knownReferenceUsd": 0.50592,
+      "totalReferenceUsd": 0.50592,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "8 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "40 passed, 0 failed, 0 skipped",
+      "fullDeliveryVerified": true,
+      "fullDeliveryBasis": "Default tests, type consumers, example, preserved dependencies and artifact review passed.",
+      "auditSha256": "699dc4ae54e8db04b439b3acd9e21ec1fc2bbf226597abd79596e321d15ad013",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "npm",
+            "run",
+            "test-esm"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/prepend.cjs"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/mocha/bin/_mocha",
+            "--reporter",
+            "json",
+            "test/test.js"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit",
+            "--strict",
+            "--target",
+            "es2020",
+            "--module",
+            "commonjs",
+            "--moduleResolution",
+            "node",
+            "--esModuleInterop",
+            "test/types.ts"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [],
+      "dependencyFingerprintUnchanged": true,
+      "maintainedTestCount": 45
+    },
+    {
+      "attempt": "emitter-candidate-02",
+      "taskId": "eventemitter3-prepend-listeners",
+      "candidateId": "candidate-r1-fb343822f73d",
+      "metricsSha256": "6594b48de2c2ee213b5da081b42e18557d0f7556d88cece21b8b78ab71a059cd",
+      "sourceEvidenceManifestSha256": "4bc24f82d1f92eca35837c470315324954a0ef43bb6bc2b67aae93c49d9ee8fc",
+      "terminal": "completed",
+      "solveMs": 306804,
+      "requests": 11,
+      "missingUsageRequests": 1,
+      "knownReferenceUsd": 0.4050288,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "8 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "40 passed, 0 failed, 0 skipped",
+      "fullDeliveryVerified": true,
+      "fullDeliveryBasis": "Default tests, type consumers, example, preserved dependencies and artifact review passed.",
+      "auditSha256": "3b84764cfeb865a2aa73832d42c9dfdfeb41cf970e8a113324b76fab9bc8300f",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "npm",
+            "run",
+            "test-esm"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "examples/prepend.cjs"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/mocha/bin/_mocha",
+            "--reporter",
+            "json",
+            "test/test.js"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit",
+            "--strict",
+            "--target",
+            "es2020",
+            "--module",
+            "commonjs",
+            "--moduleResolution",
+            "node",
+            "--esModuleInterop",
+            "test/prepend-types.ts"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [],
+      "dependencyFingerprintUnchanged": true,
+      "maintainedTestCount": 48
+    },
+    {
+      "attempt": "retry-baseline-01",
+      "taskId": "p-retry-pending-hook-cancellation",
+      "candidateId": "candidate-baseline-0630751d7c75",
+      "metricsSha256": "aba271685861ff68fb7700eb3f56e4b9de6eed17f583a8576d62be929958bf66",
+      "sourceEvidenceManifestSha256": "38b5290432c25be5ac7182be76e3599098b9e2566087111ca0155109196a9856",
+      "terminal": "completed",
+      "solveMs": 377364,
+      "requests": 16,
+      "missingUsageRequests": 1,
+      "knownReferenceUsd": 0.7200712,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "9 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "71 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "Evaluation environment has incompatible installed TypeScript; both runs changed dependency versions. Functional checks pass; full delivery is not qualified.",
+      "auditSha256": "9c67253db53296b5e3cc279378fbdde1fbf408d3221b6024a4b54cb9bcd1a682",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 1
+        },
+        {
+          "argv": [
+            "node",
+            "examples/abort-hook.js"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/ava/entrypoints/cli.mjs",
+            "--tap"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [],
+      "dependencyFingerprintUnchanged": false
+    },
+    {
+      "attempt": "retry-candidate-01",
+      "taskId": "p-retry-pending-hook-cancellation",
+      "candidateId": "candidate-r1-fb343822f73d",
+      "metricsSha256": "86703c2294d4577d8d05ed341508479c4ad4e9fec6af0aed3433546b99f2bf90",
+      "sourceEvidenceManifestSha256": "93a75aeaa72fee751d06a1c8aad3c5eea786dda471739ea36e56563029310547",
+      "terminal": "completed",
+      "solveMs": 375376,
+      "requests": 17,
+      "missingUsageRequests": 1,
+      "knownReferenceUsd": 0.6952176000000001,
+      "totalReferenceUsd": null,
+      "acceptance": {
+        "exitCode": 0,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "summary": "9 passed, 0 failed, 0 skipped, 0 errors",
+        "failures": []
+      },
+      "regression": "71 passed, 0 failed, 0 skipped, 0 errors",
+      "fullDeliveryVerified": false,
+      "fullDeliveryBasis": "Evaluation environment has incompatible installed TypeScript; both runs changed dependency versions. Functional checks pass; full delivery is not qualified.",
+      "auditSha256": "3f63ccfa04baa744fbe18371e930f330163c52b787cd18163ffb9873832ea4e1",
+      "commandResults": [
+        {
+          "argv": [
+            "npm",
+            "test"
+          ],
+          "exitCode": 1
+        },
+        {
+          "argv": [
+            "node",
+            "examples/abort-hook.js"
+          ],
+          "exitCode": 0
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/ava/entrypoints/cli.mjs",
+            "--tap"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "defaultTypeDiscovery": [],
+      "dependencyFingerprintUnchanged": false
+    }
+  ],
+  "totals": {
+    "physicalRequests": 118,
+    "missingUsageRequests": 7,
+    "knownReferenceUsd": 4.78476,
+    "totalReferenceUsd": null
+  },
+  "preflightControls": [
+    {
+      "attempt": "p-filter-complete-preflight",
+      "exitCode": 0,
+      "expectedExit": 0,
+      "elapsedMs": 18590,
+      "modelCalls": 0,
+      "validationExitCode": 0
+    },
+    {
+      "attempt": "emitter-complete-preflight",
+      "exitCode": 0,
+      "expectedExit": 0,
+      "elapsedMs": 3384,
+      "modelCalls": 0,
+      "validationExitCode": 0
+    },
+    {
+      "attempt": "retry-toolchain-preflight",
+      "exitCode": 1,
+      "expectedExit": 1,
+      "elapsedMs": 22479,
+      "modelCalls": 0,
+      "validationExitCode": 1
+    }
+  ]
+}

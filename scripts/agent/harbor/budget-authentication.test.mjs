@@ -39,7 +39,7 @@ test('frozen generation resources are shared on the wire while original client c
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ usage }))
     },
-    { generationPolicy }
+    { generationPolicy, ledgerOptions: { reservationOutputTokens: 12000 } }
   )
   const bodies = [
     {
@@ -129,8 +129,9 @@ async function until(check) {
   throw new Error('Mock condition was not reached')
 }
 async function fixture(t, handle, options = {}) {
+  const { ledgerOptions, ...gatewayOptions } = options
   const directory = mkdtempSync(join(tmpdir(), 'gateway-authentication-'))
-  const ledger = new proxy.BudgetLedger(directory, 'unlimited')
+  const ledger = new proxy.BudgetLedger(directory, 'unlimited', ledgerOptions)
   const cleanup = []
   const upstream = createServer(async (req, res) => {
     let raw = ''
@@ -145,7 +146,7 @@ async function fixture(t, handle, options = {}) {
       apiKey: 'mock-provider-key',
       token: 'mock-signing-key',
       upstream: baseURL,
-      ...options,
+      ...gatewayOptions,
     })
     .listen(0, '127.0.0.1')
   await once(gateway, 'listening')

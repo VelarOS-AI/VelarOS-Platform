@@ -1310,8 +1310,8 @@ test('runtime delivers native output to the next model turn with a small standar
   const session = await runtime.openSession('node')
   for await (const event of session.submit('Print and check native-output-739.')) void event
   assert.equal(requests.length, 2)
-  // The compact prompt includes task-completion and verification rules alongside the Node protocol.
-  assert.ok(requests[0].instructions.length < 2600, requests[0].instructions)
+  // Keep the Node protocol and entry-point/discovery verification guidance within a bounded prompt.
+  assert.ok(requests[0].instructions.length < 3000, requests[0].instructions)
   const originalFrame = JSON.parse(
     requests[0].materials.find((item) => item.origin === 'runtime-view').text
   )

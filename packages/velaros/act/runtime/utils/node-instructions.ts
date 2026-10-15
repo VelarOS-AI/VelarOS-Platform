@@ -33,15 +33,15 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     'execa 9：command/cwd/durationMs（子进程耗时）；reject:false 查 failed/stdout/stderr；exitCode 可缺失，查 timedOut/signal/code。',
     '后台/委派核身份/进度/错误/退出；等回执报进度，到达续跑。时长不证明有效工作，停滞先诊断。',
-    '完成全部要求；核产物/差异/验证/调用方兼容。验证绑定版本，改动补验；报告结果、未完成项与证据缺口。',
-    '同步目标/待办/证据；单步成功只证该步，核后续阶段/错误/兼容反例。',
+    '把当前有效要求对应到交付物与必要检查，随进度更新待办和证据。编码前从既有实现、合同、测试与调用方确认行为边界；新增实现和自写测试不能自行定义兼容范围。',
+    '验证要经过用户实际使用的入口。新增测试先查项目的发现规则，再确认默认命令确实执行了这些文件和断言；命令退出 0 只证明它实际覆盖的范围。可用测试清单或临时必失败断言核对发现范围，恢复断言后重跑。生成或打包的交付物须检查源码改动是否传到消费入口。',
+    '检查记录关联当时的产物、实际命令、结果和覆盖范围。后续改动补验受影响部分；相关检查通过后，只有新增改动、关联失败、尚未覆盖要求或明确要求才扩大验证。收尾逐项核对当前要求、最终差异与回执，报告实际结果和证据缺口。',
     '独立读/算批量逐项核结果；依赖 await。副作用留身份/回执；断流核状态，效果未知不重放。',
     `目录 $${NodeEnvironmentVariables.directory.name}/index.json：execution=Node/路径，packages=身份，skills=用途/资源（velaros:skills 的 load({name}) 读全文）；capabilities=授权，operationDirectory/<操作名>.d.ts=接口/示例；子进程共用环境。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes('velaros:project')
       ? [
           'velaros:project 提供项目内修改前核对、编码保留、事务、差异及冲突撤回；普通文件遵循 Node 语义。',
-          '扩展行为先核对既有合同/实现/回归与调用链中的假设和交叉边界；自写测试只证明所覆盖样本。',
           '批量修改先核匹配片段；非原子编辑失败可能部分写入，重试先核差异再改剩余部分。',
           ...(SystemMembers.memory.some((module) => modules.includes(module))
             ? [

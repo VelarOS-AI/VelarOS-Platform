@@ -331,7 +331,8 @@ test('base instructions stay small while authorized packages are discoverable on
     assert.match(instructions, /Node.js/)
     assert.match(instructions, /index.json/)
     const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
-    assert(prefixChars < 1800, `instruction prefix has ${prefixChars} characters`)
+    // 验证发现范围与最终产物的通用指导纳入固定前缀预算，能力合同仍按需读取。
+    assert(prefixChars < 2000, `instruction prefix has ${prefixChars} characters`)
     assert(instructions.length < 3600, 'full control semantics must remain bounded')
     const result = await f.session.execute({
       source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.capabilities.some(item=>item.module==='velaros:project');`,
@@ -364,7 +365,7 @@ test('Node hints expose only available collaboration and search capabilities wit
       assert(!instructions.includes('velaros:context-materials'))
       assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
       const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
-      assert(prefixChars < 1800, `instruction prefix has ${prefixChars} characters`)
+      assert(prefixChars < 2000, `instruction prefix has ${prefixChars} characters`)
       assert(instructions.length < 3600, 'full control semantics must remain bounded')
     }
   }

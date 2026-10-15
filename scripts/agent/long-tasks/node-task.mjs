@@ -51,8 +51,12 @@ export async function validateMaintainedNodeProject(
   env = process.env
 ) {
   if (!environment.maintainedValidation) return null
-  const { entry, args } = environment.maintainedValidation
-  return await runCapturedCommand(node, [entry, ...args], {
+  const validation = environment.maintainedValidation
+  const command = validation.npmScript ? 'npm' : node
+  const args = validation.npmScript
+    ? ['run', validation.npmScript]
+    : [validation.entry, ...validation.args]
+  return await runCapturedCommand(command, args, {
     cwd: workspace,
     env: { ...env, PATH: join(workspace, 'node_modules/.bin') + delimiter + (env.PATH ?? '') },
     timeout: 180000,
@@ -114,14 +118,20 @@ export async function nodeDependencyState(workspace, node) {
 }
 
 // 独立实体副本允许参与者安装工具；评分副本始终从冻结源恢复依赖。
-export async function copyNodeDependencies(source, destination) {
+export async function copyNodeDependencies(source, destination, signal) {
+  signal?.throwIfAborted()
   const path = join(destination, 'node_modules')
   await assert.rejects(lstat(path), { code: 'ENOENT' }, 'Dependency destination must be new')
   await cp(join(source, 'node_modules'), path, {
     recursive: true,
     verbatimSymlinks: true,
     mode: constants.COPYFILE_FICLONE,
+    filter: () => {
+      signal?.throwIfAborted()
+      return true
+    },
   })
+  signal?.throwIfAborted()
 }
 
 // 项目测试可向 stdout 打印诊断；只提取一个完整的官方 JSON reporter 文档。

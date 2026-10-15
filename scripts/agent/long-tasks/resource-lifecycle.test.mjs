@@ -29,6 +29,7 @@ import {
   restoreResourceArchive,
   verifyResourceArchive,
 } from './resource-lifecycle.mjs'
+import { copyTaskWorkspace, taskWorkspaceCopyFilter } from './task-environment.mjs'
 
 async function fixture(t, limits) {
   const base = await mkdtemp(join(tmpdir(), 'resource-lifecycle-'))
@@ -210,6 +211,74 @@ test('resource cancellation rejects finalization before scanning or admitting an
     (error) => error === reason
   )
   assert((await lstat(f.root)).isDirectory())
+})
+
+test('copy admission measures the same filtered files that are copied and accepts file sources', async (t) => {
+  const f = await fixture(t, { maxTaskBytes: 8 * 1024 ** 2 + 64 * 1024 })
+  const source = join(f.base, 'external')
+  await mkdir(join(source, 'src'), { recursive: true })
+  await writeFile(join(source, 'src', 'entry.js'), 'export const value = 1\n')
+  for (const name of ['.git', '.pytest_cache', '__pycache__', 'node_modules']) {
+    await mkdir(join(source, name))
+    await writeFile(join(source, name, 'large'), Buffer.alloc(128 * 1024))
+  }
+  const destination = join(f.root, 'judge')
+  await assert.rejects(checkTaskCopyBudget(f.resource, [{ source, destination }]), /storage limit/)
+  const budget = await checkTaskCopyBudget(f.resource, [
+    {
+      source,
+      destination,
+      filter: taskWorkspaceCopyFilter('node'),
+    },
+  ])
+  const before = await checkTaskResourceBudget(f.resource)
+  await copyTaskWorkspace(source, destination, 'node')
+  const after = await checkTaskResourceBudget(f.resource)
+  assert.equal(after.rootBytes - before.rootBytes, budget.additionalBytes)
+  assert.equal(
+    await readFile(join(destination, 'src', 'entry.js'), 'utf8'),
+    'export const value = 1\n'
+  )
+  const file = await checkTaskCopyBudget(f.resource, [
+    {
+      source: join(source, 'src', 'entry.js'),
+      destination: join(f.root, 'restored.js'),
+    },
+  ])
+  assert.equal(file.additionalBytes, budget.additionalBytes)
+  for (const name of ['.git', '.pytest_cache', '__pycache__', 'node_modules'])
+    await assert.rejects(lstat(join(destination, name)), { code: 'ENOENT' })
+})
+
+test('cancellation during copy measurement stops traversal before admission', async (t) => {
+  const f = await fixture(t)
+  const source = join(f.base, 'external')
+  await mkdir(source)
+  await writeFile(join(source, 'a'), 'first')
+  await writeFile(join(source, 'b'), 'second')
+  const controller = new AbortController()
+  const reason = new Error('cancel during scan')
+  const visited = []
+  await assert.rejects(
+    checkTaskCopyBudget(
+      f.resource,
+      [
+        {
+          source,
+          destination: join(f.root, 'judge'),
+          filter: (path) => {
+            visited.push(path)
+            if (path !== source) controller.abort(reason)
+            return true
+          },
+        },
+      ],
+      controller.signal
+    ),
+    (error) => error === reason
+  )
+  assert.equal(visited.length, 2)
+  await assert.rejects(lstat(join(f.root, 'judge')), { code: 'ENOENT' })
 })
 
 test(

@@ -24,6 +24,92 @@ const usage = {
   input_tokens_details: { cached_tokens: 20, cache_write_tokens: 0 },
 }
 
+test('bounded output reservations retain missing usage and survive restart without a fixed dollar floor', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gateway-output-reservation-'))
+  const pricing = { ...campaignPricing, input: 4, cached: 0.4, write: 5, output: 20 }
+  const options = { pricing, reservationOutputTokens: 12000, perAttemptBudgetUsd: 24 }
+  try {
+    const ledger = new BudgetLedger(directory, 24, options)
+    assert.equal(ledger.reservationUsd, 10.86)
+    assert.throws(() => ledger.reserve({}, identity('one')), /reservation bound/)
+    assert.throws(
+      () => ledger.reserve({ outputLimit: 12001 }, identity('one')),
+      /reservation bound/
+    )
+    const missing = ledger.reserve({ outputLimit: 12000 }, identity('one'))
+    ledger.settle(missing, null, 'unknown')
+    assert.equal(missing.estimatedUsd, null)
+    assert.equal(missing.budgetUsd, 10.86)
+    const next = ledger.reserve({ outputLimit: 4000 }, identity('one'))
+    ledger.settle(next, usage, 'http-200')
+    assert.equal(ledger.summary().unknownUsage, 1)
+    const before = ledger.summary().committedUpperUsd
+    ledger.close()
+    assert.throws(
+      () =>
+        new BudgetLedger(directory, 24, {
+          ...options,
+          reservationOutputTokens: 6000,
+        }),
+      /reservation output bound differs/
+    )
+    const reopened = new BudgetLedger(directory, 24, options)
+    assert.equal(reopened.summary().committedUpperUsd, before)
+    reopened.reserve({ outputLimit: 12000 }, identity('one'))
+    assert.throws(() => reopened.reserve({ outputLimit: 12000 }, identity('one')), {
+      code: 'CAMPAIGN_BUDGET_EXHAUSTED',
+    })
+    reopened.close()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('the gateway enforces the bound used for reservation before dispatch and records the actual output cap', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'gateway-output-envelope-'))
+  const ledger = new BudgetLedger(directory, 40, { reservationOutputTokens: 12000 })
+  const received = []
+  const upstream = createServer(async (req, res) => {
+    let text = ''
+    for await (const chunk of req) text += chunk
+    received.push(JSON.parse(text))
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ usage }))
+  }).listen(0, '127.0.0.1')
+  await once(upstream, 'listening')
+  const gateway = budgetServer({
+    ledger,
+    token: 'fixture',
+    apiKey: 'fixture',
+    upstream: `http://127.0.0.1:${upstream.address().port}`,
+  }).listen(0, '127.0.0.1')
+  await once(gateway, 'listening')
+  t.after(async () => {
+    await Promise.all([
+      new Promise((resolve) => gateway.close(resolve)),
+      new Promise((resolve) => upstream.close(resolve)),
+    ])
+    ledger.close()
+    rmSync(directory, { recursive: true, force: true })
+  })
+  const send = (max) =>
+    fetch(`http://127.0.0.1:${gateway.address().port}/v1/responses`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + attemptCredential(identity('bounded'), 'fixture') },
+      body: JSON.stringify({ model: ledger.model, input: 'test', max_output_tokens: max }),
+    })
+  const excessive = await send(12001)
+  assert.notEqual(excessive.status, 200)
+  assert.match(await excessive.text(), /reservation bound/)
+  assert.equal(received.length, 0)
+  assert.equal(ledger.state.requests.length, 0)
+  const accepted = await send(12000)
+  assert.equal(accepted.status, 200)
+  await accepted.text()
+  assert.equal(received[0].max_output_tokens, 12000)
+  assert.equal(ledger.state.requests[0].metadata.outputLimit, 12000)
+})
+
 test('frozen request caps apply independently to each participant and count missing usage across restart', () => {
   const directory = mkdtempSync(join(tmpdir(), 'gateway-request-cap-'))
   try {

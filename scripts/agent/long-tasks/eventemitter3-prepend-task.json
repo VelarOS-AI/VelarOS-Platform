@@ -1,0 +1,26 @@
+{
+  "id": "eventemitter3-prepend-listeners",
+  "split": "holdout",
+  "repository": "https://github.com/primus/eventemitter3",
+  "commit": "b0144e940ace8add8f335a8adfbed9284eb419f3",
+  "environment": {
+    "runtime": "node",
+    "project": "eventemitter3",
+    "acceptance": "test_eventemitter3_prepend.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "node_modules/mocha/bin/_mocha",
+    "regression": [
+      "test/test.js"
+    ],
+    "preserve": [
+      "test/test.js",
+      "test/test.mjs",
+      "package.json"
+    ],
+    "baselineFailure": "prependListener is not a function",
+    "maintainedValidation": {
+      "npmScript": "test"
+    }
+  },
+  "prompt": "Extend this real EventEmitter3 package with prependListener(event, listener, context?) and prependOnceListener(event, listener, context?). An integration needs a newly installed handler to run before already registered handlers without removing and re-registering the existing ones. Both methods return the same emitter (including subclasses), accept the same event names, listener validation and context semantics as on/once, and work for empty, one-listener and multiple-listener events. Repeated prepends are last-prepended-first. Existing on/addListener/once append behavior remains compatible. Preserve eventNames, listenerCount, listeners, removeListener/off and removeAllListeners behavior for these listeners, including symbol and prototype-looking event names. A prepended once listener is removed before invocation, so recursive emission cannot call it twice. During emission, prepending a listener must not alter the callbacks already selected for that emission; it participates in the next emission. Keep listener arguments, this binding, synchronous error propagation and existing emission mutation semantics compatible.\n\nUpdate the public TypeScript declarations so event-map argument inference, valid event names, context types and subclass return types work identically to on/once. Both CommonJS and the existing ESM entry must expose the methods. Add permanent regression tests that are executed by the existing default npm test command; add type consumer checks and an offline examples/prepend.cjs demonstrating normal and one-time priority with assertions. Document ordering, once/reentrancy behavior and usage in README.md. Preserve dependencies and the package manifest. Run the default npm test, npm run test-esm, a real TypeScript consumer including rejected bad calls, and the example. Report actual commands, results and any unresolved checks. Do not commit or publish."
+}

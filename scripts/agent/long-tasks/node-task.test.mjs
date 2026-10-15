@@ -102,10 +102,51 @@ test('maintained validation is mandatory when declared and rejects ambiguous com
   for (const command of [
     { entry: 'check.cjs', args: ['bad\0arg'] },
     { entry: 'check.cjs', args: [], optional: true },
+    { npmScript: 'test', entry: 'check.cjs', args: [] },
+    { npmScript: 'test', optional: true },
+    { npmScript: '--help' },
+    { npmScript: 'test; exit 0' },
+    { npmScript: '' },
   ])
     assert.throws(() =>
       taskEnvironment({ environment: { ...config, maintainedValidation: command } })
     )
+})
+
+test('configured npm validation executes lifecycle hooks and propagates original toolchain failures', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'long-task-npm-validation '))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(
+    join(workspace, 'package.json'),
+    JSON.stringify({
+      private: true,
+      scripts: {
+        pretest: 'node check.cjs before',
+        test: 'node check.cjs test',
+        posttest: 'node check.cjs after',
+      },
+    })
+  )
+  await writeFile(
+    join(workspace, 'check.cjs'),
+    `const fs = require('node:fs'); const phase = process.argv[2]; fs.appendFileSync('phases.txt', phase + '\\n'); if (phase === 'test' && fs.existsSync('broken-toolchain')) { console.error('incompatible installed tool'); process.exitCode = 7; }`
+  )
+  const task = {
+    prompt: 'Keep dependency versions unchanged.',
+    environment: { ...config, maintainedValidation: { npmScript: 'test' } },
+  }
+  const environment = taskEnvironment(task)
+  const check = () => validateMaintainedNodeProject(environment, workspace, process.execPath)
+  assert.equal((await check()).exitCode, 0)
+  assert.equal(await readFile(join(workspace, 'phases.txt'), 'utf8'), 'before\ntest\nafter\n')
+  await writeFile(join(workspace, 'phases.txt'), '')
+  await writeFile(join(workspace, 'broken-toolchain'), '')
+  const failed = await check()
+  assert.notEqual(failed.exitCode, 0)
+  assert.match(failed.stderr, /incompatible installed tool/)
+  assert.equal(await readFile(join(workspace, 'phases.txt'), 'utf8'), 'before\ntest\n')
+  assert(taskPrompt(task, process.execPath).includes(JSON.stringify(['npm', 'run', 'test'])))
+  assert(taskPrompt(task, process.execPath).includes('preserve required dependency versions'))
 })
 
 test('project checks retain a complete large report when a Node process exits immediately', async (t) => {

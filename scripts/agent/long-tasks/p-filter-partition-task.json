@@ -9,9 +9,19 @@
     "acceptance": "test_p_filter_partition.mjs",
     "regressionRunner": "ava-tap",
     "regressionEntry": "node_modules/ava/entrypoints/cli.mjs",
-    "regression": ["test.js"],
-    "preserve": ["test.js", "index.test-d.ts", "package.json", ".npmrc"],
-    "baselineFailure": "exports pPartition"
+    "regression": [
+      "test.js"
+    ],
+    "preserve": [
+      "test.js",
+      "index.test-d.ts",
+      "package.json",
+      ".npmrc"
+    ],
+    "baselineFailure": "exports pPartition",
+    "maintainedValidation": {
+      "npmScript": "test"
+    }
   },
   "prompt": "Add a named pPartition(input, filterer, options?) export to this real p-filter package. A data import tool needs both accepted and rejected records from an asynchronous validator. Calling pFilter twice repeats I/O and fails for a one-shot source. The new function returns Promise<{matched: ValueType[], unmatched: ValueType[]}>. Consume a synchronous or asynchronous iterable only once, await promised input values before passing each resolved value and its zero-based input index to filterer, and invoke the filterer exactly once per successfully resolved input. Classify the returned or resolved decision by JavaScript truthiness, consistently with the existing implementation. Preserve input order within both groups even when inputs or filter calls settle out of order. Preserve resolved value identity and duplicates, including undefined, null, false, zero, NaN, symbols and object references. Do not mutate caller arrays or options. Empty input resolves to two distinct empty arrays.\n\nUse the installed p-map option semantics: honor concurrency, default fail-fast rejection, stopOnError:false aggregation and AbortSignal cancellation. Forward original input/filter errors and abort reasons without wrapping their identity. With stopOnError:false, all eligible filter work is attempted and AggregateError retains each rejection; do not return a partial successful partition. An already aborted signal starts no filter work, and aborting during a concurrency-1 blocked filter rejects promptly and prevents later filters from starting; already running user work may finish. Invalid concurrency must reject as the installed p-map does. Do not serialize all work when concurrency allows progress, and do not perform two passes or filter twice. Existing default pFilter, pFilterIterable and Options export remain compatible.\n\nAdd public declarations accepting Iterable<ValueType | PromiseLike<ValueType>> or AsyncIterable<ValueType | PromiseLike<ValueType>>, a filterer receiving resolved values and index, and the existing Options. The ordinary boolean or PromiseLike<boolean> overload returns both arrays with ValueType elements. Also support a synchronous type-predicate filterer (value, index) => value is SelectedType: matched must be SelectedType[] and unmatched must be Exclude<ValueType, SelectedType>[]. Keep inference for promised values, async generators, readonly arrays and object unions; reject non-iterable input, incompatible predicates and invalid option types. The runtime truthiness behavior does not require widening the public boolean predicate signature.\n\nDeliver the implementation, declarations, permanent AVA tests in new test files, additional discovered tsd assertions, readme.md API usage and error/cancellation semantics, and examples/partition.js as a runnable offline example with assertions for both groups. Preserve test.js, index.test-d.ts, package.json, .npmrc and dependency versions byte-for-byte; add new tests without weakening original assertions. Run the complete configured npm test (XO, all AVA and tsd), the offline example and a real TypeScript consumer check. Record actual commands and results, and distinguish any existing baseline issue from a new failure. Do not commit or publish. Complete the requested validation and documentation before finishing."
 }

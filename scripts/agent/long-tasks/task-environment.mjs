@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { constants } from 'node:fs'
 import {
   chown,
   cp,
@@ -136,13 +137,20 @@ export function taskEnvironment(task) {
     assert(node, 'Maintained validation commands require a Node task')
     const command = value.maintainedValidation
     assert(command && typeof command === 'object' && !Array.isArray(command))
-    assert(Object.keys(command).every((key) => ['entry', 'args'].includes(key)))
-    assert.equal(typeof command.entry, 'string')
-    assert.match(command.entry, /^[a-zA-Z0-9_][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
-    assert(!command.entry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
-    assert(Array.isArray(command.args))
-    assert(command.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
-    result.maintainedValidation = { entry: command.entry, args: [...command.args] }
+    if (command.npmScript !== undefined) {
+      assert.deepEqual(Object.keys(command), ['npmScript'])
+      assert.equal(typeof command.npmScript, 'string')
+      assert.match(command.npmScript, /^[a-zA-Z0-9][a-zA-Z0-9:_-]*$/u)
+      result.maintainedValidation = { npmScript: command.npmScript }
+    } else {
+      assert(Object.keys(command).every((key) => ['entry', 'args'].includes(key)))
+      assert.equal(typeof command.entry, 'string')
+      assert.match(command.entry, /^[a-zA-Z0-9_][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
+      assert(!command.entry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
+      assert(Array.isArray(command.args))
+      assert(command.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
+      result.maintainedValidation = { entry: command.entry, args: [...command.args] }
+    }
   }
   if (value.regressionPreloads !== undefined) {
     assert(node, 'Regression preloads require a Node task')
@@ -201,24 +209,37 @@ export function applyTaskEnvironment(environment, target = process.env) {
   }
 }
 
+// 准入计量与实际复制共用排除规则；依赖由独立的冻结来源复制。
+export function taskWorkspaceCopyFilter(runtime) {
+  const excluded = new Set([
+    '.git',
+    '.pytest_cache',
+    '__pycache__',
+    ...(runtime === 'node' ? ['node_modules'] : []),
+  ])
+  return (path) => !excluded.has(basename(path))
+}
+
 // 基线、参与者和评分副本共用同一复制语义；相对链接保持相对，不能被改写回冻结源。
-export async function copyTaskWorkspace(source, destination, runtime) {
+export async function copyTaskWorkspace(source, destination, runtime, signal) {
+  signal?.throwIfAborted()
+  const included = taskWorkspaceCopyFilter(runtime)
   await cp(source, destination, {
     recursive: true,
     verbatimSymlinks: true,
-    filter: (path) =>
-      ![
-        '.git',
-        '.pytest_cache',
-        '__pycache__',
-        ...(runtime === 'node' ? ['node_modules'] : []),
-      ].includes(basename(path)),
+    mode: constants.COPYFILE_FICLONE,
+    filter: (path) => {
+      signal?.throwIfAborted()
+      return included(path)
+    },
   })
+  signal?.throwIfAborted()
 }
 
 // 原项目测试可能分散在源码包中；逐层检查目标父目录，拒绝沿代理创建的链接写出评分副本。
-export async function restoreTaskPaths(source, destination, paths) {
+export async function restoreTaskPaths(source, destination, paths, signal) {
   for (const path of paths) {
+    signal?.throwIfAborted()
     let parent = destination
     for (const part of path.split('/').slice(0, -1)) {
       parent = join(parent, part)
@@ -237,13 +258,21 @@ export async function restoreTaskPaths(source, destination, paths) {
       if (error.code !== 'ENOENT') throw error
       return null
     })
+    signal?.throwIfAborted()
     await rm(join(destination, path), { recursive: true, force: true })
+    signal?.throwIfAborted()
     if (original)
       await cp(join(source, path), join(destination, path), {
         recursive: true,
         verbatimSymlinks: true,
+        mode: constants.COPYFILE_FICLONE,
+        filter: () => {
+          signal?.throwIfAborted()
+          return true
+        },
       })
   }
+  signal?.throwIfAborted()
 }
 
 // 使用项目自身的回归测试入口；新功能验收使用独立测试器。
@@ -383,13 +412,14 @@ export function taskPrompt(task, executable) {
     .join(' ')
   const tools =
     task.environment?.runtime === 'node'
-      ? `Use ${executable} for Node.js; npm and the project's runtime and test dependencies are installed. The checkout's node_modules directory is private to your run; install any missing development tools there.`
+      ? `Use ${executable} for Node.js; npm and the project's runtime and test dependencies are installed. The checkout's node_modules directory is private to your run. Install missing development tools only when consistent with the task's dependency constraints; report incompatible installed tools as an environment issue and preserve required dependency versions.`
       : `Use ${executable} for Python and pytest; the project's runtime and test dependencies are installed. This Python environment is private to your run; install any missing development tools there.`
   const preloads = task.environment?.regressionPreloads?.length
     ? ` For project tests, set NODE_OPTIONS to preload ${task.environment.regressionPreloads.join(', ')} with --require and each file's absolute path in this checkout; this keeps test workers on the project's dependency versions.`
     : ''
-  const maintained = task.environment?.maintainedValidation
-    ? ` The project's complete validation command is this argv array: ${JSON.stringify([executable, task.environment.maintainedValidation.entry, ...task.environment.maintainedValidation.args])}. Run it on the final source and maintained tests, and report the actual outcome of its existing gates.`
+  const validation = task.environment?.maintainedValidation
+  const maintained = validation
+    ? ` The project's complete validation command is this argv array: ${JSON.stringify(validation.npmScript ? ['npm', 'run', validation.npmScript] : [executable, validation.entry, ...validation.args])}. Run it on the final source and maintained tests, and report the actual outcome of its existing gates.`
     : ''
   return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools}${preloads}${maintained} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
 }

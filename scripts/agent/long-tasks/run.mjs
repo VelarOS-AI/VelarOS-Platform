@@ -43,6 +43,7 @@ import {
   applyTaskEnvironment,
   bindPythonCheckout,
   copyTaskWorkspace,
+  taskWorkspaceCopyFilter,
   regressionArguments,
   regressionEnvironment,
   restoreTaskPaths,
@@ -159,11 +160,23 @@ async function copySource(destination, output) {
   if (manifest.resources)
     await checkTaskCopyBudget(
       manifest.resources,
-      [{ source: manifest.source, destination, count: 2 }],
+      [
+        {
+          source: manifest.source,
+          destination,
+          count: 2,
+          filter: taskWorkspaceCopyFilter(environment.runtime),
+        },
+        ...(environment.runtime === 'node'
+          ? [{ source: join(manifest.source, 'node_modules'), destination }]
+          : []),
+      ],
       cancellation.signal
     )
-  await copyTaskWorkspace(manifest.source, destination, environment.runtime)
-  if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, destination)
+  await copyTaskWorkspace(manifest.source, destination, environment.runtime, cancellation.signal)
+  if (environment.runtime === 'node')
+    await copyNodeDependencies(manifest.source, destination, cancellation.signal)
+  cancellation.signal.throwIfAborted()
   const build = await buildNodeProject(environment, destination, manifest.node)
   if (build) {
     await snapshot(join(output, 'initial-build.json'), build)
@@ -204,38 +217,56 @@ async function check(command, args, cwd, name, output, processEnvironment = proc
 }
 
 async function grade(workspace, output) {
-  if (manifest.resources)
-    await checkTaskCopyBudget(
+  cancellation.signal.throwIfAborted()
+  const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
+  const maintained = environment.maintainedValidation
+    ? join(manifest.taskRoot, `maintained-${output.split('/').at(-1)}`)
+    : null
+  if (manifest.resources) {
+    const destinations = maintained ? [judge, maintained] : [judge]
+    const budget = await checkTaskCopyBudget(
       manifest.resources,
       [
-        {
-          source: workspace,
-          destination: join(manifest.taskRoot, 'grading'),
-          count: environment.maintainedValidation ? 2 : 1,
-        },
-        {
-          source: manifest.source,
-          destination: join(manifest.taskRoot, 'grading'),
-          count: environment.maintainedValidation ? 2 : 1,
-        },
+        ...destinations.flatMap((destination) => [
+          {
+            source: workspace,
+            destination,
+            filter: taskWorkspaceCopyFilter(environment.runtime),
+          },
+          ...(environment.runtime === 'node'
+            ? [
+                {
+                  source: join(manifest.source, 'node_modules'),
+                  destination: join(destination, 'node_modules'),
+                },
+              ]
+            : []),
+        ]),
+        ...environment.preserve.map((path) => ({
+          source: join(manifest.source, path),
+          destination: join(judge, path),
+        })),
       ],
       cancellation.signal
     )
+    await snapshot(join(output, 'grading-copy-budget.json'), budget)
+  }
   let maintainedValidation = null
-  if (environment.maintainedValidation) {
-    const maintained = join(manifest.taskRoot, `maintained-${output.split('/').at(-1)}`)
-    await copyTaskWorkspace(workspace, maintained, environment.runtime)
-    await copyNodeDependencies(manifest.source, maintained)
+  if (maintained) {
+    await copyTaskWorkspace(workspace, maintained, environment.runtime, cancellation.signal)
+    await copyNodeDependencies(manifest.source, maintained, cancellation.signal)
+    cancellation.signal.throwIfAborted()
     const result = await validateMaintainedNodeProject(environment, maintained, manifest.node)
     await snapshot(join(output, 'maintained-validation.json'), result)
     maintainedValidation = { exitCode: result.exitCode, output: 'maintained-validation.json' }
   }
   // 验收复制真实产物；原项目测试从冻结源码恢复，防止删测试制造通过。
-  const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
-  await copyTaskWorkspace(workspace, judge, environment.runtime)
-  await restoreTaskPaths(manifest.source, judge, environment.preserve)
-  if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, judge)
+  await copyTaskWorkspace(workspace, judge, environment.runtime, cancellation.signal)
+  await restoreTaskPaths(manifest.source, judge, environment.preserve, cancellation.signal)
+  if (environment.runtime === 'node')
+    await copyNodeDependencies(manifest.source, judge, cancellation.signal)
   else await bindPythonCheckout(manifest.python, judge)
+  cancellation.signal.throwIfAborted()
   const build = await buildNodeProject(environment, judge, manifest.node)
   if (build) await snapshot(join(output, 'build.json'), build)
   const acceptance = await check(
@@ -659,25 +690,18 @@ try {
       let grading
       try {
         cancellation.signal.throwIfAborted()
-        if (resources)
-          await checkTaskCopyBudget(
-            resources,
-            [
-              { source: workspace, destination: join(output, 'source-evidence') },
-              {
-                source: workspace,
-                destination: join(manifest.taskRoot, 'grading'),
-                count: environment.maintainedValidation ? 2 : 1,
-              },
-              {
-                source: manifest.source,
-                destination: join(manifest.taskRoot, 'grading'),
-                count: environment.maintainedValidation ? 2 : 1,
-              },
-            ],
-            cancellation.signal
-          )
-        await preserveWorkspaceEvidence(workspace, output, baseline)
+        await preserveWorkspaceEvidence(workspace, output, baseline, {
+          signal: cancellation.signal,
+          beforeWrite: resources
+            ? async (additionalEvidenceBytes) => {
+                const budget = await checkTaskResourceBudget(resources, {
+                  additionalEvidenceBytes,
+                  signal: cancellation.signal,
+                })
+                await snapshot(join(output, 'source-evidence-budget.json'), budget)
+              }
+            : undefined,
+        })
         grading = await grade(workspace, output)
       } catch (error) {
         await snapshot(join(output, 'grading-deferred.json'), {

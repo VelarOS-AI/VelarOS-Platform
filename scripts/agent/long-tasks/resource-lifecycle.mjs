@@ -117,20 +117,24 @@ async function* entries(root, directory = root) {
 }
 
 /** 运行中的临时文件可随时消失，socket 也可能仍在使用；计量不将其误判成归档失败。 */
-async function directoryBytes(directory) {
+async function directoryBytes(path, { filter, signal } = {}) {
+  signal?.throwIfAborted()
+  if (filter && !(await filter(path))) return 0
+  signal?.throwIfAborted()
+  const stat = await lstat(path).catch((error) => {
+    if (error.code === 'ENOENT') return null
+    throw error
+  })
+  if (stat?.isFile()) return stat.size
+  if (!stat?.isDirectory()) return 0
   let bytes = 0
-  const names = await readdir(directory).catch((error) => {
+  const names = await readdir(path).catch((error) => {
     if (error.code === 'ENOENT') return []
     throw error
   })
   for (const name of names) {
-    const path = join(directory, name)
-    const stat = await lstat(path).catch((error) => {
-      if (error.code === 'ENOENT') return null
-      throw error
-    })
-    if (stat?.isDirectory()) bytes += await directoryBytes(path)
-    else if (stat?.isFile()) bytes += stat.size
+    signal?.throwIfAborted()
+    bytes += await directoryBytes(join(path, name), { filter, signal })
   }
   return bytes
 }
@@ -143,8 +147,8 @@ export async function checkTaskResourceBudget(
   for (const value of [additionalRootBytes, additionalEvidenceBytes])
     assert(Number.isSafeInteger(value) && value >= 0, 'Invalid projected storage growth')
   await owned(resource)
-  const rootBytes = await directoryBytes(resource.root)
-  const evidenceBytes = await directoryBytes(resource.output)
+  const rootBytes = await directoryBytes(resource.root, { signal })
+  const evidenceBytes = await directoryBytes(resource.output, { signal })
   const bytes = rootBytes + evidenceBytes
   const volume = await statfs(resource.root)
   const archiveVolume = await statfs(resource.output)
@@ -174,7 +178,8 @@ export async function checkTaskCopyBudget(resource, copies, signal) {
   signal?.throwIfAborted()
   let additionalRootBytes = 0,
     additionalEvidenceBytes = 0
-  for (const { source, destination, count = 1 } of copies) {
+  for (const { source, destination, count = 1, filter } of copies) {
+    signal?.throwIfAborted()
     assert(Number.isSafeInteger(count) && count > 0)
     let parent = resolve(destination)
     const suffix = []
@@ -194,7 +199,7 @@ export async function checkTaskCopyBudget(resource, copies, signal) {
       target.startsWith(resource.root + sep) || target.startsWith(resource.output + sep),
       'Copy must belong to the evaluation'
     )
-    const bytes = (await directoryBytes(source)) * count
+    const bytes = (await directoryBytes(source, { filter, signal })) * count
     if (target.startsWith(resource.root + sep)) additionalRootBytes += bytes
     else additionalEvidenceBytes += bytes
   }

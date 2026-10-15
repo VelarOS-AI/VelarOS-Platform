@@ -184,7 +184,7 @@ export function usageCost(usage, upperBound = false, pricing = campaignPricing) 
   )
 }
 
-// 每次请求先持久预占 20 美元：高于官方最大上下文和输出在 standard 长上下文费率下的费用。
+// 每次请求先持久预占模型输入上界与输出上限的保守费用；未绑定输出上限的旧账本保留原策略。
 // 断流没有 usage 时保留预占；进程重启也不返还。第二个进程不得共用同一本账。
 export class BudgetLedger {
   constructor(
@@ -199,6 +199,7 @@ export class BudgetLedger {
       pricingBasis,
       maxRequestsPerAttempt = null,
       perAttemptBudgetUsd = null,
+      reservationOutputTokens = null,
     } = {}
   ) {
     if (limitUsd === 'unlimited') limitUsd = null
@@ -241,15 +242,30 @@ export class BudgetLedger {
     )
       throw new Error('Per-attempt budget must be positive')
     this.perAttemptBudgetUsd = perAttemptBudgetUsd
+    if (
+      reservationOutputTokens !== null &&
+      (!Number.isSafeInteger(reservationOutputTokens) ||
+        reservationOutputTokens < 1 ||
+        reservationOutputTokens > 128000)
+    )
+      throw new Error('Reservation output bound must be an integer in 1..128000')
+    if (
+      pricing.maxInputTokens !== undefined &&
+      (!Number.isSafeInteger(pricing.maxInputTokens) || pricing.maxInputTokens < 1)
+    )
+      throw new Error('Reservation model input bound must be a positive integer')
+    this.reservationOutputTokens = reservationOutputTokens
     this.model = model
     this.pricing = Object.freeze({ ...pricing })
     this.pricingRef = pricingRef
     this.reservationUsd = Math.max(
-      20,
+      reservationOutputTokens === null ? 20 : 0,
       ((pricing.maxInputTokens ?? 1050000) *
-        Math.max(pricing.input, pricing.write) *
-        pricing.longInputMultiplier +
-        128000 * pricing.output * pricing.longOutputMultiplier) /
+        Math.max(pricing.input, pricing.cached, pricing.write) *
+        Math.max(1, pricing.longInputMultiplier) +
+        (reservationOutputTokens ?? 128000) *
+          pricing.output *
+          Math.max(1, pricing.longOutputMultiplier)) /
         1000000
     )
     mkdirSync(directory, { recursive: true })
@@ -258,7 +274,18 @@ export class BudgetLedger {
     this.fd = openSync(this.lock, 'wx', 0o600)
     this.state = existsSync(this.path)
       ? JSON.parse(readFileSync(this.path, 'utf8'))
-      : { schema: 2, limitUsd, maxRequestsPerAttempt, perAttemptBudgetUsd, requests: [] }
+      : {
+          schema: 2,
+          limitUsd,
+          maxRequestsPerAttempt,
+          perAttemptBudgetUsd,
+          reservationOutputTokens,
+          requests: [],
+        }
+    if ((this.state.reservationOutputTokens ?? null) !== reservationOutputTokens) {
+      this.close()
+      throw new Error('Existing reservation output bound differs; use a new ledger directory')
+    }
     if (
       (this.state.maxRequestsPerAttempt ?? null) !== maxRequestsPerAttempt ||
       (this.state.perAttemptBudgetUsd ?? null) !== perAttemptBudgetUsd
@@ -299,6 +326,7 @@ export class BudgetLedger {
       pricingRef,
       maxRequestsPerAttempt,
       perAttemptBudgetUsd,
+      reservationOutputTokens,
       ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
       budgetMode: limitUsd === null ? 'unlimited' : 'limited',
     })
@@ -321,6 +349,7 @@ export class BudgetLedger {
       ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
       budgetMode: this.state.budgetMode,
       reservationUsd: this.reservationUsd,
+      reservationOutputTokens: this.reservationOutputTokens,
       estimatedKnownUsd: requests.reduce((sum, item) => sum + (item.estimatedUsd ?? 0), 0),
       committedUpperUsd: requests.reduce((sum, item) => sum + item.budgetUsd, 0),
       requests: requests.length,
@@ -331,6 +360,13 @@ export class BudgetLedger {
     }
   }
   reserve(metadata = {}, identity = null) {
+    if (
+      this.reservationOutputTokens !== null &&
+      (!Number.isSafeInteger(metadata.outputLimit) ||
+        metadata.outputLimit < 1 ||
+        metadata.outputLimit > this.reservationOutputTokens)
+    )
+      throw new Error('Request output limit exceeds or omits the frozen reservation bound')
     if (
       identity &&
       this.state.requests.some(
@@ -676,6 +712,8 @@ export function budgetServer({
       const outputLimit = generationPolicy
         ? Math.min(requestedOutputLimit, generationPolicy.maxOutputTokens)
         : requestedOutputLimit
+      if (ledger.reservationOutputTokens !== null && outputLimit > ledger.reservationOutputTokens)
+        throw new Error('Request output limit exceeds the frozen reservation bound')
       if (generationPolicy) {
         body.reasoning = {
           ...body.reasoning,

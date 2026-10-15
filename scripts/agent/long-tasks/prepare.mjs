@@ -487,6 +487,7 @@ try {
     accounting: {
       maxRequestsPerAttempt: config.maxRequests,
       perAttemptBudgetUsd: config.perAttemptBudgetUsd ?? null,
+      reservationOutputTokens: config.outputTokens,
       model: pricing.model,
       reasoningEffort: 'high',
       pricingRef: `${pricing.source}#sha256=${hash(JSON.stringify(pricing))}`,
