@@ -550,7 +550,8 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
   })
   const main = model(async function* (request) {
     assert.match(request.instructions, /index.json/)
-    assert.match(request.instructions, /按需/)
+    assert.match(request.instructions, /capabilities=授权/)
+    assert.match(request.instructions, /operationDirectory/)
     if (++mainCalls === 1) {
       yield {
         type: 'text',

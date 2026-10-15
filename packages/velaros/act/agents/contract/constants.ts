@@ -4,6 +4,8 @@ export const AgentsModuleId = 'velaros:agents' as const
 export const AgentsLimits = Object.freeze({
   /** 子任务最多附带的材料引用数。 */
   materials: 32,
+  /** 一次等待任一结果的子任务数。 */
+  waitTargets: 32,
 })
 
 /** 模块稳定身份。 */

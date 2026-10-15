@@ -24,6 +24,10 @@ export interface ActiveAgentJob {
   controller: AbortController
   /** 工厂打开后用于引导与收束的会话。 */
   session?: ActChildSession
+  /** 首个运行事件或启动失败后结算；等待者分别绑定自己的取消范围。 */
+  ready: Promise<void>
+  /** 当前运行已经接纳且仍可接收引导，收束阶段为 false。 */
+  accepting: boolean
   /** 包含终态持久化的运行承诺。 */
   promise: Promise<void>
 }

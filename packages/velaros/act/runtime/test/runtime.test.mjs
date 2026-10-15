@@ -36,6 +36,7 @@ test('INV-2 runtime exposes one script-context contract and preserves paged sour
   try {
     const names = runtime.modules().items.map((item) => item.binding.moduleId)
     assert.deepEqual(names, [
+      'velaros:executions',
       'velaros:interaction',
       'velaros:modules',
       'velaros:programs',

@@ -9,6 +9,7 @@ import { AppError } from '@velaros-ai/core/error'
 import {
   CodeSurfaceLimits,
   NodeDefaultPackages,
+  NodeRuntimePackagePrefix,
   ScriptOutputLimits,
 } from '../contract/constants.js'
 import type { NodeRuntimeEnvironment } from '../types/environment.js'
@@ -58,9 +59,9 @@ export function discoverPackages(index, importer) {
     try { packageJson = findPackageJSON(installed.name,importer); }
     catch (error) {
       if(error.code === 'ERR_MODULE_NOT_FOUND') return installed;
-      return {name:installed.name,source:'workspace',error:{code:error.code ?? 'UNAVAILABLE',message:String(error.message ?? error)}};
+      return {name:installed.name,source:'workspace',runtimeImport:installed.runtimeImport,runtimeVersion:installed.runtimeVersion,runtimePackageJson:installed.runtimePackageJson,runtimeReadme:installed.runtimeReadme,error:{code:error.code ?? 'UNAVAILABLE',message:String(error.message ?? error)}};
     }
-    const reference = {name:installed.name,source:'workspace',packageJson};
+    const reference = {name:installed.name,source:'workspace',packageJson,runtimeImport:installed.runtimeImport,runtimeVersion:installed.runtimeVersion,runtimePackageJson:installed.runtimePackageJson,runtimeReadme:installed.runtimeReadme};
     try {
       reference.root = realpathSync(dirname(packageJson));
       reference.packageJson = join(reference.root,'package.json');
@@ -105,6 +106,8 @@ export async function nodeProgramSource(
     if (
       isBuiltin(name) ||
       ['velaros', 'velaros:program'].includes(name) ||
+      name.startsWith(NodeRuntimePackagePrefix) ||
+      `velaros:${name}`.startsWith(NodeRuntimePackagePrefix) ||
       isRuntimePackage(name) ||
       Object.hasOwn(specifiers, name)
     )
@@ -136,6 +139,7 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
     if (
       packages.has(pkg.specifier) ||
       isBuiltin(pkg.specifier) ||
+      pkg.specifier.startsWith(NodeRuntimePackagePrefix) ||
       isRuntimePackage(pkg.specifier) ||
       (Object.hasOwn(specifiers, pkg.specifier) && pkg.specifier !== 'velaros')
     )
@@ -166,6 +170,13 @@ import {join} from 'node:path';
 const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
 const packages = JSON.parse(${JSON.stringify(JSON.stringify(packageParents))});
 export function resolve(specifier, context, nextResolve) {
+  if (specifier.startsWith(${JSON.stringify(NodeRuntimePackagePrefix)})) {
+    const requested = specifier.slice(${NodeRuntimePackagePrefix.length});
+    const name = Object.keys(packages).find(name => requested === name || requested.startsWith(name+'/'));
+    if (!name || requested.split('/').some(part => !part || part === '.' || part === '..' || /[%\\\\?#]/u.test(part))) throw Object.assign(new Error('当前会话未授权宿主 npm 包 '+specifier), {code:'PERMISSION'});
+    if (context.conditions.includes('require')) return nextResolve(createRequire(packages[name]).resolve(requested),context);
+    return nextResolve(requested, {...context, parentURL:packages[name]});
+  }
   if (Object.hasOwn(specifiers, specifier)) return {url:specifiers[specifier], shortCircuit:true};
   if ((specifier.startsWith('velaros:') || specifier.startsWith('skill:'))) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
   try { return nextResolve(specifier, context); }

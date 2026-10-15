@@ -185,6 +185,90 @@ test('INV-20 failed and incomplete terminals retain measured usage and original 
   }
 })
 
+for (const fixture of [
+  {
+    name: 'missing sequence number',
+    error: { code: 'server_error', message: 'opaque service failure' },
+    message: 'opaque service failure',
+    retryable: true,
+  },
+  {
+    name: 'code without message',
+    error: { code: 'stream_read_error' },
+    message: 'stream_read_error',
+    retryable: true,
+  },
+  {
+    name: 'message without code',
+    error: { message: 'overloaded_error' },
+    message: 'overloaded_error',
+    retryable: true,
+  },
+  {
+    name: 'authentication with transient wording',
+    error: { code: 'invalid_api_key', message: 'service unavailable' },
+    message: 'service unavailable',
+    retryable: false,
+  },
+  {
+    name: 'permanent wording overrides transient code',
+    error: { code: 'server_error', message: 'invalid api key: rejected' },
+    message: 'invalid api key: rejected',
+    retryable: false,
+  },
+  {
+    name: 'unknown error',
+    error: { code: 'unknown_provider_failure', message: 'opaque failure' },
+    message: 'opaque failure',
+    retryable: false,
+  },
+])
+  test(`INV-19 raw failed terminal preserves ${fixture.name} through SDK schema fallback`, async () => {
+    for (const measured of [false, true]) {
+      const { events } = await heldStream([
+        ...prefix,
+        {
+          type: 'response.failed',
+          response: { error: fixture.error, ...(measured ? { usage } : {}) },
+        },
+      ])
+      expect(events.at(-1)).toMatchObject({
+        type: 'error',
+        code: 'provider',
+        message: fixture.message,
+      })
+      if (fixture.retryable)
+        expect(events.at(-1)).toHaveProperty('retryAfterMs', expect.any(Number))
+      else expect(events.at(-1)).not.toHaveProperty('retryAfterMs')
+      expect(events.filter((event) => event.type === 'usage')).toHaveLength(measured ? 1 : 0)
+      expect(
+        events.some((event) => ['finish', 'continuation', 'output'].includes(event.type))
+      ).toBe(false)
+    }
+  })
+
+test('INV-19 invalid raw failure diagnostics never infer retry or stringify unrelated fields', async () => {
+  for (const error of [
+    null,
+    { message: { code: 'server_error', privateRequest: 'fixture-secret' } },
+    {
+      code: 'server_error',
+      message: `${'x'.repeat(ModelTuning.stream.failureMessageChars + 1)}invalid api key`,
+    },
+    { code: 'server_error'.repeat(100), privateRequest: 'fixture-secret' },
+    { privateRequest: 'fixture-secret', retryable: true },
+  ]) {
+    const { events } = await heldStream([{ type: 'response.failed', response: { error } }])
+    expect(events.at(-1)).toMatchObject({ type: 'error', code: 'provider' })
+    expect(events.at(-1)).not.toHaveProperty('retryAfterMs')
+    expect(JSON.stringify(events)).not.toContain('fixture-secret')
+    expect(JSON.stringify(events).length).toBeLessThan(500)
+    expect(events.some((event) => ['finish', 'continuation', 'usage'].includes(event.type))).toBe(
+      false
+    )
+  }
+})
+
 test('INV-20 malformed terminal still fails SDK validation and invents no usage', async () => {
   const { events } = await heldStream([...prefix, { type: 'response.completed', response: null }])
   expect(events.at(-1)).toMatchObject({ type: 'error' })

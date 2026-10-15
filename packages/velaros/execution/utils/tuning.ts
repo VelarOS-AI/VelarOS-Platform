@@ -119,3 +119,19 @@ export const ShellTuning = Object.freeze({
     }),
   }),
 })
+
+/** 宿主的固定验证上限，与普通主任务执行额度分开。 */
+export const NodeValidationLimits = Object.freeze({
+  /** 单次验证最多复制的文件数量。 */
+  files: 16,
+  /** 所有输入文件的合计 UTF-8 字节上限。 */
+  inputBytes: 16_777_216,
+  /** 验证 ESM 源码的 UTF-8 字节上限。 */
+  codeBytes: 32_768,
+  /** 返回的 stdout 与 stderr 合计 UTF-8 字节上限。 */
+  outputBytes: 16_384,
+  /** 准备、预检与执行共用的墙钟上限，毫秒。 */
+  timeoutMs: 15_000,
+  /** 独立后端能力预检的单次时限，毫秒。 */
+  preflightMs: 3000,
+})

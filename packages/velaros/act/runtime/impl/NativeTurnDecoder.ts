@@ -54,10 +54,11 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       throw protocolFailure('原生工具名称必须唯一')
     const descriptions = {
       execute:
-        '执行一次程序。JSON 参数 code 是源码，options 是程序选项；options.async/retain 控制后台执行与结果保留。依赖步骤在同一程序中顺序 await；检查执行结果后继续。',
+        '执行一次程序。code 写 JavaScript 逻辑；复制或转换已有内容时，直接读取来源，在程序内由该值生成输出及校验预期。options.blobs 传递新写的文档、补丁和源码片段，通过 import {blobs} from "velaros:program" 读取，独立于 JavaScript 字面量编码。省略 options.async 使用短等待返回；true 立即后台，false 优先等待完成；新输入、并行程序收束或子任务进展会提前返回执行身份，原程序继续。options.retain 控制结果保留。等待已有执行完成时，用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}；单次等待 1..60000 毫秒，默认 60000，到期返回当前状态，目标继续运行，无需循环 read 或运行定时器。检查/停止用 kind:"read"/"stop"；read/wait 可加 cursor/limit。每次只受理一个等待，等待与检查/停止通道独立，普通执行槽满时仍可用。依赖步骤顺序 await；检查执行结果后继续。',
       observe:
         '登记或整体替换当前持续只读观察，下个正常业务轮运行；每份响应最多一次。options.clear:true 退订，options.edits 局部修改；引用、编辑、快照或清除时 code 为 ""。',
-      blobs: 'JSON 参数 name/text 绑定原文，供同一响应的程序通过 velaros:program 的 blobs 读取。',
+      blobs:
+        'JSON 参数 name/text 绑定原文，必须在同一响应同时提交使用它的程序调用。单独调用不会执行或保留原文；一次程序优先把原文放进该调用的 options.blobs。',
       done: '通过 JSON 参数 message 返回用户答复，completion 提供完成依据。作为本响应最后一个工具调用，申请运行时验收任务完成。',
     }
     this.response = {
@@ -76,7 +77,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       })),
     }
     this.instructions = [
-      '通过已提供的原生工具调用提交本轮操作，普通文本用于进度说明。工具参数按各自 JSON Schema 填写。',
+      '需要操作时通过原生工具提交，参数按各自 JSON Schema 填写。已有执行或子任务仍在运行、当前只需等待时，仅返回普通文本进度；运行时挂起模型调用，待执行进展、子任务结果或新输入后恢复。',
       this.config.allowed.includes('done')
         ? `完成后调用 ${name('done')}，通过 message 返回答复。`
         : '',
@@ -172,7 +173,12 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public finish(): ActDecodedTurn {
     this.consume(0)
     this.ended = true
-    const submission = compileScriptRecords(this.records, this.config, this.inputs)
+    const submission = compileScriptRecords(
+      this.records,
+      this.config,
+      this.inputs,
+      NativeExecutionSchema
+    )
     if (
       this.requireDecision() &&
       !this.done &&
@@ -183,7 +189,11 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
         `缺少本轮控制决策：请调用 ${this.config.allowed
           .filter((kind) => kind !== 'blobs')
           .map((kind) => nativeToolName(kind, this.config))
-          .join(' / ')}。`
+          .join(' / ')}。${
+          this.records.some((record) => record.kind === 'blobs')
+            ? '本响应的原文尚未接纳。请把原文放进程序调用的 options.blobs，并在 code 中通过 import {blobs} from "velaros:program" 读取；或在同一响应同时提交原文与使用它的程序。'
+            : ''
+        }`
       )
     return {
       message: this.text,

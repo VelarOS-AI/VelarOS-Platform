@@ -51,7 +51,7 @@ export interface ShellHostPort {
 /** 跑一条命令时宿主要的回调。入参是可移植数据、放不下函数，回调单独放这里，和入参合在一起传。 */
 export interface ShellRunCommandHooks {
   /** 前台命令跑着时每吐出一段输出（stdout、stderr 按到达顺序）就回调一次；后台命令不回调。 */
-  onOutput?: (text: string) => void
+  onOutput?: (text: string, stream?: 'stdout' | 'stderr') => void
 }
 
 // ── 本机宿主 ────────────────────────────────────────────────────
@@ -64,6 +64,12 @@ export interface ShellEnvironmentOptions {
   platform?: NodeJS.Platform
   /** 每个 POSIX 登录 shell 的读取超时，缺省 10 秒。 */
   captureTimeoutMs?: number
+}
+
+/** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */
+export interface LocalNodeValidationOptions {
+  /** 宿主已选择的 Node.js 可执行文件；模型不能替换。 */
+  readonly executable: string
 }
 
 /** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */

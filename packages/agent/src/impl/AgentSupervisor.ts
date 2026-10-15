@@ -1,4 +1,5 @@
 import { createContextReference, createContextRuntime } from '@velaros-ai/context'
+import { isUndefined } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -7,15 +8,15 @@ import type { AgentSupervisorOptions } from '../contract/requires.js'
 import type { ActInput, ActRunEvent } from '../types/act.js'
 import type { AgentJob, AgentResume, AgentStart } from '../types/delegation.js'
 import type { ActiveAgentJob } from '../types/runtime.js'
-import { appendChildEvent } from '../utils/delegation.js'
+import { appendChildEvent, guidanceUnavailable } from '../utils/delegation.js'
 import { boundedModelOperation } from '../utils/model-stream.js'
 
 /** 并发子运行的唯一调度面，父身份必须由宿主提供。 */
 export interface AgentSupervisorApi {
   /** 父运行是否仍有活动子任务。 */
   pending(parent: string): boolean
-  /** 等待新的子任务交互或收束，不调用模型轮询。 */
-  waitAny(parent: string, signal: AbortSignal): Promise<void>
+  /** 等待新的子任务交互或收束，不调用模型轮询；includeFuture 同时等待随后创建的子任务。 */
+  waitAny(parent: string, signal: AbortSignal, includeFuture?: boolean): Promise<void>
   /** 派发并立即返回句柄，输入及状态先持久化。 */
   start(parent: string, input: AgentStart, signal: AbortSignal): Promise<AgentJob>
   /** 续跑同一会话，沿用材料、授权配置和已计费预算。 */
@@ -26,8 +27,8 @@ export interface AgentSupervisorApi {
   wait(parent: string, id: string, signal: AbortSignal): Promise<AgentJob>
   /** 回答当前子运行的指定请求；陈旧、重复、跨父任务回答拒绝。 */
   reply(parent: string, id: string, requestId: string, value: unknown): Promise<void>
-  /** 向活动子运行发送新输入。 */
-  send(parent: string, id: string, input: ActInput | string): Promise<void>
+  /** 向活动子运行发送新输入；启动期间等待运行接纳，可取消本次等待。 */
+  send(parent: string, id: string, input: ActInput | string, signal?: AbortSignal): Promise<void>
   /** 取消指定子运行并等待收束。 */
   cancel(parent: string, id: string): Promise<AgentJob>
   /** 父运行取消或结束时收束其全部子运行。 */
@@ -56,11 +57,12 @@ class AgentSupervisor implements AgentSupervisorApi {
       [...this.failures.values()].some((x) => x.parent === parent)
     )
   }
-  public async waitAny(parent: string, signal: AbortSignal): Promise<void> {
+  public async waitAny(parent: string, signal: AbortSignal, includeFuture = false): Promise<void> {
+    signal.throwIfAborted()
     const failure = [...this.failures.values()].find((x) => x.parent === parent)
     if (failure) throw failure.error
     const revision = this.revisions.get(parent) ?? 0
-    if (revision === (this.seen.get(parent) ?? 0) && this.pending(parent))
+    if (revision === (this.seen.get(parent) ?? 0) && (includeFuture || this.pending(parent)))
       await this.waitChange(parent, revision, signal)
     this.seen.set(parent, this.revisions.get(parent) ?? 0)
     const next = [...this.failures.values()].find((x) => x.parent === parent)
@@ -173,10 +175,23 @@ class AgentSupervisor implements AgentSupervisorApi {
     while (this.active.has(id) && live.job.pending?.some((item) => item.id === requestId))
       await this.waitChange(parent, this.revisions.get(parent) ?? 0, live.controller.signal)
   }
-  public async send(parent: string, id: string, input: ActInput | string): Promise<void> {
-    await this.status(parent, id)
+  public async send(
+    parent: string,
+    id: string,
+    input: ActInput | string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    signal?.throwIfAborted()
+    const job = await this.status(parent, id)
     const live = this.active.get(id)
-    if (!live?.session) throw new AppError('UNAVAILABLE', '子运行尚未就绪或已经结束')
+    if (!live) throw guidanceUnavailable(job)
+    const waiting = signal
+      ? AbortSignal.any([signal, live.controller.signal])
+      : live.controller.signal
+    await boundedModelOperation(live.ready, waiting)
+    waiting.throwIfAborted()
+    if (!live.accepting || !live.session || this.active.get(id) !== live)
+      throw guidanceUnavailable(await this.status(parent, id))
     await live.session.steer(input)
   }
   public async cancel(parent: string, id: string): Promise<AgentJob> {
@@ -225,7 +240,17 @@ class AgentSupervisor implements AgentSupervisorApi {
     const abort = () => controller.abort(signal.reason)
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
-    const live: ActiveAgentJob = { job, controller, promise: Promise.resolve() }
+    let resolveReady!: () => void
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve
+    })
+    const live: ActiveAgentJob = {
+      job,
+      controller,
+      ready,
+      accepting: false,
+      promise: Promise.resolve(),
+    }
     this.active.set(job.id, live)
     live.promise = (async () => {
       const context = createContextRuntime({
@@ -234,10 +259,22 @@ class AgentSupervisor implements AgentSupervisorApi {
       })
       const events: ActRunEvent[] = []
       let omittedEvents = 0
+      let diagnostic: Optional<string>
       try {
         live.session = await this.options.open(job, request, controller.signal)
         controller.signal.throwIfAborted()
+        let ended = false
         for await (const event of live.session.submit(input, controller.signal)) {
+          ended ||=
+            event.type === 'state' &&
+            ['completed', 'cancelled', 'failed', 'context_blocked'].includes(event.status)
+          live.accepting = !ended
+          resolveReady()
+          // 停止原因独立于有界事件正文保留；后续已接受回合或成功核查清除已恢复的诊断。
+          if (event.type === 'error' || event.type === 'stalled') diagnostic = event.message
+          else if (event.type === 'accepted') diagnostic = undefined
+          else if (event.type === 'verification')
+            diagnostic = event.completed ? undefined : event.reason
           if (event.type === 'interaction') {
             live.job = {
               ...live.job,
@@ -278,12 +315,17 @@ class AgentSupervisor implements AgentSupervisorApi {
                   ? 'cancelled'
                   : 'failed',
         }
+        if (status !== 'completed' && !isUndefined(diagnostic))
+          live.job = { ...live.job, error: diagnostic }
       } catch (error) {
         live.job = {
           ...job,
           status: controller.signal.aborted ? 'cancelled' : 'failed',
           error: String(error),
         }
+      } finally {
+        live.accepting = false
+        resolveReady()
       }
       {
         try {

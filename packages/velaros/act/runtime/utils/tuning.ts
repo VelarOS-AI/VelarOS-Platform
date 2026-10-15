@@ -50,6 +50,8 @@ export const ActRuntimeTuning = Object.freeze({
   rateRetryMs: 60_000,
   /** 段内一条新历史第一次交付的字符上限；之后同段逐字复用。 */
   segmentEntryChars: 24_000,
+  /** 原始输出历史前缀扣除须覆盖范围元数据的额外成本。 */
+  materialDeltaSavings: 128,
   /** 一卷规则骨架的字符上限，超出保留首尾。 */
   volumeSkeletonChars: 6_000,
   /** 骨架里每条说明文字的字符上限。 */
@@ -84,26 +86,84 @@ export const ActRuntimeTuning = Object.freeze({
   recentFaults: 4,
 })
 
-/** 提取与复核各调用一次；正文和响应的硬上限不随模型窗口无限增长。 */
+/** 提取与复核分别有界调用；正文和响应的硬上限不随模型窗口无限增长。 */
 export const CompletionReviewLimits = Object.freeze({
+  /** 驱动明确标记的瞬时故障最多原样重试两次。 */
+  providerRetries: 2,
+  /** 单次退避上限，取消与父任务期限仍立即生效。 */
+  providerRetryMaxMs: 30_000,
   /** 每次完成尝试中，格式或引文核对失败后的专项纠正次数。 */
   protocolRepairs: 1,
-  /** 一次专项请求的总时限，单位毫秒。 */
-  timeoutMs: 45_000,
-  /** 专项输入的最高模型 Token 预算，仍受真实窗口限制。 */
-  inputTokens: 32_000,
+  /** 一次专项请求的总时限；允许推理模型完整审阅，仍受父任务剩余时限约束。 */
+  timeoutMs: 120_000,
   /** 单次提取或复核的最高输出 Token。 */
   outputTokens: 4096,
+  /** 完整需求保持可见，每次只裁定至多八项，避免有界响应装不下整份报告。 */
+  verdictBatch: 8,
+  /** 反例调查只选择少量高影响边界，仍共用既有执行次数与全部模型预算。 */
+  counterexamples: 2,
+  /** 裁定前补充证据的最多逻辑轮数，模型重试仍共用父任务预算。 */
+  discoveryRounds: 2,
+  /** 每轮补读的最多文件数，总产物上限保持不变。 */
+  discoveryFiles: 8,
   /** 当前任务完整用户原文的 UTF-16 字符总上限。 */
   originalChars: 48_000,
   /** 最终答复及执行证据各自的 UTF-16 字符上限。 */
   evidenceChars: 32_000,
-  /** 一次完整产物快照的 UTF-8 字节总上限。 */
-  artifactBytes: 128_000,
+  /** 主任务与所属执行分支轮流考虑的完整源码、回执对数量上限。 */
+  executionResults: 48,
+  /** 内联完整正文及文件元数据文本的 UTF-8 字节总上限；模型窗口另由编译器核对。 */
+  artifactBytes: 1_000_000,
+  /** 有按需读取口时先发送小材料与目录，避免反复装入大源码全文。 */
+  initialArtifactBytes: 64_000,
+  /** 单份原文的宿主读取容量；查询结果另有更小的总预算。 */
+  sourceBytes: 16_777_216,
+  /** 按需读取最多缓存两份最大原文；之后重新读取，内存保持有界。 */
+  sourceCacheBytes: 33_554_432,
+  /** 执行目录按完整来源对计数，不限制为最近的固定正文窗口。 */
+  executionCatalog: 512,
+  /** 一次完整复核（含取证、模型重试和格式纠正）的期限。 */
+  reviewTimeoutMs: 600_000,
+  /** 每次取证必须批量提出，最多四轮；最后一轮只交裁定。 */
+  evidenceRounds: 4,
+  /** 一轮最多 16 项，整个复核最多 64 项查询。 */
+  evidenceBatch: 16,
+  /** 一次复核内实际受理的查询项总上限。 */
+  evidenceQueries: 64,
+  /** 返回正文总计最多 128 KiB，每轮最多 32 KiB。 */
+  evidenceBytes: 131_072,
+  /** 每批实际返回的 UTF-8 原文字节上限。 */
+  evidenceBatchBytes: 32_768,
+  /** 字面查找与连续读取的协议上限。 */
+  evidenceReadChars: 32_000,
+  /** 字面查找关键字的 UTF-16 字符上限。 */
+  evidenceLiteralChars: 256,
+  /** 一项字面查找最多返回的匹配数量。 */
+  evidenceMatches: 16,
+  /** 每个匹配前后附带的连续 UTF-16 字符数。 */
+  evidenceContextChars: 160,
+  /** 编译后的输入与输出以外保留的上下文余量。 */
+  reserveTokens: 512,
+  /** 仅在实际编译超窗时，最多按测量结果缩减八次内联读取额度。 */
+  artifactAdjustments: 8,
   /** 单次专项响应文本的 UTF-16 字符上限。 */
   responseChars: 32_000,
   /** 一份固定需求清单的条目上限。 */
   requirements: 24,
   /** 所有需求引用的不同产物身份总数上限。 */
   artifacts: 32,
+})
+
+/** 独立执行验证的固定资源上限，模型不能扩大。 */
+export const CompletionValidationLimits = Object.freeze({
+  /** 同一次完成复核最多受理两次验证，包括参数错误。 */
+  attempts: 2,
+  /** 每次最多选择十六个需求和文件。 */
+  artifacts: 16,
+  /** 模型生成源码的 UTF-8 字节上限。 */
+  codeBytes: 32_768,
+  /** 两路输出合计的 UTF-8 字节上限。 */
+  outputBytes: 16_384,
+  /** 包括副本准备、预检和程序运行的墙钟上限。 */
+  timeoutMs: 15_000,
 })

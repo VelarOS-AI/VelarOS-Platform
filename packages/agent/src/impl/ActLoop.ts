@@ -56,10 +56,18 @@ export class ActLoop implements ActLoopApi {
       boundaryTurns: ContextPlanTuning.boundaryTurns,
       minTurns: ContextPlanTuning.minTurns,
       windowTokens: ContextPlanTuning.windowTokens,
+      retainedFrameRatio: ContextPlanTuning.retainedFrameRatio,
       recoveryAttempts: ContextPlanTuning.recoveryAttempts,
       ...options.frames.policy,
     }
-    const { foldTurns, boundaryTurns, minTurns, windowTokens, recoveryAttempts } = this.policy
+    const {
+      foldTurns,
+      boundaryTurns,
+      minTurns,
+      windowTokens,
+      recoveryAttempts,
+      retainedFrameRatio,
+    } = this.policy
     if (
       ![foldTurns, boundaryTurns, minTurns, windowTokens, recoveryAttempts].every((value) =>
         Number.isSafeInteger(value)
@@ -71,6 +79,9 @@ export class ActLoop implements ActLoopApi {
         boundaryTurns <= 64
       ) ||
       windowTokens < 1024 ||
+      !Number.isFinite(retainedFrameRatio) ||
+      retainedFrameRatio < 0 ||
+      retainedFrameRatio > 1 ||
       recoveryAttempts < 1 ||
       recoveryAttempts > 4
     )
@@ -248,13 +259,18 @@ export class ActLoop implements ActLoopApi {
         let acceptedResponseRef: Optional<{ sessionId: string; id: string }>
         for (let repair = 0; repair <= Math.max(2, this.policy.recoveryAttempts); repair++) {
           decoder.reset()
+          const taskId = (await this.options.view.inspect())?.id
+          if (!taskId) throw new AppError('MODEL_REQUEST_TASK', '模型调用没有活动任务身份')
+          const budgetRequest = { taskId, requestId: crypto.randomUUID() }
+          compiled = {
+            ...compiled,
+            request: { ...compiled.request, budgetRequestId: budgetRequest.requestId },
+          }
+          const reservedTokens = compiled.estimate.tokens + compiled.request.outputTokens
           // 每小时用量到上限：等窗口释放后继续；用户总上限到了：暂停等用户，不算失败
           for (;;)
             try {
-              await this.options.view.reserveModel(
-                'main',
-                compiled.estimate.tokens + compiled.request.outputTokens
-              )
+              await this.options.view.reserveModel('main', reservedTokens, budgetRequest)
               break
             } catch (error) {
               const code = (error as { code?: string }).code
@@ -274,322 +290,347 @@ export class ActLoop implements ActLoopApi {
               yield { type: 'throttled', runId, retryAfterMs }
               await modelProviderRetry.wait(retryAfterMs, controller.signal)
             }
-          const audit = await this.options.context.append(
-            {
-              kind: 'audit',
-              title: 'model-request',
-              body: JSON.stringify({
-                runId,
-                turn,
-                repair,
-                preparation: repair === 0 ? { observationMs, contextMs } : undefined,
-                model: this.options.model.id,
-                estimate: compiled.estimate,
-                providerRequest: compiled.providerRequest,
-                request: compiled.request,
-              }),
-            },
-            controller.signal
-          )
-          await this.options.control?.applied?.(audit.ref.id, controller.signal)
-          if (!inputApplied) {
-            yield {
-              type: 'input-applied',
-              runId,
-              ref: user.ref,
-              inputId: inputValue.inputId,
-              turnId: audit.ref.id,
-            }
-            inputApplied = true
-          }
-          yield { type: 'turn', runId, turnId: audit.ref.id }
-          yield { type: 'state', runId, status: 'thinking' }
-          let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
-          let measured = false
-          let received = ''
-          const calls: ModelToolCall[] = []
-          const rawResponse = (): string =>
-            !isEmpty(calls) ? JSON.stringify({ text: received, calls }) : received
-          let continuation: Optional<Extract<ModelTurnDelta, { type: 'continuation' }>['value']>
-          let responseRef: Optional<{ sessionId: string; id: string }>
-          let usage: Optional<Omit<Extract<ModelTurnDelta, { type: 'usage' }>, 'type'>>
-          const attemptController = new AbortController()
-          const deadline = this.options.frames.deadline?.()
-          const attemptSignal = AbortSignal.any([
-            controller.signal,
-            attemptController.signal,
-            ...(this.options.control ? [this.options.control.turnSignal()] : []),
-            ...(deadline ? [AbortSignal.timeout(Math.max(1, deadline - Date.now()))] : []),
-          ])
-          const modelStarted = performance.now()
-          let firstTextMs: Nullable<number> = null
-          let modelMs: Nullable<number> = null
-          // 当前请求没有回报时保持未知，不能把更早请求的缓存用量投影成上次事实。
-          this.cache = undefined
+          let dispatched = false
           try {
-            for await (const delta of boundedModelStream(
-              this.options.model,
-              compiled.request,
-              attemptSignal
-            )) {
-              if (delta.type !== 'usage') controller.signal.throwIfAborted()
-              if (finish) throw new AppError('PROTOCOL', '模型在结束响应后继续发送内容')
-              if (delta.type === 'error')
-                throw AppError.withFields(
-                  delta.code === 'context-limit' ? 'CONTEXT_BUDGET' : 'MODEL_PROVIDER',
-                  delta.message,
-                  { retryAfterMs: delta.retryAfterMs }
-                )
-              if (delta.type === 'usage') {
-                if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
-                measured = true
-                this.planner.measure(compiled.measured, delta.inputTokens)
-                if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens)) {
-                  const summary: { readTokens?: number; writeTokens?: number } = {}
-                  if (!isUndefined(delta.cacheReadTokens))
-                    summary.readTokens = delta.cacheReadTokens
-                  if (!isUndefined(delta.cacheWriteTokens))
-                    summary.writeTokens = delta.cacheWriteTokens
-                  this.cache = summary
-                }
-                // 供应商报告了前缀缓存的读写才带上，宿主据此按缓存价算钱
-                const cache: { cacheReadTokens?: number; cacheWriteTokens?: number } = {}
-                if (!isUndefined(delta.cacheReadTokens))
-                  cache.cacheReadTokens = delta.cacheReadTokens
-                if (!isUndefined(delta.cacheWriteTokens))
-                  cache.cacheWriteTokens = delta.cacheWriteTokens
-                usage = {
-                  inputTokens: delta.inputTokens,
-                  outputTokens: delta.outputTokens,
-                  ...cache,
-                }
-                await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
-                yield {
-                  type: 'usage',
-                  runId,
-                  inputTokens: delta.inputTokens,
-                  outputTokens: delta.outputTokens,
-                  ...cache,
-                }
-              }
-              if (delta.type === 'reasoning' && !isEmpty(delta.text))
-                yield { type: 'reasoning', runId, text: delta.text }
-              if (delta.type === 'continuation') {
-                if (continuation) throw new AppError('PROTOCOL', '模型重复返回延续状态')
-                continuation = delta.value
-              }
-              if (delta.type === 'text') {
-                if (isNull(firstTextMs) && !isEmpty(delta.text))
-                  firstTextMs = performance.now() - modelStarted
-                received += delta.text
-                for (const preview of decoder.push(delta.text)) yield { ...preview, runId }
-              }
-              if (delta.type === 'tool-call') {
-                calls.push(delta.value)
-                if (!decoder.acceptTool) throw new AppError('PROTOCOL', '当前协议没有声明原生工具')
-                if (isNull(firstTextMs)) firstTextMs = performance.now() - modelStarted
-                for (const preview of decoder.acceptTool(delta.value)) yield { ...preview, runId }
-              }
-              if (delta.type === 'finish') finish = delta
-            }
-            modelMs = performance.now() - modelStarted
-            if (!finish || finish.reason !== 'stop' || (!received && isEmpty(calls)))
-              throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
-            decoded = decoder.finish()
-            for (const preview of decoded.events) yield { ...preview, runId }
-            // 先保存完整状态，再让已接受响应引用它；中断或协议拒绝都不能使状态进入历史。
-            const continuationRecord = continuation
-              ? await this.options.context.append(
-                  {
-                    kind: 'audit',
-                    title: 'model-continuation',
-                    body: JSON.stringify(continuation),
-                    sources: [audit.ref],
-                  },
-                  controller.signal
-                )
-              : undefined
-            const accepted = await this.options.context.append(
+            const audit = await this.options.context.append(
               {
-                kind: 'assistant',
-                body: rawResponse(),
-                sources: [audit.ref, ...(continuationRecord ? [continuationRecord.ref] : [])],
+                kind: 'audit',
+                title: 'model-request',
+                body: JSON.stringify({
+                  runId,
+                  turn,
+                  repair,
+                  preparation: repair === 0 ? { observationMs, contextMs } : undefined,
+                  retention: frame.retention,
+                  model: this.options.model.id,
+                  estimate: compiled.estimate,
+                  providerRequest: compiled.providerRequest,
+                  request: compiled.request,
+                }),
               },
               controller.signal
             )
-            responseRef = accepted.ref
-            await this.options.context.append(
-              {
+            await this.options.control?.applied?.(audit.ref.id, controller.signal)
+            if (!inputApplied) {
+              yield {
+                type: 'input-applied',
+                runId,
+                ref: user.ref,
+                inputId: inputValue.inputId,
+                turnId: audit.ref.id,
+              }
+              inputApplied = true
+            }
+            yield { type: 'turn', runId, turnId: audit.ref.id }
+            yield { type: 'state', runId, status: 'thinking' }
+            let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
+            let measured = false
+            let received = ''
+            const calls: ModelToolCall[] = []
+            const rawResponse = (): string =>
+              !isEmpty(calls) ? JSON.stringify({ text: received, calls }) : received
+            let continuation: Optional<Extract<ModelTurnDelta, { type: 'continuation' }>['value']>
+            let responseRef: Optional<{ sessionId: string; id: string }>
+            let usage: Optional<Omit<Extract<ModelTurnDelta, { type: 'usage' }>, 'type'>>
+            const attemptController = new AbortController()
+            const deadline = this.options.frames.deadline?.()
+            const attemptSignal = AbortSignal.any([
+              controller.signal,
+              attemptController.signal,
+              ...(this.options.control ? [this.options.control.turnSignal()] : []),
+              ...(deadline ? [AbortSignal.timeout(Math.max(1, deadline - Date.now()))] : []),
+            ])
+            const modelStarted = performance.now()
+            let firstTextMs: Nullable<number> = null
+            let modelMs: Nullable<number> = null
+            // 当前请求没有回报时保持未知，不能把更早请求的缓存用量投影成上次事实。
+            this.cache = undefined
+            try {
+              attemptSignal.throwIfAborted()
+              for await (const delta of boundedModelStream(
+                this.options.model,
+                compiled.request,
+                attemptSignal,
+                async () => {
+                  await this.options.view.dispatchModel(budgetRequest)
+                  dispatched = true
+                },
+                async (received) => {
+                  usage = {
+                    inputTokens: received.inputTokens,
+                    outputTokens: received.outputTokens,
+                    cacheReadTokens: received.cacheReadTokens,
+                    cacheWriteTokens: received.cacheWriteTokens,
+                  }
+                  await this.options.view.recordUsage(
+                    received.inputTokens,
+                    received.outputTokens,
+                    budgetRequest
+                  )
+                }
+              )) {
+                if (delta.type !== 'usage') controller.signal.throwIfAborted()
+                if (finish) throw new AppError('PROTOCOL', '模型在结束响应后继续发送内容')
+                if (delta.type === 'error')
+                  throw AppError.withFields(
+                    delta.code === 'context-limit' ? 'CONTEXT_BUDGET' : 'MODEL_PROVIDER',
+                    delta.message,
+                    { retryAfterMs: delta.retryAfterMs }
+                  )
+                if (delta.type === 'usage') {
+                  if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
+                  measured = true
+                  this.planner.measure(compiled.measured, delta.inputTokens)
+                  if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens)) {
+                    const summary: { readTokens?: number; writeTokens?: number } = {}
+                    if (!isUndefined(delta.cacheReadTokens))
+                      summary.readTokens = delta.cacheReadTokens
+                    if (!isUndefined(delta.cacheWriteTokens))
+                      summary.writeTokens = delta.cacheWriteTokens
+                    this.cache = summary
+                  }
+                  // 供应商报告了前缀缓存的读写才带上，宿主据此按缓存价算钱
+                  const cache: { cacheReadTokens?: number; cacheWriteTokens?: number } = {}
+                  if (!isUndefined(delta.cacheReadTokens))
+                    cache.cacheReadTokens = delta.cacheReadTokens
+                  if (!isUndefined(delta.cacheWriteTokens))
+                    cache.cacheWriteTokens = delta.cacheWriteTokens
+                  usage = {
+                    inputTokens: delta.inputTokens,
+                    outputTokens: delta.outputTokens,
+                    ...cache,
+                  }
+                  yield {
+                    type: 'usage',
+                    runId,
+                    inputTokens: delta.inputTokens,
+                    outputTokens: delta.outputTokens,
+                    ...cache,
+                  }
+                }
+                if (delta.type === 'reasoning' && !isEmpty(delta.text))
+                  yield { type: 'reasoning', runId, text: delta.text }
+                if (delta.type === 'continuation') {
+                  if (continuation) throw new AppError('PROTOCOL', '模型重复返回延续状态')
+                  continuation = delta.value
+                }
+                if (delta.type === 'text') {
+                  if (isNull(firstTextMs) && !isEmpty(delta.text))
+                    firstTextMs = performance.now() - modelStarted
+                  received += delta.text
+                  for (const preview of decoder.push(delta.text)) yield { ...preview, runId }
+                }
+                if (delta.type === 'tool-call') {
+                  calls.push(delta.value)
+                  if (!decoder.acceptTool)
+                    throw new AppError('PROTOCOL', '当前协议没有声明原生工具')
+                  if (isNull(firstTextMs)) firstTextMs = performance.now() - modelStarted
+                  for (const preview of decoder.acceptTool(delta.value)) yield { ...preview, runId }
+                }
+                if (delta.type === 'finish') finish = delta
+              }
+              modelMs = performance.now() - modelStarted
+              if (!finish || finish.reason !== 'stop' || (!received && isEmpty(calls)))
+                throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
+              decoded = decoder.finish()
+              for (const preview of decoded.events) yield { ...preview, runId }
+              // 先保存完整状态，再让已接受响应引用它；中断或协议拒绝都不能使状态进入历史。
+              const continuationRecord = continuation
+                ? await this.options.context.append(
+                    {
+                      kind: 'audit',
+                      title: 'model-continuation',
+                      body: JSON.stringify(continuation),
+                      sources: [audit.ref],
+                    },
+                    controller.signal
+                  )
+                : undefined
+              const accepted = await this.options.context.append(
+                {
+                  kind: 'assistant',
+                  body: rawResponse(),
+                  sources: [audit.ref, ...(continuationRecord ? [continuationRecord.ref] : [])],
+                },
+                controller.signal
+              )
+              responseRef = accepted.ref
+              await this.options.context.append(
+                {
+                  kind: 'audit',
+                  title: 'model-response',
+                  body: JSON.stringify({
+                    runId,
+                    turnId: audit.ref.id,
+                    status: 'accepted',
+                    timing: { modelMs, firstTextMs },
+                    finish,
+                    usage,
+                    rawRef: responseRef,
+                    decoded: {
+                      message: decoded.message,
+                      done: decoded.done,
+                      completion: decoded.completion,
+                      submission: decoded.submission,
+                    },
+                  }),
+                  sources: [audit.ref, responseRef],
+                },
+                controller.signal
+              )
+              acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
+              acceptedCalls = calls
+              acceptedInputTokens = usage?.inputTokens
+              acceptedText = received
+              acceptedResponseRef = accepted.ref
+              // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
+              const sent = modelRequestEncoder.messages(compiled.request)
+              const previous = this.prefix.transcript
+              const positions =
+                frame.retained && previous
+                  ? [
+                      ...previous.positions,
+                      ...frame.logical
+                        .slice(previous.logical.length)
+                        .map((_, index) => previous.sent.length + index),
+                    ]
+                  : frame.logical.map((_, index) => index)
+              this.prefix.transcript =
+                this.options.frames.delta &&
+                !sent.some(
+                  (message) =>
+                    message.role === 'user' &&
+                    !isString(message.content) &&
+                    message.content.some((part) => part.type === 'image')
+                )
+                  ? { logical: frame.logical, sent, positions, body: frame.body }
+                  : undefined
+              yield {
+                type: 'accepted',
+                runId,
+                turnId: audit.ref.id,
+                text: decoded.message,
+                ref: accepted.ref,
+              }
+              break
+            } catch (error) {
+              modelMs ??= performance.now() - modelStarted
+              // 即使接收被取消，也保存已经收到的原始字节；这些内容不授权执行。
+              if (!responseRef)
+                responseRef = (
+                  await this.options.context.append({
+                    kind: 'audit',
+                    title: 'model-response-raw',
+                    body: rawResponse(),
+                    sources: [audit.ref],
+                  })
+                ).ref
+              await this.options.context.append({
                 kind: 'audit',
                 title: 'model-response',
                 body: JSON.stringify({
                   runId,
                   turnId: audit.ref.id,
-                  status: 'accepted',
+                  status: 'rejected',
                   timing: { modelMs, firstTextMs },
                   finish,
                   usage,
                   rawRef: responseRef,
-                  decoded: {
-                    message: decoded.message,
-                    done: decoded.done,
-                    completion: decoded.completion,
-                    submission: decoded.submission,
+                  error: {
+                    message: error instanceof Error ? error.message : String(error),
+                    code: (error as { code?: string }).code,
                   },
                 }),
                 sources: [audit.ref, responseRef],
-              },
-              controller.signal
-            )
-            acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
-            acceptedCalls = calls
-            acceptedInputTokens = usage?.inputTokens
-            acceptedText = received
-            acceptedResponseRef = accepted.ref
-            // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
-            const sent = modelRequestEncoder.messages(compiled.request)
-            const previous = this.prefix.transcript
-            const positions =
-              frame.retained && previous
-                ? [
-                    ...previous.positions,
-                    ...frame.logical
-                      .slice(previous.logical.length)
-                      .map((_, index) => previous.sent.length + index),
-                  ]
-                : frame.logical.map((_, index) => index)
-            this.prefix.transcript =
-              this.options.frames.delta &&
-              !sent.some(
-                (message) =>
-                  message.role === 'user' &&
-                  !isString(message.content) &&
-                  message.content.some((part) => part.type === 'image')
-              )
-                ? { logical: frame.logical, sent, positions, body: frame.body }
-                : undefined
-            yield {
-              type: 'accepted',
-              runId,
-              turnId: audit.ref.id,
-              text: decoded.message,
-              ref: accepted.ref,
-            }
-            break
-          } catch (error) {
-            modelMs ??= performance.now() - modelStarted
-            // 即使接收被取消，也保存已经收到的原始字节；这些内容不授权执行。
-            if (!responseRef)
-              responseRef = (
-                await this.options.context.append({
-                  kind: 'audit',
-                  title: 'model-response-raw',
-                  body: rawResponse(),
-                  sources: [audit.ref],
-                })
-              ).ref
-            await this.options.context.append({
-              kind: 'audit',
-              title: 'model-response',
-              body: JSON.stringify({
+              })
+              yield {
+                type: 'rejected',
                 runId,
                 turnId: audit.ref.id,
-                status: 'rejected',
-                timing: { modelMs, firstTextMs },
-                finish,
-                usage,
-                rawRef: responseRef,
-                error: {
-                  message: error instanceof Error ? error.message : String(error),
-                  code: (error as { code?: string }).code,
-                },
-              }),
-              sources: [audit.ref, responseRef],
-            })
-            yield {
-              type: 'rejected',
-              runId,
-              turnId: audit.ref.id,
-              message: error instanceof Error ? error.message : String(error),
-            }
-            if (!controller.signal.aborted && this.options.control?.pending()) continue turns
-            const retryDelay = (error as { retryAfterMs?: number }).retryAfterMs
-            if (
-              !attemptSignal.aborted &&
-              (error as { code?: string }).code === 'MODEL_PROVIDER' &&
-              Number.isFinite(retryDelay) &&
-              retryDelay! >= 0 &&
-              repair < this.policy.recoveryAttempts
-            ) {
-              // 此响应尚未被接受，没有任何脚本被派发；每次重新请求继续计入预算和追踪。
+                message: error instanceof Error ? error.message : String(error),
+              }
+              if (!controller.signal.aborted && this.options.control?.pending()) continue turns
+              const retryDelay = (error as { retryAfterMs?: number }).retryAfterMs
+              if (
+                !attemptSignal.aborted &&
+                (error as { code?: string }).code === 'MODEL_PROVIDER' &&
+                Number.isFinite(retryDelay) &&
+                retryDelay! >= 0 &&
+                repair < this.policy.recoveryAttempts
+              ) {
+                // 此响应尚未被接受，没有任何脚本被派发；每次重新请求继续计入预算和追踪。
+                await this.options.context.append(
+                  {
+                    kind: 'event',
+                    title: 'model-retry',
+                    body: JSON.stringify({
+                      turnId: audit.ref.id,
+                      attempt: repair + 1,
+                      executed: false,
+                      delayMs: Math.min(30000, retryDelay! * 2 ** repair),
+                    }),
+                  },
+                  controller.signal
+                )
+                await modelProviderRetry.wait(
+                  Math.min(30000, retryDelay! * 2 ** repair),
+                  attemptSignal
+                )
+                continue
+              }
+              if (
+                !controller.signal.aborted &&
+                (error as { code?: string }).code === 'CONTEXT_BUDGET' &&
+                repair < this.policy.recoveryAttempts
+              ) {
+                // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
+                this.planner.rejected()
+                this.prefix.transcript = undefined
+                const repaired = await this.frame(controller.signal, decoder, {
+                  provider: true,
+                  recovery: repair > 0,
+                })
+                if (!repaired) throw error
+                frame = repaired
+                compiled = repaired
+                continue
+              }
+              if (
+                controller.signal.aborted ||
+                (error as { code?: string }).code !== 'SCRIPT_PROTOCOL' ||
+                repair === 2
+              )
+                throw error
+              const message = error instanceof Error ? error.message : String(error)
               await this.options.context.append(
                 {
                   kind: 'event',
-                  title: 'model-retry',
-                  body: JSON.stringify({
-                    turnId: audit.ref.id,
-                    attempt: repair + 1,
-                    executed: false,
-                    delayMs: Math.min(30000, retryDelay! * 2 ** repair),
-                  }),
+                  title: 'protocol-rejected',
+                  body: JSON.stringify({ frame: audit.ref.id, executed: false, message }),
                 },
                 controller.signal
               )
-              await modelProviderRetry.wait(
-                Math.min(30000, retryDelay! * 2 ** repair),
-                attemptSignal
+              yield { type: 'error', runId, message: `协议未通过，正在修复：${message}` }
+              compiled = await boundedModelOperation(
+                this.compiler.compileModelTurn(
+                  {
+                    ...frame.request,
+                    compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
+                  },
+                  this.options.model,
+                  this.options.limits.safetyTokens,
+                  this.planner.calibration()
+                ),
+                controller.signal
               )
-              continue
+              if (!compiled.okToSend)
+                throw new AppError('CONTEXT_BUDGET', '协议修复请求超过上下文预算')
+            } finally {
+              attemptController.abort()
             }
-            if (
-              !controller.signal.aborted &&
-              (error as { code?: string }).code === 'CONTEXT_BUDGET' &&
-              repair < this.policy.recoveryAttempts
-            ) {
-              // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
-              this.planner.rejected()
-              this.prefix.transcript = undefined
-              const repaired = await this.frame(controller.signal, decoder, {
-                provider: true,
-                recovery: repair > 0,
-              })
-              if (!repaired) throw error
-              frame = repaired
-              compiled = repaired
-              continue
-            }
-            if (
-              controller.signal.aborted ||
-              (error as { code?: string }).code !== 'SCRIPT_PROTOCOL' ||
-              repair === 2
-            )
-              throw error
-            const message = error instanceof Error ? error.message : String(error)
-            await this.options.context.append(
-              {
-                kind: 'event',
-                title: 'protocol-rejected',
-                body: JSON.stringify({ frame: audit.ref.id, executed: false, message }),
-              },
-              controller.signal
-            )
-            yield { type: 'error', runId, message: `协议未通过，正在修复：${message}` }
-            compiled = await boundedModelOperation(
-              this.compiler.compileModelTurn(
-                {
-                  ...frame.request,
-                  compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
-                },
-                this.options.model,
-                this.options.limits.safetyTokens,
-                this.planner.calibration()
-              ),
-              controller.signal
-            )
-            if (!compiled.okToSend)
-              throw new AppError('CONTEXT_BUDGET', '协议修复请求超过上下文预算')
           } finally {
-            attemptController.abort()
+            if (!dispatched)
+              await this.options.view.releaseModel('main', reservedTokens, budgetRequest, true)
           }
         }
         if (this.options.control?.pending()) continue
@@ -608,7 +649,8 @@ export class ActLoop implements ActLoopApi {
             decoded.submission,
             controller.signal,
             acceptedTurnId,
-            acceptedCalls
+            acceptedCalls,
+            this.options.control?.turnSignal()
           )
           if (!isEmpty(acceptedCalls)) {
             if (!isObject(success) || !('results' in success))
@@ -628,6 +670,7 @@ export class ActLoop implements ActLoopApi {
               controller.signal
             )
           }
+          if (this.options.control?.pending()) continue turns
           if (isFalse(success) || (isObject(success) && !success.succeeded)) continue
           if (!done && !isEmpty(acceptedCalls) && this.options.frames.deliveryReady?.()) {
             await this.options.context.append(
@@ -654,7 +697,18 @@ export class ActLoop implements ActLoopApi {
         if (compiled.request.mode === 'maintenance') continue
         if (this.options.execution.pending()) {
           yield { type: 'state', runId, status: 'waiting' }
-          await this.options.execution.wait(controller.signal)
+          // 新输入只唤醒当前等待；后台执行继续使用运行级信号。
+          const waitSignal = AbortSignal.any([
+            controller.signal,
+            ...(this.options.control ? [this.options.control.turnSignal()] : []),
+          ])
+          try {
+            await this.options.execution.wait(waitSignal)
+          } catch (error) {
+            if (!controller.signal.aborted && waitSignal.aborted && this.options.control?.pending())
+              continue turns
+            throw error
+          }
           continue
         }
         if (!done) {
@@ -707,6 +761,7 @@ export class ActLoop implements ActLoopApi {
             yield { type: 'state', runId, status: 'waiting' }
             return
           }
+          if (recovery === 'failed') yield { type: 'error', runId, message: completion.reason }
           terminal = recovery === 'capacity' ? 'context-blocked' : 'failed'
           yield {
             type: 'state',
@@ -795,6 +850,8 @@ export class ActLoop implements ActLoopApi {
       ...(this.options.control ? [this.options.control.turnSignal()] : []),
     ])
     const { outputTokens, window, budget } = this.capacity()
+    const retainedFrameLimit = Math.floor(window * this.policy.retainedFrameRatio)
+    let rebuiltFromTokens: Optional<number>
     // 显式整理请求在请求边界处理：Runtime 先封段，再运行整理支线
     if (attempt === 0)
       await frames.maintain?.({ reason: 'boundary', targetChars: budget }, maintenanceSignal)
@@ -825,7 +882,23 @@ export class ActLoop implements ActLoopApi {
     // 同一会话每帧同一个缓存键：认它的供应商把这个会话的请求路由到同一处前缀缓存
     const cacheKey = await sessionCacheKey(this.options.sessionId)
     // 本次组帧只在第一次投影时决定是否沿用上次出线；放弃后同一次组帧里的重组不再沿用
-    let retain = Boolean(frames.delta)
+    let retain = Boolean(frames.delta) && this.policy.retainedFrameRatio > 0
+    // 去掉插入帧，保留相同逻辑事件、当前正文、协议和不透明续接；两份同口径估算之差是历史帧开销。
+    // 只在本地编译，不发送、不消费租约；固定开销不会被误算成重复状态。
+    const historyTokens = async (
+      compiled: CompiledModelRequest,
+      logical: readonly ModelHistoryMessage[]
+    ) => {
+      signal.throwIfAborted()
+      const plain = await this.compiler.compileModelTurn(
+        { ...compiled.request, history: logical },
+        model,
+        limits.safetyTokens,
+        this.planner.calibration()
+      )
+      signal.throwIfAborted()
+      return Math.max(0, compiled.estimate.tokens - plain.estimate.tokens)
+    }
     const compose = async (maxChars: number) => {
       const projected = await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
@@ -876,6 +949,7 @@ export class ActLoop implements ActLoopApi {
         logical,
         body,
         retained: Boolean(retained),
+        historyTokens: retained ? await historyTokens(compiled, logical) : 0,
       }
     }
     const fits = (current: Awaited<ReturnType<typeof compose>>) =>
@@ -936,15 +1010,16 @@ export class ActLoop implements ActLoopApi {
     let current = await compose(first)
     let runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     retain = current.retained
-    // 已接受的前缀能完整发送就继续沿用；预测增长只作预警，不提前改写已交付事实。
-    // 真实放不下时先重建逻辑历史与完整帧，再考虑退卡和封段。
-    if (current.retained && !fits(current)) {
+    // 历史帧达到独立预算或完整请求放不下时，先从逻辑历史和完整当前帧重建。
+    // 重建重新核对正文交付，不封段、不消费租约，也不凭增长预测改写事实。
+    if (current.retained && (current.historyTokens > retainedFrameLimit || !fits(current))) {
+      if (current.historyTokens > retainedFrameLimit) rebuiltFromTokens = current.historyTokens
       retain = false
       this.prefix.transcript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
-    // 无可延续前缀时仍按剩余轮数规划；已保留的完整请求仅在实际超窗时回收。
+    // 无可延续前缀时仍按剩余轮数规划；预算内的完整前缀继续沿用。
     if (
       !repair.provider &&
       (!fits(current) || (!current.retained && runway < this.policy.foldTurns)) &&
@@ -953,6 +1028,12 @@ export class ActLoop implements ActLoopApi {
       retain = false
       this.prefix.transcript = undefined
       current = await compose(first)
+      runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
+    }
+    // 先收紧本帧可变投影；可发送的历史仍可复用，只有最小投影也放不下时才因超窗封段。
+    // 封段会改写缓存前缀，不能用它代替已有的有界投影恢复。
+    if (!fits(current) && current.phase.phase !== 'finalizing') {
+      current = await recoverProjection()
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
     // 抖动只抑制预测性的提前封段；实际超窗仍尝试回收已可封存的历史，每次组帧最多成功封一次。
@@ -1076,12 +1157,23 @@ export class ActLoop implements ActLoopApi {
       return compiled
     }
     let compiled = await finalize()
+    let retainedTokens = current.retained ? await historyTokens(compiled, current.logical) : 0
     // 状态说明也是实际请求的一部分；追加后越界仍先收紧投影，再判断容量受阻。
-    if (!compiled.okToSend || compiled.estimate.tokens > window) {
+    if (
+      !compiled.okToSend ||
+      compiled.estimate.tokens > window ||
+      retainedTokens > retainedFrameLimit
+    ) {
+      if (retainedTokens > retainedFrameLimit) rebuiltFromTokens = retainedTokens
       retain = false
       this.prefix.transcript = undefined
-      current = await compose(Math.min(budget, limits.recoveryChars))
+      current = await compose(
+        compiled.okToSend && compiled.estimate.tokens <= window
+          ? first
+          : Math.min(budget, limits.recoveryChars)
+      )
       compiled = await finalize()
+      retainedTokens = 0
     }
     if (!compiled.okToSend || compiled.estimate.tokens > window) return null
     // 只从选中的完整请求学习字符密度，本地探测不挤占后续帧的样本。
@@ -1101,6 +1193,11 @@ export class ActLoop implements ActLoopApi {
       logical: current.logical,
       body: current.body,
       retained: current.retained,
+      retention: {
+        limitTokens: retainedFrameLimit,
+        historyTokens: retainedTokens,
+        rebuiltFromTokens,
+      },
       ...compiled,
     }
   }
@@ -1119,7 +1216,7 @@ export class ActLoop implements ActLoopApi {
       JSON.stringify(message)
     for (const [index, message] of transcript.logical.entries())
       if (identity(message) !== identity(logical[index]!)) return undefined
-    // 帧里也有首次交付的事实正文；只在完整请求放不下时重建，避免预测突增提前打断前缀。
+    // 帧里也有首次交付的事实正文；容量与历史帧预算在完整组帧后核对，重建会重新交付必要正文。
     // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
     const marked = new Set(
       transcript.positions.filter((_, index) => logical[index]?.cacheBreakpoint)

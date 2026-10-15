@@ -8,8 +8,14 @@ import { test } from 'node:test'
 import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createExclusiveSqliteLock } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
-import { createNodeCodeRunner, NodeDefaultPackages, nodeRuntimePackages } from '@velaros-ai/script'
+import {
+  CodeSurfaceLimits,
+  createNodeCodeRunner,
+  NodeDefaultPackages,
+  nodeRuntimePackages,
+} from '@velaros-ai/script'
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -82,6 +88,100 @@ const nativeDone = (message) => ({
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+test('INV-74 bounded state windows rebuild without losing real Node results or repeating executions', async (t) => {
+  const f = await fixture(t)
+  const evidence = Array.from(
+    { length: 60 },
+    (_, i) => `source-${i}: exact original evidence`
+  ).join('\n')
+  await writeFile(join(f.cwd, 'evidence.txt'), evidence)
+  const requests = []
+  let turn = 0
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false, policy: { windowTokens: 24000, retainedFrameRatio: 0.125 } },
+    storage: localContextStorage({ path: join(f.root, 'bounded-state.sqlite') }),
+    model: {
+      id: 'bounded-state',
+      nativeTools: true,
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(JSON.stringify(modelRequestEncoder.messages(request)).length / 4),
+        precision: 'exact',
+        basis: 'deterministic input size for runtime integration',
+      }),
+      async *stream(request) {
+        requests.push(request)
+        if (++turn <= 9)
+          yield {
+            type: 'tool-call',
+            value: {
+              id: `step-${turn}`,
+              name: 'exec',
+              input: {
+                code: `import {readFile,appendFile} from 'node:fs/promises'; await appendFile('calls.txt', '${turn},'); console.log(${turn === 1 ? "await readFile('evidence.txt','utf8')" : JSON.stringify(`step ${turn} complete`)});`,
+              },
+            },
+          }
+        else yield nativeDone('Evidence preserved; all steps executed once.')
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('bounded-state')
+  const events = []
+  for await (const event of session.submit(
+    'Read the exact evidence, complete the steps and preserve the original output.'
+  )) {
+    assert.notEqual(event.type, 'error')
+    events.push(event)
+  }
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(requests.length, 10)
+  assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), '1,2,3,4,5,6,7,8,9,')
+  let retained = 0
+  let rebuilt = 0
+  const content = (request) =>
+    modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
+  for (const [index, request] of requests.entries()) {
+    const states = request.history.filter(
+      (m) =>
+        typeof m.content === 'string' && m.content.startsWith('当前运行状态（origin=runtime-view')
+    )
+    if (index && !states.length) rebuilt++
+    if (states.length) {
+      retained++
+      const previous = content(requests[index - 1])
+      assert.deepEqual(content(request).slice(0, previous.length), previous)
+    }
+    const frame = JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text)
+    assert.equal(frame.partitions.runtime.decision.missing?.length ?? 0, 0)
+    if (index) {
+      const delivered = [
+        request.compiledPrompt,
+        ...request.history.map((m) =>
+          typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        ),
+      ].join('\n')
+      assert(
+        delivered.includes(evidence.replaceAll('\n', '\\n')) || delivered.includes(evidence),
+        `source body at request ${index + 1}`
+      )
+      assert.equal(
+        request.history.filter((m) => m.toolExchange?.calls.some((c) => c.id === 'step-1')).length,
+        1
+      )
+    }
+  }
+  assert(retained > 0, 'Accepted wire prefixes remain inside each state window')
+  assert(rebuilt > 0, 'Independent state budget rebuilds before total capacity is exhausted')
+})
 
 for (const explicit of [true, false])
   test(`real Node requests keep the prompt prefix and route tool cache points (explicit=${explicit})`, async (t) => {
@@ -185,6 +285,9 @@ for (const explicit of [true, false])
       first.input.filter((item) => ['system', 'developer'].includes(item.role))
     )
     assert(system.includes('Node.js ESM'))
+    assert(system.includes(`默认时限 ${CodeSurfaceLimits.timeoutMs} ms`))
+    assert(system.includes('options.timeoutMs'))
+    assert(system.includes('options.async:true 只改变受理方式'))
     assert(system.includes('execution'))
     assert(!system.includes('revision-'))
     assert(!system.includes('apply_patch'))
@@ -1085,6 +1188,44 @@ test('approval denial launches no process; approval waiting is outside the progr
   assert.equal((await approved.run(request('console.log(1)', 20), noCalls, () => {})).ok, true)
 })
 
+test('explicit runtime deadlines reach Node and source reuse restores the default deadline', async (t) => {
+  const f = await fixture(t)
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'deadline.sqlite') }),
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('deadline')
+  await session.context.append({
+    kind: 'user',
+    body: 'Validate execution deadlines and current receipts.',
+  })
+  const first = await session.script({
+    execute: { source: 'console.log("deadline-output")', timeoutMs: 4800000 },
+  })
+  assert.equal(first.execute.timing.requestedTimeoutMs, 4800000)
+  assert.equal(first.execute.timing.effectiveTimeoutMs, 4800000)
+  assert.equal(first.execute.result.process.exitCode, 0)
+  const next = await session.script({ execute: { sourceRef: first.execute.sourceRef } })
+  assert.equal(next.execute.timing.effectiveTimeoutMs, CodeSurfaceLimits.timeoutMs)
+  assert.equal(next.execute.timing.requestedTimeoutMs, undefined)
+  assert.equal(next.execute.result.process.exitCode, 0)
+  const stopped = await session.script({
+    execute: {
+      source:
+        'console.log("before-explicit-timeout"); await new Promise(() => {setInterval(() => {}, 1000)})',
+      timeoutMs: 300,
+    },
+  })
+  assert.equal(stopped.execute.result.failed.code, 'TIMEOUT')
+  assert.equal(stopped.execute.timing.effectiveTimeoutMs, 300)
+  assert.match(stopped.execute.result.process.stdout, /before-explicit-timeout/)
+})
+
 test('timeout and cancellation terminate real Node and retain failure output', async (t) => {
   const f = await fixture(t)
   const runner = createNodeCodeRunner(f.node)
@@ -1094,7 +1235,21 @@ test('timeout and cancellation terminate real Node and retain failure output', a
     () => {}
   )
   assert.equal(timeout.error.code, 'TIMEOUT')
+  assert.match(timeout.error.message, /程序计时时限 300 ms/u)
   assert.match(timeout.process.stdout, /before-timeout/)
+  const childSource = 'console.log("child-started"); setInterval(()=>{},1000)'
+  const childTimeout = await runner.run(
+    request(
+      `import {execa} from 'execa'; await execa(process.execPath,['-e',${JSON.stringify(childSource)}],{stdin:'ignore',stdout:'inherit',timeout:60000});`,
+      800
+    ),
+    noCalls,
+    () => {}
+  )
+  assert.equal(childTimeout.error.code, 'TIMEOUT')
+  assert.match(childTimeout.error.message, /程序计时时限 800 ms/u)
+  assert.match(childTimeout.process.stdout, /child-started/u)
+  assert.equal(childTimeout.process.cleanupIncomplete, false)
   const controller = new AbortController()
   const running = runner.run(
     request('console.log("started"); setInterval(()=>{},1000)'),
@@ -1769,10 +1924,20 @@ test('default npm packages work in entrypoints, saved files and child Node proce
     if(!(await globby(['*.yml'])).includes('fixture.yml')) throw Error('globby failed');
     const match=await execa(rgPath,['--fixed-strings','42','fixture.yml']);
     console.log(match.stdout);
+    const openInput=await execa(process.execPath,['-e',"process.stdin.resume();process.stdin.on('end',()=>console.log('eof'))"],{timeout:250,reject:false});
+    if(!openInput.timedOut) throw Error('Expected the native open-stdin child to wait for EOF');
+    const closedInput=await execa(process.execPath,['-e',"process.stdin.resume();process.stdin.on('end',()=>console.log('eof'))"],{stdin:'ignore',timeout:2000});
+    if(closedInput.stdout!=='eof') throw Error('Noninteractive child did not observe EOF');
+    const searched=await execa(rgPath,['--fixed-strings','answer: 42','.'],{stdin:'ignore',timeout:2000});
+    if(!searched.stdout.includes('fixture.yml:answer: 42')) throw Error('Explicit search path did not select workspace files');
+    console.log('noninteractive-stdin-and-search-passed');
     await writeFile('packages.mjs',"import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {parse} from 'yaml';console.log(Boolean(rgPath), (await globby('*.yml')).length, parse('answer: 42').answer);");
     console.log((await execa(process.execPath,['packages.mjs'])).stdout);
     const child=await execa(process.execPath,['saved.mjs']);
     console.log(child.stdout);
+    const input='raw stdin: 中文 \\"quoted\\" \\\\slash\\nsecond line';
+    const piped=await execa(process.execPath,['-e',"process.stdin.setEncoding('utf8');let text='';process.stdin.on('data',chunk=>text+=chunk);process.stdin.on('end',()=>process.stdout.write(JSON.stringify(text)))"],{input,timeout:2000});
+    if(JSON.parse(piped.stdout)!==input) throw Error('stdin bytes or EOF lost');
     const failed=await execa(process.execPath,['-e',"process.stderr.write('diagnostic');process.exit(7)"],{reject:false});
     console.log(JSON.stringify({exitCode:failed.exitCode,stderr:failed.stderr}));
   `
@@ -1780,6 +1945,7 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.match(result.process.stdout, /42 2/)
   assert.match(result.process.stdout, /answer: 42/)
+  assert.match(result.process.stdout, /noninteractive-stdin-and-search-passed/)
   assert.match(result.process.stdout, /true 1 42/)
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })

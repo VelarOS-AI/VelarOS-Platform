@@ -60,6 +60,7 @@ export interface ShellCommandResult {
   truncated: boolean
   capture?: ShellCommandOutputCapture
   shell?: ShellDescriptor
+  /** 已声明 cleanupScope 内的输出/终止收尾未完成；false 不证明脱组后代已结束。 */
   cleanupIncomplete?: boolean
   ownership?: ShellProcessOwnership
   success: boolean
@@ -132,6 +133,10 @@ export interface ShellProcessOwnership {
   backend: 'windows-job' | 'process-tree'
   parentDeathCleanup: boolean
   reason: string
+  /** 实际清理边界；旧宿主省略时范围未知。 */
+  cleanupScope?: 'job' | 'process-group' | 'process-tree'
+  /** 脱离原进程组的后代是否由同一宿主管理；unknown 不能当作已清理。 */
+  detachedDescendants?: 'owned' | 'unknown'
 }
 
 // ── 后台任务与控制台 ────────────────────────────────────────────

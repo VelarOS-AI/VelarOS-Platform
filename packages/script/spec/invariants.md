@@ -77,3 +77,9 @@ npm 目录由本次 Node 进程按程序入口查询，工作区版本覆盖后�
 验证：`test/operation-docs.test.ts`、`test/subprocess.test.ts`；Desktop 的 Electron 主进程与 ASAR 分发探针。
 
 宿主可通过 acquireRuntime 为每次执行固定新的 npm 快照；目录发现、ESM/CJS 解析、PATH 与 Node 子进程使用同一快照。安装和升级在后续执行生效，当前进程继续使用原版本；完整回收后释放租约，回收不完整时保留。验证：`../velaros/act/system/spec/environment.test.mjs` 与 `test/subprocess.test.ts`。
+
+## INV-46 显式宿主 npm 命名空间
+
+`velaros:npm/<包名>` 只解析本次授权环境的安装根，版本固定在本次租约；裸包名仍遵循工作区 Node 解析。作用域包、别名、ESM/CJS 条件和公开子路径使用该安装的 exports，Node 子进程继承同一解析快照。未知包、路径越界与能力/组合包占用命名空间拒绝；工作区损坏不让裸导入偷换版本。执行目录同时保留入口实际身份和明确宿主导入对应的实际版本、清单与说明。后续租约更新只影响后续执行，回收后正常释放。
+
+验证：`test/subprocess.test.ts` 的 INV-46 原生进程、旧版 CJS、作用域别名、子路径、子进程、拒绝与换版验收；Runtime `test/host-instructions.test.mjs` 的首帧与执行目录身份验收。

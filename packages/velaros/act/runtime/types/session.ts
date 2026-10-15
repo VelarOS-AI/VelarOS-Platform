@@ -23,6 +23,8 @@ export type ScriptSubmissionFields = {
   /** 本轮只运行一次的代码及其结果可见租约。 */
   readonly execute?: (ScriptSourceProgram | ScriptReferenceProgram) & {
     readonly retainTurns?: ScriptRetention
+    /** 本次执行的显式计时，不能通过源码引用继承；最大值见 CodeSurfaceLimits。 */
+    readonly timeoutMs?: number
   }
 }
 
@@ -57,4 +59,6 @@ export type ScriptExecutionReceipt = CodeSurfaceOutcome & {
   readonly executionId: string
   /** 当前会话里的完整执行回执。 */
   readonly resultRef: string
+  /** 本次实际受理的程序计时；能力等待停表，父任务期限与取消独立生效。 */
+  readonly timing?: { readonly requestedTimeoutMs?: number; readonly effectiveTimeoutMs: number }
 }

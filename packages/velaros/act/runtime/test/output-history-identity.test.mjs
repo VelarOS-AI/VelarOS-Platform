@@ -8,6 +8,7 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { materialHistoryDelta, projectMaterial } from '../../../dist/act/runtime/utils/materials.js'
 
 import { historyEntries } from './support/model-turn.mjs'
 
@@ -468,4 +469,124 @@ test('INV-69 body deduplication preserves collection diagnostics and reference m
   assert(shown.text.includes('"pointer":"/output/blocks/1/value"'))
   assert(shown.text.includes('"reason":"source-policy"'))
   assertNoInternalProof(second)
+})
+
+test('INV-69 raw partial history contributes its exact prefix without repeating it in a wider frame', async (t) => {
+  const f = await fixture(t)
+  const stdout = Array.from({ length: 450 }, (_, i) => `line-${i}: ${'x'.repeat(55)}\n`).join('')
+  const ref = await archiveRaw(f, stdout)
+  const first = await project(f, 20000, true)
+  const frozen = retained(first, ref)
+  const prior = JSON.parse(frozen.text.split('当次输出：\n').at(-1)).result.process.stdout
+  assert(prior.selection.shown > 1000 && prior.selection.shown < stdout.length)
+  const second = await project(f, 100000)
+  assert.equal(retained(second, ref).text, frozen.text, 'frozen history remains byte-identical')
+  const shown = current(second, ref)
+  const next = JSON.parse(shown.text).result.process.stdout
+  assert.equal(next.history?.shown, prior.selection.shown)
+  assert.equal(next.selection.from, prior.selection.shown)
+  assert.equal(
+    next.text,
+    stdout.slice(next.selection.from, next.selection.from + next.selection.shown)
+  )
+  assert(!shown.text.includes('line-0:'), 'already retained raw text must not be echoed')
+  assert.equal(shown.bodyInHistory, undefined, 'partial history is not proof of the entire value')
+  assert(shown.truncated)
+})
+
+test('INV-69 raw history delta preserves new strings, paths, Unicode and unread bounds', () => {
+  const ref = { sessionId: 'material-delta', id: '12345678' }
+  const text = Array.from({ length: 400 }, (_, i) => `${i}: 中文😀\n`).join('')
+  const original = JSON.stringify({
+    'escaped/~key': { stdout: text, stderr: 'new failure', exitCode: 1 },
+  })
+  const before = projectMaterial(original, ref, 1600)
+  const after = projectMaterial(original, ref, 3500)
+  const reduced = materialHistoryDelta(original, after.text, before.text, ref)
+  assert(reduced.length < after.text.length)
+  const prior = JSON.parse(before.text)['escaped/~key'].stdout
+  const next = JSON.parse(reduced)['escaped/~key']
+  assert.equal(next.stderr, 'new failure')
+  assert.equal(next.exitCode, 1)
+  assert.equal(next.stdout.position, '/escaped~1~0key/stdout')
+  assert.equal(next.stdout.selection.from, prior.selection.shown)
+  assert.equal(prior.text + next.stdout.text, text.slice(0, next.stdout.read.offset))
+  assert.equal(next.stdout.read.limit, text.length - next.stdout.read.offset)
+  assert.equal(next.stdout.selection.unit, 'utf16')
+  assert.equal(next.stdout.selection.total, text.length)
+})
+
+test('INV-69 partial history cannot hide changed, foreign, mispositioned or unproven text', () => {
+  const ref = { sessionId: 'material-delta', id: '12345678' }
+  const original = JSON.stringify({ stdout: 'prefix-'.repeat(2500) })
+  const before = projectMaterial(original, ref, 2500)
+  const after = projectMaterial(original, ref, 5000)
+  for (const mutate of [
+    (value) => {
+      value.stdout.text = `DIFFERENT${value.stdout.text.slice(9)}`
+    },
+    (value) => {
+      value.stdout.ref.sessionId = 'foreign'
+    },
+    (value) => {
+      value.stdout.ref.id = 'different'
+    },
+    (value) => {
+      value.stdout.position = '/stderr'
+    },
+    (value) => {
+      value.stdout.bodyIncluded = false
+    },
+    (value) => {
+      value.stdout.selection.from = 1
+    },
+    (value) => {
+      value.stdout.selection.total++
+    },
+    (value) => {
+      value.stdout.selection.shown++
+    },
+    (value) => {
+      value.stdout.selection.unit = 'bytes'
+    },
+  ]) {
+    const prior = JSON.parse(before.text)
+    mutate(prior)
+    assert.equal(materialHistoryDelta(original, after.text, JSON.stringify(prior), ref), undefined)
+  }
+  assert.equal(materialHistoryDelta(original, after.text, '{invalid', ref), undefined)
+  assert.equal(
+    materialHistoryDelta(original, before.text, JSON.stringify({ stdout: 'different' }), ref),
+    undefined
+  )
+})
+
+test('INV-69 complete string history may cover a narrower view without claiming unread characters', () => {
+  const ref = { sessionId: 'material-delta', id: '12345678' }
+  const original = JSON.stringify({ stdout: 'complete-'.repeat(1800), failed: false })
+  const current = projectMaterial(original, ref, 4000)
+  const result = JSON.parse(materialHistoryDelta(original, current.text, original, ref))
+  const projected = JSON.parse(current.text).stdout
+  assert.equal(result.stdout.text, undefined)
+  assert.equal(result.stdout.bodyIncluded, false)
+  assert.equal(result.stdout.history.shown, projected.selection.shown)
+  assert.equal(result.stdout.selection.shown, 0)
+  assert.equal(result.stdout.read.offset, projected.selection.shown)
+  assert.equal(result.failed, false)
+})
+
+test('INV-69 raw arrays retain indexes and small or unrelated fields keep their exact values', () => {
+  const ref = { sessionId: 'material-delta', id: '12345678' }
+  const value = { values: ['large-'.repeat(2000), 'small'], next: 'new-output' }
+  const original = JSON.stringify(value)
+  const prior = JSON.stringify({ values: [value.values[0], 'different'], next: 'old-output' })
+  const reduced = JSON.parse(materialHistoryDelta(original, original, prior, ref))
+  assert.equal(reduced.values[0].position, '/values/0')
+  assert.equal(reduced.values[0].history.shown, value.values[0].length)
+  assert.equal(reduced.values[1], 'small')
+  assert.equal(reduced.next, 'new-output')
+  assert.equal(
+    materialHistoryDelta('{"small":"a"}', '{"small":"a"}', '{"small":"a"}', ref),
+    undefined
+  )
 })

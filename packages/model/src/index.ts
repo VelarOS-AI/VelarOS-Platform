@@ -23,6 +23,7 @@ export type {
   ModelProviderRetryApi,
   ModelRequestClientApi,
   ModelRequestClientOptions,
+  ModelRequestDispatcherApi,
   ModelRuntimeCapabilityService,
   ModelRuntimeCompositionApi,
   ModelUsageApi,
@@ -54,6 +55,7 @@ export { modelCatalog } from './impl/providers/ModelCatalog'
 export { modelProfiles } from './impl/requests/ModelProfiles'
 export { modelProviderRetry } from './impl/requests/ModelProviderRetry'
 export { createModelRequestClient } from './impl/requests/ModelRequestClient'
+export { modelRequestDispatcher } from './impl/requests/ModelRequestDispatcher.js'
 export { modelUsage } from './impl/requests/ModelUsage'
 
 // ── 公开签名用到的数据 ──────────────────────────────────────────

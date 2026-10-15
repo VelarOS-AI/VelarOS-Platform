@@ -39,6 +39,8 @@ test('process ownership fallback reports its actual cleanup capability', () => {
   const result = buildOwnedProcessSpec(spec, { platform: 'linux' })
   expect(result.spec).toEqual(spec)
   expect(result.ownership.parentDeathCleanup).toBe(false)
+  expect(result.ownership.cleanupScope).toBe('process-group')
+  expect(result.ownership.detachedDescendants).toBe('unknown')
 })
 
 test('Windows without a native host reports bounded process-tree capability', () => {
@@ -49,6 +51,8 @@ test('Windows without a native host reports bounded process-tree capability', ()
     backend: 'process-tree',
     parentDeathCleanup: false,
     reason: 'native-host-unavailable',
+    cleanupScope: 'process-tree',
+    detachedDescendants: 'unknown',
   })
 })
 

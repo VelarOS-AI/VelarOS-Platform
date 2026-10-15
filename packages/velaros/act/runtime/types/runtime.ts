@@ -1,5 +1,6 @@
 import type { ProgramDescriptor } from '../../system/types/programs.js'
 
+import type { ExecutionOutputState } from './execution-output.js'
 import type { ScriptRetention } from './results.js'
 
 /** 领域登记的声明式纯快照计划；input 由指定提供者按固定合同核对。 */
@@ -140,6 +141,8 @@ export interface ScriptProtocolOptions {
   readonly maxBlocks?: number
   /** 会话后台执行并发上限，所有任务共享。 */
   readonly concurrency?: number
+  /** 模型普通执行的返回窗口，默认 10000 毫秒、最多 60000；程序计时独立。 */
+  readonly yieldAfterMs?: number
 }
 
 /** 控制头在纯语法解析后的字面量数据。 */
@@ -220,13 +223,21 @@ export interface ScriptJob {
   readonly batchId: string
   readonly status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
   readonly resultRef?: string
+  readonly output?: ExecutionOutputState
+  readonly stopRequested?: boolean
 }
 
 /** 一次提交的宿主选项。 */
 export interface RuntimeSubmitOptions {
   /**
+   * 本次提交的硬截止时间，正安全整数 Unix 毫秒时间戳；到期取消运行及所属工作，续段不延长。
+   * 真实剩余时间随模型帧提供。省略时不从可续期运行窗口推断硬期限；外部 signal 仍可提前取消。
+   */
+  readonly deadline?: number
+  /**
    * 按这段话建立目标（目标模式）：在本次运行第一次读取目标之前写入，首帧就能看到。
-   * 当前目标还在推进、暂停或受阻时保持原目标；超出目标长度上限的部分截掉，全文照常作为本次输入。
+   * 完整保存目标正文；工作帧按预算展示正文或不可变原文引用，显式读取始终返回全文。
+   * 当前目标还在推进、暂停或受阻时保持原目标；模型自行建立目标仍受 GoalUpdate 的内容上限约束。
    */
   readonly goal?: string
 }

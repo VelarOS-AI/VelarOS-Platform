@@ -16,6 +16,11 @@ export interface AgentJobTarget {
   readonly id: string
 }
 
+/** @AgentView 要等待的子任务，ids 需要 1 到 32 个互不重复的 job.id；返回后把已处理的任务移出下一次等待集合。 */
+export interface AgentJobTargets {
+  readonly ids: readonly string[]
+}
+
 /** @AgentView 在子任务收束后续跑：id 是子任务，其余同 AgentResume；materials 最多 32 条。 */
 export interface AgentResumeRequest extends AgentResume {
   readonly id: string

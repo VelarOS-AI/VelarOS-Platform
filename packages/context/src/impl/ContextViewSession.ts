@@ -1,6 +1,5 @@
 import { isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { ContextLimits } from '../contract/constants.js'
 import type {
@@ -27,14 +26,18 @@ import type {
   TaskCapsule,
   ViewIntentInput,
 } from '../types/context.js'
+import type {
+  ContextModelBudgetUpdate,
+  ContextModelRequestIdentity,
+} from '../types/model-budget.js'
 import type { ContextTaskMutation } from '../types/runtime.js'
+import { updateModelBudget } from '../utils/model-budget.js'
 import {
   contextFailure,
   emptyContextMetadata,
   emptyContextState,
   sameContextRef,
 } from '../utils/state.js'
-import { hourlyRetryMs, recentHourlyTokens, rolledHourly } from '../utils/usage.js'
 import { completionVerification, verificationRequirements } from '../utils/verification.js'
 import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
@@ -107,11 +110,28 @@ export interface ContextViewApi {
   /** 通过 CAS 续期仍匹配的所有权，包括宿主休眠造成的到期；被替换、撤销或终态则失败。 */
   renew(signal?: AbortSignal): Promise<void>
   /** 为主模型或搜索、整理会话预占调用与 token 预算。 */
-  reserveModel(role: 'main' | 'context', tokens: number): Promise<void>
+  reserveModel(
+    role: 'main' | 'context',
+    tokens: number,
+    request?: ContextModelRequestIdentity
+  ): Promise<void>
+  /** 按请求身份确认进入实际驱动派发；重复确认幂等。 */
+  dispatchModel(request: ContextModelRequestIdentity): Promise<void>
+  /** 原子转交尚未派发的收尾占位，预算与小时桶不变。 */
+  transferModelReservation(request: ContextModelRequestIdentity, requestId: string): Promise<void>
   /** 释放未实际发出的预留模型调用。 */
-  releaseModel(role: 'main' | 'context', tokens: number): Promise<void>
+  releaseModel(
+    role: 'main' | 'context',
+    tokens: number,
+    request?: ContextModelRequestIdentity,
+    confirmedNotDispatched?: boolean
+  ): Promise<void>
   /** 保存供应商实际用量；缺少用量时保持未知计数。 */
-  recordUsage(inputTokens: number, outputTokens: number): Promise<void>
+  recordUsage(
+    inputTokens: number,
+    outputTokens: number,
+    request?: ContextModelRequestIdentity
+  ): Promise<void>
   /** 依照证据缺口、新鲜度和领域验收器判断交付；效果不明的操作不挡交付，照实留在结算事实里。 */
   complete(
     verifier?: ContextCompletionPort,
@@ -602,86 +622,59 @@ export class ContextViewSession implements ContextViewApi {
     await this.change({ apply: (current) => this.owned(current) }, true, signal)
   }
 
-  public async reserveModel(role: 'main' | 'context', tokens: number): Promise<void> {
-    if (!Number.isSafeInteger(tokens) || tokens < 1)
-      throw contextFailure('MODEL_BUDGET', '模型预算无效')
-    // 单次请求就超过每小时上限，等多久都放不进去
-    if (tokens > this.limits.modelTokensPerHour)
-      throw contextFailure('MODEL_BUDGET', '单次模型请求超过任务每小时用量上限')
-    await this.change({
-      apply: (current) => {
-        const task = this.owned(current)
-        const usage = task.usage
-        if (
-          usage.mainCalls + usage.contextCalls >= this.limits.modelCalls ||
-          Math.max(usage.reservedTokens, usage.inputTokens + usage.outputTokens) + tokens >
-            this.limits.modelTokens
-        )
-          throw contextFailure('MODEL_BUDGET', '任务共享模型预算耗尽')
-        const now = Date.now()
-        const hourly = rolledHourly(usage.hourly, now)
-        if (recentHourlyTokens(hourly, now) + tokens > this.limits.modelTokensPerHour)
-          throw AppError.withFields('MODEL_RATE', '任务每小时的模型用量已到上限，稍后继续', {
-            retryAfterMs: hourlyRetryMs(hourly, tokens, this.limits.modelTokensPerHour, now),
-          })
-        return {
-          ...task,
-          usage: {
-            ...usage,
-            [role === 'main' ? 'mainCalls' : 'contextCalls']:
-              usage[role === 'main' ? 'mainCalls' : 'contextCalls'] + 1,
-            reservedTokens: usage.reservedTokens + tokens,
-            unmeasuredCalls: usage.unmeasuredCalls + 1,
-            hourly: { ...hourly, tokens: hourly.tokens + tokens },
-          },
-        }
-      },
-    })
+  public async reserveModel(
+    role: 'main' | 'context',
+    tokens: number,
+    request?: ContextModelRequestIdentity
+  ): Promise<void> {
+    await this.modelAccounting({ type: 'reserve', role, tokens, request }, true)
   }
 
-  public async releaseModel(role: 'main' | 'context', tokens: number): Promise<void> {
-    if (!Number.isSafeInteger(tokens) || tokens < 1)
-      throw contextFailure('MODEL_BUDGET', '预留预算无效')
-    await this.change({
-      apply: (current) => {
-        const task = this.owned(current)
-        const usage = task.usage
-        const key = role === 'main' ? 'mainCalls' : 'contextCalls'
-        return {
-          ...task,
-          usage: {
-            ...usage,
-            [key]: Math.max(0, usage[key] - 1),
-            reservedTokens: Math.max(0, usage.reservedTokens - tokens),
-            unmeasuredCalls: Math.max(0, usage.unmeasuredCalls - 1),
-            // 没派发的预留从当前桶退回；跨了桶的部分随桶自然淡出
-            hourly: usage.hourly
-              ? { ...usage.hourly, tokens: Math.max(0, usage.hourly.tokens - tokens) }
-              : undefined,
-          },
-        }
-      },
-    })
+  public async dispatchModel(request: ContextModelRequestIdentity): Promise<void> {
+    await this.modelAccounting({ type: 'dispatch', request }, true)
   }
 
-  public async recordUsage(inputTokens: number, outputTokens: number): Promise<void> {
-    if (![inputTokens, outputTokens].every((value) => Number.isSafeInteger(value) && value >= 0))
-      throw contextFailure('MODEL_USAGE', '供应商用量无效')
-    await this.change({
-      apply: (current) => {
-        const task = this.owned(current)
-        const usage = task.usage
-        return {
-          ...task,
-          usage: {
-            ...usage,
-            inputTokens: usage.inputTokens + inputTokens,
-            outputTokens: usage.outputTokens + outputTokens,
-            unmeasuredCalls: Math.max(0, usage.unmeasuredCalls - 1),
-          },
-        }
+  public async transferModelReservation(
+    request: ContextModelRequestIdentity,
+    requestId: string
+  ): Promise<void> {
+    await this.modelAccounting({ type: 'transfer', request, requestId }, true)
+  }
+
+  public async releaseModel(
+    role: 'main' | 'context',
+    tokens: number,
+    request?: ContextModelRequestIdentity,
+    confirmedNotDispatched?: boolean
+  ): Promise<void> {
+    await this.modelAccounting(
+      { type: 'release', role, tokens, request, confirmedNotDispatched },
+      !request
+    )
+  }
+
+  public async recordUsage(
+    inputTokens: number,
+    outputTokens: number,
+    request?: ContextModelRequestIdentity
+  ): Promise<void> {
+    await this.modelAccounting({ type: 'usage', inputTokens, outputTokens, request }, !request)
+  }
+
+  private async modelAccounting(
+    update: ContextModelBudgetUpdate,
+    requireOwner: boolean
+  ): Promise<void> {
+    await this.change(
+      {
+        apply: (current) => {
+          const task = requireOwner ? this.owned(current) : current
+          if (!task) throw contextFailure('TASK_STATE', '模型预算任务不存在')
+          return updateModelBudget(task, update, this.limits, Date.now())
+        },
       },
-    })
+      requireOwner
+    )
   }
 
   public async complete(

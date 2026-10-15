@@ -46,6 +46,7 @@ import type {
   ProgramQuery,
 } from '../../system/types/programs.js'
 import type { ProgramCatalogValidator } from '../contract/requires.js'
+import type { ExecutionOutputState } from '../types/execution-output.js'
 import type { MemoryReadDelivery } from '../types/memory.js'
 import type { PreparedScript } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
@@ -124,6 +125,10 @@ export interface ProgramContextApi {
   ): Promise<void>
   /** 保存已受理的任务状态，真实结果仍由同一 journal 和结果记录提供。 */
   job(job: ScriptJob): Promise<void>
+  /** 更新过程输出时保持并发到达的终态。 */
+  progress(executionId: string, output: ExecutionOutputState): Promise<void>
+  /** 原子登记停止请求，不覆盖已经到达的输出或终态。 */
+  requestStop(executionId: string): Promise<void>
   /** 按当前会话读取不可变的完整脚本底稿。 */
   readProgram(ref: string, offset?: number, limit?: number): Promise<ContextContent>
   /** 明确读取原始结果，读取本身不延长自动展示。 */
@@ -904,7 +909,28 @@ export class ProgramContext implements ProgramContextApi {
   public async job(job: ScriptJob): Promise<void> {
     await this.update((state) => ({
       ...state,
-      jobs: [...(state.jobs ?? []).filter((item) => item.executionId !== job.executionId), job],
+      jobs: [
+        ...(state.jobs ?? []).filter((item) => item.executionId !== job.executionId),
+        { ...(state.jobs ?? []).find((item) => item.executionId === job.executionId), ...job },
+      ],
+    }))
+  }
+
+  public async requestStop(executionId: string): Promise<void> {
+    await this.update((state) => ({
+      ...state,
+      jobs: (state.jobs ?? []).map((job) =>
+        job.executionId === executionId ? { ...job, stopRequested: true } : job
+      ),
+    }))
+  }
+
+  public async progress(executionId: string, output: ExecutionOutputState): Promise<void> {
+    await this.update((state) => ({
+      ...state,
+      jobs: (state.jobs ?? []).map((job) =>
+        job.executionId === executionId ? { ...job, output } : job
+      ),
     }))
   }
 
@@ -1645,11 +1671,16 @@ export class ProgramContext implements ProgramContextApi {
         completedTurns: state.completedTurns,
         resultsRevision: state.resultsRevision ?? 0,
       },
-      jobs: (state.jobs ?? []).filter(
-        (item) =>
-          ['queued', 'running', 'unknown'].includes(item.status) ||
-          visible.some((lease) => lease.executionId === item.executionId)
-      ),
+      jobs: (state.jobs ?? [])
+        .filter(
+          (item) =>
+            ['queued', 'running', 'unknown'].includes(item.status) ||
+            visible.some((lease) => lease.executionId === item.executionId)
+        )
+        .map(({ output, ...job }) => {
+          if (output) return { ...job, outputChars: output.totalChars }
+          return job
+        }),
       observation: {
         health: state.health,
         freshness: state.observationCollection,

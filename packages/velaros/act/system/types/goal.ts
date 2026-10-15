@@ -9,7 +9,7 @@ export interface GoalState {
   /** 这一个目标的身份；建立新目标就换一个。 */
   readonly id: string
   readonly revision: number
-  /** 用户要完成的事。 */
+  /** 用户要完成的事的完整正文；宿主随提交给出的内容可以超过模型建立目标的输入上限。 */
   readonly objective: string
   readonly status: GoalStatus
   /** 完成依据、受阻原因或最近的进展。 */

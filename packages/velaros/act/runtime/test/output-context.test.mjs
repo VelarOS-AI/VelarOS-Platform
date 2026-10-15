@@ -985,7 +985,7 @@ test('INV-58 legacy history without presentation fingerprints keeps current cont
   }
 })
 
-test('INV-58 complete raw material in actual history covers a smaller projection but partial history does not', async (t) => {
+test('INV-58 complete raw history covers a smaller projection and partial history covers only exact prior ranges', async (t) => {
   for (const firstChars of [600000, 4000]) {
     const f = await fixture(t, "import {output} from 'velaros';output(1)")
     const body = 'raw evidence '.repeat(350)
@@ -1035,7 +1035,23 @@ test('INV-58 complete raw material in actual history covers a smaller projection
       }
     } else {
       assert.equal(current.bodyInHistory, undefined)
-      assert(current.text.includes(body))
+      const frozen = historyEntries(first).find((item) => item.ref?.id === result.resultRef)
+      const previous = JSON.parse(frozen.text.split('当次输出：\n').at(-1))
+      const restored = []
+      const inspect = (value) => {
+        if (!value || typeof value !== 'object') return
+        if (value.history?.bodyInHistory && value.selection?.unit === 'utf16') {
+          const prior = value.position
+            .slice(1)
+            .split('/')
+            .reduce((item, key) => item[key.replaceAll('~1', '/').replaceAll('~0', '~')], previous)
+          const text = typeof prior === 'string' ? prior : prior.text
+          restored.push(text.slice(0, value.history.shown) + (value.text ?? ''))
+        } else for (const child of Object.values(value)) inspect(child)
+      }
+      inspect(JSON.parse(current.text))
+      assert(restored.includes(body), 'retained prefix plus current range preserves the full value')
+      assert(!current.text.includes(body), 'partial history must not be sent again as a full value')
     }
     assert(!JSON.stringify(frame).includes('materialCoverage'))
     assert(!JSON.stringify(frame).includes('fullMaterial'))

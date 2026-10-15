@@ -2,10 +2,12 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 17 种合同投影、98 个投影操作、56 项去重后的用法。系统包 `velaros:system` 有 6 个成员（modules、environment、programs、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 20 种合同投影、104 个投影操作、62 项去重后的用法。系统包 `velaros:system` 有 7 个成员（modules、environment、programs、executions、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
+| [runtime/ — completion-validation](runtime/README.md) | `execute` | 完成复核作用域，在本次固定文件副本上执行有界断言 | [completion-validation-template.js](runtime/completion-validation-template.js) |
+| [runtime/ — completion-evidence](runtime/README.md) | `retrieve` | 完成复核作用域，生成合同绑定原生只读接收门 | [completion-evidence-template.js](runtime/completion-evidence-template.js) |
 | [system/ — system-environment](system/README.md) | `list`、`search`、`describe`、`apply`、`rollback` | 宿主绑定持久 npm 环境，沿用会话权限 | [environment-template.js](system/environment-template.js) |
 | [system/ — system-goal](system/README.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
 | [system/ — system-memory-local](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
@@ -16,11 +18,12 @@
 | [system/ — system-store-write](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
 | [system/ — system-store-read](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
 | [system/ — modules](system/README.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
+| [system/ — executions](system/README.md) | `read`、`wait`、`stop` | 当前任务的执行观测与定向停止 | [executions-template.js](system/executions-template.js) |
 | [system/ — programs](system/README.md) | `publish`、`list`、`describe` | 具备当前会话程序目录 | [programs-template.js](system/programs-template.js) |
 | [system/ — context-materials](system/README.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
 | [agents/ — interaction](agents/README.md) | `ask`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
 | [agents/ — widget](agents/README.md) | `show` | 宿主配置 widgets | [widget-template.js](agents/widget-template.js) |
-| [agents/ — agents](agents/README.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
+| [agents/ — agents](agents/README.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`waitAny`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
 | [search/ — search](search/README.md) | `profiles`、`search`、`read` | 宿主配置 search | [template.js](search/template.js) |
 | [search/ — evidence](search/README.md) | `query`、`read`、`report` | 搜索作用域 | [evidence-template.js](search/evidence-template.js) |
 
@@ -41,12 +44,14 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 
 | 操作 | 允许入口 | 声明效果 | 用途 |
 | --- | --- | --- | --- |
+| `velaros:completion-validation.execute` | `execute` | `write` | 本次复核最多两次。通过 JSON.parse(process.env.VELAR_REVIEW_INPUTS) 取得所选身份对应的只读文件 URL，再 import 或读取。仅临时工作目录可写；网络、子进程和副本外文件不可用，依赖须在所选文件中。回执只证明本次断言；区分产品反例、断言错误和环境缺口。 |
+| `velaros:completion-evidence.retrieve` | `observe`、`execute` | `none` | 一次查询 1..16 项；read.limit 为 1..32000，find.literal 为 1..256 字符，find.limit 为 1..16。一次复核最多 4 批、64 项、131072 正文字节，每批最多 32768 字节；原文读取上限 16777216 字节。按 nextOffset 续读，issue 是缺口；目录元数据不能证明正文正确。 |
 | `system.environment.list` | `observe`、`execute` | `none` | 查看当前版本、直接安装的包和保留的回滚版本；最多直接安装 128 个包，保留最近 16 次发布。 |
 | `system.environment.search` | `observe`、`execute` | `none` | 搜索 npm 包，query 最多 256 字符，limit 默认 10、最多 20。第三方说明作为资料读取。 |
 | `system.environment.describe` | `observe`、`execute` | `none` | 查询包名、版本、Node 要求和依赖。package 最多 256 字符；最多返回 20 个版本，超出时缩小版本范围。 |
 | `system.environment.apply` | `execute` | `write` | 按 list 的 baseRevision 安装、升级、替换或卸载，install 和 remove 各最多 32 项，规格最多 256 字符，删除包名最多 214 字符。支持 registry 包、版本范围、标签与 npm alias。allowScripts 默认 false，需要构建时可显式开启，仍经宿主权限检查。发布完成后下一次执行自动使用新版本；失败保留原环境。 |
 | `system.environment.rollback` | `execute` | `write` | 将 list.history 中的 revision 发布成新版本，baseRevision 必须是当前版本。下一次执行生效。 |
-| `system.goal.get` | `observe`、`execute` | `none` | 读当前目标：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。 |
+| `system.goal.get` | `observe`、`execute` | `none` | 读当前目标的完整正文与状态：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。 工作帧里的 objectiveInRecord、reasonInRecord 是原文引用，不代表正文已读；可按其中的 ref、pointer 用 memory.read 分页读取。 |
 | `system.goal.update` | `execute` | `write` | 建立、暂停、恢复或结束目标；先 get 拿到 revision，版本变了就重新读取再改。 |
 | `system.memory.list` | `observe`、`execute` | `none` | 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。 |
 | `system.memory.read` | `observe`、`execute` | `none` | 按引用分页读原文：输入、源码、结果、笔记与材料都用它。 |
@@ -74,6 +79,9 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.modules.list` | `observe`、`execute` | `none` | 分页列出模块，可按 space 只看系统成员或业务能力。 |
 | `system.modules.search` | `observe`、`execute` | `none` | 按关键词找模块：匹配模块名、简介与操作名。 |
 | `system.modules.describe` | `observe`、`execute` | `none` | 读模块或指定导出的合同；exports 可同次读取多个导出及去重的依赖类型，指定导出时示例按 template: true 读取。 |
+| `system.executions.read` | `observe`、`execute` | `none` | 按游标读取状态与有界 stdout/stderr；运行时合并输出变化，避免逐行查询。终态后仍可取剩余输出。 |
+| `system.executions.wait` | `observe`、`execute` | `none` | 等待已有执行结束并读取有界输出；waitMs 为整数毫秒 1..60000，默认 60000。到期返回当时状态，目标继续运行；终态或 unknown 立即返回。取消仅结束等待，不能等待自身。无需反复 read 或创建定时器程序。 |
+| `system.executions.stop` | `execute` | `write` | 请求停止当前任务的一个执行，返回当时状态；继续 read 确认终态及清理。不能停止调用者自身。 |
 | `system.programs.publish` | `execute` | `write` | 检查并发布不可变程序，baseRevision 控制同名更新；语法、import 或版本失败不改变已发布名称。 |
 | `system.programs.list` | `observe`、`execute` | `none` | 列当前会话授权范围内的程序；重置前的程序不因目录查询恢复可见性。 |
 | `system.programs.describe` | `observe`、`execute` | `none` | 读稳定名称的当前版本，或仍可访问的 sourceRef 原版本；只是目录，不重新执行。 |
@@ -89,6 +97,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:agents.reply` | `execute` | `none` | 回答子任务在 job.pending 里的请求。 |
 | `velaros:agents.status` | `observe`、`execute` | `none` | 读子任务的状态与结果引用。 |
 | `velaros:agents.wait` | `execute` | `none` | 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。 |
+| `velaros:agents.waitAny` | `execute` | `none` | 等集合内任一子任务提问或结束，立即返回该 job；ids 最多 32 个且不能重复。仅结束本次等待，其余子任务继续运行；下一次等待传入仍未处理的任务。 |
 | `velaros:agents.cancel` | `execute` | `none` | 取消子任务并等它收束。 |
 | `velaros:agents.send` | `execute` | `none` | 给正在跑的子任务发引导。 |
 | `velaros:search.profiles` | `observe`、`execute` | `none` | 列出能选的搜索档位、默认的那个与它们的全部资源上限。 |

@@ -623,6 +623,11 @@ test('INV-15 cancelled finalization and invalid or foreign report evidence canno
       checks: Array.from({ length: ContextVerificationLimits.checks }, () => ({
         label: 'x'.repeat(ContextVerificationLimits.labelChars),
         status: 'passed',
+        artifacts: Array.from({ length: ContextVerificationLimits.artifacts }, (_, i) => ({
+          identity: `file:${i}:${'x'.repeat(ContextVerificationLimits.scopeChars - 16)}`,
+          contentHash: 'x'.repeat(ContextVerificationLimits.scopeChars),
+          revision: 'x'.repeat(ContextVerificationLimits.scopeChars),
+        })),
       })),
     },
   ])

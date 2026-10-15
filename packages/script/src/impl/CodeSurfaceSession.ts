@@ -75,6 +75,16 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
     const { program } = input
+    if (
+      !isUndefined(input.timeoutMs) &&
+      (!Number.isSafeInteger(input.timeoutMs) ||
+        input.timeoutMs < 1 ||
+        input.timeoutMs > CodeSurfaceLimits.maxExecutionTimeoutMs)
+    )
+      throw new AppError(
+        'VALIDATION',
+        `程序时限必须是 1 到 ${CodeSurfaceLimits.maxExecutionTimeoutMs} 的整数毫秒`
+      )
     const source = program.source
     const oversized = describeProgramOversize(source, program.blobs, program.input)
     if (isString(oversized))
@@ -146,7 +156,9 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
             (this.runner.environment === 'node'
               ? CodeSurfaceLimits.timeoutMs
               : CodeSurfaceTuning.defaultTimeoutMs),
-          CodeSurfaceLimits.timeoutMs
+          this.runner.environment === 'node' && input.mode !== 'observe'
+            ? CodeSurfaceLimits.maxExecutionTimeoutMs
+            : CodeSurfaceLimits.timeoutMs
         ),
       },
       async (call, holdClock) => {
@@ -188,7 +200,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         }
         return result
       },
-      (line) => this.events.logged?.(line),
+      (line, stream) => this.events.logged?.(line, stream),
       input.signal
     )
     input.signal?.removeEventListener('abort', stopRun)

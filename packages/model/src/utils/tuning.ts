@@ -102,6 +102,10 @@ export const ModelTuning = Object.freeze({
   stream: Object.freeze({
     /** Responses 单个 SSE 事件的原始字节上限；超限失败，不截成成功终端。 */
     responseEventBytes: 16 * 1024 * 1024,
+    /** 原始失败终态里允许进入诊断和重试分类的机器码最大字符数。 */
+    failureCodeChars: 128,
+    /** 原始失败文案的最大字符数；超限不截断推断，保留未知失败。 */
+    failureMessageChars: 2_048,
     /** 一条响应最多转给宿主多少字符的思考摘要；超出的部分不再转发，响应照常接收。 */
     reasoningChars: 200_000,
   }),

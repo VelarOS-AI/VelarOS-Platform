@@ -19,15 +19,18 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
   const name = (kind: 'blobs' | 'observe' | 'execute' | 'done') => nativeToolName(kind, config)
   const hasProgram = allowed.includes('execute') || allowed.includes('observe')
   return [
-    '使用已提供的原生工具，参数是符合工具 Schema 的 JSON 对象。同一响应可提交多个独立工具调用，各自拥有调用身份和回执；实际执行次序由 Runtime 调度。',
+    '需要操作时使用已提供的原生工具，参数是符合工具 Schema 的 JSON 对象。同一响应可提交多个独立工具调用，各自拥有调用身份和回执；实际执行次序由 Runtime 调度。已有工作仍在运行且当前只需等待时，仅返回普通文本进度，Runtime 挂起模型调用并在执行进展、子任务结果或新输入后恢复。',
     hasProgram
       ? '程序源码放 code，程序选项放 options。code 按 JSON 字符串编码，解码后的值作为 JavaScript 源码执行；引号、换行和反斜线按 JSON 规则转义。options.input 与 options.inputRef:"host:名称" 互斥；通过 import {input} from "velaros:program" 读取参数。其他字段包括 options.modules、options.blobs:{名称:额外原文}。'
+      : '',
+    hasProgram
+      ? `复制或转换已有内容时，先在程序内读取文件或授权来源引用，再由实际读到的值生成输出及校验预期；模型重写的副本只能证明自洽。新写的文档、补丁和源码片段随使用它的程序一次提交到 ${allowed.includes('execute') ? name('execute') : name('observe')} 的 options.blobs，code 写读取和应用逻辑；反引号、插值标记和反斜线保持原样，只经过工具 JSON 编码。原文示例：${JSON.stringify({ code: 'import {blobs} from "velaros:program"; console.log(blobs.content)', options: { blobs: { content: '新写的内容' } } })}。`
       : '',
     hasProgram
       ? 'options.sourceRef 复用归档源码，options.edits:[{oldText,newText,module?}] 精确编辑；引用或编辑时 code 为 ""。options.format:"program" 时 code 是序列化后的完整程序 JSON，程序字段在该对象内提供。示例中的原文、源码片段和引用应换成本轮实际值。'
       : '',
     allowed.includes('execute')
-      ? `${name('execute')} 执行一次 code；options.async:true 后台受理。options.retain:1..32 控制结果曝光次数，"segment" 随历史封段退役，"task" 保留至任务结束；默认 ${defaultRetain}。`
+      ? `${name('execute')} 执行一次 code；省略 options.async 使用短等待返回，options.async:true 立即后台受理，options.async:false 优先等待完成，新输入、并行程序收束或子任务进展可提前返回执行身份，原程序继续；options.timeoutMs 指定本次程序计时，源码引用不继承。等待已有作业用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}，无需循环 read 或运行定时器；waitMs 为 1..60000 的整数，默认 60000，到期返回当前状态。检查/停止用 kind:"read"/"stop"，最多 5000 毫秒；read/wait 可加 cursor/limit。每次只受理一个等待，其通道与检查/停止独立，普通执行槽满时仍可用。options.retain:1..32 控制结果曝光次数，"segment" 随历史封段退役，"task" 保留至任务结束；默认 ${defaultRetain}。`
       : '',
     allowed.includes('observe')
       ? `${name('observe')} 的 code 提供完整只读源码时登记或整体替换当前观察，所需程序参数通过 options 提供。观察采用自己的 Schema，刷新、编辑和退订都调用这个工具。`
@@ -45,7 +48,7 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
       ? `${name('blobs')} 用 name/text 绑定原文，参数示例：${JSON.stringify({ name: 'content', text: '需保留的原文' })}。text 使用 JSON 字符串编码，解码后逐字绑定。`
       : '',
     allowed.includes('blobs') && hasProgram
-      ? `同一响应可同时调用 ${name('blobs')} 与 ${allowed.includes('execute') ? name('execute') : name('observe')}；程序通过 import {blobs} from "velaros:program" 读取，例如 blobs.content。`
+      ? `${name('blobs')} 必须与使用它的 ${allowed.includes('execute') ? name('execute') : name('observe')} 在同一响应同时提交；原文只属于本响应，单独提交会拒绝接纳。程序通过 import {blobs} from "velaros:program" 读取，例如 blobs.content。`
       : '',
     allowed.includes('done')
       ? `${name('done')} 通过 message 给出用户答复，通过 completion 给出完成依据；参数示例：${JSON.stringify({ message: '基于实际结果的答复', completion: '已经核实的完成依据' })}。`

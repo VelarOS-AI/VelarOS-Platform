@@ -389,6 +389,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     )
       throw new AppError('SEARCH_BUSY', '并发搜索占位失败')
     let reserved = false
+    const finalizationRequestId = crypto.randomUUID()
     let activity: Optional<ModelToolRuntimeScope>
     let activation: Optional<SearchActivation>
     let failed = false
@@ -402,7 +403,11 @@ export class AdvancedSearch implements AdvancedSearchApi {
         Math.max(1, deadline - Date.now()),
         call.signal
       )
-      await activity.budget.reserveModel('context', profile.finalizationTokens)
+      await activity.budget.reserveModel(
+        'context',
+        profile.finalizationTokens,
+        finalizationRequestId
+      )
       reserved = true
       call.signal.throwIfAborted()
       if (Date.now() >= deadline) throw new AppError('SEARCH_LIMIT', '搜索启动时已达到期限')
@@ -423,6 +428,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
         context,
         storage: this.dependencies.storage,
         parent: activity.budget,
+        finalizationRequestId,
         scope: { sessionId: call.invocation.sessionId, revision: task.revision },
         deadline: modelDeadline,
         save: (value) => {
@@ -532,7 +538,12 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const failures: unknown[] = []
     try {
       if (activation) await activation.close()
-      else if (reserved) await activity!.budget.releaseModel('context', profile.finalizationTokens)
+      else if (reserved)
+        await activity!.budget.releaseModel(
+          'context',
+          profile.finalizationTokens,
+          finalizationRequestId
+        )
     } catch (error) {
       Log.tag('ActRuntime').debug('AdvancedSearch 已进入异常处理或降级分支')
       failures.push(error)

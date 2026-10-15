@@ -10,6 +10,10 @@ import type {
   ContextPatch,
 } from '../../system/types/maintenance.js'
 
+/** 两种整理路径都保留判断来源与验证范围，避免把模型归因提升为已证实事实。 */
+export const contextEvidenceGuidance =
+  '区分直接观察、模型诊断和验证结论。模型声称的根因、因果或修复若缺少对应执行证据，应注明是未验证判断，保留矛盾现象与待验证项；代码改动或其他场景的测试通过，不能替代原故障复测。'
+
 /** 摘要与事项核对均投影生成合同；版本、状态和引文偏移由宿主绑定。 */
 export function volumeNarrationFormat(
   schema: Readonly<Record<string, unknown>>

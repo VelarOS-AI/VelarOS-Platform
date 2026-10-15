@@ -12,7 +12,8 @@ import type { GoalState, GoalUpdate } from '../types/goal.js'
  * 目标跨回合保留：结束一轮回复、停止执行都不会完成它；暂停只在用户要求时做，完成或受阻要有实际验收依据。
  */
 export interface GoalOperationsApi {
-  /** @AgentView 读当前目标：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。
+  /** @AgentView 读当前目标的完整正文与状态：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。
+   * 工作帧里的 objectiveInRecord、reasonInRecord 是原文引用，不代表正文已读；可按其中的 ref、pointer 用 memory.read 分页读取。
    * @OperationEffect none
    */
   get(ctx: GoalOperationContext): Promise<Nullable<GoalState>>

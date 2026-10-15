@@ -1,6 +1,6 @@
 import { isArray, isBoolean, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { CodeProgramEditLimits } from '@velaros-ai/script/contracts'
+import { CodeProgramEditLimits, CodeSurfaceLimits } from '@velaros-ai/script/contracts'
 
 import { ScriptLeaseLimits } from '../../system/contract/constants.js'
 import type { ScriptSubmission } from '../types/session.js'
@@ -55,7 +55,17 @@ function checkEdits(value: unknown, label: string): void {
 /** 一段程序：给正文（source），或引用已存档的源码（sourceRef，可带替换）；观察还可以只给替换，改当前那一份。execute 另可声明结果租约。 */
 function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   if (!isPlainObject(value)) throw submissionInput(`${label} 必须是对象`)
-  const lease = label === 'execute' ? ['retainTurns'] : ['refresh']
+  const lease = label === 'execute' ? ['retainTurns', 'timeoutMs'] : ['refresh']
+  if (
+    label === 'execute' &&
+    !isUndefined(value.timeoutMs) &&
+    (!Number.isSafeInteger(value.timeoutMs) ||
+      (value.timeoutMs as number) < 1 ||
+      (value.timeoutMs as number) > CodeSurfaceLimits.maxExecutionTimeoutMs)
+  )
+    throw submissionInput(
+      `timeoutMs 需要 1 到 ${CodeSurfaceLimits.maxExecutionTimeoutMs} 的整数毫秒`
+    )
   if (label === 'observe' && !isUndefined(value.refresh) && !isBoolean(value.refresh))
     throw submissionInput('observe.refresh 必须是布尔值')
   if (!isUndefined(value.snapshot)) {

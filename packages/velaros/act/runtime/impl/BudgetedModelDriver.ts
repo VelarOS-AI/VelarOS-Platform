@@ -7,6 +7,7 @@ import type {
   ModelTurnRequest,
 } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
+import { modelRequestDispatcher } from '@velaros-ai/model'
 
 import type { BudgetedModelOptions } from '../types/model-budget.js'
 import { reservedModelStream } from '../utils/model-budget.js'
@@ -29,6 +30,7 @@ export interface BudgetedModelDriverApi extends ModelDriver {
 
 /** 子调用在真实发送前原子预留父预算，续跑沿用同一总账。 */
 export class BudgetedModelDriver implements BudgetedModelDriverApi {
+  public readonly dispatchAware = true
   public get nativeTools(): boolean {
     return Boolean(this.options.model.nativeTools)
   }
@@ -46,18 +48,23 @@ export class BudgetedModelDriver implements BudgetedModelDriverApi {
   }
   public async *stream(
     request: ModelTurnRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {
     const combined = AbortSignal.any([signal, this.options.signal, this.lifetime.signal])
     combined.throwIfAborted()
     const estimate = await this.estimate(request)
     combined.throwIfAborted()
+    const requestId = request.budgetRequestId ?? crypto.randomUUID()
+    const identified = { ...request, budgetRequestId: requestId }
     yield* reservedModelStream(
       this.options.parent,
       estimate.tokens + request.outputTokens,
       combined,
-      () => this.dispatch(request, combined),
-      this.accounting
+      (dispatch) => this.dispatch(identified, combined, dispatch),
+      this.accounting,
+      requestId,
+      beforeDispatch
     )
   }
   public close(): Promise<void> {
@@ -74,15 +81,25 @@ export class BudgetedModelDriver implements BudgetedModelDriverApi {
   }
   private async *dispatch(
     request: ModelTurnRequest,
-    combined: AbortSignal
+    combined: AbortSignal,
+    beforeDispatch: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {
     let measured = false
-    for await (const event of this.options.model.stream(request, combined)) {
-      combined.throwIfAborted()
+    for await (const event of modelRequestDispatcher.stream(
+      this.options.model,
+      request,
+      combined,
+      beforeDispatch
+    )) {
+      if (event.type !== 'usage') combined.throwIfAborted()
       if (event.type === 'usage') {
         if (measured) throw new AppError('PROTOCOL', '子模型重复用量')
         measured = true
-        const recorded = this.options.parent.recordUsage(event.inputTokens, event.outputTokens)
+        const recorded = this.options.parent.recordUsage(
+          event.inputTokens,
+          event.outputTokens,
+          request.budgetRequestId
+        )
         this.accounting.add(recorded)
         await recorded
       }

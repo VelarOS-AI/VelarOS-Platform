@@ -68,6 +68,9 @@ export function buildOwnedProcessSpec(
         backend: 'process-tree',
         parentDeathCleanup: false,
         reason: 'native-host-unavailable',
+        cleanupScope:
+          (options.platform ?? process.platform) === 'win32' ? 'process-tree' : 'process-group',
+        detachedDescendants: 'unknown',
       },
     }
   return {
@@ -82,7 +85,13 @@ export function buildOwnedProcessSpec(
         ...spec.args,
       ],
     },
-    ownership: { backend: 'windows-job', parentDeathCleanup: true, reason: 'native-job-host' },
+    ownership: {
+      backend: 'windows-job',
+      parentDeathCleanup: true,
+      reason: 'native-job-host',
+      cleanupScope: 'job',
+      detachedDescendants: 'owned',
+    },
   }
 }
 

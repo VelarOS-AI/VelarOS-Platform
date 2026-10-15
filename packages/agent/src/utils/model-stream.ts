@@ -4,6 +4,21 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnDelta, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
+/** 先校验供应商事实，再交给持久账本；取消也不能绕过协议检查。 */
+function checkUsage(delta: Extract<ModelTurnDelta, { type: 'usage' }>): void {
+  if (
+    ![delta.inputTokens, delta.outputTokens].every(
+      (value) => Number.isSafeInteger(value) && value >= 0
+    ) ||
+    !Number.isSafeInteger(delta.inputTokens + delta.outputTokens) ||
+    [delta.cacheReadTokens, delta.cacheWriteTokens].some(
+      (value) => !isUndefined(value) && (!Number.isSafeInteger(value) || value < 0)
+    ) ||
+    (delta.cacheReadTokens ?? 0) + (delta.cacheWriteTokens ?? 0) > delta.inputTokens
+  )
+    throw new AppError('PROTOCOL', '模型用量不符合实际计数契约')
+}
+
 /** 模型准备阶段也服从运行期限，驱动估算不能无限阻塞取消。 */
 export async function boundedModelOperation<T>(
   pending: Promise<T>,
@@ -26,9 +41,23 @@ export async function boundedModelOperation<T>(
 export async function* boundedModelStream(
   driver: ModelDriver,
   request: ModelTurnRequest,
-  signal: AbortSignal
+  signal: AbortSignal,
+  beforeDispatch?: () => Promise<void>,
+  onUsage?: (usage: Extract<ModelTurnDelta, { type: 'usage' }>) => Promise<void>
 ): AsyncIterable<ModelTurnDelta> {
-  const iterator = driver.stream(request, signal)[Symbol.asyncIterator]()
+  // 保留直接驱动的增量顺序；增加生成器转发层会改变同步取消与 usage 的先后。
+  let dispatched = false
+  let registration: Promise<void> | undefined
+  const dispatch = () =>
+    (registration ??= (async () => {
+      signal.throwIfAborted()
+      await beforeDispatch?.()
+      dispatched = true
+    })())
+  if (!driver.dispatchAware) await dispatch()
+  const iterator = driver
+    .stream(request, signal, driver.dispatchAware ? dispatch : undefined)
+    [Symbol.asyncIterator]()
   try {
     for (;;) {
       signal.throwIfAborted()
@@ -38,8 +67,28 @@ export async function* boundedModelStream(
         signal.addEventListener('abort', cancel, { once: true })
       })
       let result: IteratorResult<ModelTurnDelta>
+      let receivedUsage: Extract<ModelTurnDelta, { type: 'usage' }> | undefined
+      let recordedUsage: Promise<void> | undefined
       try {
-        result = await Promise.race([iterator.next(), aborted])
+        const pending = iterator.next().then(async (next) => {
+          if (!next.done && !dispatched)
+            throw new AppError('PROTOCOL', '模型驱动在派发确认前返回响应')
+          // 取消后的用量是已经发生的请求事实；按原身份记账，不恢复任务或执行响应。
+          if (!next.done && next.value?.type === 'usage') {
+            checkUsage(next.value)
+            receivedUsage = next.value
+            recordedUsage = onUsage?.(next.value) ?? Promise.resolve()
+            await recordedUsage
+          }
+          return next
+        })
+        result = await Promise.race([pending, aborted])
+      } catch (error) {
+        if (signal.aborted && receivedUsage) {
+          await recordedUsage
+          yield receivedUsage
+        }
+        throw error
       } finally {
         signal.removeEventListener('abort', cancel)
       }
@@ -64,17 +113,6 @@ export async function* boundedModelStream(
         ].includes(delta.type)
       )
         throw new AppError('PROTOCOL', '模型响应包含契约之外的事件')
-      if (
-        delta.type === 'usage' &&
-        (![delta.inputTokens, delta.outputTokens].every(
-          (value) => Number.isSafeInteger(value) && value >= 0
-        ) ||
-          [delta.cacheReadTokens, delta.cacheWriteTokens].some(
-            (value) => !isUndefined(value) && (!Number.isSafeInteger(value) || value < 0)
-          ) ||
-          (delta.cacheReadTokens ?? 0) + (delta.cacheWriteTokens ?? 0) > delta.inputTokens)
-      )
-        throw new AppError('PROTOCOL', '模型用量不符合实际计数契约')
       if (delta.type === 'text' && (request.response.type === 'json' || !isString(delta.text)))
         throw new AppError('PROTOCOL', '模型文本增量不符合响应模式')
       if (delta.type === 'reasoning' && !isString(delta.text))

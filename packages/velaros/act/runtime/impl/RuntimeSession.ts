@@ -24,6 +24,7 @@ import type {
 } from '@velaros-ai/context'
 import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
+import { isFalse, isTrue } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
@@ -46,6 +47,7 @@ import type {
   ScriptPackageDefinition,
 } from '@velaros-ai/script'
 import {
+  CodeSurfaceLimits,
   createKernelScriptSession,
   createNodeCodeRunner,
   nodeRuntimePackages,
@@ -54,18 +56,25 @@ import {
 } from '@velaros-ai/script'
 
 import {
+  ExecutionWaitLimits,
   GoalLimits,
   ScriptLeaseLimits,
   StoreProjectionLimits,
 } from '../../system/contract/constants.js'
+import type { ExecutionsPort } from '../../system/contract/requires.js'
 import type {
   ContextCandidateValidator,
   ProgramCatalogPort,
 } from '../../system/contract/requires.js'
 import type { StoreSessionApi } from '../../system/impl/StoreSession.js'
+import type {
+  ExecutionRead,
+  ExecutionSnapshot,
+  ExecutionWait,
+} from '../../system/types/executions.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import { ObservationReuseLimits } from '../contract/constants.js'
+import { ExecutionObservabilityLimits, ObservationReuseLimits } from '../contract/constants.js'
 import type {
   SnapshotObservationProvider,
   VelarosContextOptions,
@@ -103,6 +112,7 @@ import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
+import { readExecutionOutput } from '../utils/execution-output.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
@@ -119,6 +129,7 @@ import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ContextMemoryApi } from './ContextMemory.js'
 import { ContextMemory } from './ContextMemory.js'
+import { ExecutionProgress, type ExecutionProgressApi } from './ExecutionProgress.js'
 import { NativeTurnDecoder } from './NativeTurnDecoder.js'
 import type { ProgramContextApi } from './ProgramContext.js'
 import { ProgramContext } from './ProgramContext.js'
@@ -134,6 +145,8 @@ import { standardModules } from './StandardModules.js'
 export interface RuntimeSessionAccess extends ContextCandidateValidator {
   /** 与本会话源码归档及当前检查器共用的程序目录。 */
   readonly programCatalog: ProgramCatalogPort
+  /** 当前任务的执行读取与定向停止。 */
+  readonly executions: ExecutionsPort
   /** 模型与宿主共用的会话目标。 */
   readonly goal: SessionGoalApi
   /** 父运行的取消权，独立于单次脚本调用。 */
@@ -165,6 +178,8 @@ export interface RuntimeSessionModelTool {
   pressure(): void
   /** 当前模型请求的截止时间。 */
   deadline(): number
+  /** 专项执行的绝对期限；模型请求时限不裁剪脚本的执行窗口。 */
+  executionDeadline?(): number
   /** 有界工作与最终交付的指令。 */
   phase(): { phase: 'work' | 'maintenance' | 'finalizing'; instructions: string }
   /** 返回受预算约束的专项运行事实，作为数据进入 runtime 分区。 */
@@ -239,6 +254,8 @@ export interface RuntimeSessionDependencies {
 
 /** 一个会话共享上下文，模型回合有序，执行任务按并发预算运行。 */
 export interface VelarosSession {
+  /** 当前任务获权的执行读取与停止，和模型能力使用相同端口。 */
+  readonly executions: ExecutionsPort
   /** 读取目标生命周期；与执行状态独立。 */
   getGoal(): Promise<Nullable<GoalState>>
   /** 已登记输入的会话中按版本创建或更新目标。 */
@@ -311,6 +328,12 @@ export interface VelarosSession {
 }
 
 export class RuntimeSession implements VelarosSession {
+  public readonly executions: ExecutionsPort
+  private readonly executionProgress: ExecutionProgressApi
+  private controlSlots = 0
+  private readonly waitJobs = new Set<string>()
+  private readonly jobControllers = new Map<string, AbortController>()
+  private readonly progressWaiters = new Set<() => void>()
   public readonly context: ContextRuntime
   public readonly view: ContextViewApi
   private readonly active = new Map<
@@ -330,6 +353,7 @@ export class RuntimeSession implements VelarosSession {
   private readonly lifetime = new AbortController()
   private modelRunning = false
   private runDeadline?: number
+  private submissionDeadline?: number
   private runController?: AbortController
   /** 本次运行收到的输入（提交与运行中的追加引导）；帧里不在其中的目标来自此前的运行。 */
   private readonly runInputs = new Set<string>()
@@ -432,6 +456,31 @@ export class RuntimeSession implements VelarosSession {
         return script.dependencies(program)
       },
     })
+    this.executionProgress = new ExecutionProgress(
+      this.programs,
+      () => {
+        for (const wake of [...this.progressWaiters]) wake()
+      },
+      (error) => {
+        this.backgroundFailure = error
+      }
+    )
+    this.executions = {
+      read: (input, signal) => this.readExecution(input, signal),
+      wait: (input, caller, signal) => this.waitForExecution(input, caller, signal),
+      stop: async (input, caller, signal) => {
+        signal.throwIfAborted()
+        if (input.executionId === caller)
+          throw new AppError('VALIDATION', '程序不能停止当前调用自身')
+        await this.readExecution(input, signal)
+        const controller = this.jobControllers.get(input.executionId)
+        if (controller && !controller.signal.aborted) {
+          await this.programs.requestStop(input.executionId)
+          controller.abort(new AppError('CANCELLED', '执行已按请求停止'))
+        }
+        return this.readExecution(input, signal)
+      },
+    }
     this.history = new RecentContext(id, this.context, dependencies.storage)
     this.memory = new ContextMemory(
       id,
@@ -533,10 +582,16 @@ export class RuntimeSession implements VelarosSession {
       },
       memory: this.memory,
       programCatalog: this.programs.catalog,
+      executions: this.executions,
       goal: this.goal,
       phase: () => this.contextPhase,
       interact: (kind, message, signal, detail) => this.request(kind, message, signal, detail),
-      deadline: () => this.runDeadline,
+      deadline: () => {
+        const execution = this.executionDeadline()
+        return isUndefined(this.runDeadline)
+          ? execution
+          : Math.min(this.runDeadline, execution ?? this.runDeadline)
+      },
     })
     if (dependencies.model)
       this.agent = createActRunService({
@@ -576,8 +631,14 @@ export class RuntimeSession implements VelarosSession {
               await this.stopPrograms()
             }
           },
-          invoke: (input, signal, acceptedTurnId, calls) =>
-            this.invokeBatch(input as ScriptProtocolSubmission, signal, acceptedTurnId, calls),
+          invoke: (input, signal, acceptedTurnId, calls, waitSignal) =>
+            this.invokeBatch(
+              input as ScriptProtocolSubmission,
+              signal,
+              acceptedTurnId,
+              calls,
+              waitSignal
+            ),
         },
         frames: {
           deliveryReady: () => Boolean(dependencies.tool?.deliveryReady?.()),
@@ -653,7 +714,7 @@ export class RuntimeSession implements VelarosSession {
                 verified: false,
                 reason:
                   request.response.type === 'tools'
-                    ? 'GOAL_ACTIVE: 目标仍在推进，请继续完成剩余工作；达成或确有阻碍时，按需导入 velaros:system 的 goal，读取当前版本后更新状态和依据。'
+                    ? 'GOAL_ACTIVE: 目标仍在推进，请继续完成剩余工作；达成后调用 done，completion 写完成依据、message 写用户答复，运行时验收后一起完成任务与目标；确有阻碍时用 goal.update 记录依据。'
                     : 'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
                 recovery: 'repair',
               }
@@ -772,13 +833,7 @@ export class RuntimeSession implements VelarosSession {
     this.goalSeed = undefined
     const current = await this.goal.get(signal)
     if (current && !['complete', 'cancelled', 'removed'].includes(current.status)) return
-    await this.goal.update(
-      {
-        baseRevision: current?.revision ?? 0,
-        objective: objective.slice(0, GoalLimits.objectiveChars),
-      },
-      signal
-    )
+    await this.goal.seed(objective, current?.revision ?? 0, signal)
   }
 
   /** 每次模型请求重新读授权和依赖事实，首帧无需执行探索脚本。 */
@@ -806,7 +861,8 @@ export class RuntimeSession implements VelarosSession {
         )
         packages = nodeRuntimePackages.references([...installed.values()]).map((pkg) => ({
           name: pkg.name,
-          version: pkg.version,
+          runtimeImport: pkg.runtimeImport,
+          fallbackVersion: pkg.version,
           skill: pkg.skill,
           error: pkg.error && `${pkg.error.code}: ${pkg.error.message}`,
         }))
@@ -843,6 +899,16 @@ export class RuntimeSession implements VelarosSession {
     )
   }
 
+  private executionDeadline(): Optional<number> {
+    const parent =
+      this.dependencies.tool?.executionDeadline?.() ??
+      this.dependencies.tool?.deadline() ??
+      (this.dependencies.renewRuns ? undefined : this.runDeadline)
+    return isUndefined(this.submissionDeadline)
+      ? parent
+      : Math.min(this.submissionDeadline, parent ?? this.submissionDeadline)
+  }
+
   private async project(
     view: ModelView,
     signal: AbortSignal,
@@ -858,13 +924,16 @@ export class RuntimeSession implements VelarosSession {
       Math.min(ActRuntimeTuning.modelToolContextChars, Math.floor(maxChars / 2))
     )
     if (!this.dependencies.tool && this.goalSeed) await this.seedGoal(this.goalSeed, signal)
-    const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
+    const currentGoal = this.dependencies.tool
+      ? null
+      : await this.goal.frame(Math.min(GoalLimits.objectiveChars, Math.max(0, maxChars)), signal)
     const goal = currentGoal?.status === 'removed' ? null : currentGoal
     const goalControl =
       nativeTools && goal?.status === 'active'
         ? {
             module: 'velaros:system-goal',
-            completion: '持续目标仍为 active；收尾前按需读取当前版本，显式更新状态与依据后答复。',
+            completion:
+              '持续目标仍为 active；达成后调用 done，completion 写完成依据、message 写用户答复，运行时验收后一起完成任务与目标；暂停或受阻时按当前版本更新 goal。',
           }
         : undefined
     const environment = {
@@ -875,7 +944,22 @@ export class RuntimeSession implements VelarosSession {
       signal,
       Math.min(ActRuntimeTuning.inventoryChars, Math.floor(maxChars / 4))
     )
+    const observedAt = Date.now()
+    const deadline = this.executionDeadline()
+    const executionTime = {
+      observedAt,
+      deadline: toNullable(deadline),
+      remainingMs: isUndefined(deadline) ? null : Math.max(0, deadline - observedAt),
+      runWindowDeadline: toNullable(this.runDeadline),
+      runWindowRenewable: Boolean(this.dependencies.renewRuns),
+    }
+    if (!isUndefined(deadline))
+      Object.assign(executionTime, {
+        planning:
+          '按剩余时间安排执行，长工作分段存档，预留验证与收尾；单个程序 timeout 不延长硬期限。',
+      })
     const extra =
+      JSON.stringify(executionTime).length +
       JSON.stringify(environment).length +
       JSON.stringify(inventory).length +
       (goal ? JSON.stringify(goal).length : 0) +
@@ -891,7 +975,12 @@ export class RuntimeSession implements VelarosSession {
     )
     const frame = JSON.parse(projected.body)
     if (this.executionRunner.environment === 'node') frame.presentation = 'node'
-    frame.partitions.runtime = { ...frame.partitions.runtime, environment, inventory }
+    frame.partitions.runtime = {
+      ...frame.partitions.runtime,
+      environment,
+      inventory,
+      executionTime,
+    }
     // 同一任务里此前运行的输入只作上文，模型据此只回应本次运行的新请求
     frame.partitions.task.goals = frame.partitions.task.goals.map(
       (goal: { record: { ref: { id: string } } }) =>
@@ -910,12 +999,15 @@ export class RuntimeSession implements VelarosSession {
     const controller = new AbortController()
     const combined = AbortSignal.any([signal, controller.signal])
     try {
-      const progress = this.dependencies.agents?.pending(this.id)
-        ? this.dependencies.agents.waitAny(this.id, combined)
-        : this.waitProgress(combined)
-      await (this.dependencies.stores
-        ? Promise.race([progress, this.dependencies.stores.wait(combined)])
-        : progress)
+      combined.throwIfAborted()
+      // 本地程序与子任务并存时，任一进展都唤醒父任务；结束等待不取消其他工作。
+      const progress: Array<Promise<unknown>> = []
+      if (this.jobs.size || this.finalizers.size) progress.push(this.waitProgress(combined))
+      if (this.dependencies.agents?.pending(this.id))
+        progress.push(this.dependencies.agents.waitAny(this.id, combined))
+      if (isEmpty(progress)) return
+      if (this.dependencies.stores) progress.push(this.dependencies.stores.wait(combined))
+      await Promise.race(progress)
     } finally {
       controller.abort()
     }
@@ -930,15 +1022,34 @@ export class RuntimeSession implements VelarosSession {
       throw new AppError('CLOSED', '会话已关闭或已有活动程序')
     if (!this.agent) throw new AppError('UNAVAILABLE', '运行时尚未配置模型驱动')
     if (this.modelRunning) throw new AppError('CONFLICT', '会话已有活动模型运行')
+    if (!isUndefined(options.deadline)) {
+      if (!Number.isSafeInteger(options.deadline) || options.deadline <= 0)
+        throw new AppError('VALIDATION', '提交期限必须是正安全整数 Unix 毫秒时间戳')
+      if (options.deadline <= Date.now()) throw createTimeoutError('宿主提交期限已到')
+    }
     if (!isString(input) && input.task === 'new' && this.dependencies.agents?.pending(this.id))
       throw new AppError('CONFLICT', '子任务仍在运行，不能切换逻辑任务')
     await this.recoverInterrupted(signal)
     this.modelRunning = true
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
+    this.submissionDeadline = options.deadline
     this.runController = new AbortController()
     this.runInputs.clear()
     this.goalSeed = options.goal?.trim() || undefined
+    const timers = new TimerScope({ name: 'RuntimeSession.submit' })
     try {
+      const controller = this.runController
+      const expire = () => {
+        if (controller.signal.aborted || isUndefined(this.submissionDeadline)) return
+        const remaining = this.submissionDeadline - Date.now()
+        if (remaining <= 0) controller.abort(createTimeoutError('宿主提交期限已到'))
+        else
+          timers.after(Math.min(remaining, 2_147_483_647), expire, {
+            signal: controller.signal,
+            unref: true,
+          })
+      }
+      expire()
       for await (const event of this.agent.submit(
         input,
         AbortSignal.any([this.runController.signal, ...(signal ? [signal] : [])])
@@ -947,12 +1058,14 @@ export class RuntimeSession implements VelarosSession {
         yield event
       }
     } finally {
+      timers.dispose()
       this.runController.abort()
       try {
         await this.dependencies.agents?.cancelParent(this.id)
       } finally {
         this.modelRunning = false
         this.runDeadline = undefined
+        this.submissionDeadline = undefined
         this.runController = undefined
         this.goalSeed = undefined
       }
@@ -1140,7 +1253,11 @@ export class RuntimeSession implements VelarosSession {
     const observe = request.observe
       ? await this.prepareProgram(request.observe, control, signal, false)
       : undefined
-    const { retainTurns = ScriptLeaseLimits.defaultTurns, ...program } = request.execute ?? {}
+    const {
+      retainTurns = ScriptLeaseLimits.defaultTurns,
+      timeoutMs,
+      ...program
+    } = request.execute ?? {}
     const execute = request.execute
       ? await this.prepareProgram(
           program as CodeProgramRequest | ScriptReferenceProgram,
@@ -1229,7 +1346,9 @@ export class RuntimeSession implements VelarosSession {
         'execute',
         retainTurns,
         control.id,
-        execute.receipt.parentRef
+        execute.receipt.parentRef,
+        undefined,
+        timeoutMs
       )) as ScriptExecutionReceipt
       const completed = await this.programs.finish(control, {
         ...receipt,
@@ -2025,7 +2144,8 @@ export class RuntimeSession implements VelarosSession {
     turns?: ScriptRetention,
     executionId: string = crypto.randomUUID(),
     parentRef?: string,
-    basis?: LooseOptional<ModelView>
+    basis?: LooseOptional<ModelView>,
+    timeoutMs?: number
   ): Promise<CodeSurfaceOutcome> {
     if (this.closed || this.active.has(executionId))
       return Promise.reject(new AppError('CLOSED', '会话已关闭或执行身份已占用'))
@@ -2042,7 +2162,8 @@ export class RuntimeSession implements VelarosSession {
         'sourceRef' in program ? { sessionId: this.id, id: program.sourceRef } : undefined,
         executionId,
         parentRef,
-        basis
+        basis,
+        timeoutMs
       )
     )
     this.active.set(executionId, { pending, controller })
@@ -2057,6 +2178,71 @@ export class RuntimeSession implements VelarosSession {
     return pending
   }
 
+  private async readExecution(
+    input: ExecutionRead,
+    signal: AbortSignal
+  ): Promise<ExecutionSnapshot> {
+    signal.throwIfAborted()
+    if (!isString(input.executionId) || !input.executionId || input.executionId.length > 256)
+      throw new AppError('VALIDATION', '执行身份无效')
+    // ProgramContext 的状态按当前 task.startedSequence 和重置水位过滤。
+    const job = (await this.programs.state()).jobs?.find(
+      (item) => item.executionId === input.executionId
+    )
+    if (!job) throw new AppError('NOT_FOUND', '当前任务没有这个执行')
+    const status =
+      ['queued', 'running'].includes(job.status) && !this.jobControllers.has(job.executionId)
+        ? 'unknown'
+        : job.status
+    const output = this.executionProgress.current(job.executionId) ??
+      job.output ?? { chunks: [], totalChars: 0 }
+    const snapshot: ExecutionSnapshot = {
+      executionId: job.executionId,
+      sourceRef: job.sourceRef,
+      batchId: job.batchId,
+      status,
+      stopRequested: !!job.stopRequested,
+      complete: ['succeeded', 'failed', 'cancelled'].includes(status),
+      ...readExecutionOutput(output, input.cursor, input.limit),
+    }
+    if (job.resultRef) return { ...snapshot, resultRef: job.resultRef }
+    return snapshot
+  }
+
+  private async waitForExecution(
+    input: ExecutionWait,
+    caller: string,
+    signal: AbortSignal
+  ): Promise<ExecutionSnapshot> {
+    signal.throwIfAborted()
+    const waitMs = input.waitMs ?? ExecutionWaitLimits.defaultMs
+    if (!Number.isInteger(waitMs) || waitMs < 1 || waitMs > ExecutionWaitLimits.maxMs)
+      throw new AppError('VALIDATION', `waitMs 必须是 1..${ExecutionWaitLimits.maxMs} 的整数`)
+    if (input.executionId === caller) throw new AppError('VALIDATION', '程序不能等待当前调用自身')
+    const snapshot = await this.readExecution(input, signal)
+    signal.throwIfAborted()
+    const pending = this.jobs.get(input.executionId)
+    if (snapshot.complete || snapshot.status === 'unknown' || !pending) return snapshot
+    const timers = new TimerScope({ name: 'RuntimeSession.executionWait' })
+    try {
+      // 订阅原作业的收束；输出变化不创建新等待，也不提前触发模型查询。
+      await Promise.race([
+        pending.then(
+          () => {},
+          () => {}
+        ),
+        timers.sleep(waitMs, { signal }),
+      ])
+      signal.throwIfAborted()
+      return await this.readExecution(input, signal)
+    } catch (error) {
+      signal.throwIfAborted()
+      throw error
+    } finally {
+      timers.dispose()
+    }
+  }
+
   private async waitProgress(signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
     const pending = [...this.jobs.values(), ...this.finalizers]
@@ -2066,9 +2252,15 @@ export class RuntimeSession implements VelarosSession {
       cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '任务已取消'))
       signal.addEventListener('abort', cancel, { once: true })
     })
+    let wake!: () => void
+    const progress = new Promise<void>((resolve) => {
+      wake = resolve
+      this.progressWaiters.add(wake)
+    })
     try {
-      await Promise.race([...pending, aborted])
+      await Promise.race([...pending, aborted, progress])
     } finally {
+      this.progressWaiters.delete(wake)
       signal.removeEventListener('abort', cancel)
     }
   }
@@ -2083,8 +2275,13 @@ export class RuntimeSession implements VelarosSession {
     await Promise.allSettled([...this.finalizers])
   }
 
-  private async acquireSlot(signal: AbortSignal): Promise<void> {
-    while (this.slots >= this.config.concurrency) {
+  private async acquireSlot(signal: AbortSignal, control?: true | 'wait'): Promise<void> {
+    // waitJobs 在接纳时限制为一个，等待不占用普通执行或检查/停止槽。
+    if (control === 'wait') {
+      signal.throwIfAborted()
+      return
+    }
+    while (control ? this.controlSlots >= 1 : this.slots >= this.config.concurrency) {
       signal.throwIfAborted()
       let wake = (): void => {}
       await new Promise<void>((resolve, reject) => {
@@ -2104,14 +2301,16 @@ export class RuntimeSession implements VelarosSession {
       })
     }
     signal.throwIfAborted()
-    this.slots++
+    if (control) this.controlSlots++
+    else this.slots++
   }
 
   private async invokeBatch(
     input: ScriptProtocolSubmission,
     signal: AbortSignal,
     acceptedTurnId: string,
-    calls: readonly ModelToolCall[] = []
+    calls: readonly ModelToolCall[] = [],
+    waitSignal?: AbortSignal
   ): Promise<boolean | { succeeded: boolean; results: readonly ModelToolResult[] }> {
     const control = scriptControlIdentity(
       this.id,
@@ -2121,7 +2320,7 @@ export class RuntimeSession implements VelarosSession {
       this.expectedObservation
     )
     const identities = input.executions.map((execution, index) => {
-      const { retainTurns: _retain, ...program } = execution.program
+      const { retainTurns: _retain, timeoutMs: _timeout, ...program } = execution.program
       return scriptControlIdentity(
         this.id,
         `${acceptedTurnId}:${index}`,
@@ -2130,9 +2329,10 @@ export class RuntimeSession implements VelarosSession {
         this.expectedObservation
       ).id
     })
-    const succeeded = await this.executeBatch(input, signal, acceptedTurnId)
+    const succeeded = await this.executeBatch(input, signal, acceptedTurnId, waitSignal)
     if (!calls.length) return succeeded
     const receipt = await this.programs.receipt(control)
+    const jobs = (await this.programs.state()).jobs ?? []
     let executionIndex = 0
     return {
       succeeded,
@@ -2146,19 +2346,25 @@ export class RuntimeSession implements VelarosSession {
           : call.name === nativeToolName('observe', this.config)
             ? receipt?.observe
             : undefined
-        // 持久回执保存状态和归档身份；组帧时按已展示正文绑定工具回包，避免在此复制大输出。
-        const output =
-          execution && 'resultRef' in execution
-            ? {
-                status: 'recorded',
-                resultRef: execution.resultRef,
-                executionId: execution.executionId,
-              }
-            : {
-                status: receipt?.status ?? 'unknown',
-                receipt: toNullable(execution),
-                effect: receipt && !receipt.executed ? 'none' : 'unknown',
-              }
+        const job = jobs.find((item) => item.executionId === executionId)
+        const resultRef =
+          execution && 'resultRef' in execution ? execution.resultRef : job?.resultRef
+        // 回执绑定稳定执行身份；进行中的副作用只能报告未知，不能以批次未收尾推断无效果。
+        const output = resultRef
+          ? { status: 'recorded', resultRef, executionId: execution?.executionId ?? executionId }
+          : {
+              status: job?.status ?? receipt?.status ?? 'unknown',
+              ...(job ? { batchId: job.batchId, sourceRef: job.sourceRef } : {}),
+              receipt: toNullable(execution),
+              effect: job
+                ? job.status === 'queued'
+                  ? 'none'
+                  : 'unknown'
+                : receipt && !receipt.executed
+                  ? 'none'
+                  : 'unknown',
+            }
+        if (!resultRef && executionId) Object.assign(output, { executionId })
         return { id: call.id, name: call.name, output }
       }),
     }
@@ -2167,8 +2373,11 @@ export class RuntimeSession implements VelarosSession {
   private async executeBatch(
     input: ScriptProtocolSubmission,
     signal: AbortSignal,
-    acceptedTurnId: string
+    acceptedTurnId: string,
+    waitSignal?: AbortSignal
   ): Promise<boolean> {
+    // 在异步准备之前记录并行工作；准备期间完成的事件也必须唤醒本次等待。
+    const otherWork: Array<Promise<unknown>> = [...this.jobs.values(), ...this.finalizers]
     const control = scriptControlIdentity(
       this.id,
       acceptedTurnId,
@@ -2190,7 +2399,14 @@ export class RuntimeSession implements VelarosSession {
         },
         signal
       )
-      if (this.jobs.size + input.executions.length > this.config.maxBlocks)
+      const waits = input.executions.filter((item) => item.control === 'wait').length
+      if (this.waitJobs.size + waits > 1)
+        throw new AppError('SCRIPT_QUEUE_LIMIT', '当前已有执行等待，请等待其结果或控制原执行')
+      if (
+        this.jobs.size - this.waitJobs.size + input.executions.length - waits >
+        this.config.maxBlocks +
+          (input.executions.length === 1 && input.executions[0].control ? 1 : 0)
+      )
         throw new AppError('SCRIPT_QUEUE_LIMIT', '后台队列已达到本会话上限，先等待已有任务')
       const saved = await this.programs.receipt(control)
       if (saved) {
@@ -2205,7 +2421,11 @@ export class RuntimeSession implements VelarosSession {
       const basis = toNullable((await this.view.inspect())?.view)
       const executions: PreparedScript[] = []
       for (let index = 0; index < input.executions.length; index++) {
-        const { retainTurns: _retain, ...program } = input.executions[index].program
+        const {
+          retainTurns: _retain,
+          timeoutMs: _timeout,
+          ...program
+        } = input.executions[index].program
         const child = scriptControlIdentity(
           this.id,
           `${acceptedTurnId}:${index}`,
@@ -2253,26 +2473,47 @@ export class RuntimeSession implements VelarosSession {
       const results: Array<ScriptControlReceipt | ScriptExecutionReceipt> = executions.map(
         (item) => item.receipt
       )
-      const pending: Array<Promise<unknown>> = []
+      const pending: Array<Promise<void>> = []
+      let start!: () => void
+      let predecessor = new Promise<void>((resolve) => {
+        start = resolve
+      })
+      const startedAt = Date.now()
       for (let index = 0; index < executions.length; index++) {
         const item = executions[index]
         const executionId = item.receipt.executionId!
         const sourceRef = item.receipt.sourceRef!
         const job = { executionId, sourceRef, batchId: control.id }
+        const jobController = new AbortController()
+        const jobSignal = AbortSignal.any([controller.signal, jobController.signal])
+        const isWait = input.executions[index].control === 'wait'
+        if (isWait) this.waitJobs.add(executionId)
+        const controlTimeout =
+          ExecutionObservabilityLimits.controlTimeoutMs + (isWait ? ExecutionWaitLimits.maxMs : 0)
+        const controlTimers = input.executions[index].control
+          ? new TimerScope({ name: 'RuntimeSession.executionControl' })
+          : undefined
+        controlTimers?.after(
+          Math.min(input.executions[index].program.timeoutMs ?? controlTimeout, controlTimeout),
+          () => jobController.abort(createTimeoutError('执行控制超时'))
+        )
+        this.jobControllers.set(executionId, jobController)
+        this.executionProgress.begin(executionId)
         const run = async (): Promise<void> => {
           let acquired = false
           try {
-            await this.acquireSlot(controller.signal)
+            await this.acquireSlot(jobSignal, input.executions[index].control)
             acquired = true
             await this.programs.job({ ...job, status: 'running' })
             const outcome = (await this.launch(
               { sourceRef },
-              controller.signal,
+              jobSignal,
               'execute',
               input.executions[index].program.retainTurns ?? ScriptLeaseLimits.defaultTurns,
               executionId,
               item.receipt.parentRef,
-              basis
+              basis,
+              input.executions[index].program.timeoutMs
             )) as ScriptExecutionReceipt
             results[index] = outcome
             const { status, failure } = executionOutcome(
@@ -2284,16 +2525,21 @@ export class RuntimeSession implements VelarosSession {
             await this.programs.job({ ...job, status, resultRef: outcome.resultRef })
             if (failure) {
               failed = true
-              if (status !== 'failed' || !isCompletedProcessFailure(outcome))
+              if (
+                !jobSignal.aborted &&
+                (status !== 'failed' || !isCompletedProcessFailure(outcome))
+              )
                 controller.abort(new AppError('CANCELLED', '本批程序失败'))
             }
           } catch (error) {
             Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
             failed = true
+            const cancelled = jobSignal.aborted
+            if (!cancelled) controller.abort(error)
             results[index] = {
               ...item.receipt,
               status: 'rejected',
-              code: controller.signal.aborted ? 'CANCELLED' : 'SCRIPT_FAILED',
+              code: cancelled ? 'CANCELLED' : 'SCRIPT_FAILED',
               message: error instanceof Error ? error.message : String(error),
             }
             const output = await this.context.append({
@@ -2310,26 +2556,41 @@ export class RuntimeSession implements VelarosSession {
             )
             await this.programs.job({
               ...job,
-              status: controller.signal.aborted ? 'cancelled' : 'failed',
+              status: cancelled ? 'cancelled' : 'failed',
               resultRef: output.ref.id,
             })
-            controller.abort(error)
           } finally {
-            if (acquired) {
-              this.slots--
-              for (const wake of [...this.waiters]) wake()
+            controlTimers?.dispose()
+            this.jobControllers.delete(executionId)
+            try {
+              await this.executionProgress.finish(executionId)
+            } finally {
+              if (acquired) {
+                if (!isWait) {
+                  if (input.executions[index].control) this.controlSlots--
+                  else this.slots--
+                }
+                for (const wake of [...this.waiters]) wake()
+              }
             }
           }
         }
-        const promise = run()
+        // 先登记全部 Promise 和收尾，再放行；后台项可并行，后续顺序项仍等前序顺序项。
+        const promise = predecessor.then(run)
+        if (!isTrue(input.executions[index].async))
+          predecessor = promise.catch(() => {
+            Log.tag('ActRuntime').debug('前序脚本已失败，继续执行同批后续程序')
+          })
         pending.push(promise)
         this.jobs.set(executionId, promise)
         void promise
-          .finally(() => this.jobs.delete(executionId))
+          .finally(() => {
+            this.jobs.delete(executionId)
+            this.waitJobs.delete(executionId)
+          })
           .catch(() => {
             Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
           })
-        if (!input.executions[index].async) await promise
       }
       const finalized = Promise.allSettled(pending)
         .then(async (settled) => {
@@ -2352,7 +2613,67 @@ export class RuntimeSession implements VelarosSession {
           this.backgroundFailure = error
         })
         .finally(() => this.finalizers.delete(finalized))
-      if (!input.executions.some((item) => item.async)) await finalized
+      start()
+      const returnController = new AbortController()
+      const returnSignal = AbortSignal.any([
+        signal,
+        returnController.signal,
+        ...(waitSignal ? [waitSignal] : []),
+      ])
+      const timers = new TimerScope({ name: 'RuntimeSession.returnWindow' })
+      let wake!: () => void
+      const interrupted = new Promise<void>((resolve) => {
+        wake = resolve
+        returnSignal.addEventListener('abort', wake, { once: true })
+        if (returnSignal.aborted) wake()
+      })
+      try {
+        const foreground = async (): Promise<void> => {
+          await Promise.all(pending.filter((_, index) => isFalse(input.executions[index].async)))
+          if (returnSignal.aborted) return
+          const hasBackground = input.executions.some((item) => isTrue(item.async))
+          if (input.executions.some((item) => isUndefined(item.async))) {
+            await Promise.race([
+              hasBackground
+                ? Promise.all(pending.filter((_, index) => !isTrue(input.executions[index].async)))
+                : finalized,
+              timers.sleep(Math.max(0, this.config.yieldAfterMs - (Date.now() - startedAt)), {
+                signal: returnSignal,
+              }),
+            ])
+          } else if (!hasBackground) await finalized
+        }
+        // 前台偏好只约束返回时机；新输入和并行工作的终态不能被长程序遮蔽。
+        const progress = [foreground(), interrupted]
+        if (input.executions.some((item) => isFalse(item.async))) {
+          const concurrent = [
+            ...otherWork,
+            ...pending.filter((_, index) => isTrue(input.executions[index].async)),
+          ]
+          if (this.dependencies.agents)
+            concurrent.push(this.dependencies.agents.waitAny(this.id, returnSignal, true))
+          if (!isEmpty(concurrent))
+            progress.push(
+              (async () => {
+                await Promise.race(concurrent)
+                if (returnSignal.aborted) return
+                // 先给当前短程序同一个返回窗口，避免子任务刚结束就抢在结果落盘前多问一轮模型。
+                await timers.sleep(
+                  Math.max(0, this.config.yieldAfterMs - (Date.now() - startedAt)),
+                  {
+                    signal: returnSignal,
+                  }
+                )
+              })()
+            )
+        }
+        await Promise.race(progress)
+        signal.throwIfAborted()
+      } finally {
+        returnSignal.removeEventListener('abort', wake)
+        returnController.abort()
+        timers.dispose()
+      }
       return !failed
     } catch (error) {
       if (signal.aborted) throw error
@@ -2426,7 +2747,8 @@ export class RuntimeSession implements VelarosSession {
     savedSource?: ContextRef,
     identity?: string,
     parentRef?: string,
-    basis?: LooseOptional<ModelView>
+    basis?: LooseOptional<ModelView>,
+    timeoutMs?: number
   ): Promise<CodeSurfaceOutcome> {
     if (signal.aborted) throw new AppError('CANCELLED', '程序已取消')
     const executionId = identity ?? crypto.randomUUID()
@@ -2452,6 +2774,17 @@ export class RuntimeSession implements VelarosSession {
     let failure: unknown
     let resultRef: Optional<string>
     const scriptStarted = performance.now()
+    const deadline = this.executionDeadline()
+    const maximum =
+      mode === 'execute' && this.executionRunner.environment === 'node'
+        ? CodeSurfaceLimits.maxExecutionTimeoutMs
+        : CodeSurfaceLimits.timeoutMs
+    const effectiveTimeoutMs = Math.min(
+      timeoutMs ?? CodeSurfaceLimits.timeoutMs,
+      maximum,
+      isUndefined(deadline) ? maximum : Math.max(1, Math.floor(deadline - Date.now()))
+    )
+    const timing = { requestedTimeoutMs: timeoutMs, effectiveTimeoutMs }
     let durationMs = 0
     try {
       const session = createKernelScriptSession({
@@ -2462,7 +2795,13 @@ export class RuntimeSession implements VelarosSession {
         sessionId: this.id,
         executionId,
         mode,
+        timeoutMs: effectiveTimeoutMs,
+        events: {
+          logged: (text, stream) => this.executionProgress.append(executionId, text, stream),
+        },
       })
+      if (!isUndefined(deadline) && deadline <= Date.now())
+        throw new AppError('TIMEOUT', '父任务期限已到，程序未派发')
       result = await session.run(program, signal)
     } catch (error) {
       failure = error
@@ -2526,7 +2865,7 @@ export class RuntimeSession implements VelarosSession {
           executionId,
           mode,
           ...(persisted ?? { error: String(failure) }),
-          timing: { durationMs },
+          timing: { durationMs, ...timing },
           attachments: !isEmpty(attachments) ? attachments : undefined,
           observationFeedback: observationFeedback?.length ? observationFeedback : undefined,
           recovery:
@@ -2628,6 +2967,7 @@ export class RuntimeSession implements VelarosSession {
       parentRef: toOptional(parentRef),
       executionId,
       resultRef: resultRef!,
+      timing,
     } as ScriptExecutionReceipt
   }
 
@@ -2865,6 +3205,7 @@ export class RuntimeSession implements VelarosSession {
       this.controlController?.abort()
       await Promise.allSettled([...this.controls.values()].map((item) => item.pending))
       await this.stopPrograms()
+      await this.executionProgress.close()
     } catch (error) {
       Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
       failures.push(error)

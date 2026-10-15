@@ -9,6 +9,7 @@ import type {
   ModelTurnRequest,
 } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
+import { modelRequestDispatcher } from '@velaros-ai/model'
 
 import type { ModelBudgetPort } from '../types/model-budget.js'
 import type { ModelToolModelProfile, ModelToolModelUsage } from '../types/model-tools.js'
@@ -22,6 +23,8 @@ export interface ModelToolActivationOptions {
   readonly model: ModelDriver
   /** 调用者已经预留 finalizationTokens 的祖先总账。 */
   readonly parent: ModelBudgetPort
+  /** 已预留的收尾轮身份；旧宿主省略时保持聚合兼容。 */
+  readonly finalizationRequestId?: string
   /** 独立活动的绝对硬期限，发布阶段由调用者另行预留。 */
   readonly deadline: number
 }
@@ -56,6 +59,7 @@ export interface ModelToolActivationApi extends ModelDriver {
 
 /** 资源限制只围绕模型调用，业务证据和补丁规则留在各工具中。 */
 export class ModelToolActivation implements ModelToolActivationApi {
+  public readonly dispatchAware = true
   public readonly id: string
   public get limits(): ModelDriverLimits {
     const limits = this.options.model.limits
@@ -64,7 +68,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
       0,
       Math.min(
         this.options.profile.finalizationTokens,
-        this.options.profile.modelTokens - this.reserved
+        this.options.profile.modelTokens - this.budgetTokens
       )
     )
     return {
@@ -81,6 +85,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
   private readonly accounting = new Set<Promise<void>>()
   private calls = 0
   private reserved = 0
+  private budgetTokens = 0
   private measured = 0
   private input = 0
   private output = 0
@@ -104,7 +109,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
       Boolean(this.reason) ||
       this.calls >= profile.modelCalls - 1 ||
       Date.now() + profile.callTimeoutMs + profile.finalizationMs >= deadline ||
-      this.reserved + profile.finalizationTokens >= profile.modelTokens
+      this.budgetTokens + profile.finalizationTokens >= profile.modelTokens
     )
   }
   public canExplore(): boolean {
@@ -127,6 +132,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
     return {
       calls: this.calls,
       reservedTokens: this.reserved,
+      budgetTokens: this.budgetTokens,
       measuredCalls: this.measured,
       inputTokens: this.input,
       outputTokens: this.output,
@@ -137,7 +143,8 @@ export class ModelToolActivation implements ModelToolActivationApi {
 
   public async *stream(
     request: ModelTurnRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {
     const { profile, parent, deadline } = this.options
     const combined = AbortSignal.any([
@@ -152,36 +159,59 @@ export class ModelToolActivation implements ModelToolActivationApi {
     const estimate = await this.estimate(request)
     const tokens = estimate.tokens + request.outputTokens
     combined.throwIfAborted()
-    if (!finalizing && this.reserved + tokens + profile.finalizationTokens > profile.modelTokens) {
+    if (
+      !finalizing &&
+      this.budgetTokens + tokens + profile.finalizationTokens > profile.modelTokens
+    ) {
       this.finalize('token-budget')
       throw new AppError('CONTEXT_BUDGET', '普通请求将占用收尾额度，请重新编译最后交付轮')
     }
     if (
-      this.reserved + tokens > profile.modelTokens ||
+      this.budgetTokens + tokens > profile.modelTokens ||
       (finalizing && tokens > profile.finalizationTokens)
     )
       throw new AppError('CONTEXT_BUDGET', '本次模型工具 token 预算不足')
+    let requestId: string | undefined = request.budgetRequestId ?? crypto.randomUUID()
+    if (finalizing) {
+      const reservationId = this.options.finalizationRequestId
+      if (reservationId && parent.transferModelReservation)
+        await parent.transferModelReservation(reservationId, requestId)
+      else requestId = reservationId
+    }
+    const identified = { ...request, budgetRequestId: requestId ?? request.budgetRequestId }
     if (!finalizing) {
       yield* reservedModelStream(
         parent,
         tokens,
         combined,
-        () => this.dispatch(request, combined, tokens, false),
-        this.accounting
+        (dispatch) => this.dispatch(identified, combined, tokens, false, dispatch, requestId),
+        this.accounting,
+        requestId,
+        beforeDispatch
       )
-    } else yield* this.dispatch(request, combined, tokens, true)
+    } else
+      yield* this.dispatch(
+        identified,
+        combined,
+        tokens,
+        true,
+        async () => {
+          if (requestId) await parent.dispatchModel?.(requestId)
+          await beforeDispatch?.()
+        },
+        requestId
+      )
   }
 
   private async *dispatch(
     request: ModelTurnRequest,
     signal: AbortSignal,
     tokens: number,
-    finalizing: boolean
+    finalizing: boolean,
+    beforeDispatch: () => Promise<void>,
+    requestId?: string
   ): AsyncIterable<ModelTurnDelta> {
-    this.responseFinalizing = finalizing
-    if (finalizing) this.finalUsed = true
-    this.reserved += tokens
-    this.calls++
+    signal.throwIfAborted()
     const { profile, parent, deadline } = this.options
     const bounded = AbortSignal.any([
       signal,
@@ -196,15 +226,28 @@ export class ModelToolActivation implements ModelToolActivationApi {
       ),
     ])
     let measured = false
-    for await (const event of this.options.model.stream(request, bounded)) {
-      bounded.throwIfAborted()
+    for await (const event of modelRequestDispatcher.stream(
+      this.options.model,
+      request,
+      bounded,
+      async () => {
+        await beforeDispatch()
+        this.responseFinalizing = finalizing
+        if (finalizing) this.finalUsed = true
+        this.reserved += tokens
+        this.budgetTokens += tokens
+        this.calls++
+      }
+    )) {
+      if (event.type !== 'usage') bounded.throwIfAborted()
       if (event.type === 'usage') {
         if (measured) throw new AppError('PROTOCOL', '模型工具重复返回用量')
         measured = true
         this.measured++
         this.input += event.inputTokens
         this.output += event.outputTokens
-        const settled = parent.recordUsage(event.inputTokens, event.outputTokens)
+        this.budgetTokens += event.inputTokens + event.outputTokens - tokens
+        const settled = parent.recordUsage(event.inputTokens, event.outputTokens, requestId)
         this.accounting.add(settled)
         await settled
       }
@@ -225,7 +268,12 @@ export class ModelToolActivation implements ModelToolActivationApi {
     )
     try {
       if (!this.finalUsed)
-        await this.options.parent.releaseModel('context', this.options.profile.finalizationTokens)
+        await this.options.parent.releaseModel(
+          'context',
+          this.options.profile.finalizationTokens,
+          this.options.finalizationRequestId,
+          true
+        )
     } catch (error) {
       Log.tag('ActRuntime').debug('ModelToolActivation 已进入异常处理或降级分支')
       failures.push(error)

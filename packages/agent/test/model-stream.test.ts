@@ -75,20 +75,29 @@ test('a pending uncooperative driver cancels promptly and retains unknown usage'
 
 test('cancellation never turns malformed usage into accounting evidence', async () => {
   const controller = new AbortController()
+  const recorded: ModelTurnDelta[] = []
+  const emitted: ModelTurnDelta[] = []
   await expect(
-    boundedModelStream(
-      simultaneous(controller, {
-        type: 'usage',
-        inputTokens: 3,
-        outputTokens: 2,
-        cacheReadTokens: 4,
-      }),
-      request,
-      controller.signal
-    )
-      [Symbol.asyncIterator]()
-      .next()
-  ).rejects.toThrow('实际计数')
+    (async () => {
+      for await (const event of boundedModelStream(
+        simultaneous(controller, {
+          type: 'usage',
+          inputTokens: 3,
+          outputTokens: 2,
+          cacheReadTokens: 4,
+        }),
+        request,
+        controller.signal,
+        undefined,
+        async (usage) => {
+          recorded.push(usage)
+        }
+      ))
+        emitted.push(event)
+    })()
+  ).rejects.toThrow('fixture cancel')
+  expect(recorded).toEqual([])
+  expect(emitted).toEqual([])
 })
 
 test('an iterator ending simultaneously with cancellation preserves the cancellation reason', async () => {

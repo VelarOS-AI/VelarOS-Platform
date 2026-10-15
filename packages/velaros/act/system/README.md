@@ -1,6 +1,6 @@
 # @velaros-ai/velaros/act/system
 
-模型的自管理系统包 `velaros:system`：`modules` 发现能力与定向合同，`programs` 发布和发现参数化程序，`goal` 管目标，`memory` 管笔记与材料，`store` 管共享状态，`environment` 管持久 npm 依赖。`createRuntime` 按会话装配；宿主固定记忆、空间、程序与来源权限。
+模型的自管理系统包 `velaros:system`：`modules` 发现能力与定向合同，`programs` 发布和发现参数化程序，`executions` 读取当前任务作业的状态与有界输出、定向停止，`goal` 管目标，`memory` 管笔记与材料，`store` 管共享状态，`environment` 管持久 npm 依赖。`createRuntime` 按会话装配；宿主固定记忆、空间、程序与来源权限。
 
 ## 用法
 
@@ -56,7 +56,8 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 - 模型写 `import { modules, goal, memory, store } from 'velaros:system'`；同一会话每个成员只挂一种投影，按装配与授权取第一个可用的，实际操作与可用条件见 [Act 能力目录](../README.md)。
 - `memory(sessionId)` 在主会话打开时固定作用域，模型选不了；搜索、整理与子任务不带长期记忆，要用由主线召回后显式交给它们。`release` 只释放当前任务里的展示、原文仍可召回，`remove` 才删长期记忆的原文。
 - 不给 `stores` 时主会话在 `session:<id>` 的边界里建自己的空间，返回 `undefined` 就不挂 store；子任务只拿父任务经 `agents.start` 显式交出的权限子集，没有创建权，续跑时重新核对。
-- 目标只在主会话：宿主的 `getGoal`、`updateGoal`、`controlGoal` 与模型的 `goal` 共用一份按版本追加的账本，版本不对抛 `GOAL_CONFLICT`、不合法的状态变化抛 `GOAL_INPUT`；删除只留 `removed` 墓碑，暂停的目标不会因新消息恢复，完成回复也不会自动完成活动目标。
+- 目标只在主会话：宿主的 `getGoal`、`updateGoal`、`controlGoal` 与模型的 `goal` 共用一份按版本追加的账本，版本不对抛 `GOAL_CONFLICT`、不合法的状态变化抛 `GOAL_INPUT`；删除只留 `removed` 墓碑，暂停的目标不会因新消息恢复。有依据的 `done` 按完成核查合同收尾。
+- 宿主随提交给出的目标正文完整保存，`goal.get` 返回全文，模型建立目标与更新依据仍受既有内容上限约束。工作帧的 `objectiveInRecord`、`reasonInRecord` 给出原文 `ref`、`pointer` 与 UTF-16 长度，可用 `memory.read` 分页读取；当前目标跨任务可读，历史版本沿用材料授权。
 - 笔记是模型的解释，不能覆盖真实回执；宿主经会话的 `listNotes`、`readNote`、`setNoteResident` 看和调驻留，与模型共用版本，移出上下文不删正文。
 - 执行结果支持按实际曝光轮数、当前上下文段（`segment`）或当前任务（`task`）保留；`memory.retain` 默认任务期限，`release` 立即释放展示。段期限随该结果封入历史卷时退役，原文仍可读取，续租与封段不重跑原脚本。
 - `memory.organize` 只排队：下一次模型请求之前由整理模型按父快照交补丁，补丁先整份校验再按版本发布，失败的不发布、原因带到下一帧；整理只改展示，不重跑业务脚本。`context: { maintenance: false }` 关掉整理。
@@ -77,3 +78,7 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 模型从 `velaros:system` 导入 `environment`，用 `list/search/describe` 查询，再用 `apply({baseRevision,install,remove,allowScripts})` 一次变更依赖。同名包指定新版本即升级或降级；安装和删除可同时完成替换。支持 registry 版本范围、标签和 npm alias；锁文件与安装收据保留具体版本。生命周期脚本默认关闭，需要时可显式开启并沿用宿主权限。
 
 安装成功后，当前已打开会话的下一次 Node 或 Shell 执行自动获取新快照，直接 import 和包命令都可用。工作区依赖按原生 Node 规则优先，Skill 的固定包名冲突时使用 alias。包目录提供实际版本、README、package.json 和命令名，模型需验证目标功能。`rollback` 将保留历史发布成新版本；正在运行的进程及其后代保留原快照。进程回收不完整时保留文件供宿主核对；正常结束后释放租约并回收超出保留历史的版本。
+
+`executions.read({executionId,cursor,limit})` 只读当前任务已受理作业；游标按合并输出的 UTF-16 偏移，保留末尾 32768 字符，单次默认 8000、最多 16000。返回流、游标、截断与完成标记；stderr 文本不代表失败，未知清理状态继续报告 unknown。`wait({executionId,waitMs,cursor,limit})` 按原身份等待终态，waitMs 为整数 1..60000、默认 60000；到期返回当前快照，取消仅结束等待，终态或 unknown 立即返回，不能等待自身。`stop({executionId})` 提交停止请求后继续读取实际终态，不能停止调用者自身。输出变化最多每分钟合并唤醒一次等待，正常结束即时唤醒。
+
+普通执行槽满时，用 exec 的空源码与 `options.control:{kind:"read",executionId:"回执身份"}` 或 `kind:"stop"`；文本传输在空 execute 段的选项里提供 `control`。宿主生成固定程序，独立控制通道最多同时执行一个，墙钟最多 5000 毫秒；自定义源码、模块、原文绑定及后台标志均不能夹带进入该通道。

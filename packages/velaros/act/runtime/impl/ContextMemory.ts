@@ -64,7 +64,7 @@ import {
   noteEntry,
 } from '../utils/context-memory.js'
 import { decisionStateProjection } from '../utils/decision-state.js'
-import { readMaterialField } from '../utils/materials.js'
+import { executionMaterial, materialHistoryDelta, readMaterialField } from '../utils/materials.js'
 import { segmentBase, skeletonLine } from '../utils/segment.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -181,6 +181,23 @@ export class ContextMemory implements ContextMemoryApi {
         : await this.storage.load(this.id)
     signal.throwIfAborted()
     return snapshot
+  }
+
+  /** 当前目标跨任务保持可读，与 goal.get 的范围一致；历史版本仍沿用材料授权。 */
+  private async materialSnapshot(ref: ContextRef, signal: AbortSignal) {
+    const snapshot = await this.snapshot(signal, [
+      { title: 'search:history-reset', latest: true },
+      { title: 'session:goal', latest: true },
+      { kind: 'user' },
+      { refId: ref.id },
+    ])
+    const currentGoal = snapshot?.records.findLast((item) => item.title === 'session:goal')
+    const record =
+      memoryReference(snapshot, ref) ??
+      (ref.sessionId === this.id && currentGoal?.kind === 'audit' && currentGoal.ref.id === ref.id
+        ? currentGoal
+        : undefined)
+    return { snapshot, record }
   }
 
   private async notes(
@@ -445,17 +462,13 @@ export class ContextMemory implements ContextMemoryApi {
     invocation?: string
   ): Promise<MemoryContent> {
     const ref = isString(value) ? { sessionId: this.id, id: value } : value
-    const snapshot = await this.snapshot(signal, [
-      { title: 'search:history-reset', latest: true },
-      { kind: 'user' },
-      { refId: ref.id },
-    ])
-    const record = memoryReference(snapshot, ref)
+    const { snapshot, record } = await this.materialSnapshot(ref, signal)
     if (ref.sessionId !== this.id || !record)
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
     await this.fault(ref, signal)
     const result = /^script:[^:]+:result$/u.test(record.title ?? '')
     const stateDetails = record.title.startsWith('context:decision-state:')
+    const goal = record.kind === 'audit' && record.title === 'session:goal'
     if (!isUndefined(invocation)) {
       if (!result || !isString(invocation) || !invocation)
         throw new AppError('VALIDATION', '调用召回必须指定失败执行结果及其调用身份')
@@ -505,24 +518,20 @@ export class ContextMemory implements ContextMemoryApi {
       content.invocation = invocation
       return content
     }
-    if (!isUndefined(pointer) || result || stateDetails) {
-      if (!result && !stateDetails)
-        throw new AppError('VALIDATION', '字段召回仅适用于执行结果或当前决策状态归档')
+    if (!isUndefined(pointer) || result || stateDetails || goal) {
+      if (!result && !stateDetails && !goal)
+        throw new AppError('VALIDATION', '字段召回仅适用于执行结果、目标或当前决策状态归档')
       const archived = await this.storage.get(this.id, record.objectId)
       signal.throwIfAborted()
-      if (isNull(archived)) throw new AppError('NOT_FOUND', '执行结果原文不可用')
+      if (isNull(archived)) throw new AppError('NOT_FOUND', '材料原文不可用')
       const page: MemoryContent = isUndefined(pointer)
         ? await this.context.read(ref, { offset, limit })
         : { record, ...readMaterialField(archived, pointer, offset, limit) }
-      // 状态细节召回定位原文，不签发执行输出的 required 送达证明。
-      if (stateDetails) {
-        const current = await this.snapshot(signal, [
-          { title: 'search:history-reset', latest: true },
-          { kind: 'user' },
-          { refId: ref.id },
-        ])
-        if (!memoryReference(current, ref))
-          throw new AppError('SCOPE_MISMATCH', '召回期间当前决策状态的授权范围已经变化')
+      // 目标与状态细节召回定位原文，不签发执行输出的 required 送达证明。
+      if (stateDetails || goal) {
+        const current = await this.materialSnapshot(ref, signal)
+        if (!current.record || current.record.objectId !== record.objectId)
+          throw new AppError('SCOPE_MISMATCH', '召回期间材料的授权范围已经变化')
         return page
       }
       const match = pointer?.match(/^\/output\/blocks\/(0|[1-9]\d*)\/value$/u)
@@ -973,6 +982,33 @@ export class ContextMemory implements ContextMemoryApi {
     const workingTexts = new Map<string, string>(
       material.results.map((item: { ref: string; text?: string }) => [item.ref, item.text ?? ''])
     )
+    const rawDeltas = new Map<string, string>()
+    for (const item of material.results) {
+      if (item.structuredOutput || !item.materialCoverage || !item.text) continue
+      const index = history.items.findIndex(
+        (entry) => entry.ref === item.ref && entry.role === 'user' && entry.bodyIncluded
+      )
+      const entry = history.items[index]
+      const content = history.messages[index]?.content
+      const record = records.get(item.ref)
+      if (!entry?.outputFingerprint || !isString(content) || !record) continue
+      const marker = '\n当次输出：\n'
+      const boundary = content.lastIndexOf(marker)
+      if (boundary < 0) continue
+      const previous = content.slice(boundary + marker.length)
+      const identity = [this.id, item.ref, toNullable(item.sourceRef)]
+      if (
+        entry.outputFingerprint !== scriptOutputs.hash([...identity, previous]) ||
+        entry.outputFingerprint === scriptOutputs.hash([...identity, item.text])
+      )
+        continue
+      const archived = await this.storage.get(this.id, record.objectId)
+      if (!archived) continue
+      const original = executionMaterial(JSON.parse(archived))
+      if (item.materialCoverage.identity !== scriptOutputs.hash([...identity, original])) continue
+      const reduced = materialHistoryDelta(original, item.text, previous, record.ref)
+      if (reduced) rawDeltas.set(item.ref, reduced)
+    }
     material.results = material.results.map((item: Record<string, unknown> & { ref: string }) => {
       const { outputProofs: _outputProofs, outputViews, materialCoverage, ...displayed } = item
       const coverage = frame.outputCoverage?.find((coverage) => coverage.ref === item.ref)
@@ -1024,7 +1060,14 @@ export class ContextMemory implements ContextMemoryApi {
         historyOutputs.get(item.ref) !==
           scriptOutputs.hash([this.id, item.ref, toNullable(item.sourceRef), encoded])
       )
-        return displayed
+        return rawDeltas.has(item.ref)
+          ? {
+              ...displayed,
+              text: rawDeltas.get(item.ref),
+              representation: 'excerpt',
+              truncated: true,
+            }
+          : displayed
       // 同一来源的本次编码表示已经逐字进入历史；表示的截断状态与原值缺口独立保留。
       // 同一个 ref 仍可经 memory.read 读取完整原文。
       return {

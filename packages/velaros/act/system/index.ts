@@ -2,6 +2,7 @@ export type { MemoryModuleApi, ModulesModuleApi, SystemModulesApi } from './cont
 export type { StoreModuleApi, StoreSessionApi } from './contract/provides.js'
 export type { ProgramsModuleApi } from './contract/provides.js'
 export type { EnvironmentModuleApi, EnvironmentRegistryApi } from './contract/provides.js'
+export type { ExecutionsModuleApi } from './contract/provides.js'
 export type {
   ContextCandidateValidator,
   ContextMaintenanceHost,
@@ -33,8 +34,11 @@ export type {
   EnvironmentOperationContext,
   EnvironmentRegistryOptions,
 } from './contract/requires.js'
+export type { ExecutionsHost, ExecutionsPort } from './contract/requires.js'
+export type { ExecutionsOperationContext } from './contract/requires.js'
 export { environmentModule } from './impl/EnvironmentModule.js'
 export { createEnvironmentRegistry } from './impl/EnvironmentRegistry.js'
+export { executionsModule } from './impl/ExecutionsModule.js'
 export { memoryModule } from './impl/MemoryModule.js'
 export { modulesModule } from './impl/ModulesModule.js'
 export { programsModule } from './impl/ProgramsModule.js'
@@ -50,6 +54,13 @@ export type {
   EnvironmentSearch,
   EnvironmentState,
 } from './types/environment.js'
+export type {
+  ExecutionOutputChunk,
+  ExecutionRead,
+  ExecutionSnapshot,
+  ExecutionTarget,
+  ExecutionWait,
+} from './types/executions.js'
 export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
 export type { VolumeNarrative } from './types/history.js'
 export type {

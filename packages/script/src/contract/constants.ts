@@ -121,8 +121,10 @@ export const CodeSurfaceLimits = Object.freeze({
   imageChars: 20 * 1024 * 1024,
   /** 一次程序最多能发多少次能力调用；防住 `while(true)` 里调接口。 */
   calls: 200,
-  /** 程序的墙钟上限（毫秒）。 */
+  /** 程序的缺省计时上限及观察程序的最大计时（毫秒）。 */
   timeoutMs: 120_000,
+  /** Node 一次性程序显式申请的最大计时；父任务取消仍独立生效（毫秒）。 */
+  maxExecutionTimeoutMs: 86_400_000,
   /** 程序附属模块的相对路径字符上限。 */
   scriptPathChars: 160,
 } as const)
@@ -161,6 +163,9 @@ export const ScriptOutputLimits = Object.freeze({
   /** view.paths 最多几个 JSON Pointer。 */
   paths: 64,
 })
+
+/** 显式导入本次宿主 npm 安装；裸包名仍按工作区 Node 规则解析。 */
+export const NodeRuntimePackagePrefix = 'velaros:npm/' as const
 
 /** Node 执行环境预装的标准 npm 包；工作区自带依赖优先。 */
 export const NodeDefaultPackages = Object.freeze([

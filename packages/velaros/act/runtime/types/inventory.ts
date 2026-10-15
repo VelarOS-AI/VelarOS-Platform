@@ -12,8 +12,10 @@ export interface RuntimeCapabilityHint {
 export interface RuntimePackageHint {
   /** npm 导入名，alias 保留别名。 */
   readonly name: string
-  /** 读取实际安装清单得到的版本。 */
-  readonly version?: string
+  /** 显式选择本次宿主安装的 import，版本取 fallbackVersion。 */
+  readonly runtimeImport?: string
+  /** 后备安装清单的版本；工作区包可覆盖它，实际身份由执行进程目录提供。 */
+  readonly fallbackVersion?: string
   /** 提供该包的已选择 Skill。 */
   readonly skill?: string
   /** 对应安装的读取诊断，避免将损坏条目误报为可用。 */

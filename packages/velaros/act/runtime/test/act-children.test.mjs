@@ -9,7 +9,7 @@ import { createActEventProjector } from '../../../dist/act/runtime/renderer.js'
 
 import { modelText } from './support/model-turn.mjs'
 import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, marker, turn } from './support/model-turn.mjs'
 const model = (stream) => ({
   id: 'fixture',
   limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -27,6 +27,46 @@ const setup = async (t, options) => {
   return { runtime, session: await runtime.openSession('root') }
 }
 const task = (request, source) => turn(request, { execute: { source } })
+
+test('immediate child guidance reaches the same real runtime run before completion', async (t) => {
+  const requests = []
+  let main = 0
+  const child = model(async function* (request, signal) {
+    const text = modelText(request)
+    requests.push(text)
+    if (!text.includes('additional-child-constraint')) {
+      await new Promise((resolve) => {
+        signal.addEventListener('abort', resolve, { once: true })
+        if (signal.aborted) resolve()
+      })
+      return
+    }
+    yield* done(request, 'child followed additional constraint')
+  })
+  const f = await setup(t, {
+    context: { maintenance: false },
+    agents: { concurrency: 1, maxChildren: 1, profiles: { read: { model: child, modules: [] } } },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,send,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'initial child work',profile:'read'});await send({id:job.id,input:'additional-child-constraint'});output(await wait({id:job.id}));"
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request, 'parent complete')
+    }),
+  })
+  const events = []
+  for await (const event of f.session.submit('delegate then immediately guide')) events.push(event)
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert(requests.some((text) => text.includes('additional-child-constraint')))
+  const page = await f.runtime.trace('root')
+  const branches = page.branches.filter((branch) => branch.kind === 'agent')
+  assert.equal(branches.length, 1)
+  assert.equal(branches[0].status, 'closed')
+  const first = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
+  assert.equal(first.agents[0].status, 'completed')
+})
 
 test('unknown child effects do not block the parent: it keeps writing, completes and can switch tasks', async (t) => {
   let writes = 0
@@ -400,6 +440,65 @@ test('child reservations cannot exceed the root model budget', async (t) => {
   assert.match(events.findLast((e) => e.type === 'error').message, /用量已到上限/)
 })
 
+test('child budget stops expose the reason, preserve accounting on resume, and clear after recovery', async (t) => {
+  let main = 0
+  let childCalls = 0
+  let childId
+  const child = model(async function* (request) {
+    if (++childCalls === 1) {
+      yield task(request, "import {output} from 'velaros';output('partial work');")
+      yield { type: 'finish', reason: 'stop' }
+    } else yield* done(request, 'child complete')
+  })
+  const f = await setup(t, {
+    context: { maintenance: false, limits: { modelCalls: 20 } },
+    agents: {
+      concurrency: 1,
+      maxChildren: 1,
+      profiles: {
+        tight: { model: child, modules: [], budget: { modelCalls: 1 } },
+        expanded: { model: child, modules: [], budget: { modelCalls: 4 } },
+      },
+    },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'work',profile:'tight'});output(await wait({id:job.id}));"
+        )
+      } else if (main <= 3) {
+        const job = runtimeFrame(request).children[0]
+        assert.match(job.error, /用量已到上限/)
+        assert.equal(job.delivery.continuation, undefined)
+        assert.equal(childCalls, 1)
+        if (childId) assert.equal(job.id, childId)
+        childId = job.id
+        yield task(
+          request,
+          `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},input:'continue',profile:'${main === 2 ? 'tight' : 'expanded'}'});output(await wait({id:job.id}));`
+        )
+      } else {
+        const job = runtimeFrame(request).children[0]
+        assert.equal(job.id, childId)
+        assert.equal(job.status, 'completed')
+        assert.equal(job.error, undefined)
+        assert.equal(job.delivery.continuation.operation, 'agents.resume')
+        yield* done(request, 'parent complete')
+        return
+      }
+      yield { type: 'finish', reason: 'stop' }
+    }),
+  })
+  const events = []
+  for await (const event of f.session.submit('exercise bounded child recovery')) events.push(event)
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(childCalls, 2)
+  assert.equal(main, 4)
+  const usage = (await f.session.view.inspect()).usage
+  assert.equal(usage.mainCalls, 4)
+  assert.equal(usage.contextCalls, 2)
+})
+
 test('renderer distinguishes preview, rejected generation and accepted body; replay is idempotent', () => {
   const p = createActEventProjector()
   let sequence = 0
@@ -542,8 +641,9 @@ test(
       }),
     })
     const reserve = f.session.view.reserveModel.bind(f.session.view)
-    f.session.view.reserveModel = async (role, tokens) => {
-      await reserve(role, tokens)
+    f.session.view.reserveModel = async (...args) => {
+      const [role] = args
+      await reserve(...args)
       if (role === 'context') {
         entered.resolve()
         await release.promise
@@ -749,3 +849,163 @@ test('live and persisted projection share accepted identities without duplicate 
   assert.equal(p.applyLive({ type: 'text', runId: 'r', text: 'late' }).runs.r.preview, '')
   assert.equal(p.snapshot().runs.r.messages[0].text, 'answer')
 })
+
+for (const transport of ['text', 'tools']) {
+  for (const winner of ['local-success', 'local-failure', 'child']) {
+    test(
+      `mixed background work wakes the parent for ${winner} over ${transport} while unrelated work continues`,
+      { timeout: 15000 },
+      async (t) => {
+        const gate = () => {
+          let resolve
+          const promise = new Promise((done) => {
+            resolve = done
+          })
+          return { promise, resolve }
+        }
+        const local = gate()
+        const child = gate()
+        const localEntered = gate()
+        const childEntered = gate()
+        const resumed = gate()
+        let main = 0
+        let localFinished = false
+        let childFinished = false
+        let waiting = false
+        let doneCalls = 0
+        const driver = (stream) => ({ ...model(stream), nativeTools: transport === 'tools' })
+        const complete = async function* (request, message) {
+          if (transport === 'text') yield* done(request, message)
+          else {
+            yield {
+              type: 'tool-call',
+              value: { id: `done-${++doneCalls}`, name: 'done', input: { message } },
+            }
+            yield { type: 'finish', reason: 'stop' }
+          }
+        }
+        const module = {
+          binding: {
+            moduleId: 'probe:progress',
+            instanceId: 'work',
+            generation: 1,
+            schemaRevision: '1',
+          },
+          summary: 'Controlled background work',
+          operations: {
+            hold: {
+              summary: 'Wait for the independent work result',
+              input: { type: 'null' },
+              output: { type: 'string' },
+              effects: 'none',
+              run: async () => {
+                localEntered.resolve()
+                await local.promise
+                localFinished = true
+                if (winner === 'local-failure') throw Error('LOCAL_WORK_FAILED')
+                return 'LOCAL_WORK_FINISHED'
+              },
+            },
+          },
+        }
+        const f = await setup(t, {
+          modules: [module],
+          protocol: { transport },
+          context: { maintenance: false },
+          agents: {
+            concurrency: 1,
+            maxChildren: 1,
+            profiles: {
+              independent: {
+                modules: [],
+                model: driver(async function* (request) {
+                  childEntered.resolve()
+                  await child.promise
+                  childFinished = true
+                  yield* complete(request, 'CHILD_WORK_FINISHED')
+                }),
+              },
+            },
+          },
+          model: driver(async function* (request) {
+            main++
+            if (main === 1) {
+              const source =
+                "import {start} from 'velaros:agents';import {hold} from 'probe:progress';import {output} from 'velaros';await start({task:'Independent work',profile:'independent'});output(await hold());"
+              if (transport === 'tools')
+                yield {
+                  type: 'tool-call',
+                  value: {
+                    id: 'start-work',
+                    name: 'exec',
+                    input: { code: source, options: { async: true } },
+                  },
+                }
+              else {
+                const tag = marker(request)
+                yield { type: 'text', text: `${tag} execute({async:true})\n${source}\n${tag}` }
+              }
+              yield { type: 'finish', reason: 'stop' }
+            } else if (main === 2) {
+              await Promise.all([localEntered.promise, childEntered.promise])
+              yield { type: 'text', text: 'Waiting for the next completed background operation.' }
+              yield { type: 'finish', reason: 'stop' }
+            } else {
+              if (main === 3) {
+                resumed.resolve({
+                  localFinished,
+                  childFinished,
+                  text: modelText(request),
+                  children: runtimeFrame(request).children,
+                })
+                local.resolve()
+                child.resolve()
+              }
+              yield* complete(request, 'Observed background results')
+            }
+          }),
+        })
+        const events = []
+        const run = (async () => {
+          for await (const event of f.session.submit(
+            'Handle each background result as it becomes available.'
+          )) {
+            events.push(event)
+            if (event.type === 'state' && event.status === 'waiting' && main === 2 && !waiting) {
+              waiting = true
+              if (winner === 'child') child.resolve()
+              else local.resolve()
+            }
+          }
+        })()
+        let timer
+        try {
+          const progress = await Promise.race([
+            resumed.promise,
+            new Promise((_, reject) => {
+              timer = setTimeout(
+                () => reject(Error('Parent did not resume for the available result')),
+                4000
+              )
+            }),
+          ])
+          assert.equal(waiting, true)
+          assert.equal(progress.localFinished, winner !== 'child')
+          assert.equal(progress.childFinished, winner === 'child')
+          if (winner === 'child') assert.equal(progress.children[0].status, 'completed')
+          else
+            assert.match(
+              progress.text,
+              winner === 'local-failure' ? /LOCAL_WORK_FAILED/ : /LOCAL_WORK_FINISHED/
+            )
+        } finally {
+          clearTimeout(timer)
+          local.resolve()
+          child.resolve()
+          await run
+        }
+        assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+      }
+    )
+  }
+}

@@ -2,16 +2,19 @@ import type { ModelToolDelivery } from '@velaros-ai/agent'
 import type { ContextStorage, ContextViewApi } from '@velaros-ai/context'
 import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime } from '@velaros-ai/context'
+import { createContextView } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnRequest } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
+import { modelProviderRetry, modelRequestDispatcher } from '@velaros-ai/model'
 
 import { ModelToolLimits } from '../contract/constants.js'
-import type { ModelBudgetPort } from '../types/model-budget.js'
+import type { ModelBudgetPort, ModelBudgetSettlement } from '../types/model-budget.js'
 import type { ModelToolBinding, ModelToolPolicy } from '../types/model-tools.js'
+import { readModelBudgetSettlement } from '../utils/model-budget.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 /** 一次模型工具活动共享的资源权，不授予业务能力。 */
@@ -70,6 +73,8 @@ export interface ModelToolRuntimeApi {
 
 /** 一棵调用树只有归属、活动权、祖先总账和实际模型调用配额。 */
 export class ModelToolRuntime implements ModelToolRuntimeApi {
+  private readonly budgetRecovery = new Map<string, Promise<void>>()
+  private readonly budgetRecoveredSequence = new Map<string, number>()
   public async deliver(
     parent: string,
     sessionId: string,
@@ -187,6 +192,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
 
   public releaseRoot(sessionId: string): void {
     this.roots.delete(sessionId)
+    this.budgetRecoveredSequence.delete(sessionId)
   }
 
   public descends(sessionId: string, ancestorId: string): boolean {
@@ -225,6 +231,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
     if (depth > this.policy.maxDepth)
       throw new AppError('MODEL_TOOL_DEPTH', '模型工具调用深度已达上限')
     const rootSessionId = parent?.binding.rootSessionId ?? parentSessionId
+    await this.recoverBudget(rootSessionId)
     const deadline = Math.min(
       Date.now() + timeoutMs,
       parent?.binding.deadline ?? Infinity,
@@ -250,9 +257,16 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
     ])
     combined.throwIfAborted()
     const ancestors: ContextViewApi[] = []
+    const taskIds = new Map<ContextViewApi, string>()
+    const sessionIds = new Map<ContextViewApi, string>()
     let ancestor = parentSessionId
     while (true) {
-      ancestors.unshift(this.options.view(ancestor))
+      const view = this.options.view(ancestor)
+      const taskId = (await view.inspect())?.id
+      if (!taskId) throw new AppError('MODEL_TOOL_SCOPE', '模型预算祖先没有活动逻辑任务')
+      ancestors.unshift(view)
+      taskIds.set(view, taskId)
+      sessionIds.set(view, ancestor)
       const node = this.active.get(ancestor)
       if (!node) break
       ancestor = node.binding.parentSessionId
@@ -264,12 +278,28 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       binding,
       signal: combined,
       budget: {
-        reserveModel: async (role, tokens) => {
+        reserveModel: async (role, tokens, requestId) => {
           const reserved: ContextViewApi[] = []
           try {
             for (const view of ancestors) {
               combined.throwIfAborted()
-              await view.reserveModel(role, tokens)
+              for (;;) {
+                try {
+                  await view.reserveModel(
+                    role,
+                    tokens,
+                    requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
+                  )
+                  break
+                } catch (error) {
+                  if (!requestId || (error as { code?: string }).code !== 'MODEL_RATE') throw error
+                  await modelProviderRetry.wait(
+                    (error as { retryAfterMs?: number }).retryAfterMs ??
+                      ActRuntimeTuning.rateRetryMs,
+                    combined
+                  )
+                }
+              }
               reserved.push(view)
             }
             combined.throwIfAborted()
@@ -278,7 +308,11 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             const failures: unknown[] = [error]
             for (const view of reserved.reverse())
               try {
-                await view.releaseModel(role, tokens)
+                await view.releaseModel(
+                  role,
+                  tokens,
+                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
+                )
               } catch (release) {
                 Log.tag('ActRuntime').debug('ModelToolRuntime 已进入异常处理或降级分支')
                 failures.push(release)
@@ -287,16 +321,88 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             throw error
           }
         },
-        releaseModel: async (role, tokens) => {
+        transferModelReservation: async (reservationId, requestId) => {
           const failures = (
-            await Promise.allSettled(ancestors.map((view) => view.releaseModel(role, tokens)))
+            await Promise.allSettled(
+              ancestors.map((view) =>
+                view.transferModelReservation(
+                  { requestId: reservationId, taskId: taskIds.get(view)! },
+                  requestId
+                )
+              )
+            )
+          ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
+          if (failures.length === 1) throw failures[0]
+          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先收尾占位转交失败')
+        },
+        dispatchModel: async (requestId) => {
+          const failures = (
+            await Promise.allSettled(
+              ancestors.map((view) => view.dispatchModel({ requestId, taskId: taskIds.get(view)! }))
+            )
+          ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
+          if (failures.length === 1) throw failures[0]
+          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先模型派发登记失败')
+        },
+        releaseModel: async (role, tokens, requestId, confirmedNotDispatched) => {
+          const failures = (
+            await Promise.allSettled(
+              ancestors.map((view) =>
+                view.releaseModel(
+                  role,
+                  tokens,
+                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined,
+                  confirmedNotDispatched
+                )
+              )
+            )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
           if (!isEmpty(failures)) throw new AggregateError(failures, '祖先预算归还失败')
         },
-        recordUsage: async (input, output) => {
+        recordUsage: async (input, output, requestId) => {
+          if (requestId && binding.rootTaskId) {
+            const receipt: ModelBudgetSettlement = {
+              requestId,
+              rootSessionId,
+              rootTaskId: binding.rootTaskId,
+              inputTokens: input,
+              outputTokens: output,
+              targets: ancestors.map((view) => ({
+                sessionId: sessionIds.get(view)!,
+                taskId: taskIds.get(view)!,
+              })),
+              status: 'pending',
+            }
+            readModelBudgetSettlement(receipt, rootSessionId)
+            const context = createContextRuntime({
+              sessionId: rootSessionId,
+              storage: this.options.storage,
+            })
+            await context.append({
+              kind: 'audit',
+              title: 'model-budget:settlement',
+              body: JSON.stringify(receipt),
+            })
+            try {
+              await this.applyBudgetSettlement(receipt, ancestors)
+            } catch (error) {
+              this.budgetRecovery.delete(rootSessionId)
+              this.budgetRecoveredSequence.delete(rootSessionId)
+              throw error
+            }
+            return
+          }
           const failures = (
-            await Promise.allSettled(ancestors.map((view) => view.recordUsage(input, output)))
+            await Promise.allSettled(
+              ancestors.map((view) =>
+                view.recordUsage(
+                  input,
+                  output,
+                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
+                )
+              )
+            )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
           if (!isEmpty(failures)) throw new AggregateError(failures, '祖先用量结算失败')
@@ -318,12 +424,14 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
   public model(sessionId: string, driver: ModelDriver): ModelDriver {
     return {
       id: driver.id,
+      dispatchAware: true,
       get limits() {
         return driver.limits
       },
       nativeTools: driver.nativeTools,
       estimate: (request) => driver.estimate(request),
-      stream: (request, signal) => this.stream(sessionId, driver, request, signal),
+      stream: (request, signal, beforeDispatch) =>
+        this.stream(sessionId, driver, request, signal, beforeDispatch),
     }
   }
 
@@ -331,20 +439,100 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
     sessionId: string,
     driver: ModelDriver,
     request: ModelTurnRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
   ) {
     const scope = this.active.get(sessionId)
     if (!scope && !this.roots.has(sessionId))
       throw new AppError('MODEL_TOOL_CLOSED', '模型工具活动已结束')
     const combined = scope ? AbortSignal.any([signal, scope.signal]) : signal
+    await this.recoverBudget(scope?.binding.rootSessionId ?? sessionId)
     await this.acquire(combined)
     try {
       combined.throwIfAborted()
-      yield* driver.stream(request, combined)
+      yield* modelRequestDispatcher.stream(driver, request, combined, beforeDispatch)
     } finally {
       this.running--
       this.queue.shift()?.()
     }
+  }
+
+  private recoverBudget(rootSessionId: string): Promise<void> {
+    let pending = this.budgetRecovery.get(rootSessionId)
+    if (!pending) {
+      pending = this.recoverBudgetSettlements(rootSessionId).finally(() => {
+        if (this.budgetRecovery.get(rootSessionId) === pending)
+          this.budgetRecovery.delete(rootSessionId)
+      })
+      this.budgetRecovery.set(rootSessionId, pending)
+    }
+    return pending
+  }
+
+  private async recoverBudgetSettlements(rootSessionId: string): Promise<void> {
+    const snapshot = await this.options.storage.load(rootSessionId)
+    if (!snapshot) return
+    const recovered = this.budgetRecoveredSequence.get(rootSessionId) ?? 0
+    const latest = new Map<string, ModelBudgetSettlement>()
+    for (const record of snapshot.records) {
+      if (record.sequence <= recovered || record.title !== 'model-budget:settlement') continue
+      const receipt = readModelBudgetSettlement(
+        JSON.parse((await this.options.storage.get(rootSessionId, record.objectId))!),
+        rootSessionId
+      )
+      latest.set(receipt.requestId, receipt)
+    }
+    for (const receipt of latest.values()) {
+      if (receipt.status !== 'pending') continue
+      const views = receipt.targets.map((target) =>
+        createContextView({
+          sessionId: target.sessionId,
+          storage: this.options.storage,
+          context: createContextRuntime({
+            sessionId: target.sessionId,
+            storage: this.options.storage,
+          }),
+          sources: [],
+        })
+      )
+      await this.applyBudgetSettlement(receipt, views)
+    }
+    this.budgetRecoveredSequence.set(rootSessionId, snapshot.records.length)
+  }
+
+  private async applyBudgetSettlement(
+    receipt: ModelBudgetSettlement,
+    views: readonly ContextViewApi[]
+  ): Promise<void> {
+    let archived = false
+    const results = await Promise.allSettled(
+      views.map(async (view, index) => {
+        const target = receipt.targets[index]
+        const state = await view.inspect()
+        if (state?.id !== target.taskId) {
+          archived = true
+          return
+        }
+        await view.recordUsage(receipt.inputTokens, receipt.outputTokens, {
+          requestId: receipt.requestId,
+          taskId: target.taskId,
+        })
+      })
+    )
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    )
+    if (failures.length === 1) throw failures[0]
+    if (!isEmpty(failures)) throw new AggregateError(failures, '祖先用量结算失败，持久回执可重试')
+    const context = createContextRuntime({
+      sessionId: receipt.rootSessionId,
+      storage: this.options.storage,
+    })
+    await context.append({
+      kind: 'audit',
+      title: 'model-budget:settlement',
+      body: JSON.stringify({ ...receipt, status: archived ? 'archived' : 'settled' }),
+    })
   }
 
   private async acquire(signal: AbortSignal): Promise<void> {

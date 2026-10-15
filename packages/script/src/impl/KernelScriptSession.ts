@@ -164,12 +164,14 @@ class KernelScriptSession implements KernelScriptSessionApi {
         checker: nodeProgramChecker,
         runner: this.options.runner,
         capabilities: port,
+        events: this.options.events,
       }).submit({
         program,
         signal,
         granted: [],
         packages: this.options.packages,
         mode: this.options.mode,
+        timeoutMs: this.options.timeoutMs,
         host: { sessionId: this.options.sessionId, executionId: this.options.executionId, modules },
       })
     }
@@ -184,8 +186,15 @@ class KernelScriptSession implements KernelScriptSessionApi {
       checker: codeProgramChecker,
       runner: this.options.runner,
       capabilities: port,
+      events: this.options.events,
     })
-    return session.submit({ program, signal, granted: surface.granted, packages: surface.packages })
+    return session.submit({
+      program,
+      signal,
+      granted: surface.granted,
+      packages: surface.packages,
+      timeoutMs: this.options.timeoutMs,
+    })
   }
 }
 

@@ -80,6 +80,8 @@ export interface SearchActivationApi extends ModelDriver {
 
   /** 本次请求的有限截止时间。 */
   deadline(): number
+  /** 整个专项的执行期限，独立于单次模型请求时限。 */
+  executionDeadline(): number
   /** 本次请求的阶段、剩余预算及收尾要求。 */
   /** 容量预警让叶子直接交付已有证据。 */
   pressure(): void
@@ -101,6 +103,8 @@ export interface SearchActivationDependencies {
   readonly storage: ContextStorage
   /** 父任务预算与当前空间。 */
   readonly parent: ModelBudgetPort
+  /** 当前预留收尾轮的请求身份。 */
+  readonly finalizationRequestId?: string
   /** 实际来源授权作用域。 */
   readonly scope: ContextTaskScope
   /** 独立绝对截止时间。 */
@@ -111,6 +115,7 @@ export interface SearchActivationDependencies {
 
 /** 单次搜索的共享驱动预算和真实来源访问，不另建模型循环。 */
 export class SearchActivation implements SearchActivationApi {
+  public readonly dispatchAware = true
   public readonly id: string
   public get nativeTools(): boolean {
     return this.control.nativeTools
@@ -141,6 +146,9 @@ export class SearchActivation implements SearchActivationApi {
   public deadline() {
     this.phase()
     return this.control.deadline()
+  }
+  public executionDeadline(): number {
+    return this.dependencies.deadline
   }
 
   public material(maxChars: number): unknown {
@@ -229,9 +237,13 @@ export class SearchActivation implements SearchActivationApi {
     return this.control.estimate(request)
   }
 
-  public stream(request: ModelTurnRequest, signal: AbortSignal): AsyncIterable<ModelTurnDelta> {
+  public stream(
+    request: ModelTurnRequest,
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
+  ): AsyncIterable<ModelTurnDelta> {
     this.phase()
-    return this.control.stream(request, signal)
+    return this.control.stream(request, signal, beforeDispatch)
   }
 
   public canExplore() {

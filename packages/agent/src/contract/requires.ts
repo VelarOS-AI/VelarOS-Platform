@@ -48,12 +48,13 @@ export interface ActExecutionPort {
   wait(signal: AbortSignal): Promise<void>
   /** 取消并收束本次任务尚未结束的程序。 */
   stop(): Promise<void>
-  /** 执行并记录回执；acceptedTurnId 由宿主绑定到已持久化的响应。 */
+  /** 执行并记录回执；acceptedTurnId 绑定已持久化的响应。waitSignal 只唤醒前台等待，程序生命周期仍由 signal 控制。 */
   invoke(
     input: unknown,
     signal: AbortSignal,
     acceptedTurnId: string,
-    calls?: readonly ModelToolCall[]
+    calls?: readonly ModelToolCall[],
+    waitSignal?: AbortSignal
   ): Promise<void | boolean | { succeeded: boolean; results: readonly ModelToolResult[] }>
 }
 /** 上下文策略独立于协议解码和执行调度。 */
@@ -113,7 +114,8 @@ export interface ActContextPort {
   }>
   /**
    * 渲染本帧相对上一帧的变化，未列出的沿用上一帧。提供时循环把已发送的帧留在历史里、
-   * 在暂态开销阈值内只在其后追加，供应商可复用完整前缀缓存；重建时核对实际正文覆盖。
+   * 在 policy.retainedFrameRatio 的历史帧预算内只在其后追加，供应商可复用完整前缀缓存；
+   * 超出历史帧或完整请求预算时，从权威投影重建并重新核对实际正文覆盖。
    * 缺省时每帧完整重发。
    */
   delta?(body: string, previous: string): string

@@ -20,11 +20,11 @@ const result = await session.run({
 if (result.checked) console.log(result.result.process)
 ```
 
-每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`，直接按包名 import；工作区自己的 npm 依赖优先，损坏的项目依赖保留原错误。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
+每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`，用 `velaros:npm/<包名>` 显式选择宿主安装，例如 `import {execa} from "velaros:npm/execa"`。裸包名按 Node 的工作区规则解析，损坏的项目依赖保留原错误；宿主包子路径沿用该安装的 exports。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
 
 `VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 
-目录的 `importer` 标明本次程序入口；`packages` 的版本、`packageJson`、README 与实际入口的工作区依赖对应，`source` 区分工作区解析和运行环境后备安装。包清单缺失或损坏时保留该条目的诊断，不借用其他版本的身份，也不影响无关程序。发现由本次 Node 进程读取，宿主在执行用户源码前一次发布；保存脚本中的其他入口仍按各自位置解析依赖。
+目录的 `importer` 标明本次程序入口；`packages` 的版本、`packageJson`、README 与实际入口的工作区依赖对应，`source` 区分工作区解析和运行环境后备安装。`runtimeImport`、`runtimeVersion`、`runtimePackageJson` 和 `runtimeReadme` 同时给出显式宿主安装的身份与证据入口。包清单缺失或损坏时保留该条目的诊断，不借用其他版本的身份，也不影响无关程序。发现由本次 Node 进程读取，宿主在执行用户源码前一次发布；保存脚本中的其他入口仍按各自位置解析依赖。
 
 同一目录的 `execution` 记录本次子进程实际的 `node` 版本、`executable`、`platform`、`arch`、`cwd` 和有序 `path`。它是启动时的环境事实，标准命令按该 PATH 和调用时的实际文件解析；宿主可通过 `environment.PATH` 指定命令搜索范围。目录只发布这些字段，其他环境变量与能力凭据保持私有。
 

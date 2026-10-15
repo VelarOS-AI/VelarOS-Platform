@@ -898,7 +898,7 @@ test('resume authorization checks obey the configured timeout even if a source i
     f.source.authorize = async () => true
     f.session = session
     const resumed = await search(f, { resume: first.ref })
-    assert.equal(resumed.status, 'completed')
+    assert.equal(resumed.status, 'completed', JSON.stringify(resumed))
     assert.equal(resumed.searchId, first.searchId)
   } finally {
     await runtime.close()
@@ -1431,8 +1431,8 @@ test(
     const release = Promise.withResolvers()
     const reserve = f.session.view.reserveModel.bind(f.session.view)
     let reservations = 0
-    f.session.view.reserveModel = async (role, tokens) => {
-      await reserve(role, tokens)
+    f.session.view.reserveModel = async (...args) => {
+      await reserve(...args)
       if (++reservations === 2) {
         entered.resolve()
         await release.promise

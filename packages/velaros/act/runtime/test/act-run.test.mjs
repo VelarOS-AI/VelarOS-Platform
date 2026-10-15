@@ -516,6 +516,117 @@ test('INV-51 the main run renews at its turn limit and keeps going instead of fa
   )
 })
 
+test('a host deadline cancels after renewal and does not leak into the next submission', async (t) => {
+  let calls = 0
+  let initialWindow
+  const f = await setup(
+    t,
+    async function* (request, signal) {
+      calls++
+      const time = runtimeFrame(request).executionTime
+      if (calls === 1) initialWindow = time.runWindowDeadline
+      if (calls <= 3) {
+        assert.equal(time.deadline, deadline)
+        yield {
+          type: 'text',
+          text: block(request, "import {output} from 'velaros';output('checkpoint');"),
+        }
+        yield finish
+      } else if (calls === 4) {
+        assert.equal(time.deadline, deadline)
+        assert(time.runWindowDeadline > initialWindow, 'run window must actually renew')
+        assert.equal(time.runWindowRenewable, true)
+        await new Promise((resolve) => {
+          signal.addEventListener('abort', resolve, { once: true })
+          if (signal.aborted) resolve()
+        })
+      } else {
+        assert.equal(time.deadline, null)
+        assert.equal(time.remainingMs, null)
+        yield* done(request)
+      }
+    },
+    { limits: { turns: 3, timeoutMs: 60000 } }
+  )
+  const deadline = Date.now() + 2500
+  const events = []
+  for await (const event of f.session.submit('bounded work', undefined, { deadline }))
+    events.push(event)
+  assert.equal(calls, 4)
+  assert(events.some((event) => event.type === 'renewed'))
+  assert.equal(events.at(-1).status, 'cancelled')
+  assert(Date.now() >= deadline)
+  assert(Date.now() < deadline + 5000)
+  const next = []
+  for await (const event of f.session.submit('fresh work')) next.push(event)
+  assert.equal(next.at(-1).status, 'completed')
+  assert.equal(calls, 5)
+})
+
+test('invalid or expired submission deadlines reject before any model request', async (t) => {
+  let calls = 0
+  const f = await setup(t, async function* (request) {
+    calls++
+    yield* done(request)
+  })
+  for (const deadline of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, 'tomorrow']) {
+    await assert.rejects(
+      async () => {
+        for await (const event of f.session.submit('invalid', undefined, { deadline })) {
+          assert.equal(typeof event.type, 'string')
+        }
+      },
+      { code: 'VALIDATION' }
+    )
+  }
+  await assert.rejects(
+    async () => {
+      for await (const event of f.session.submit('expired', undefined, {
+        deadline: Date.now() - 1,
+      })) {
+        assert.equal(typeof event.type, 'string')
+      }
+    },
+    { name: 'TimeoutError' }
+  )
+  assert.equal(calls, 0)
+  for await (const event of f.session.submit('valid')) {
+    assert.equal(typeof event.type, 'string')
+  }
+  assert.equal(calls, 1)
+})
+
+test('a far-future host deadline does not overflow the timer and external cancellation remains effective', async (t) => {
+  const controller = new AbortController()
+  const entered = Promise.withResolvers()
+  const f = await setup(t, async function* (request, signal) {
+    const time = runtimeFrame(request).executionTime
+    assert.equal(time.deadline, deadline)
+    entered.resolve()
+    await new Promise((resolve) => {
+      signal.addEventListener('abort', resolve, { once: true })
+      if (signal.aborted) resolve()
+    })
+    yield finish
+  })
+  const deadline = Date.now() + 2 ** 32
+  const events = []
+  const run = (async () => {
+    for await (const event of f.session.submit('bounded work', controller.signal, { deadline }))
+      events.push(event)
+  })()
+  await entered.promise
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.notEqual(
+    events.at(-1)?.status,
+    'cancelled',
+    'large deadline overflowed to an immediate timer'
+  )
+  controller.abort()
+  await run
+  assert.equal(events.at(-1).status, 'cancelled')
+})
+
 test('INV-51 a renewing main run still cancels a turn stuck for a second clock period', async (t) => {
   const f = await setup(
     t,

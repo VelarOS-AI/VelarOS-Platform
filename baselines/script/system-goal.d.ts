@@ -3,7 +3,8 @@
  * 目标跨回合保留：结束一轮回复、停止执行都不会完成它；暂停只在用户要求时做，完成或受阻要有实际验收依据。
  */
 declare module 'velaros:system-goal' {
-  /** 读当前目标：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。
+  /** 读当前目标的完整正文与状态：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。
+   * 工作帧里的 objectiveInRecord、reasonInRecord 是原文引用，不代表正文已读；可按其中的 ref、pointer 用 memory.read 分页读取。
    */
   export function get(): Promise<GoalState | null>
 
@@ -16,7 +17,7 @@ declare module 'velaros:system-goal' {
     /** 这一个目标的身份；建立新目标就换一个。 */
     readonly id: string
     readonly revision: number
-    /** 用户要完成的事。 */
+    /** 用户要完成的事的完整正文；宿主随提交给出的内容可以超过模型建立目标的输入上限。 */
     readonly objective: string
     readonly status: GoalStatus
     /** 完成依据、受阻原因或最近的进展。 */

@@ -75,6 +75,91 @@ function runFixture() {
   return { store, context, view, options }
 }
 
+test('INV-41 a delayed usage receipt settles its original cancelled task without reviving it', async () => {
+  const f = runFixture()
+  const entered = Promise.withResolvers<void>()
+  const usageReady = Promise.withResolvers<void>()
+  f.options.model.stream = async function* () {
+    entered.resolve()
+    await usageReady.promise
+    yield { type: 'usage', inputTokens: 25, outputTokens: 5 }
+    yield { type: 'text', text: 'must not execute after cancellation' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const cancel = new AbortController()
+  const events = []
+  const running = (async () => {
+    for await (const event of service.submit('work', cancel.signal)) events.push(event)
+  })()
+  await entered.promise
+  cancel.abort()
+  await running
+  expect((await f.view.inspect())!.usage.unmeasuredCalls).toBe(1)
+  usageReady.resolve()
+  for (let attempt = 0; attempt < 30 && (await f.view.inspect())!.usage.unmeasuredCalls; attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  const state = (await f.view.inspect())!
+  expect(state.status).toBe('cancelled')
+  expect(state.usage.inputTokens).toBe(25)
+  expect(state.usage.outputTokens).toBe(5)
+  expect(state.usage.budgetTokens).toBe(30)
+  expect(state.usage.unmeasuredCalls).toBe(0)
+  expect(events.some((event) => event.type === 'accepted')).toBe(false)
+  await service.close()
+})
+
+test('INV-41 a dispatch-aware driver cannot return unregistered output or usage to the main loop', async () => {
+  const f = runFixture()
+  f.options.model = { ...f.options.model, dispatchAware: true }
+  f.options.model.stream = async function* () {
+    yield { type: 'usage', inputTokens: 10, outputTokens: 5 }
+    yield { type: 'text', text: 'must not be accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  for await (const event of service.submit('work')) events.push(event)
+  const state = (await f.view.inspect())!
+  expect(state.status).toBe('failed')
+  expect(state.usage.mainCalls).toBe(0)
+  expect(state.usage.inputTokens).toBe(0)
+  expect(events.some((event) => event.type === 'accepted')).toBe(false)
+  await service.close()
+})
+
+test('INV-45 invalid usage is rejected before accounting, including simultaneous cancellation', async () => {
+  for (const cancelOnRead of [false, true]) {
+    const f = runFixture()
+    const cancel = new AbortController()
+    let measured = 0
+    f.options.model.stream = async function* () {
+      if (cancelOnRead) cancel.abort()
+      yield { type: 'usage', inputTokens: 10, outputTokens: 5, cacheReadTokens: 11 }
+    }
+    const request: ModelTurnRequest = {
+      instructions: 'fixture',
+      materials: [],
+      response: { type: 'text' },
+      mode: 'work',
+      outputTokens: 100,
+    }
+    const iterator = boundedModelStream(
+      f.options.model,
+      request,
+      cancel.signal,
+      undefined,
+      async () => {
+        measured++
+      }
+    )[Symbol.asyncIterator]()
+    await expect(iterator.next()).rejects.toBeDefined()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(measured).toBe(0)
+    await iterator.return?.()
+  }
+})
+
 test('INV-45 cache context preserves unknown fields and clears measurements after a request without cache usage', async () => {
   const f = runFixture()
   const requests: ModelTurnRequest[] = []
@@ -553,6 +638,58 @@ test.each(['fits', 'needs-finalization'] as const)(
   }
 )
 
+test('INV-53 a fitting current projection preserves the history before overflow folding', async () => {
+  const f = runFixture()
+  const original = 'Original evidence remains in chronological history. '.repeat(80)
+  const history: ModelHistoryMessage[] = [{ role: 'user', content: original }]
+  const sent: ModelTurnRequest[] = []
+  let folds = 0
+  let acknowledged = 0
+  f.options.frames.policy = { windowTokens: 3000 }
+  f.options.frames.project = async (_view, _signal, maxChars) => ({
+    body: JSON.stringify({ required: 'Keep original evidence', optional: 'x'.repeat(maxChars) }),
+    history,
+    images: [],
+    segment: { id: 'original', index: 1, revision: 0, volumes: 0, turns: 4 },
+  })
+  f.options.frames.fold = async () => {
+    folds++
+    return false
+  }
+  f.options.frames.acknowledge = async () => {
+    acknowledged++
+  }
+  f.options.model.estimate = async (request) => ({
+    tokens: Math.ceil(
+      (original.length + JSON.parse(request.materials[0]!.text).optional.length) / 4
+    ),
+    precision: 'exact',
+    basis: 'Fixed required history and separately adjustable current evidence',
+  })
+  f.options.model.stream = async function* (request) {
+    sent.push(request)
+    yield { type: 'text', text: 'complete' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  try {
+    const events = []
+    for await (const event of service.submit('Use original evidence')) events.push(event)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+    expect(folds).toBe(0)
+    expect(sent).toHaveLength(1)
+    expect(acknowledged).toBe(1)
+    expect(sent[0]!.history).toEqual(history)
+    expect(sent[0]!.contextStatus!.inputTokens).toBeLessThanOrEqual(3000)
+    const projected = JSON.parse(sent[0]!.materials[0]!.text)
+    expect(projected.required).toBe('Keep original evidence')
+    expect(projected.optional.length).toBeGreaterThan(1000)
+    expect(projected.optional.length).toBeLessThan(10000)
+  } finally {
+    await service.close()
+  }
+})
+
 test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel'] as const)(
   'INV-53 bounded local projection keeps usable evidence and enforces the final work window: %s',
   async (mode) => {
@@ -637,6 +774,181 @@ test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel
     }
   }
 )
+
+test.each([0, 0.125, 1])(
+  'INV-48 retained frame budget bounds repeated state while preserving logical facts: %s',
+  async (ratio) => {
+    const f = runFixture()
+    const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+    const evidence = 'source evidence '.repeat(40)
+    const requests: ModelTurnRequest[] = []
+    let turn = 0
+    let acknowledged = 0
+    f.options.limits = { ...f.options.limits, turns: 10 }
+    f.options.model = {
+      ...f.options.model,
+      limits: { contextTokens: 20000, inputTokens: 18000, outputTokens: 100 },
+    }
+    f.options.frames = {
+      ...f.options.frames,
+      policy: { retainedFrameRatio: ratio },
+      async project() {
+        return { body: JSON.stringify({ evidence, turn }), images: [], history: [...logical] }
+      },
+      delta: (body) => body,
+      async reconcile(body, history, previous) {
+        const covered =
+          previous && history.some((entry) => JSON.stringify(entry).includes(evidence))
+        return { body, prompt: `${covered ? 'delta' : 'full'} ${body}` }
+      },
+      async acknowledge() {
+        acknowledged++
+      },
+    }
+    f.options.model.estimate = async (request) => ({
+      tokens:
+        100 +
+        modelRequestEncoder
+          .messages(request)
+          .reduce((sum, message) => sum + JSON.stringify(message.content).length, 0),
+      precision: 'exact',
+      basis: 'deterministic textual cost including current protocol',
+    })
+    f.options.model.stream = async function* (request) {
+      requests.push(request)
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish: () =>
+        turn >= 6
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: {}, events: [] },
+    })
+    f.options.execution.invoke = async () => {
+      logical.push({ role: 'assistant', content: `accepted ${turn}` })
+      logical.push({ role: 'user', content: `result ${turn++}` })
+    }
+    const service = createActRunService(f.options)
+    try {
+      const events = []
+      for await (const event of service.submit('work')) events.push(event)
+      expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      expect(requests).toHaveLength(7)
+      expect(acknowledged).toBe(7)
+      let retained = 0
+      let rebuilt = 0
+      for (const [index, request] of requests.entries()) {
+        const priorFrames = (request.history ?? []).filter(
+          (message) =>
+            typeof message.content === 'string' && /^(full|delta) /u.test(message.content)
+        )
+        const marginal =
+          (await f.options.model.estimate(request)).tokens -
+          (
+            await f.options.model.estimate({
+              ...request,
+              history: request.history?.filter((message) => !priorFrames.includes(message)),
+            })
+          ).tokens
+        expect(marginal).toBeLessThanOrEqual(18000 * ratio)
+        expect(
+          request.history
+            ?.filter((message) => !priorFrames.includes(message))
+            .map(({ cacheBreakpoint: _mark, ...message }) => message)
+        ).toEqual(logical.slice(0, 1 + index * 2))
+        if (priorFrames.length) {
+          retained++
+          const previous = modelRequestEncoder.messages(requests[index - 1]!)
+          expect(
+            modelRequestEncoder
+              .messages(request)
+              .slice(0, previous.length)
+              .map(({ role, content }) => ({ role, content }))
+          ).toEqual(previous.map(({ role, content }) => ({ role, content })))
+        } else if (index) rebuilt++
+        expect(request.compiledPrompt).toContain(evidence)
+        expect(request.compiledPrompt).toContain(priorFrames.length ? 'delta' : 'full')
+      }
+      if (ratio === 0) expect(rebuilt).toBe(6)
+      else if (ratio === 1) expect(retained).toBe(6)
+      else {
+        expect(retained).toBeGreaterThan(0)
+        expect(rebuilt).toBeGreaterThan(0)
+        const state = await f.store.load('fault')
+        const audits = await Promise.all(
+          state!.records
+            .filter((record) => record.title === 'model-request')
+            .map(async (record) => JSON.parse((await f.store.get('fault', record.objectId))!))
+        )
+        expect(audits).toHaveLength(7)
+        expect(
+          audits.some(({ retention }) => retention.rebuiltFromTokens > retention.limitTokens)
+        ).toBe(true)
+        expect(
+          audits.every(({ retention }) => retention.historyTokens <= retention.limitTokens)
+        ).toBe(true)
+      }
+    } finally {
+      await service.close()
+    }
+  }
+)
+
+test('INV-48 cancellation during local frame accounting cannot dispatch or acknowledge another request', async () => {
+  const f = runFixture()
+  const cancel = new AbortController()
+  let calls = 0
+  let acknowledgements = 0
+  let executed = 0
+  f.options.frames = {
+    ...f.options.frames,
+    project: async () => ({ body: '{}', images: [], history: [] }),
+    delta: () => 'delta',
+    acknowledge: async () => {
+      acknowledgements++
+    },
+  }
+  f.options.model.estimate = async (request) => {
+    if (executed && !request.history?.length) {
+      cancel.abort()
+      return new Promise(() => {})
+    }
+    return { tokens: 100, precision: 'exact', basis: 'fixture' }
+  }
+  f.options.model.stream = async function* () {
+    calls++
+    yield { type: 'text', text: 'accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push() {
+      return []
+    },
+    finish: () => ({ message: 'work', done: false, submission: {}, events: [] }),
+  })
+  f.options.execution.invoke = async () => {
+    executed++
+  }
+  const service = createActRunService(f.options)
+  try {
+    const events = []
+    for await (const event of service.submit('work', cancel.signal)) events.push(event)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'cancelled' })
+    expect(calls).toBe(1)
+    expect(acknowledgements).toBe(1)
+    expect(executed).toBe(1)
+  } finally {
+    await service.close()
+  }
+})
 
 test.each([
   { role: 'user' as const, content: 'same result' },
@@ -845,11 +1157,11 @@ test('INV-41 a run waits out the hourly model limit and continues; the total cap
   f.options.view = new Proxy(f.view, {
     get(target, key) {
       if (key === 'reserveModel')
-        return async (role: 'main' | 'context', tokens: number) => {
+        return async (...args: Parameters<typeof target.reserveModel>) => {
           if (exhausted) throw Object.assign(Error('budget'), { code: 'MODEL_BUDGET' })
           if (refusals-- > 0)
             throw Object.assign(Error('rate'), { code: 'MODEL_RATE', retryAfterMs: 5 })
-          return target.reserveModel(role, tokens)
+          return target.reserveModel(...args)
         }
       const value = Reflect.get(target, key)
       return typeof value === 'function' ? value.bind(target) : value
@@ -1299,6 +1611,207 @@ test('INV-37 steering invalidates a stale response before slow input persistence
   await service.close()
 })
 
+for (const slowPersistence of [false, true])
+  test(`INV-37 steering wakes passive execution wait before background completion, slow persistence=${slowPersistence}`, async () => {
+    const f = runFixture()
+    const waiting = Promise.withResolvers<void>()
+    const nextTurn = Promise.withResolvers<void>()
+    const writing = Promise.withResolvers<void>()
+    const persisted = Promise.withResolvers<void>()
+    let calls = 0
+    let stopped = 0
+    let waitAborted = false
+    const ingest = f.context.ingest.bind(f.context)
+    f.context.ingest = async (input, signal) => {
+      if (input.text === 'new direction' && slowPersistence) {
+        writing.resolve()
+        await persisted.promise
+      }
+      return ingest(input, signal)
+    }
+    f.options.model.stream = async function* () {
+      calls++
+      if (calls === 2) nextTurn.resolve()
+      yield { type: 'text', text: calls === 1 ? 'Waiting for the running job.' : 'done' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return { message: 'progress', done: calls > 1, events: [] }
+      },
+    })
+    f.options.execution = {
+      pending: () => calls === 1,
+      async wait(signal) {
+        waiting.resolve()
+        signal.throwIfAborted()
+        await new Promise<void>((_resolve, reject) =>
+          signal.addEventListener(
+            'abort',
+            () => {
+              waitAborted = true
+              reject(signal.reason)
+            },
+            { once: true }
+          )
+        )
+      },
+      async invoke() {},
+      async stop() {
+        stopped++
+      },
+    }
+    const service = createActRunService(f.options)
+    const events: Array<{ type: string; status?: string }> = []
+    const running = (async () => {
+      for await (const event of service.submit('original')) events.push(event)
+    })()
+    let resumed = false
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      await waiting.promise
+      const steering = service.steer('new direction')
+      if (slowPersistence) {
+        await writing.promise
+        await Promise.resolve()
+        expect(calls).toBe(1)
+        expect(stopped).toBe(0)
+        persisted.resolve()
+      }
+      await steering
+      resumed = await Promise.race([
+        nextTurn.promise.then(() => true),
+        new Promise<false>((resolve) => (deadline = setTimeout(() => resolve(false), 300))),
+      ])
+      if (resumed) await running
+    } finally {
+      clearTimeout(deadline)
+      persisted.resolve()
+      service.cancel()
+      await running
+      await service.close()
+    }
+    expect(resumed).toBe(true)
+    expect(waitAborted).toBe(true)
+    expect(calls).toBe(2)
+    expect((await f.view.inspect())?.goals.length).toBe(2)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  })
+
+for (const slowPersistence of [false, true])
+  test(`INV-37 steering yields foreground invocation without aborting execution, slow persistence=${slowPersistence}`, async () => {
+    const f = runFixture()
+    const entered = Promise.withResolvers<void>()
+    const writing = Promise.withResolvers<void>()
+    const persisted = Promise.withResolvers<void>()
+    const resumed = Promise.withResolvers<void>()
+    let calls = 0
+    let invoked = 0
+    let waitingCancelled = false
+    let executionSignal: AbortSignal | undefined
+    const ingest = f.context.ingest.bind(f.context)
+    f.context.ingest = async (input, signal) => {
+      if (input.text === 'new direction' && slowPersistence) {
+        writing.resolve()
+        await persisted.promise
+      }
+      return ingest(input, signal)
+    }
+    f.options.model.stream = async function* () {
+      if (++calls === 2) {
+        expect(executionSignal?.aborted).toBe(false)
+        resumed.resolve()
+      }
+      yield { type: 'text', text: calls === 1 ? 'execute' : 'done' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return {
+          message: 'progress',
+          done: calls > 1,
+          events: [],
+          ...(calls === 1 ? { submission: {} } : {}),
+        }
+      },
+    })
+    f.options.execution = {
+      pending: () => false,
+      async wait() {},
+      async stop() {},
+      async invoke(_input, signal, _turnId, _calls, waitSignal = signal) {
+        invoked++
+        executionSignal = signal
+        entered.resolve()
+        let wake!: () => void
+        let cancel!: () => void
+        try {
+          await new Promise<void>((resolve, reject) => {
+            wake = () => {
+              waitingCancelled = true
+              resolve()
+            }
+            cancel = () => reject(signal.reason)
+            waitSignal.addEventListener('abort', wake, { once: true })
+            signal.addEventListener('abort', cancel, { once: true })
+            if (waitSignal.aborted) wake()
+            signal.throwIfAborted()
+          })
+        } finally {
+          waitSignal.removeEventListener('abort', wake)
+          signal.removeEventListener('abort', cancel)
+        }
+        return true
+      },
+    }
+    const service = createActRunService(f.options)
+    const events: Array<{ type: string; status?: string }> = []
+    const running = (async () => {
+      for await (const event of service.submit('original')) events.push(event)
+    })()
+    let woke = false
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      await entered.promise
+      const steering = service.steer('new direction')
+      if (slowPersistence) {
+        await writing.promise
+        await Promise.resolve()
+        expect(calls).toBe(1)
+        expect(executionSignal?.aborted).toBe(false)
+        persisted.resolve()
+      }
+      await steering
+      woke = await Promise.race([
+        resumed.promise.then(() => true),
+        new Promise<false>((resolve) => (deadline = setTimeout(() => resolve(false), 300))),
+      ])
+      if (woke) await running
+    } finally {
+      clearTimeout(deadline)
+      persisted.resolve()
+      service.cancel()
+      await running
+      await service.close()
+    }
+    expect(woke).toBe(true)
+    expect(waitingCancelled).toBe(true)
+    expect(invoked).toBe(1)
+    expect(calls).toBe(2)
+    expect((await f.view.inspect())?.goals.length).toBe(2)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  })
+
 test('all cleanup stages are attempted when both execution and frame cleanup fail', async () => {
   const f = runFixture()
   let release = 0
@@ -1443,6 +1956,80 @@ test('INV-38 child delivery bounds embedded history and never turns an unfinishe
   expect(result.events.at(-1).status).toBe('context_blocked')
   expect(result.eventSource.sessionId).toBe(job.sessionId)
   await supervisor.close()
+})
+
+test('child stop diagnostics remain visible after event eviction and reopen, and recovered errors clear', async () => {
+  const error = { type: 'error' as const, runId: 'child', message: 'configured budget exhausted' }
+  const accepted = {
+    type: 'accepted' as const,
+    runId: 'child',
+    turnId: 'recovered',
+    text: 'continued',
+    ref: { sessionId: 'child', id: 'accepted' },
+  }
+  const verification = {
+    type: 'verification' as const,
+    runId: 'child',
+    completed: false,
+    verified: false,
+    reason: 'required input is unavailable',
+  }
+  for (const scenario of [
+    { events: [error], terminal: 'waiting' as const, diagnostic: error.message },
+    {
+      events: [
+        { type: 'stalled' as const, runId: 'child', repeatedSteps: 4, message: 'no progress' },
+      ],
+      terminal: 'waiting' as const,
+      diagnostic: 'no progress',
+    },
+    { events: [verification], terminal: 'failed' as const, diagnostic: verification.reason },
+    {
+      events: [
+        error,
+        ...Array.from({ length: 100 }, () => ({
+          type: 'state' as const,
+          runId: 'child',
+          status: 'thinking' as const,
+        })),
+      ],
+      terminal: 'waiting' as const,
+      diagnostic: error.message,
+    },
+    { events: [error, accepted], terminal: 'waiting' as const, diagnostic: undefined },
+    {
+      events: [verification, { ...verification, completed: true, verified: true }],
+      terminal: 'waiting' as const,
+      diagnostic: undefined,
+    },
+    { events: [error], terminal: 'completed' as const, diagnostic: undefined },
+  ]) {
+    const store = storage()
+    const signal = new AbortController().signal
+    const options = {
+      storage: store,
+      concurrency: 1,
+      maxChildren: 1,
+      async open() {
+        return {
+          ...child(),
+          async *submit() {
+            yield* scenario.events
+            yield { type: 'state' as const, runId: 'child', status: scenario.terminal }
+          },
+        }
+      },
+    }
+    const supervisor = createAgentSupervisor(options)
+    const started = await supervisor.start('p', { task: 'work', profile: 'read' }, signal)
+    const job = await supervisor.wait('p', started.id, signal)
+    expect(job.error).toBe(scenario.diagnostic)
+    expect(job.status).toBe(scenario.terminal === 'waiting' ? 'interrupted' : scenario.terminal)
+    await supervisor.close()
+    const reopened = createAgentSupervisor(options)
+    expect((await reopened.status('p', started.id)).error).toBe(scenario.diagnostic)
+    await reopened.close()
+  }
 })
 
 test('INV-29 a driver ignoring cancellation cannot publish late deltas', async () => {
@@ -1691,6 +2278,165 @@ test('child start, status and resume without optional grants produce strict JSON
     expect(Object.hasOwn(resumed, 'stores')).toBe(false)
     expect((await supervisor.wait('p', first.id, signal)).status).toBe('completed')
   } finally {
+    await supervisor.close()
+  }
+})
+
+test('child guidance waits for an admitted run and reaches that same child exactly once', async () => {
+  const opening = Promise.withResolvers<void>()
+  const delivered = Promise.withResolvers<void>()
+  const received: unknown[] = []
+  let admitted = false
+  let opened = 0
+  const supervisor = createAgentSupervisor({
+    storage: storage(),
+    concurrency: 1,
+    maxChildren: 1,
+    async open() {
+      opened++
+      await opening.promise
+      return {
+        ...child(),
+        async *submit(_input, signal) {
+          const abort = () => delivered.resolve()
+          signal!.addEventListener('abort', abort, { once: true })
+          try {
+            admitted = true
+            yield { type: 'state' as const, runId: 'child', status: 'thinking' as const }
+            await delivered.promise
+            yield {
+              type: 'state' as const,
+              runId: 'child',
+              status: signal!.aborted ? ('cancelled' as const) : ('completed' as const),
+            }
+          } finally {
+            signal!.removeEventListener('abort', abort)
+          }
+        },
+        async steer(input) {
+          expect(admitted).toBe(true)
+          received.push(input)
+          delivered.resolve()
+        },
+      }
+    },
+  })
+  try {
+    const started = await supervisor.start(
+      'p',
+      { task: 'initial', profile: 'read' },
+      new AbortController().signal
+    )
+    let settled = false
+    const sending = supervisor.send('p', started.id, 'additional constraint').then(
+      () => {
+        settled = true
+        return null
+      },
+      (error) => {
+        settled = true
+        return error
+      }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    opening.resolve()
+    expect(await sending).toBeNull()
+    expect((await supervisor.wait('p', started.id, new AbortController().signal)).status).toBe(
+      'completed'
+    )
+    expect(received).toEqual(['additional constraint'])
+    expect(opened).toBe(1)
+  } finally {
+    opening.resolve()
+    delivered.resolve()
+    await supervisor.close()
+  }
+})
+
+test('child guidance cancellation during startup leaves the child running and delivers no stale input', async () => {
+  const opening = Promise.withResolvers<void>()
+  const admitted = Promise.withResolvers<void>()
+  const received: unknown[] = []
+  const supervisor = createAgentSupervisor({
+    storage: storage(),
+    concurrency: 1,
+    maxChildren: 1,
+    async open() {
+      await opening.promise
+      return {
+        ...child(true),
+        async *submit(input, signal) {
+          for await (const event of child(true).submit(input, signal)) {
+            admitted.resolve()
+            yield event
+          }
+        },
+        async steer(input) {
+          received.push(input)
+        },
+      }
+    },
+  })
+  try {
+    const started = await supervisor.start(
+      'p',
+      { task: 'work', profile: 'read' },
+      new AbortController().signal
+    )
+    const caller = new AbortController()
+    const reason = new AppError('CANCELLED', 'guidance caller cancelled')
+    const sending = supervisor
+      .send('p', started.id, 'stale input', caller.signal)
+      .catch((error) => error)
+    caller.abort(reason)
+    expect(await sending).toBe(reason)
+    opening.resolve()
+    await admitted.promise
+    expect((await supervisor.status('p', started.id)).status).toBe('running')
+    expect(received).toEqual([])
+  } finally {
+    opening.resolve()
+    await supervisor.close()
+  }
+})
+
+test('child guidance reports startup failure and points completed jobs to explicit resume', async () => {
+  const opening = Promise.withResolvers<void>()
+  let opened = 0
+  const sessions: string[] = []
+  const supervisor = createAgentSupervisor({
+    storage: storage(),
+    concurrency: 1,
+    maxChildren: 1,
+    async open(job) {
+      sessions.push(job.sessionId)
+      if (++opened === 1) {
+        await opening.promise
+        throw new AppError('UNAVAILABLE', 'fixture startup failure')
+      }
+      return child()
+    },
+  })
+  const signal = new AbortController().signal
+  try {
+    const started = await supervisor.start('p', { task: 'work', profile: 'read' }, signal)
+    const sending = supervisor.send('p', started.id, 'follow up').catch((error) => error)
+    opening.resolve()
+    const error = await sending
+    expect(error.code).toBe('UNAVAILABLE')
+    expect(error.message).toContain('failed')
+    expect(error.message).toContain('resume')
+    expect((await supervisor.wait('p', started.id, signal)).status).toBe('failed')
+    await supervisor.resume('p', started.id, { input: 'retry explicitly' }, signal)
+    expect((await supervisor.wait('p', started.id, signal)).status).toBe('completed')
+    const completedError = await supervisor.send('p', started.id, 'more').catch((error) => error)
+    expect(completedError.message).toContain('completed')
+    expect(completedError.message).toContain('resume')
+    expect(opened).toBe(2)
+    expect(sessions).toEqual([started.sessionId, started.sessionId])
+  } finally {
+    opening.resolve()
     await supervisor.close()
   }
 })
@@ -1968,7 +2714,10 @@ test('INV-47 retrying an interrupted unaccepted frame resets decoding and never 
   expect(events.filter((event) => event.type === 'usage')).toHaveLength(3)
   expect(events.filter((event) => event.type === 'rejected')).toHaveLength(1)
   expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
-  expect(history[2]).toBe(history[1])
+  const { budgetRequestId: previousBudget, ...previousRequest } = JSON.parse(history[1])
+  const { budgetRequestId: retriedBudget, ...retriedRequest } = JSON.parse(history[2])
+  expect(retriedRequest).toEqual(previousRequest)
+  expect(retriedBudget).not.toBe(previousBudget)
   expect(history.slice(2).some((body) => body.includes('must-not-execute'))).toBe(false)
   const records = (await f.store.load('fault'))!.records
   const responses = await Promise.all(

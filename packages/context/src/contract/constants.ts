@@ -113,8 +113,8 @@ export const ContextVerificationLimits = Object.freeze({
   checks: 32,
   /** 每个检查项的证据引用上限。 */
   evidenceRefs: 8,
-  /** 整份报告的 JSON 字符上限。 */
-  reportChars: 24000,
+  /** 完整证据报告的 JSON 字符上限；模型视图仍按自己的投影额度呈现。 */
+  reportChars: 262144,
   /** 单项核查覆盖的精确产物数量上限。 */
   artifacts: 32,
   /** 核查或探测一次返回的费用依据上限。 */

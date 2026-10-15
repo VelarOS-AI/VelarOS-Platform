@@ -921,7 +921,14 @@ test('automatic narration retries a classified transient response with separate 
     true
   )
   assert.equal(f.requests.length, 2)
-  assert.deepEqual(f.requests[0], f.requests[1], 'retry keeps the same fixed evidence and format')
+  const { budgetRequestId: firstRequest, ...first } = f.requests[0]
+  const { budgetRequestId: retryRequest, ...retried } = f.requests[1]
+  assert.deepEqual(first, retried, 'retry keeps the same fixed evidence and format')
+  assert.notEqual(
+    firstRequest,
+    retryRequest,
+    'a new physical attempt has a distinct budget identity'
+  )
   assert.deepEqual(f.usage, [
     [1100, 10],
     [1200, 80],

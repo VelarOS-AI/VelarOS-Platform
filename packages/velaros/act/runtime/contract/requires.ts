@@ -28,7 +28,14 @@ import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
 import type { SkillCapabilityModuleOptions } from '@velaros-ai/velaros/skills'
 
+import type { CompletionEvidenceApi } from '../impl/CompletionEvidence.js'
+import type { CompletionValidationApi } from '../impl/CompletionValidation.js'
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
+import type { CompletionExecutionEntry } from '../types/completion-evidence.js'
+import type {
+  CompletionValidationInput,
+  CompletionValidationOutcome,
+} from '../types/completion-validation.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
 import type { ModelToolPolicy } from '../types/model-tools.js'
@@ -105,34 +112,134 @@ export interface VelarosContextOptions {
   readonly completion?: ContextCompletionPort | CompletionReviewOptions
 }
 
-/** 独立模型核查只读材料；正文必须完整，指纹覆盖本次读取的全部产物与授权。 */
+/** 独立模型核查只读材料；区分完整正文与仅含元数据的证明，指纹覆盖产物与授权。 */
 export interface CompletionArtifactSnapshot {
   /** 完整依赖的可靠变化代次；无法覆盖时必须返回 unknown。 */
   readonly fingerprint: ContextVerificationFingerprint
-  /** 本次真正读取的完整文本，identity 与指纹的产物成员一致。 */
-  readonly materials: ReadonlyArray<{ readonly identity: string; readonly text: string }>
+  /** 正文完整；大产物可仅提供宿主流式核对的元数据，此时 text 严格为 JSON.stringify(metadata)。 */
+  readonly materials: ReadonlyArray<{
+    readonly identity: string
+    readonly text: string
+    /** 只证明字节存在与完整性，不代表模型已读正文或内容通过；sha256 绑定全部原始字节。 */
+    readonly metadata?: { readonly bytes: number; readonly sha256: string }
+  }>
   /** 缺失、截断、权限或不稳定读取保持显式缺口，不伪造空文件。 */
   readonly issues: readonly string[]
+  /** 可选的有界目录定位提示；只含实际条目，不是文件正文或验收证据，目标仍须重新 capture。 */
+  readonly locations?: ReadonlyArray<{
+    readonly directory: string
+    readonly files: readonly string[]
+    readonly directories: readonly string[]
+    readonly truncated: boolean
+  }>
 }
 
-/** 宿主提供限定工作区内的纯文本产物快照；模型不能通过此口执行命令。 */
+/** 宿主提供限定工作区内的完整文本或明确的文件元数据；模型不能通过此口执行命令。 */
 export interface CompletionArtifactSource {
-  /** identities 为 file: 后接工作区路径；每次读取上限由调用者提供。 */
+  /** identities 为 file: 后接工作区路径；maxBytes 限制送入模型的 UTF-8 材料字节，含元数据。 */
   capture(
     identities: readonly string[],
     maxBytes: number,
     signal: AbortSignal
   ): Promise<CompletionArtifactSnapshot>
+  /** 按需读取同一授权快照中的一份完整 UTF-8 原文，供 Runtime 选择连续片段；不直接全部送给模型。最大 16777216 字节，返回指纹仍覆盖 expected 的全部依赖。旧宿主可省略，缺口保持显式。 */
+  read?(
+    identity: string,
+    expected: ContextVerificationFingerprint,
+    maxBytes: number,
+    signal: AbortSignal
+  ): Promise<CompletionArtifactSnapshot>
 }
 
-/** 普通任务的有界独立模型复核；不授予执行能力，也不将复核当作测试通过。 */
+/** 普通任务的有界独立模型复核；执行验证仅由显式宿主端口提供。 */
 export interface CompletionReviewOptions {
-  /** 在统一完成接口中选择有界、只读的独立模型复核。 */
+  /** 在统一完成接口中选择有界的独立模型复核。 */
   readonly kind: 'model-review'
   /** 宿主拥有的工作区读取与变化代次权威。 */
   readonly artifacts: CompletionArtifactSource
+  /** 在裁定前独立补充契约和调用链文件，最多两轮；只扩展宿主已授权工作区的证据，不增加用户交付要求。 */
+  readonly discoverEvidence?: boolean
+  /** 可选反例调查：裁定前共用既有取证和隔离验证额度，先实际尝试独立检查；须同时提供 validation，默认关闭。 */
+  readonly counterexampleReview?: boolean
   /** 省略时复用主会话的驱动，仍使用独立请求和共同预算。 */
   readonly model?: ModelDriver
+  /** 可选隔离执行验证；省略时复核保持只读，不回退普通执行器。 */
+  readonly validation?: CompletionValidationHost
+}
+
+/** 宿主收到已授权输入与完整版本；不接受模型决定的命令、路径、环境或额度。 */
+export interface CompletionValidationRequest extends CompletionValidationInput {
+  /** 输入属于该完整快照，宿主读取前后都须保持一致。 */
+  readonly fingerprint: ContextVerificationFingerprint
+  /** 包括准备和进程执行的墙钟上限，仍受父任务取消约束。 */
+  readonly timeoutMs: number
+  /** 两路输出合计允许返回的 UTF-8 字节数。 */
+  readonly maxOutputBytes: number
+}
+
+/** 独立验证的宿主权威；拒绝缺少约束的后端，取消后须等待进程清理再返回。 */
+export interface CompletionValidationHost {
+  /** 只在授权产物副本中运行；固定运行时与隔离、文件准备及清理由宿主负责。 */
+  execute(
+    request: CompletionValidationRequest,
+    signal: AbortSignal
+  ): Promise<CompletionValidationOutcome>
+}
+
+/** Node 宿主对同一工作区快照、固定运行时和授权生命周期的绑定。 */
+export interface NodeCompletionValidationOptions {
+  /** 当前授权工作区的根目录。 */
+  readonly workspace: string
+  /** 已有只读产物提供者；验证与取证必须共享同一实例及版本权威。 */
+  readonly artifacts: CompletionArtifactSource
+  /** 宿主提供的 Node.js 执行文件。 */
+  readonly executable: string
+  /** 宿主授权撤销时终止正在进行的准备和验证。 */
+  readonly signal?: AbortSignal
+}
+
+/** 单次完成复核使用的验证配额、需求版本和文件授权集合。 */
+export interface CompletionValidationDependencies {
+  /** 显式宿主验证端口。 */
+  readonly host?: CompletionValidationHost
+  /** 当前授权快照。 */
+  readonly snapshot: CompletionArtifactSnapshot
+  /** 当前固定需求身份。 */
+  readonly requirementIds: readonly string[]
+  /** 完整需求清单的 SHA256。 */
+  readonly requirementsSha256: string
+  /** 核对完整文件和授权代次。 */
+  assertCurrent(signal: AbortSignal): Promise<void>
+}
+
+/** 验证操作的专用上下文；不含主任务普通命令执行能力。 */
+export interface CompletionValidationOperationContext {
+  /** 复核生命周期和父任务取消信号。 */
+  readonly abortSignal: AbortSignal
+  /** 当前版本与调用次数的接收门。 */
+  readonly validation: CompletionValidationApi
+}
+
+/** 一次复核的冻结证据依赖；来源、原始执行记录与当前版本核对全部由宿主注入。 */
+export interface CompletionEvidenceDependencies {
+  /** 固定授权集合及其完整字节哈希、变化代次。 */
+  readonly snapshot: CompletionArtifactSnapshot
+  /** 当前宿主的只读文件快照入口。 */
+  readonly artifacts: CompletionArtifactSource
+  /** 当前根任务所有可访问的不可变源码/回执对。 */
+  readonly executions: readonly CompletionExecutionEntry[]
+  /** 按不可变对象身份读取实际执行存档。 */
+  readonly storage: ContextStorage
+  /** 每批读取前后核对完整依赖及授权，变化须抛出错误。 */
+  assertCurrent(signal: AbortSignal): Promise<void>
+}
+
+/** 只读复核的专用操作上下文，不含任何执行、网络或文件写入端口。 */
+export interface CompletionEvidenceOperationContext {
+  /** 同时受父任务、复核期限和本轮调用取消约束。 */
+  readonly abortSignal: AbortSignal
+  /** 本次冻结证据及共享读取预算。 */
+  readonly evidence: CompletionEvidenceApi
 }
 
 /** 领域只登记固定纯计划及捕获操作；实际读取仍由授权 Kernel 派发。 */
@@ -345,6 +452,8 @@ export interface NodeExecutionOutput {
   readonly invocationId: string
   /** 新吐出的一段，stdout、stderr 按到达顺序。 */
   readonly text: string
+  /** 不支持流区分的旧宿主可以省略。 */
+  readonly stream?: 'stdout' | 'stderr' | 'combined'
 }
 
 /** 宿主持有 OAuth 凭据与交互。 */

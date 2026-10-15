@@ -532,7 +532,7 @@ test('oversized observation and leased result carry truncation flags and a reada
   assert(!frame.results[0].text.includes('THE_END'))
   const body = await f.session.context.read(
     { sessionId: 's', id: frame.results[0].ref },
-    { offset: frame.results[0].totalChars - 100, limit: 100 }
+    { offset: frame.results[0].totalChars - 512, limit: 512 }
   )
   assert.match(body.text, /THE_END/)
 })

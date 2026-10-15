@@ -11,5 +11,6 @@ export type { ShellCommandPolicyApi } from '../impl/ShellCommandPolicy.js'
 // ── 本机实现：工厂在 `./local` 入口 ─────────────────────────────
 export type { ConfinedShellRunnerApi } from '../impl/local/ConfinedShellRunner.js'
 export type { LocalShellHostApi } from '../impl/local/LocalShellHost.js'
+export type { NodeValidationHostApi } from '../impl/local/NodeValidationHost.js'
 export type { NpmClientApi } from '../impl/local/NpmClient.js'
 export type { ShellEnvironmentApi } from '../impl/local/ShellEnvironment.js'

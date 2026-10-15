@@ -125,6 +125,8 @@ export type ModelResponseFormat =
     }
 /** 一次已经冻结的中立请求。 */
 export interface ModelTurnRequest {
+  /** 宿主为单次驱动派发生成的预算身份；不进入供应商消息、缓存键或模型材料。 */
+  readonly budgetRequestId?: string
   /** ProviderRequestCompiler 封存的实际 prompt；驱动不能重新选择或压缩材料。 */
   readonly compiledPrompt?: string
   /** 历史与当前材料分开编码，不能伪造 tool 消息。 */

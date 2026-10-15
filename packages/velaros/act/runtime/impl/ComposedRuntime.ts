@@ -24,6 +24,7 @@ import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 import { EvidenceModuleId } from '../../search/contract/constants.js'
 import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
 import { AdvancedSearch } from '../../search/impl/AdvancedSearch.js'
+import { ExecutionsModuleId } from '../../system/contract/constants.js'
 import {
   ContextMaterialsModuleId,
   GoalModuleId,
@@ -225,10 +226,12 @@ class ComposedRuntime implements VelarosRuntime {
                 ? 'partial'
                 : 'failed',
             [],
-            {
-              operation: 'agents.resume',
-              input: { id: job.id, input: '继续完成交付中未完成的事项。' },
-            }
+            isUndefined(job.error)
+              ? {
+                  operation: 'agents.resume',
+                  input: { id: job.id, input: '继续完成交付中未完成的事项。' },
+                }
+              : undefined
           ),
         storage: options.storage,
         concurrency: options.agents.concurrency,
@@ -259,6 +262,7 @@ class ComposedRuntime implements VelarosRuntime {
               instructions: `本会话证据合同：\n${evidence.declarations}`,
               pressure: () => activation.pressure(),
               deadline: () => activation.deadline(),
+              executionDeadline: () => activation.executionDeadline(),
               phase: () => activation.phase(),
               material: (maxChars) => activation.material(maxChars),
               refresh: (signal) => activation.refresh(signal),
@@ -375,6 +379,11 @@ class ComposedRuntime implements VelarosRuntime {
             if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
             return access
           },
+          executions: (id) => {
+            const access = this.programAccess.get(id)
+            if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
+            return access.executions
+          },
           programCatalog: (id) => {
             const access = this.programAccess.get(id)
             if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
@@ -417,6 +426,7 @@ class ComposedRuntime implements VelarosRuntime {
   private allows(id: string, module: string): boolean {
     const scope = this.scopes.get(id)
     if (!scope) return false
+    if (module === ExecutionsModuleId) return true
     if (module === GoalModuleId) return scope.kind === 'main'
     if (module === ContextMaterialsModuleId)
       return scope.kind === 'context' && Boolean(this.maintenance?.active(id))
@@ -629,7 +639,8 @@ class ComposedRuntime implements VelarosRuntime {
               : submission.text,
             files: !isEmpty(files) ? files : submission.files,
           },
-          AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])])
+          AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])]),
+          { deadline: activity.binding.deadline }
         )
       },
       answer: (value: Parameters<typeof session.answer>[0]) => session.answer(value),
@@ -663,7 +674,9 @@ class ComposedRuntime implements VelarosRuntime {
       operations: Object.fromEntries(
         Object.entries(module.operations).map(([name, operation]) => [
           name,
-          operation.effects === 'none'
+          // 停止通道不能排在被停止作业持有的副作用锁后；权限、身份和效果回执仍走 Kernel。
+          operation.effects === 'none' ||
+          (module.binding.moduleId === ExecutionsModuleId && name === 'stop')
             ? operation
             : {
                 ...operation,

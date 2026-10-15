@@ -33,7 +33,8 @@ export interface MemoryPage {
   readonly nextAfter: Nullable<number>
 }
 /** @AgentView 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。
- * 补读执行结果或当前决策状态归档中的字段时传展示给出的 pointer（JSON Pointer，以 / 开头，最多 4096 个字符）；字符串返回原文，其他值返回 JSON，offset 与 limit 针对选中字段。省略 pointer 时读整份归档。
+ * 补读执行结果、目标或当前决策状态归档中的字段时传展示给出的 pointer（JSON Pointer，以 / 开头，最多 4096 个字符）；字符串返回原文，其他值返回 JSON，offset 与 limit 针对选中字段。省略 pointer 时读整份归档。
+ * 当前目标的原文跨任务可读，与 goal.get 的范围一致；目标历史版本沿用原有任务材料授权。
  * 脚本失败后，先按 progress.feedback.recovery.index 读取调用索引；invocation 填索引中的 id，ref 仍为该失败脚本结果。此时读的是原始调用回执（outcome/effect/value/error），pointer 针对该回执；省略 pointer 读整份回执。未落定的调用明确不可用，不会重跑。
  */
 export interface MemoryReadInput {

@@ -45,6 +45,8 @@ test('INV-2 声明里写给模型的上限与常量表一致', () => {
       [
         `materials 把已有原文引用复制给它（最多 ${AgentsLimits.materials} 条）`,
         `materials 最多 ${AgentsLimits.materials} 条`,
+        `ids 最多 ${AgentsLimits.waitTargets} 个且不能重复`,
+        `ids 需要 1 到 ${AgentsLimits.waitTargets} 个互不重复的 job.id`,
       ],
     ],
     [

@@ -349,10 +349,16 @@ test('INV-23 首帧获知当前 npm，安装升级回滚删除后的模型帧立
   )
   assert.deepEqual(
     inventories.map(
-      (item) => item.packages.find((pkg) => pkg.name === 'environment-fixture')?.version
+      (item) => item.packages.find((pkg) => pkg.name === 'environment-fixture')?.fallbackVersion
     ),
     [undefined, '1.0.0', '2.0.0', '1.0.0', undefined]
   )
+  for (const inventory of inventories.slice(1, 4)) {
+    assert.equal(
+      inventory.packages.find((pkg) => pkg.name === 'environment-fixture').runtimeImport,
+      'velaros:npm/environment-fixture'
+    )
+  }
   assert.equal(new Set(inventories.map((item) => item.npm.environment)).size, 5)
   assert.ok(frames.every((request) => request.instructions === frames[0].instructions))
   assert.match(frames[1].compiledPrompt, /environment-fixture/)

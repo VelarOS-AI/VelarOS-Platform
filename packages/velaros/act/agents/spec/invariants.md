@@ -8,3 +8,4 @@
 | INV-4 | 回答回到模型前按问题整理，只留下问题里有的选项、字段与对应类型的值；确认只有布尔值或带 approved 的对象算数，含糊的回答按不同意 | 测试 | spec/acceptance.test.mjs |
 | INV-5 | 宿主读回的提问与 `ask` 发出的形状一致；坏形状当普通问题，返回 null | 测试 | spec/acceptance.test.mjs |
 | INV-6 | 小部件核对标题与代码长度、高度收进上下限后带着调用身份交给宿主；宿主不给显示端口就没有 `velaros:widget` | 测试 | spec/acceptance.test.mjs |
+| INV-7 | 集合等待先核对全部归属，任一提问或收束即返回；等待取消不取消子任务，未选中的等待监听被回收 | 测试 | spec/wait-any.test.mjs |

@@ -24,6 +24,7 @@ import { evidenceModule, searchModule } from '../../search/index.js'
 import type { EnvironmentRegistryApi } from '../../system/contract/provides.js'
 import type {
   ContextMaintenanceHost,
+  ExecutionsHost,
   LongTermMemoryHost,
   ProgramsHost,
   StoreHost,
@@ -43,7 +44,7 @@ import { capabilityModules } from './CapabilityModules.js'
 import type { RuntimeSessionAccess } from './RuntimeSession.js'
 
 /** 标准模块的受控依赖。 */
-export interface StandardModulesHost extends ProgramsHost {
+export interface StandardModulesHost extends ProgramsHost, ExecutionsHost {
   /** 与执行器共用的当前 agent npm 环境。 */
   readonly packageEnvironment?: EnvironmentRegistryApi
   /** 实际子任务配置目录。 */

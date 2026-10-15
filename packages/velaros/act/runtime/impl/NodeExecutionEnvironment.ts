@@ -31,7 +31,7 @@ export interface NodeExecutionEnvironmentApi {
   /** 经命令宿主派发并等待完整的进程收束。 */
   execute(
     request: NodeProcessRequest,
-    onOutput: (text: string) => void,
+    onOutput: (text: string, stream?: 'stdout' | 'stderr' | 'combined') => void,
     signal: AbortSignal
   ): Promise<NodeProcessResult>
 }
@@ -64,7 +64,7 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
 
   public async execute(
     request: NodeProcessRequest,
-    onOutput: (text: string) => void,
+    onOutput: (text: string, stream?: 'stdout' | 'stderr' | 'combined') => void,
     signal: AbortSignal
   ): Promise<NodeProcessResult> {
     signal.throwIfAborted()
@@ -91,14 +91,15 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
       environment,
       ipcSocket: request.environment[NodeEnvironmentVariables.socket.name],
       outputFile: request.environment[NodeEnvironmentVariables.output.name],
-      onOutput: (text) => {
-        onOutput(text)
+      onOutput: (text, stream) => {
+        onOutput(text, stream)
         if (request.sessionId && request.executionId)
           this.options.output?.({
             sessionId: request.sessionId,
             executionId: request.executionId,
             invocationId: `${request.executionId}:exec`,
             text,
+            stream,
           })
       },
       nativeCommand: {

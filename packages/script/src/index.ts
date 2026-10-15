@@ -12,6 +12,7 @@ export {
   NodeDefaultPackages,
   NodeEnvironmentVariables,
   NodeExecutionLimits,
+  NodeRuntimePackagePrefix,
 } from './contract/constants.js'
 export type { KernelScriptSessionApi } from './contract/provides.js'
 export type { ScriptPackageCompilerApi } from './contract/provides.js'

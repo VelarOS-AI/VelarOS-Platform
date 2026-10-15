@@ -9,6 +9,7 @@ import type {
   RegisteredViewIntent,
 } from '../types/context.js'
 
+import { checkModelBudget } from './model-budget.js'
 import { contextFailure } from './state.js'
 
 /** 合并有限预算，零只允许用于关闭重取。 */
@@ -76,6 +77,7 @@ export function readContextTask(stored: ContextTaskState): ContextTaskState {
   for (const count of [...Object.values(counts), ...Object.values(hourly ?? {})])
     if (!Number.isSafeInteger(count) || count < 0)
       throw contextFailure('TASK_STATE', '任务用量无效')
+  checkModelBudget(value)
   return value
 }
 

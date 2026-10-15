@@ -4,7 +4,7 @@ export function frameText(request) {
 }
 /** 从真实请求读取本帧标记，测试不跨帧复用控制文本。 */
 export function marker(request) {
-  const value = frameText(request).match(/当前帧标记：(@@\w+)。/)
+  const value = [...frameText(request).matchAll(/当前帧标记：(@@\w+)。/g)].at(-1)
   if (!value) throw Error('missing frame marker')
   return value[1]
 }

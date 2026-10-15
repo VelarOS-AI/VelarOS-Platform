@@ -7,7 +7,11 @@ import {
   isTrue,
   isUndefined,
 } from '@velaros-ai/core'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
+import { ExecutionWaitLimits } from '../../system/contract/constants.js'
+import { ExecutionObservabilityLimits } from '../contract/constants.js'
+import type { NativeExecutionInput } from '../types/native-tools.js'
 import type { ScriptProtocolRecord, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptSubmission } from '../types/session.js'
 
@@ -19,7 +23,8 @@ import { checkScriptSubmission } from './script-submission.js'
 export function compileScriptRecords(
   records: readonly ScriptProtocolRecord[],
   config: ReturnType<typeof protocolConfig>,
-  inputs: Readonly<Record<string, unknown>>
+  inputs: Readonly<Record<string, unknown>>,
+  executionSchema: Readonly<Record<string, unknown>>
 ): ScriptProtocolSubmission {
   const blobs: Record<string, string> = Object.create(null)
   for (const record of records.filter((record) => record.kind === 'blobs')) {
@@ -36,8 +41,10 @@ export function compileScriptRecords(
     const options = !isEmpty(record.args) ? record.args[0] : {}
     if (!isPlainObject(options)) throw protocolFailure('程序选项必须是对象', record.line)
     const {
-      async: background = false,
+      async: background,
       retain,
+      timeoutMs,
+      control,
       inputRef,
       clear,
       format,
@@ -47,13 +54,62 @@ export function compileScriptRecords(
       throw protocolFailure('一份响应最多更新一次观察', record.line)
     if (
       (record.kind === 'observe' &&
-        (Object.hasOwn(options, 'async') || Object.hasOwn(options, 'retain'))) ||
-      !isBoolean(background)
+        (Object.hasOwn(options, 'async') ||
+          Object.hasOwn(options, 'retain') ||
+          Object.hasOwn(options, 'timeoutMs'))) ||
+      (!isUndefined(background) && !isBoolean(background))
     )
       throw protocolFailure(
-        '调度选项无效：async 必须是布尔值；observe 不接受 async 或 retain，请去掉这些执行专用字段',
+        '调度选项无效：async 必须是布尔值；observe 不接受 async、retain 或 timeoutMs，请去掉这些执行专用字段',
         record.line
       )
+    if (!isUndefined(control)) {
+      if (
+        record.kind !== 'execute' ||
+        isTrue(background) ||
+        record.body.trim() ||
+        !isEmpty(Object.keys(fields)) ||
+        !isUndefined(format) ||
+        !isUndefined(inputRef) ||
+        !isUndefined(clear) ||
+        !isEmpty(Object.keys(blobs))
+      )
+        throw protocolFailure('执行控制只接受空源码、control 与调度选项', record.line)
+      let checked: NativeExecutionInput
+      try {
+        checked = modelRequestEncoder.output(
+          { type: 'json', name: 'exec', description: '执行控制', schema: executionSchema },
+          { code: '', options }
+        ) as NativeExecutionInput
+      } catch (error) {
+        throw protocolFailure(
+          `执行控制参数无效：${error instanceof Error ? error.message : String(error)}`,
+          record.line
+        )
+      }
+      const { kind, ...target } = checked.options!.control!
+      const controlTimeout =
+        ExecutionObservabilityLimits.controlTimeoutMs +
+        (kind === 'wait' ? ExecutionWaitLimits.maxMs : 0)
+      const source = `import {executions} from 'velaros:system'; export default await executions.${kind}(${JSON.stringify(target)});`
+      const candidate = {
+        execute: {
+          source,
+          retainTurns: retain ?? config.defaultRetain,
+          timeoutMs: timeoutMs ?? controlTimeout,
+        },
+      }
+      checkScriptSubmission(candidate)
+      executions.push({
+        program: {
+          ...candidate.execute,
+          timeoutMs: Math.min(candidate.execute.timeoutMs as number, controlTimeout),
+        },
+        async: false,
+        control: kind === 'wait' ? 'wait' : true,
+      })
+      continue
+    }
     if (!isUndefined(clear)) {
       if (
         !isTrue(clear) ||
@@ -85,6 +141,8 @@ export function compileScriptRecords(
         throw protocolFailure('完整程序载荷必须是 JSON 对象', record.line)
       }
       if (!isPlainObject(program)) throw protocolFailure('完整程序载荷必须是对象', record.line)
+      if (Object.hasOwn(program, 'timeoutMs'))
+        throw protocolFailure('timeoutMs 属于本次执行选项，不能放入源码载荷', record.line)
     } else {
       if (!isUndefined(format)) throw protocolFailure('程序载荷格式无效', record.line)
       if ('source' in fields || 'retainTurns' in fields)
@@ -110,8 +168,10 @@ export function compileScriptRecords(
       program.blobs = { ...(program.blobs as Optional<Record<string, string>>), ...blobs }
     }
     let parsed: ScriptSubmission
-    if (record.kind === 'execute')
+    if (record.kind === 'execute') {
       program.retainTurns = retain ?? program.retainTurns ?? config.defaultRetain
+      if (!isUndefined(timeoutMs)) program.timeoutMs = timeoutMs
+    }
     try {
       const candidate = scriptInputCopy({ [record.kind]: program })
       checkScriptSubmission(candidate)

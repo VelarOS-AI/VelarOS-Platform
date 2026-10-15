@@ -277,6 +277,8 @@ async function coordinatorFixture(t, policy) {
     if (!accounts.has(id)) accounts.set(id, { calls: 0, tokens: 0, input: 0, output: 0 })
     const value = accounts.get(id)
     return {
+      inspect: async () => ({ id: `task:${id}` }),
+      dispatchModel: async () => {},
       reserveModel: async (_role, tokens) => {
         value.calls++
         value.tokens += tokens

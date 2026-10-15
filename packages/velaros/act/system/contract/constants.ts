@@ -25,6 +25,15 @@ export const LongTermMemoryModuleIds: readonly string[] = Object.freeze([
 export const ModulesModuleId = 'velaros:modules' as const
 /** 可复用程序的发布与发现身份。 */
 export const ProgramsModuleId = 'velaros:programs' as const
+/** 当前任务执行观测与定向停止身份。 */
+export const ExecutionsModuleId = 'velaros:executions' as const
+/** 已受理执行的单次完成等待边界；计时不改变目标执行的期限。 */
+export const ExecutionWaitLimits = Object.freeze({
+  /** 默认等待毫秒数。 */
+  defaultMs: 60000,
+  /** 最大等待毫秒数。 */
+  maxMs: 60000,
+})
 /** 整理会话的固定快照只读能力。 */
 export const ContextMaterialsModuleId = 'velaros:context-materials' as const
 /** 工作笔记与材料目录对外承诺的上限：memory 成员声明里写的就是这些数（两边一致由验收核对）。 */
@@ -45,9 +54,9 @@ export const MemoryReadLimits = Object.freeze({
   /** JSON Pointer 最多多少 UTF-16 字符。 */
   pointerChars: 4096,
 })
-/** 会话目标对外承诺的上限：goal 成员声明里写的就是这些数（两边一致由验收核对）。 */
+/** 模型写入会话目标的内容上限；宿主随提交提供的目标完整保存，工作帧另按预算展示。 */
 export const GoalLimits = Object.freeze({
-  /** 目标描述最多多少字符。 */
+  /** 模型建立目标时描述最多多少字符，也是目标工作帧的软展示上限。 */
   objectiveChars: 8000,
   /** 状态变化的依据最多多少字符。 */
   reasonChars: 4000,
@@ -95,11 +104,15 @@ export const SystemPackageSpecifier = 'velaros:system' as const
  * 这些身份都不作为业务能力单独列出。
  */
 export const SystemMembers: Readonly<
-  Record<'modules' | 'goal' | 'memory' | 'store' | 'programs' | 'environment', readonly string[]>
+  Record<
+    'modules' | 'goal' | 'memory' | 'store' | 'programs' | 'environment' | 'executions',
+    readonly string[]
+  >
 > = Object.freeze({
   modules: Object.freeze([ModulesModuleId]),
   environment: Object.freeze([EnvironmentModuleId]),
   programs: Object.freeze([ProgramsModuleId]),
+  executions: Object.freeze([ExecutionsModuleId]),
   goal: Object.freeze([GoalModuleId]),
   memory: Object.freeze([
     PersistentMemoryModuleId,

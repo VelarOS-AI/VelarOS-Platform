@@ -11,10 +11,13 @@ const Destination = fileURLToPath(new URL('../../packages/velaros/act/README.md'
 
 /** 每种合同投影什么时候挂上：由宿主配置、会话作用域与授权决定。 */
 const Activation = Object.freeze({
+  'completion-validation': '完成复核作用域，在本次固定文件副本上执行有界断言',
+  'completion-evidence': '完成复核作用域，生成合同绑定原生只读接收门',
   'system-environment': '宿主绑定持久 npm 环境，沿用会话权限',
   'system-goal': '主会话',
   modules: '默认装配',
   programs: '具备当前会话程序目录',
+  executions: '当前任务的执行观测与定向停止',
   'system-memory-local': '搜索或未启用整理的会话',
   'system-memory': '具备整理模型的主线或业务子任务',
   'system-memory-persistent-local': '主线宿主配置 memory，没有整理模型',

@@ -736,7 +736,7 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
       system ??= request.instructions
       assert.equal(request.instructions, system)
       assert.match(system, /sourceRef 复用归档源码/)
-      assert.match(system, /结果未知时不得重跑/)
+      assert.match(system, /结果未知(?:时不得|不)重跑/)
       assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
       assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用归档源码/)
       const protocol = request.compiledPrompt.split('本帧协议').at(-1)
@@ -790,7 +790,7 @@ test('INV-63 missing closure between blob and program rejects the whole response
     const tag = marker(request)
     if (f.calls === 1) {
       firstMarker = tag
-      assert(request.instructions.includes('段内是原文'))
+      assert.match(request.instructions, /blobs\("名称"\)[^\n]*原文[^\n]*反引号[^\n]*插值/)
       yield {
         type: 'text',
         text: `${block(request, 'execute()', write)}${tag} blobs("payload")\nrecovered\n${tag} execute()\n`,

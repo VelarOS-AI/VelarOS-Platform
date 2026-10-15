@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
 import type { CodeRunRequest } from '../src/types/runner'
 import { executeNativeNode } from '../src/utils/native-process'
@@ -19,6 +20,31 @@ const request = (source: string, extra: Partial<CodeRunRequest> = {}): CodeRunRe
 })
 const noCalls = async () => ({})
 const log = () => {}
+
+async function installPackage(root: string, name: string, version: string) {
+  const directory = join(root, 'node_modules', name)
+  await mkdir(directory, { recursive: true })
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({
+      name: 'aliased-original',
+      version,
+      type: 'module',
+      exports: {
+        '.': { import: './index.mjs', require: './index.cjs' },
+        './feature': { import: './feature.mjs', require: './feature.cjs' },
+      },
+    })
+  )
+  for (const stem of ['index', 'feature']) {
+    await writeFile(
+      join(directory, `${stem}.mjs`),
+      `export const value=${JSON.stringify(version)};`
+    )
+    await writeFile(join(directory, `${stem}.cjs`), `exports.value=${JSON.stringify(version)};`)
+  }
+  await writeFile(join(directory, 'README.md'), `Installed ${version}`)
+}
 async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), 'native-script-test-'))
   const cwd = join(root, 'workspace')
@@ -193,5 +219,200 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
         expect(result.ok).toBe(false)
         expect(result.output?.blocks[0]?.value).toEqual({ n: 42 })
       }
+    }))
+})
+
+describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
+  test('工作区旧版 CJS 与宿主 Execa 独立导入，目录保留两种实际身份', () =>
+    fixture(async (cwd, directory) => {
+      const local = join(cwd, 'node_modules', 'execa')
+      await mkdir(local, { recursive: true })
+      await writeFile(
+        join(local, 'package.json'),
+        JSON.stringify({ name: 'execa', version: '5.0.0', main: 'index.cjs' })
+      )
+      await writeFile(join(local, 'index.cjs'), 'module.exports=()=>"workspace";')
+      const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
+      const result = await runner.run(
+        request(
+          `
+        import local from 'execa';
+        import {execa} from 'velaros:npm/execa';
+        import {readFileSync} from 'node:fs';
+        const pkg=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8')).packages.find(p=>p.name==='execa');
+        export default {local:local(),host:(await execa(process.execPath,['-e','process.stdout.write("42")'],{stdin:'ignore'})).stdout,pkg};
+      `,
+          { timeoutMs: 3000 }
+        ),
+        noCalls,
+        log
+      )
+      expect(result).toMatchObject({
+        ok: true,
+        value: {
+          local: 'workspace',
+          host: '42',
+          pkg: { source: 'workspace', version: '5.0.0', runtimeImport: 'velaros:npm/execa' },
+        },
+      })
+      const pkg = (
+        result.value as {
+          pkg: { runtimeVersion: string; runtimePackageJson: string; runtimeReadme: string }
+        }
+      ).pkg
+      expect(pkg.runtimeVersion).not.toBe('5.0.0')
+      expect(JSON.parse(await readFile(pkg.runtimePackageJson, 'utf8')).version).toBe(
+        pkg.runtimeVersion
+      )
+      expect(await readFile(pkg.runtimeReadme, 'utf8')).toContain('execa')
+      const bare = await runner.run(
+        request("import {execa} from 'execa'; export default typeof execa;"),
+        noCalls,
+        log
+      )
+      expect(bare.ok).toBe(false)
+      expect(bare.process?.stderr).toContain('execa')
+    }))
+
+  test('作用域别名、公开子路径、ESM/CJS 子进程使用同一宿主快照', () =>
+    fixture(async (cwd, directory) => {
+      const host = join(cwd, 'host')
+      for (const name of ['tool-alias', '@tools/alias']) {
+        await installPackage(cwd, name, 'workspace')
+        await installPackage(host, name, 'host')
+      }
+      await writeFile(
+        join(cwd, 'child.mjs'),
+        "import {value} from 'velaros:npm/@tools/alias/feature';console.log(value);"
+      )
+      await writeFile(
+        join(cwd, 'child.cjs'),
+        "console.log(require('velaros:npm/tool-alias').value,require('velaros:npm/@tools/alias/feature').value);"
+      )
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: executeNativeNode,
+        runtime: {
+          id: 'alias-host',
+          packages: ['tool-alias', '@tools/alias'].map((name) => ({
+            name,
+            version: 'host',
+            directory: host,
+          })),
+          skills: [],
+        },
+      })
+      const result = await runner.run(
+        request(
+          `
+        import {value as local} from '@tools/alias';
+        import {value as host} from 'velaros:npm/tool-alias';
+        import {value as feature} from 'velaros:npm/@tools/alias/feature';
+        import {execFileSync} from 'node:child_process';
+        export default {local,host,feature,esm:execFileSync(process.execPath,['child.mjs'],{encoding:'utf8'}).trim(),cjs:execFileSync(process.execPath,['child.cjs'],{encoding:'utf8'}).trim()};
+      `,
+          { timeoutMs: 3000 }
+        ),
+        noCalls,
+        log
+      )
+      expect(result).toMatchObject({
+        ok: true,
+        value: { local: 'workspace', host: 'host', feature: 'host', esm: 'host', cjs: 'host host' },
+      })
+      const hidden = await runner.run(
+        request("import 'velaros:npm/@tools/alias/private';"),
+        noCalls,
+        log
+      )
+      expect(hidden).toMatchObject({ ok: false, error: { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' } })
+    }))
+
+  test('未授权安装和路径越界拒绝，能力与组合包不能覆盖宿主命名空间', () =>
+    fixture(async (cwd, directory) => {
+      let launches = 0
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async (...args) => {
+          launches++
+          return executeNativeNode(...args)
+        },
+      })
+      for (const suffix of [
+        'uninstalled',
+        'execa/../yaml',
+        'execa/%2e%2e/yaml',
+        'execa//index.js',
+        'execa/./index.js',
+        'execa/index.js?x',
+        'execa/index.js#x',
+      ]) {
+        const result = await runner.run(
+          request(`import ${JSON.stringify(NodeRuntimePackagePrefix + suffix)};`),
+          noCalls,
+          log
+        )
+        expect(result).toMatchObject({ ok: false, error: { code: 'PERMISSION' } })
+      }
+      const dispatched = launches
+      for (const specifier of ['velaros:npm/execa', 'velaros:npm/unknown', 'npm/execa']) {
+        const result = await runner.run(
+          request('', { operations: { [specifier]: ['run'] } }),
+          noCalls,
+          log
+        )
+        expect(result).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+      }
+      const combination = await runner.run(
+        request('', { packages: [{ specifier: 'velaros:npm/execa', exports: {} }] }),
+        noCalls,
+        log
+      )
+      expect(combination).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+      expect(launches).toBe(dispatched)
+    }))
+
+  test('后续执行获取新租约，显式导入与目录版本同步，旧租约正常释放', () =>
+    fixture(async (cwd, directory) => {
+      const roots = ['one', 'two'].map((version) => join(cwd, version))
+      for (const [index, root] of roots.entries())
+        await installPackage(root, 'tool-alias', String(index + 1))
+      let acquired = 0
+      let released = 0
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: executeNativeNode,
+        acquireRuntime: async () => {
+          const index = acquired++
+          return {
+            environment: {
+              id: String(index),
+              packages: [
+                { name: 'tool-alias', version: String(index + 1), directory: roots[index]! },
+              ],
+              skills: [],
+            },
+            binDirectories: [],
+            release: async () => {
+              released++
+            },
+          }
+        },
+      })
+      for (const value of ['1', '2']) {
+        const result = await runner.run(
+          request(
+            "import {value} from 'velaros:npm/tool-alias';import {readFileSync} from 'node:fs';const pkg=JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8')).packages.find(p=>p.name==='tool-alias');export default {value,version:pkg.runtimeVersion};"
+          ),
+          noCalls,
+          log
+        )
+        expect(result).toMatchObject({ ok: true, value: { value, version: value } })
+      }
+      expect(acquired).toBe(2)
+      expect(released).toBe(2)
     }))
 })

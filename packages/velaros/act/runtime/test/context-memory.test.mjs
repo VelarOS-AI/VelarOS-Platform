@@ -11,6 +11,7 @@ import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
+import { SessionGoal } from '../../../dist/act/runtime/impl/SessionGoal.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   memoryCommittedGroups,
@@ -918,6 +919,126 @@ test('archived field recall preserves authorization, cancellation and released o
     code: 'SCOPE_MISMATCH',
   })
 })
+
+test('INV-48 bounded goal frames recall full Unicode fields by immutable reference without output delivery credit', async (t) => {
+  const f = await fixture(t)
+  const ledger = new SessionGoal('s', f.storage)
+  const objective = `全文开始\n${'原文 \\"🔍\\n\n'.repeat(9000)}尾部验收：所有输入都保留 ✅`
+  const reason = '已完成第一项；后续仍需核验。'.repeat(180)
+  await ledger.seed(objective, 0, signal)
+  const current = await ledger.update({ baseRevision: 1, reason }, signal)
+  assert.equal(current.objective, objective)
+  assert.deepEqual(await ledger.frame(JSON.stringify(current).length, signal), current)
+  for (const budget of [8000, 1000, 0]) {
+    const frame = await ledger.frame(budget, signal)
+    assert.equal(frame.id, current.id)
+    assert.equal(frame.revision, current.revision)
+    assert.equal(frame.status, current.status)
+    assert.equal(frame.objective, undefined)
+    if (budget) assert(JSON.stringify(frame).length <= budget)
+    for (const field of ['objective', 'reason']) {
+      const reference = frame[`${field}InRecord`]
+      if (!reference) {
+        assert.equal(frame[field], current[field])
+        continue
+      }
+      assert.equal(reference.chars, current[field].length)
+      const offset = Math.max(0, current[field].length - 137)
+      const page = await f.memory.readMaterial(
+        reference.ref,
+        offset,
+        137,
+        signal,
+        reference.pointer
+      )
+      assert.equal(page.text, current[field].slice(offset))
+      assert.equal(page.offset, offset)
+      assert.equal(page.totalChars, current[field].length)
+      assert.equal(page.pointer, `/${field}`)
+      assert.equal(page.delivery, undefined)
+    }
+  }
+  const first = await ledger.frame(1000, signal)
+  const input = {
+    ref: first.objectiveInRecord.ref,
+    pointer: first.objectiveInRecord.pointer,
+    offset: objective.length - 137,
+    limit: 137,
+  }
+  const result = await f.session.execute({
+    source: `import {memory} from 'velaros:system';export default await memory.read(${JSON.stringify(input)});`,
+  })
+  assert(result.checked && !result.result.failed, JSON.stringify(result))
+  const page = result.rawValue
+  assert.equal(page.text, objective.slice(-137))
+  assert.equal(page.totalChars, objective.length)
+  await ledger.update({ baseRevision: current.revision, reason: '新的进度' }, signal)
+  const originalReason = await f.memory.readMaterial(
+    first.reasonInRecord.ref,
+    0,
+    4000,
+    signal,
+    first.reasonInRecord.pointer
+  )
+  assert.equal(originalReason.text, reason)
+})
+
+test('INV-48 current goal recall survives task boundaries while prior versions and other sessions retain scope checks', async (t) => {
+  const f = await fixture(t)
+  const ledger = new SessionGoal('s', f.storage)
+  await ledger.seed('持续目标原文。'.repeat(300), 0, signal)
+  const previous = await ledger.frame(1000, signal)
+  await ledger.update({ baseRevision: 1, reason: '更新后的依据' }, signal)
+  const current = await ledger.frame(1000, signal)
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'search:history-reset',
+    body: '新的授权代次',
+  })
+  const input = await f.session.context.ingest({ text: '在新的任务中继续当前目标' })
+  await f.session.view.begin(input.ref, signal, 'new')
+  const read = (ref, abort = signal) => f.memory.readMaterial(ref, 0, 60, abort, '/objective')
+  assert.equal(
+    (await read(current.objectiveInRecord.ref)).text,
+    (await ledger.get(signal)).objective.slice(0, 60)
+  )
+  await assert.rejects(read(previous.objectiveInRecord.ref), { code: 'SCOPE_MISMATCH' })
+  await assert.rejects(read({ ...current.objectiveInRecord.ref, sessionId: 'other' }), {
+    code: 'SCOPE_MISMATCH',
+  })
+  const abort = new AbortController()
+  abort.abort()
+  await assert.rejects(read(current.objectiveInRecord.ref, abort.signal), { name: 'AbortError' })
+  const record = (await f.storage.load('s')).records.find(
+    (item) => item.ref.id === current.objectiveInRecord.ref.id
+  )
+  const originalGet = f.storage.get.bind(f.storage)
+  let changedDuringRead = false
+  f.storage.get = async (id, objectId) => {
+    const body = await originalGet(id, objectId)
+    if (!changedDuringRead && objectId === record.objectId) {
+      changedDuringRead = true
+      await ledger.update(
+        { baseRevision: current.revision, reason: '读取期间推进了目标版本' },
+        signal
+      )
+    }
+    return body
+  }
+  try {
+    await assert.rejects(read(current.objectiveInRecord.ref), { code: 'SCOPE_MISMATCH' })
+  } finally {
+    f.storage.get = originalGet
+  }
+  assert(changedDuringRead, 'the current goal changed while its older-task body was being read')
+  const refreshed = await ledger.frame(1000, signal)
+  assert.notEqual(refreshed.objectiveInRecord.ref.id, current.objectiveInRecord.ref.id)
+  assert.equal(
+    (await read(refreshed.objectiveInRecord.ref)).text,
+    (await ledger.get(signal)).objective.slice(0, 60)
+  )
+})
+
 async function run(f, input = 'Continue') {
   const events = []
   for await (const event of f.session.submit(input)) events.push(event)

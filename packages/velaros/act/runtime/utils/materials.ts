@@ -1,10 +1,13 @@
 import type { ContextRef } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
+import { isTrue } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isArray, isEmpty, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryReadLimits } from '../../system/contract/constants.js'
+
+import { ActRuntimeTuning } from './tuning.js'
 
 /** 在已授权执行归档中选择真实字段，再按该字段的 UTF-16 字符分页；不读取原型属性。 */
 export function readMaterialField(
@@ -237,4 +240,104 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
     size,
     omitted,
   }
+}
+
+/** 仅扣除本次真实历史中逐字匹配的原值字符串前缀；新增字符及未读范围独立保留。 */
+export function materialHistoryDelta(
+  original: string,
+  current: string,
+  previous: string,
+  ref: ContextRef
+): Optional<string> {
+  let value: unknown
+  let shown: unknown
+  let earlier: unknown
+  try {
+    value = JSON.parse(original)
+    shown = JSON.parse(current)
+    earlier = JSON.parse(previous)
+  } catch {
+    Log.tag('ActRuntime').debug('历史材料不是 JSON，保留当前投影')
+    return undefined
+  }
+  // 只从原始值确为字符串的位置取证，形似投影元数据的业务对象不能证明交付。
+  const prefix = (raw: string, projected: unknown, pointer: string): Optional<string> => {
+    if (isString(projected)) return projected === raw ? projected : undefined
+    if (
+      !isPlainObject(projected) ||
+      !isPlainObject(projected.ref) ||
+      projected.ref.sessionId !== ref.sessionId ||
+      projected.ref.id !== ref.id ||
+      projected.position !== pointer ||
+      projected.representation !== 'excerpt' ||
+      !isTrue(projected.bodyIncluded) ||
+      !isString(projected.text) ||
+      !isPlainObject(projected.selection) ||
+      projected.selection.from !== 0 ||
+      projected.selection.shown !== projected.text.length ||
+      projected.selection.total !== raw.length ||
+      projected.selection.unit !== 'utf16' ||
+      !raw.startsWith(projected.text)
+    )
+      return undefined
+    return projected.text
+  }
+  const visit = (raw: unknown, next: unknown, prior: unknown, pointer: string): unknown => {
+    if (isString(raw)) {
+      const after = prefix(raw, next, pointer)
+      const before = prefix(raw, prior, pointer)
+      if (!after || !before) return next
+      let covered = Math.min(after.length, before.length)
+      // 字符范围不得拆开 UTF-16 代理对。
+      if (covered < raw.length && /[\uD800-\uDBFF]/u.test(raw[covered - 1]!)) covered--
+      if (!covered) return next
+      const text = after.slice(covered)
+      const reduced = {
+        ref,
+        position: pointer || '/',
+        representation: text ? 'excerpt' : 'reference',
+        bodyIncluded: Boolean(text),
+        chars: raw.length,
+        history: { from: 0, shown: covered, unit: 'utf16', bodyInHistory: true },
+        selection: { from: covered, shown: text.length, total: raw.length, unit: 'utf16' },
+        read: {
+          module: 'velaros:system',
+          export: 'memory',
+          operation: 'read',
+          ref: ref.id,
+          pointer,
+          rangeUnit: 'utf16',
+          offset: after.length,
+          limit: Math.min(ContextLimits.readChars, raw.length - after.length),
+        },
+        reason: text ? 'history-prefix-and-new-range' : 'body-in-history',
+      }
+      if (text) Object.assign(reduced, { text })
+      return JSON.stringify(reduced).length + ActRuntimeTuning.materialDeltaSavings <
+        JSON.stringify(next).length
+        ? reduced
+        : next
+    }
+    // 数组只递归两边都按原始下标呈现的成员；截断数组外壳继续完整显示。
+    if (isArray(raw) && isArray(next) && isArray(prior))
+      return next.map((item, index) => visit(raw[index], item, prior[index], `${pointer}/${index}`))
+    if (!isPlainObject(raw) || !isPlainObject(next) || !isPlainObject(prior)) return next
+    return Object.fromEntries(
+      Object.entries(next).map(([key, item]) => [
+        key,
+        Object.hasOwn(raw, key) && Object.hasOwn(prior, key)
+          ? visit(
+              raw[key],
+              item,
+              prior[key],
+              `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`
+            )
+          : item,
+      ])
+    )
+  }
+  const reduced = JSON.stringify(visit(value, shown, earlier, ''))
+  return reduced.length + ActRuntimeTuning.materialDeltaSavings < current.length
+    ? reduced
+    : undefined
 }

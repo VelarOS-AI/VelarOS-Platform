@@ -55,6 +55,23 @@ const decode = (mode, records, config = {}, inputs = {}) => {
 const raw = '中文 👋\r\n`template ${x}` "double" \'single\' \\path\\x\n\\n\n'
 const source = `import {input,blobs} from 'velaros:program'; console.log(input,blobs);\n// ${raw}`
 const valid = [
+  [
+    {
+      kind: 'execute',
+      code: '',
+      options: { control: { kind: 'read', executionId: 'known-job', cursor: 0, limit: 1000 } },
+    },
+  ],
+  [{ kind: 'execute', code: '', options: { control: { kind: 'stop', executionId: 'known-job' } } }],
+  [{ kind: 'execute', code: source, options: { async: true, timeoutMs: 4800000 } }],
+  [{ kind: 'execute', code: '', options: { sourceRef: 'saved', timeoutMs: 5000 } }],
+  [
+    {
+      kind: 'execute',
+      code: JSON.stringify({ source }),
+      options: { format: 'program', timeoutMs: 4800000 },
+    },
+  ],
   [{ kind: 'execute', code: source }],
   [
     { kind: 'blobs', name: 'literal', text: raw },
@@ -104,6 +121,29 @@ const valid = [
     { kind: 'done', message: 'Done' },
   ],
 ]
+
+test('execution timeout uses the same bounded scheduling contract in both transports', () => {
+  for (const mode of ['tools', 'text']) {
+    const result = decode(mode, [
+      { kind: 'execute', code: source, options: { timeoutMs: 4800000 } },
+    ])
+    assert.equal(result.submission.executions[0].program.timeoutMs, 4800000)
+    for (const timeoutMs of [0, -1, 1.5, 86400001, '5000', true, null])
+      assert.throws(() => decode(mode, [{ kind: 'execute', code: source, options: { timeoutMs } }]))
+    assert.throws(() =>
+      decode(mode, [{ kind: 'observe', code: source, options: { timeoutMs: 5000 } }])
+    )
+    assert.throws(() =>
+      decode(mode, [
+        {
+          kind: 'execute',
+          code: JSON.stringify({ source, timeoutMs: 5000 }),
+          options: { format: 'program' },
+        },
+      ])
+    )
+  }
+})
 for (const [index, records] of valid.entries())
   test(`both transports bind identical programs and completion (${index})`, () => {
     assert.deepEqual(
@@ -336,6 +376,43 @@ test('native observation and execution expose only their own options', () => {
   for (const key of ['snapshot', 'refresh', 'clear']) assert.equal(execution[key], undefined)
 })
 
+test('native raw-text guidance produces self-contained executable calls for scoped names', () => {
+  for (const kind of ['execute', 'observe']) {
+    const options = { allowed: [kind], names: { [kind]: 'work' } }
+    const rules = nativeProtocolRules(options)
+    const example = JSON.parse(rules.match(/原文示例：(\{[^\n]+\})。/u)[1])
+    example.options.blobs.content = raw
+    const decoder = new NativeTurnDecoder(options)
+    decoder.acceptTool({ id: 'raw-text', name: 'work', input: example })
+    const submission = decoder.finish().submission
+    const program = kind === 'execute' ? submission.executions[0].program : submission.observe
+    assert.equal(program.blobs.content, raw)
+    assert.match(program.source, /import \{blobs\} from "velaros:program"/)
+  }
+})
+
+test('a standalone blob rejection tells the model how to resubmit the full input', () => {
+  const decoder = new NativeTurnDecoder({ names: { execute: 'run', blobs: 'literal' } })
+  decoder.acceptTool({ id: 'raw', name: 'literal', input: { name: 'content', text: raw } })
+  assert.throws(
+    () => decoder.finish(),
+    (error) => {
+      assert.equal(error.code, 'SCRIPT_PROTOCOL')
+      assert.match(error.message, /options\.blobs/)
+      assert.match(error.message, /同一响应/)
+      assert.match(error.message, /run/)
+      return true
+    }
+  )
+  decoder.reset()
+  decoder.acceptTool({
+    id: 'fixed',
+    name: 'run',
+    input: { code: source, options: { blobs: { content: raw } } },
+  })
+  assert.equal(decoder.finish().submission.executions[0].program.blobs.content, raw)
+})
+
 test('native observation examples are valid calls and respect scoped tool names', () => {
   const options = { allowed: ['observe', 'done'], names: { observe: 'watch', done: 'finish' } }
   const rules = nativeProtocolRules(options)
@@ -424,9 +501,9 @@ test('actual requests carry only their selected transport syntax with scoped nam
             }
           } else {
             assert.equal(request.response.type, 'text')
-            assert.match(request.instructions, /watch\(\{clear:true\}\) 和空段/)
-            assert.match(request.instructions, /literal\("名称"\) 的段内是原文/)
-            assert.match(request.instructions, /blobs\["名称"\] 即原文字串/)
+            assert.match(request.instructions, /空段 watch\(\{clear:true\}\) 退订/)
+            assert.match(request.instructions, /literal\("名称"\) 段保留原文/)
+            assert.match(request.instructions, /blobs\["名称"\] 读原文/)
             assert.doesNotMatch(
               request.instructions,
               /JSON Schema|工具 Schema|options\.sourceRef|"code":""/
@@ -450,3 +527,31 @@ test('actual requests carry only their selected transport syntax with scoped nam
   }
   assert.notEqual(instructions.get('tools'), instructions.get('text'))
 })
+
+for (const mode of ['tools', 'text']) {
+  test(`${mode} execution control cannot carry arbitrary source or an unsupported operation`, () => {
+    for (const record of [
+      {
+        kind: 'execute',
+        code: 'console.log("injected")',
+        options: { control: { kind: 'read', executionId: 'job' } },
+      },
+      { kind: 'execute', code: '', options: { control: { kind: 'eval', executionId: 'job' } } },
+      {
+        kind: 'execute',
+        code: '',
+        options: {
+          control: { kind: 'read', executionId: 'job' },
+          modules: { './extra.js': 'console.log("injected")' },
+        },
+      },
+      {
+        kind: 'execute',
+        code: '',
+        options: { control: { kind: 'stop', executionId: 'job' }, async: true },
+      },
+      { kind: 'observe', code: '', options: { control: { kind: 'read', executionId: 'job' } } },
+    ])
+      assert.throws(() => decode(mode, [record]))
+  })
+}

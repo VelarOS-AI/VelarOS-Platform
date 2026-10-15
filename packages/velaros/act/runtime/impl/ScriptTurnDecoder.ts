@@ -3,6 +3,7 @@ import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { GoalLimits } from '../../system/contract/constants.js'
+import { NativeExecutionSchema } from '../contract/surface.js'
 import type { ScriptProtocolRecord, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
 import { scriptInputCopy } from '../utils/program-context.js'
@@ -130,7 +131,12 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
         this.active.line
       )
     this.ended = true
-    const { observe, executions } = compileScriptRecords(this.records, this.config, this.inputs)
+    const { observe, executions } = compileScriptRecords(
+      this.records,
+      this.config,
+      this.inputs,
+      NativeExecutionSchema
+    )
     if (this.requireDecision() && !this.done && isUndefined(observe) && isEmpty(executions))
       throw protocolFailure(protocolDecisionInstructions(this.marker, this.config))
     const submission: ScriptProtocolSubmission = { observe, executions }

@@ -8,12 +8,17 @@ import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
-import { goalChange } from '../utils/goal.js'
+import type { GoalFrame } from '../types/goal.js'
+import { goalChange, goalFrame } from '../utils/goal.js'
 
 /** 会话目标与模型、宿主共用同一原始存储。 */
 export interface SessionGoalApi {
   /** 返回当前快照，包括删除墓碑。 */
   get(signal: AbortSignal): Promise<Nullable<GoalState>>
+  /** 宿主随提交给出的完整目标；模型自行建立目标仍使用 update 的内容上限。 */
+  seed(objective: string, baseRevision: number, signal: AbortSignal): Promise<GoalState>
+  /** 正文按展示预算投影；引用绑定同一个不可变目标版本。 */
+  frame(maxChars: number, signal: AbortSignal): Promise<Nullable<GoalFrame>>
   /** CAS 更新，不能隐式覆盖另一目标。 */
   update(input: GoalUpdate, signal: AbortSignal): Promise<GoalState>
   /** 宿主专属删除及用户控制。 */
@@ -41,10 +46,17 @@ export class SessionGoal implements SessionGoalApi {
     const body = record ? await this.storage.get(this.id, record.objectId) : null
     signal.throwIfAborted()
     if (record && isNull(body)) throw new AppError('NOT_FOUND', '目标原文缺失')
-    return { state, goal: isNull(body) ? null : (JSON.parse(body) as GoalState) }
+    return { state, record, goal: isNull(body) ? null : (JSON.parse(body) as GoalState) }
   }
   public async get(signal: AbortSignal) {
     return (await this.snapshot(signal)).goal
+  }
+  public seed(objective: string, baseRevision: number, signal: AbortSignal) {
+    return this.commit({ baseRevision, objective }, signal, 'user')
+  }
+  public async frame(maxChars: number, signal: AbortSignal) {
+    const { goal, record } = await this.snapshot(signal)
+    return goal && record ? goalFrame(goal, record.ref, maxChars) : null
   }
   public update(input: GoalUpdate, signal: AbortSignal) {
     return this.commit(input, signal)
@@ -94,7 +106,11 @@ export class SessionGoal implements SessionGoalApi {
       },
     }
   }
-  private async commit(input: GoalUpdate | GoalControl, signal: AbortSignal): Promise<GoalState> {
+  private async commit(
+    input: GoalUpdate | GoalControl,
+    signal: AbortSignal,
+    source: 'model' | 'user' = 'model'
+  ): Promise<GoalState> {
     for (let attempt = 0; attempt < 32; attempt++) {
       const { state, goal } = await this.snapshot(signal)
       if (!state) throw new AppError('GOAL_INPUT', '先登记用户输入，再建立目标')
@@ -102,7 +118,8 @@ export class SessionGoal implements SessionGoalApi {
         goal,
         input,
         Date.now(),
-        (await createContextReference(this.storage, this.id)).id
+        (await createContextReference(this.storage, this.id)).id,
+        source
       )
       const body = JSON.stringify(next)
       const objectId = await this.storage.put(this.id, body)

@@ -10,7 +10,10 @@ export interface ScriptProtocolSubmission {
   /** 按原文出现顺序执行的程序。 */
   readonly executions: ReadonlyArray<{
     readonly program: NonNullable<ScriptSubmission['execute']>
-    readonly async: boolean
+    /** 省略使用有界返回；true 立即后台，false 优先完整等待，新输入或并行工作进展可提前返回作业身份。 */
+    readonly async?: boolean
+    /** 仅共用编译器验证结构化控制后签发，不能由程序载荷设置。 */
+    readonly control?: true | 'wait'
   }>
 }
 

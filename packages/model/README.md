@@ -84,6 +84,8 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 
 ## 约定
 
+- 支持准确派发登记的驱动声明 `dispatchAware`，准备完成后在实际调用前等待 `stream` 的第三参数；登记失败不发请求且保留宿主错误。`modelRequestDispatcher` 在旧驱动入口保守登记；`budgetRequestId` 仅用于宿主记账，不进入供应商正文或缓存键。
+
 - 绝不换 provider：选中的 provider 没启用、缺凭据或没有适配器时 `resolveRoleRuntime` 抛 `ModelErrorCodes.providerUnavailable`；只在同一 provider 内回退模型，原因写在结果的 `fallbackReason` 与 `resolutionTrace`。
 - 失败按 `error.code` 分支：本域的码在 `ModelErrorCodes`（缺凭据 `credentialMissing`、Cloud 未连接 `cloudNotConnected` 等），入参形状不对是 `VALIDATION`；文案只给人看。
 - 一个宿主、租户或隔离执行环境各建一份对象图：没有模块级单例，provider script、Cloud 绑定与目录缓存都不跨对象图；对象图没有 `dispose`，随宿主进程存活。
@@ -101,6 +103,7 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 请求编译的会话估算校准支持 `textRatio` 与可选固定开销 `overheadTokens`，结果以原始文本估算为上限；精确计数、图片和不透明状态的预留独立处理。固定开销必须是非负安全整数。驱动已标记 `calibration: 'provider-usage'` 的实测校准估算保持原值，避免再次缩小。
 - 加密推理状态、签名或 `reasoning.context` 被拒时直接保留原错误，不按思考档位不兼容降档重试。
 - 供应商重试分类同时读取结构化错误码和仅含一个机器码的诊断；已知的流读取、服务暂不可用和限流错误可交给调用方有限重试，鉴权、参数、额度等永久错误与取消优先。普通句子中提到某个错误码不改变分类，未知错误保留失败；重试资格不代表响应已被接受或可以执行其中的调用。
+- Responses 原始失败终态独立保留错误码与文案，避免 SDK 因缺少序号等外围字段而只返回 `other`。只接受至多 128 字符的机器码和 2048 字符的诊断；无效或过长详情保持未知失败，不截断后推断重试，不接收失败响应里的产物，已报告用量照常保留。
 - 内置 OpenAI Responses 收齐 `response.completed`、`response.incomplete` 或 `response.failed` 的完整 SSE 事件后结束 SDK 输入，由 SDK 按原有规则生成 usage、continuation 和最终状态；不再等待连接的无关尾流。正文原字节保持，只在终端以 CR 结束时补 LF，形成等价 SSE 分隔符。半帧和普通文本完成事件不算响应终端，单个事件超过 16 MiB 时明确失败；取消清理失败或悬挂不能改变已完整交付的终端事实。
 
 - `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。请求快照与指纹包含工具定义。

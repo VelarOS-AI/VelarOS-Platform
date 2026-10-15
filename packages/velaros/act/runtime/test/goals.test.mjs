@@ -288,26 +288,16 @@ test('INV-48 native goal completion is discoverable from the first actual reques
         .map((message) => message.content)
         .join('\n')
       assert.equal(visible.split(objective).length - 1, 1)
-      if (calls === 1) {
-        assert.equal(displayed.goalControl.module, 'velaros:system-goal')
-        assert.match(displayed.goalControl.completion, /显式更新状态与依据/)
-        yield {
-          type: 'tool-call',
-          value: {
-            id: 'explicit-completion',
-            name: 'exec',
-            input: {
-              code: "import * as goal from 'velaros:system-goal'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'交付和验证已核对'});",
-            },
-          },
-        }
-      } else {
-        assert.equal(raw.status, 'complete')
-        assert.equal(displayed.goalControl, undefined)
-        yield {
-          type: 'tool-call',
-          value: { id: 'done', name: 'done', input: { message: '完成。' } },
-        }
+      assert.equal(raw.status, 'active')
+      assert.equal(displayed.goalControl.module, 'velaros:system-goal')
+      assert.match(displayed.goalControl.completion, /done.*completion.*message/)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'done',
+          name: 'done',
+          input: { completion: '交付和验证已核对', message: '完成。' },
+        },
       }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -316,12 +306,12 @@ test('INV-48 native goal completion is discoverable from the first actual reques
   const events = await Array.fromAsync(
     session.submit(`本次需求：\n${objective}\n按此执行。`, undefined, { goal: objective })
   )
-  assert.equal(calls, 2, JSON.stringify(events))
+  assert.equal(calls, 1, JSON.stringify(events))
   assert.equal((await session.getGoal()).status, 'complete')
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
 })
 
-test('a goal passed with submit is set before the first frame, clipped to the objective limit', async (t) => {
+test('INV-48 host goal retains its full Unicode objective across first frame, completion and restart', async (t) => {
   const frames = []
   const model = {
     id: 'goal-seed-test',
@@ -332,27 +322,56 @@ test('a goal passed with submit is set before the first frame, clipped to the ob
       yield* doneWith(request, '已完成')
     },
   }
-  const dataDir = await mkdtemp(join(tmpdir(), 'session-goal-seed-'))
-  const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
-    context: { maintenance: false },
-    model,
-  })
-  t.after(async () => {
-    await runtime.close()
-    await rm(dataDir, { recursive: true, force: true })
-  })
-  const session = await runtime.openSession('seed')
-  const objective = `新的目标${'。'.repeat(9000)}`
+  const { runtime, session, options } = await fixture(t, model)
+  const objective = `新的目标\n${'逐项核对 🔍\n'.repeat(1800)}尾部验收：保存全部结果 ✅`
   await Array.fromAsync(session.submit(objective, undefined, { goal: objective }))
   assert.equal(frames.length, 1)
+  const completed = await session.getGoal()
+  assert.equal(completed.objective, objective)
+  assert.equal(completed.status, 'complete')
   const first = runtimeGoal(frames[0])
   assert.equal(first.status, 'active')
-  assert.equal(first.objective, objective.slice(0, 8000))
-  assert.equal((await session.getGoal()).status, 'complete')
+  assert.equal(first.objective, undefined)
+  assert.equal(first.objectiveInRecord.pointer, '/objective')
+  assert.equal(first.objectiveInRecord.chars, objective.length)
+  assert(JSON.stringify(first).length <= 8000)
+  const archived = JSON.parse((await session.context.read(first.objectiveInRecord.ref)).text)
+  assert.equal(archived.objective, objective)
+  assert.equal(archived.status, 'active')
+  assert.equal(archived.revision, first.revision)
+  const read = await session.execute({
+    source: "import {goal} from 'velaros:system';export default await goal.get();",
+  })
+  assert(read.checked && !read.result.failed, JSON.stringify(read))
+  assert.equal(read.rawValue.objective, objective)
+  await runtime.close()
+  const reopened = await createRuntime(options)
+  try {
+    assert.deepEqual(await (await reopened.openSession('goal')).getGoal(), completed)
+  } finally {
+    await reopened.close()
+  }
+})
+
+test('INV-48 full host objectives do not relax model-created goal or reason quotas', async (t) => {
+  const { session } = await fixture(t)
+  await assert.rejects(session.updateGoal({ baseRevision: 0, objective: '字'.repeat(8001) }), {
+    code: 'GOAL_INPUT',
+  })
+  assert.equal(await session.getGoal(), null)
+  const rejected = await session.execute({
+    source:
+      "import {goal} from 'velaros:system';await goal.update({baseRevision:0,objective:'字'.repeat(8001)});",
+  })
+  assert(rejected.result.failed, JSON.stringify(rejected))
+  assert.equal(await session.getGoal(), null)
+  const accepted = await session.updateGoal({ baseRevision: 0, objective: '字'.repeat(8000) })
+  assert.equal(accepted.objective.length, 8000)
+  await assert.rejects(
+    session.updateGoal({ baseRevision: accepted.revision, reason: '据'.repeat(4001) }),
+    { code: 'GOAL_INPUT' }
+  )
+  assert.deepEqual(await session.getGoal(), accepted)
 })
 
 test('a goal passed with submit keeps a paused goal and replaces a finished one', async (t) => {
@@ -658,4 +677,45 @@ test('INV-48 native done with a claim completes the goal through the same accept
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
   assert.equal((await session.getGoal()).status, 'complete')
   assert.equal((await session.getGoal()).reason, '已核对交付与实际验证')
+})
+
+test('INV-78 native goal guidance routes a repaired completion claim through verification before publishing goal state', async (t) => {
+  let calls = 0
+  let checks = 0
+  const f = await verificationFixture(
+    t,
+    async (session) => {
+      assert.equal((await session.getGoal()).status, 'active')
+      return ++checks === 1
+        ? { verified: false, reason: 'repair the missing delivery', report: checkReport('failed') }
+        : { verified: true, reason: 'delivery checked', report: checkReport('passed') }
+    },
+    async function* (session, request) {
+      calls++
+      const runtime = JSON.parse(
+        request.materials.find((item) => item.origin === 'runtime-view').text
+      ).partitions.runtime
+      assert.match(runtime.goalControl.completion, /done.*completion.*message/)
+      assert.equal((await session.getGoal()).status, 'active')
+      if (calls === 2) assert.match(request.compiledPrompt, /GOAL_ACTIVE[^\n]*done[^\n]*completion/)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: `completion-${calls}`,
+          name: 'done',
+          input:
+            calls === 1
+              ? { message: 'candidate delivery' }
+              : { completion: 'verified delivery basis', message: 'delivery result' },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+    { nativeTools: true }
+  )
+  const events = await Array.fromAsync(f.session.submit('deliver and verify'))
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(calls, 3)
+  assert.equal(checks, 2)
+  assert.equal((await f.session.getGoal()).status, 'complete')
 })

@@ -145,10 +145,57 @@ test('INV-57 首帧直接交付真实领域能力用途和已安装 npm，详细
   for (const pkg of nodeRuntimePackages.defaults())
     assert.deepEqual(
       first.packages.find((item) => item.name === pkg.name),
-      { name: pkg.name, version: pkg.version }
+      { name: pkg.name, runtimeImport: `velaros:npm/${pkg.name}`, fallbackVersion: pkg.version }
     )
   assert.equal(first.totals.capabilities, first.capabilities.length)
   assert.match(frames[0].instructions, /runtime.inventory/)
+})
+
+test('INV-57 首帧后备包版本与执行进程实际工作区解析身份分别表达', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-package-shadow-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const directory = join(workspace, 'node_modules', 'execa')
+  await mkdir(directory, { recursive: true })
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({ name: 'execa', version: '0.0.1-workspace', main: 'index.cjs' })
+  )
+  await writeFile(join(directory, 'index.cjs'), 'module.exports = () => "workspace-export";')
+  const frames = []
+  const f = await fixture(t, {
+    workspace,
+    model: driver(async function* (request) {
+      frames.push(request)
+      if (frames.length === 1) {
+        yield turn(request, {
+          execute: {
+            source:
+              'import execa from "execa"; import {execa as hostExeca} from "velaros:npm/execa"; import {readFile} from "node:fs/promises"; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+"/index.json","utf8")); const pkg=catalog.packages.find(p=>p.name==="execa"); console.log(JSON.stringify({value:execa(),hostExeca:typeof hostExeca,source:pkg.source,version:pkg.version,runtimeImport:pkg.runtimeImport,runtimeVersion:pkg.runtimeVersion}));',
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Inspect the workspace package identity'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  const hint = inventory(frames[0]).packages.find((item) => item.name === 'execa')
+  assert.equal(
+    hint.fallbackVersion,
+    nodeRuntimePackages.defaults().find((p) => p.name === 'execa').version
+  )
+  assert.equal(Object.hasOwn(hint, 'version'), false)
+  assert.equal(hint.runtimeImport, 'velaros:npm/execa')
+  assert.match(frames[0].instructions, /import \{execa\} from "velaros:npm\/execa"/)
+  const history = JSON.stringify(frames[1].history)
+  for (const value of [
+    'workspace-export',
+    '0.0.1-workspace',
+    'source',
+    'runtimeVersion',
+    'hostExeca',
+  ])
+    assert.ok(history.includes(value), value)
 })
 
 test('INV-57 环境引子读取所选 Skill 和损坏包的实际状态，元数据租约完整释放', async (t) => {
@@ -207,7 +254,10 @@ test('INV-57 环境引子读取所选 Skill 和损坏包的实际状态，元数
   for await (const event of f.session.submit('Explain available dependencies'))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   const first = inventory(frames[0])
-  assert.equal(first.packages.find((item) => item.name === 'primer-package').version, '2.3.4')
+  assert.equal(
+    first.packages.find((item) => item.name === 'primer-package').fallbackVersion,
+    '2.3.4'
+  )
   assert.ok(first.packages.find((item) => item.name === 'primer-broken').error)
   assert.deepEqual(first.skills, [
     { name: 'fixture-skill', version: '3.0.0', description: '解析科学数据' },
@@ -245,7 +295,10 @@ test('INV-57 大目录遵守展示预算并保留完整数量，常规环境保�
       module: `example:module-${i}`,
       summary: '用途说明'.repeat(100),
     })),
-    packages: Array.from({ length: 128 }, (_, i) => ({ name: `package-${i}`, version: '1.2.3' })),
+    packages: Array.from({ length: 128 }, (_, i) => ({
+      name: `package-${i}`,
+      fallbackVersion: '1.2.3',
+    })),
     skills: [{ name: 'test-skill', version: '1', description: 'skill 用途' }],
     totals: { capabilities: 40, packages: 128, skills: 1 },
   }
@@ -277,7 +330,8 @@ test('base instructions stay small while authorized packages are discoverable on
       assert.notEqual(event.type, 'error')
     assert.match(instructions, /Node.js/)
     assert.match(instructions, /index.json/)
-    assert(instructions.split('完整响应全部校验后才执行')[0].length < 1800)
+    const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
+    assert(prefixChars < 1800, `instruction prefix has ${prefixChars} characters`)
     assert(instructions.length < 3600, 'full control semantics must remain bounded')
     const result = await f.session.execute({
       source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.capabilities.some(item=>item.module==='velaros:project');`,
@@ -309,7 +363,8 @@ test('Node hints expose only available collaboration and search capabilities wit
       assert.equal(instructions.includes('velaros:search'), search)
       assert(!instructions.includes('velaros:context-materials'))
       assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
-      assert(instructions.split('完整响应全部校验后才执行')[0].length < 1800)
+      const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
+      assert(prefixChars < 1800, `instruction prefix has ${prefixChars} characters`)
       assert(instructions.length < 3600, 'full control semantics must remain bounded')
     }
   }

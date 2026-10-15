@@ -37,6 +37,8 @@ export interface ModelToolModelProfile {
 export interface ModelToolModelUsage {
   readonly calls: number
   readonly reservedTokens: number
+  /** 已知实际加尚未报告用量的预留。 */
+  readonly budgetTokens: number
   readonly measuredCalls: number
   readonly inputTokens: number
   readonly outputTokens: number

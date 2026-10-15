@@ -33,5 +33,6 @@ export type {
   ModelRequestClientApi,
   ModelRequestClientOptions,
 } from '../impl/requests/ModelRequestClient'
+export type { ModelRequestDispatcherApi } from '../impl/requests/ModelRequestDispatcher.js'
 export type { ModelUsageApi } from '../impl/requests/ModelUsage'
 export type { ProviderRequestCompilerApi } from '../impl/requests/ProviderRequestCompiler.js'

@@ -51,7 +51,7 @@ class NodeCodeRunner implements CodeRunnerApi {
   public async run(
     request: CodeRunRequest,
     dispatch: CodeRunDispatch,
-    onLog: (text: string) => void,
+    onLog: (text: string, stream?: 'stdout' | 'stderr' | 'combined') => void,
     signal?: AbortSignal
   ): Promise<CodeRunOutcome> {
     const failure = (code: string, message: string): CodeRunOutcome => ({
@@ -116,7 +116,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       started = performance.now()
       timer = timers.after(Math.max(0, remaining), () => {
         timedOut = true
-        controller.abort(new AppError('TIMEOUT', 'Node 程序达到执行时限。'))
+        controller.abort(new AppError('TIMEOUT', `Node 程序达到执行时限 ${request.timeoutMs} ms。`))
       })
     }
     const holdClock = () => {
@@ -417,7 +417,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       processStarted = true
       const result = await this.options.execute(
         processRequest,
-        (text) => {
+        (text, stream) => {
           if (stopping || isUndefined(log)) return
           try {
             const buffer = Buffer.from(text)
@@ -428,7 +428,7 @@ class NodeCodeRunner implements CodeRunnerApi {
               logTruncated = true
               controller.abort(new AppError('LIMIT', '输出归档达到上限，程序已停止。'))
             }
-            onLog(text.slice(-NodeExecutionLimits.previewChars))
+            onLog(text, stream)
           } catch (error) {
             Log.tag('NodeCodeRunner').caught('无法归档或投递进程输出，执行已取消', error)
             controller.abort(error)
@@ -496,7 +496,7 @@ class NodeCodeRunner implements CodeRunnerApi {
               ? describeChildExit(result.exitCode, result.stderr)
               : {
                   code,
-                  message: `Node 执行失败：${code}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
+                  message: `Node 执行失败：${code}${timedOut ? `（程序计时时限 ${request.timeoutMs} ms，直接等待子进程也计时）` : ''}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
                 })
         ),
       }

@@ -6,6 +6,7 @@ import { ContextLimits, StoreLimits } from '@velaros-ai/context'
 import { ContextMaintenanceReadLimits } from '../../../dist/act/runtime/contract/constants.js'
 import {
   ContextPatchLimits,
+  ExecutionWaitLimits,
   GoalLimits,
   MemoryReadLimits,
   MemoryRecallLimits,
@@ -18,6 +19,7 @@ import {
 } from '../../../dist/act/system/contract/constants.js'
 import {
   VelarContextMaterialsModule,
+  VelarExecutionsModule,
   VelarModulesModule,
   VelarSystemGoalModule,
   VelarSystemMemoryPersistentModule,
@@ -89,6 +91,12 @@ const documented = (surface, fragments) => {
     )
 }
 test('INV-20 声明里写给模型的上限与常量表一致', () => {
+  documented(VelarExecutionsModule, [
+    `waitMs 为整数毫秒 1..${ExecutionWaitLimits.maxMs}，默认 ${ExecutionWaitLimits.defaultMs}`,
+  ])
+  assert.equal(VelarExecutionsModule.operations.wait.effects, 'none')
+  assert.equal(VelarExecutionsModule.operations.read.effects, 'none')
+  assert.equal(VelarExecutionsModule.operations.stop.effects, 'write')
   documented(VelarSystemGoalModule, [
     `objective 最多 ${GoalLimits.objectiveChars} 个字符`,
     `reason 最多 ${GoalLimits.reasonChars} 个字符`,

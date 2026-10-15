@@ -30,7 +30,7 @@ export interface NodeCodeRunnerOptions {
   /** 启动真实 Node，将 source 作为 ESM 标准输入；signal 必须终止并回收进程树。 */
   execute(
     request: NodeProcessRequest,
-    onOutput: (text: string) => void,
+    onOutput: (text: string, stream?: 'stdout' | 'stderr' | 'combined') => void,
     signal: AbortSignal
   ): Promise<NodeProcessResult>
 }
@@ -53,6 +53,8 @@ export interface KernelScriptSessionOptions {
   readonly packages?: readonly ScriptPackageDefinition[]
   /** 由宿主设定，本次脚本不能通过参数改变执行权限。 */
   readonly mode?: 'execute' | 'observe'
+  /** 宿主核准的本次程序计时；省略采用缺省值，源码引用不携带此调度参数。 */
+  readonly timeoutMs?: number
   /** 持有统一注册、调用和日志的运行时。 */
   readonly runtime: OperationRuntimeApi
   /** 显式选择通过隔离验收的运行器。 */
@@ -63,6 +65,8 @@ export interface KernelScriptSessionOptions {
   readonly executionId: string
   /** 宿主可显式收窄本次执行的能力范围；省略时使用挂载模块。 */
   readonly allowedModules?: readonly string[]
+  /** 同一执行身份上的即时输出，仅作为资料。 */
+  readonly events?: CodeSurfaceEventSink
 }
 
 /** 程序发出的一次能力调用。 */
@@ -128,10 +132,9 @@ export interface CodeSurfaceEventSink {
   /**
    * 程序打了一行日志。
    *
-   * 界面要**实时**看见它（用户得知道程序跑到哪了）；模型那边不走这条路，
-   * 日志随最终结果一起回——一次 tool_use 只能回一个 tool_result，中途没法单独成轮。
+   * 宿主可展示实时输出，也可按执行身份合并为有界过程快照；输出自身不获得指令权限。
    */
-  logged?(line: string): void
+  logged?(line: string, stream?: 'stdout' | 'stderr' | 'combined'): void
 }
 
 /**
@@ -154,7 +157,7 @@ export interface CodeRunnerApi {
   run(
     request: CodeRunRequest,
     dispatch: CodeRunDispatch,
-    onLog: (line: string) => void,
+    onLog: (line: string, stream?: 'stdout' | 'stderr' | 'combined') => void,
     signal?: AbortSignal
   ): Promise<CodeRunOutcome>
 }

@@ -18,6 +18,14 @@ export interface NodeRuntimePackageReference {
   readonly source: 'workspace' | 'runtime'
   /** 实际包清单的版本；清单未声明或无法读取时省略。 */
   readonly version?: string
+  /** 显式选择本次宿主安装的导入名，不受工作区同名依赖覆盖。 */
+  readonly runtimeImport?: string
+  /** runtimeImport 对应安装清单的实际版本。 */
+  readonly runtimeVersion?: string
+  /** runtimeImport 对应安装的清单，可核对 exports 和类型入口。 */
+  readonly runtimePackageJson?: string
+  /** runtimeImport 对应版本的说明入口。 */
+  readonly runtimeReadme?: string
   /** 提供后备安装的 Skill；工作区依赖及基础包省略。 */
   readonly skill?: string
   /** 实际包目录，可读取随版本安装的文档、声明和实现。 */

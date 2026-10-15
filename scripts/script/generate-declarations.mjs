@@ -753,7 +753,7 @@ function generateStandard(entry) {
  * 只放数据、不 import 任何东西，渲染进程也能加载；类型就地写明，不让能力包为这一行去依赖代码面。
  */
 function surfaceModules() {
-  const files = new Map()
+  const files = new Map(nativeSurfaceBlocks)
   for (const surface of CodeSurfaces) {
     const result = generated.get(surface.namespace)
     if (!result || result.problems.length > 0) continue
@@ -829,6 +829,7 @@ function findStrayTags(marked) {
 }
 
 let failed = false
+const nativeSurfaceBlocks = new Map()
 // 执行入口是传输合同，单独从类型生成；不将它注册成可 import 的应用能力。
 if (!OutputOption) {
   const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
@@ -853,14 +854,7 @@ if (!OutputOption) {
     }
   )
   const target = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
-  const text = `${SurfaceFileHeader}\n\n${declarations.join('\n')}`
-  if (!ts.sys.fileExists(target) || readFileSync(target, 'utf8') !== text) {
-    if (ShouldWrite) writeFileSync(target, text)
-    else {
-      failed = true
-      process.stdout.write('✗ 原生执行入口 schema 与正式类型不一致；运行 bun run generate:script\n')
-    }
-  }
+  nativeSurfaceBlocks.set(target, [declarations.join('\n').trimEnd()])
 }
 const marked = new Set()
 const generated = new Map()

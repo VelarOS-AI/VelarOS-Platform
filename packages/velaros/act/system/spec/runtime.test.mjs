@@ -116,11 +116,18 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
   assert.deepEqual(listing.value.items[0].exports, [
     'modules',
     'programs',
+    'executions',
     'goal',
     'memory',
     'store',
   ])
-  assert.equal(listing.value.items[0].operations.length, 28)
+  assert.equal(listing.value.items[0].operations.length, 31)
+  assert.deepEqual(
+    listing.value.items[0].operations
+      .filter((operation) => operation.startsWith('executions.'))
+      .sort(),
+    ['executions.read', 'executions.stop', 'executions.wait']
+  )
   assert.equal(listing.value.items[0].binding, undefined)
   const result = await execute(
     f.session,

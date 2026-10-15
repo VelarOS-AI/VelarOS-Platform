@@ -1,15 +1,18 @@
+import type { ContextRef } from '@velaros-ai/context'
 import { isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { GoalLimits } from '../../system/contract/constants.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
+import type { GoalFrame } from '../types/goal.js'
 
 /** 校验目标状态迁移和读取版本，再生成不共享可变数据的下一版。 */
 export function goalChange(
   prior: Nullable<GoalState>,
   input: GoalUpdate | GoalControl,
   now: number,
-  id: string
+  id: string,
+  source: 'model' | 'user' = 'model'
 ): GoalState {
   if (!Number.isSafeInteger(input.baseRevision) || input.baseRevision < 0)
     throw new AppError('GOAL_INPUT', '目标版本无效')
@@ -48,7 +51,9 @@ export function goalChange(
     reason.length > GoalLimits.reasonChars ||
     (!control &&
       !isUndefined(input.objective) &&
-      (!isString(input.objective) || !objective || objective.length > GoalLimits.objectiveChars))
+      (!isString(input.objective) ||
+        !objective ||
+        (source === 'model' && objective.length > GoalLimits.objectiveChars)))
   )
     throw new AppError('GOAL_INPUT', '目标内容或状态无效')
   if (objective && prior && (prior.status === 'active' || prior.status === 'paused'))
@@ -74,4 +79,24 @@ export function goalChange(
     createdAt: creating ? now : prior!.createdAt,
     updatedAt: now,
   }
+}
+
+/** 只缩减展示：整字段换成可召回引用，原文、版本与状态不裁剪；最小元数据允许超出软预算。 */
+export function goalFrame(goal: GoalState, ref: ContextRef, maxChars: number): GoalFrame {
+  let frame: GoalFrame = goal
+  if (JSON.stringify(frame).length <= maxChars) return frame
+  const fields = (['objective', 'reason'] as const).toSorted(
+    (left, right) => JSON.stringify(goal[right]).length - JSON.stringify(goal[left]).length
+  )
+  for (const field of fields) {
+    const { [field]: _body, ...metadata } = frame
+    const next: GoalFrame = {
+      ...metadata,
+      [`${field}InRecord`]: { ref, pointer: `/${field}`, chars: goal[field].length },
+    }
+    if (JSON.stringify(next).length >= JSON.stringify(frame).length) continue
+    frame = next
+    if (JSON.stringify(frame).length <= maxChars) break
+  }
+  return frame
 }

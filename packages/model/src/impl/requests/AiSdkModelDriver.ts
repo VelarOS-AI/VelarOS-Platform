@@ -24,11 +24,16 @@ import {
 import { withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
 import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
 import { awaitModelStreamValue } from '../../utils/wire/stream-cancel.js'
-import { responseTerminalKind, responseTerminalUsage } from '../../utils/wire/stream-terminal.js'
+import {
+  responseTerminalFailure,
+  responseTerminalKind,
+  responseTerminalUsage,
+} from '../../utils/wire/stream-terminal.js'
 
 import { ModelInputEstimator } from './ModelInputEstimator.js'
 
 class AiSdkModelDriver implements ModelDriver {
+  public readonly dispatchAware = true
   public readonly nativeTools = true
   public readonly id: string
   public readonly limits: ModelDriverLimits
@@ -57,13 +62,16 @@ class AiSdkModelDriver implements ModelDriver {
 
   public async *stream(
     request: ModelTurnRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {
     let reportedUsage: Optional<Extract<ModelTurnDelta, { type: 'usage' }>>
     let usagePublished = false
     let responseTerminal: Optional<string>
+    let responseFailure: Optional<AppError>
     let iterator: Optional<AsyncIterator<unknown>>
     let sample: Optional<ModelInputSample>
+    let dispatchFailed = false
     try {
       sample = await this.inputSample(request)
       signal.throwIfAborted()
@@ -71,14 +79,22 @@ class AiSdkModelDriver implements ModelDriver {
       const openaiOptions: Record<string, boolean> = {}
       if (format.type === 'json') openaiOptions.strictJsonSchema = false
       if (usesResponseContinuation(this.options.model)) openaiOptions.store = false
+      const messages = restoreResponseContinuations(
+        modelRequestEncoder.messages(request),
+        this.options.model,
+        this.id
+      ).messages
+      try {
+        await beforeDispatch?.()
+      } catch (error) {
+        dispatchFailed = true
+        throw error
+      }
+      signal.throwIfAborted()
       const result = streamText({
         model: this.options.model,
         system: request.instructions,
-        messages: restoreResponseContinuations(
-          modelRequestEncoder.messages(request),
-          this.options.model,
-          this.id
-        ).messages,
+        messages,
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
         tools:
@@ -153,6 +169,8 @@ class AiSdkModelDriver implements ModelDriver {
         if (part.type === 'raw' && usesResponseContinuation(this.options.model)) {
           responseTerminal ??= responseTerminalKind(part.rawValue)
           reportedUsage ??= responseTerminalUsage(part.rawValue)
+          if (responseTerminal === 'response.failed')
+            responseFailure ??= responseTerminalFailure(part.rawValue)
         }
         if (
           part.type === 'finish' &&
@@ -173,6 +191,7 @@ class AiSdkModelDriver implements ModelDriver {
           yield reportedUsage
         }
         signal.throwIfAborted()
+        if (responseFailure) throw responseFailure
         if (finish) throw new AppError('PROTOCOL', '供应商在结束响应后继续发送内容')
         if (part.type === 'reasoning-start' && reasoningChars > 0) reasoningBreak = true
         let reasoning = ''
@@ -289,6 +308,7 @@ class AiSdkModelDriver implements ModelDriver {
       }
       yield finish
     } catch (error) {
+      if (dispatchFailed) throw error
       Log.tag('ActRuntime').debug('AiSdkModelDriver 已进入异常处理或降级分支')
       if (reportedUsage && !usagePublished) {
         usagePublished = true

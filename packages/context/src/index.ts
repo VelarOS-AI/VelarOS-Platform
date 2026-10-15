@@ -114,6 +114,12 @@ export type {
   ContextRecordSnapshot,
 } from './types/context.js'
 export type {
+  ContextLegacyModelUsage,
+  ContextModelBudgetRequest,
+  ContextModelBudgetState,
+  ContextModelRequestIdentity,
+} from './types/model-budget.js'
+export type {
   StoreCard,
   StoreChange,
   StoreChanges,

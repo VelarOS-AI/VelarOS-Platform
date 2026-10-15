@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { NodeDefaultPackages } from '../contract/constants.js'
+import { NodeDefaultPackages, NodeRuntimePackagePrefix } from '../contract/constants.js'
 import type { NodeRuntimePackage, NodeRuntimePackageReference } from '../types/environment.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
 
@@ -41,13 +41,25 @@ class NodeRuntimePackages implements NodeRuntimePackagesApi {
           name: pkg.name,
           source,
           version: optionalWhen(isString, manifest.version),
+          runtimeImport: `${NodeRuntimePackagePrefix}${pkg.name}`,
+          runtimeVersion: optionalWhen(isString, manifest.version),
+          runtimePackageJson: packageJson,
+          runtimeReadme: optionalWhen(Boolean(readme), join(root, readme ?? '')),
           skill: pkg.skill,
           root,
           packageJson,
           readme: optionalWhen(Boolean(readme), join(root, readme ?? '')),
         }
       } catch (cause) {
-        return { name: pkg.name, source, root, packageJson, error: shapeOperationFailure(cause) }
+        return {
+          name: pkg.name,
+          source,
+          runtimeImport: `${NodeRuntimePackagePrefix}${pkg.name}`,
+          runtimePackageJson: packageJson,
+          root,
+          packageJson,
+          error: shapeOperationFailure(cause),
+        }
       }
     })
   }

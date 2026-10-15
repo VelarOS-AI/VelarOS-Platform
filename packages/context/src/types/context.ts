@@ -1,5 +1,7 @@
 import type { ContextViewForms } from '../contract/constants.js'
 
+import type { ContextModelBudgetState } from './model-budget.js'
+
 /**
  * 上下文原始记录的来源与用途。
  * @AgentView
@@ -386,6 +388,8 @@ export interface ContextTaskUsage {
   readonly inputTokens: number
   readonly outputTokens: number
   readonly unmeasuredCalls: number
+  /** 逐请求结算后的预算占用；已知实际加未知预留，旧任务底座保持保守。 */
+  readonly budgetTokens?: number
   /** 用来限每小时用量。 */
   readonly hourly?: ContextHourlyUsage
 }
@@ -403,6 +407,8 @@ export interface ContextArtifactProvenance {
   readonly complete: boolean
 }
 export interface ContextTaskState {
+  /** 宿主的持久请求账本，与任务检查点在同一次 CAS 中更新。 */
+  readonly modelBudget?: ContextModelBudgetState
   /** 最近一次领域核查的不可变记录；正文注明原任务、视图和宿主完成对象的版本。 */
   readonly completionRef?: ContextRef
   /** 当前逻辑任务使用的持久 store ID；由 Runtime 维护，展示时重新核验权限。 */
@@ -487,8 +493,8 @@ export interface ContextCompletionResult {
   readonly verified: boolean
   /** 可供下一轮或宿主处理的具体原因。 */
   readonly reason: string
-  /** 未完成时应补读修复、刷新、等待输入或处理容量。 */
-  readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
+  /** 未完成时应修复、刷新、等待真实输入、处理容量或因基础设施错误终止。 */
+  readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity' | 'failed'
   /** 领域实际检查的有界范围与原始依据，不把模型的完成主张当作证明。 */
   readonly report?: ContextVerificationReport
 }

@@ -541,7 +541,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       timeoutMs?: number
       maxOutputChars: number
       stdin?: string
-      onOutput?: (text: string) => void
+      onOutput?: (text: string, stream?: 'stdout' | 'stderr') => void
       abortSignal?: AbortSignal
     }
   ): Promise<{
@@ -588,7 +588,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       if (!text || !options.onOutput) return
       // 宿主看运行中的输出只是展示：它出错不能打断命令，也不能让这段输出丢出结果。
       try {
-        options.onOutput(text)
+        options.onOutput(text, stream)
       } catch (error) {
         log.warn('命令运行中输出的接收方处理失败', { error })
       }

@@ -6,6 +6,12 @@ import type { NpmClientApi } from '@velaros-ai/velaros/execution'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 
 import type { StoreSessionApi } from '../impl/StoreSession.js'
+import type {
+  ExecutionRead,
+  ExecutionSnapshot,
+  ExecutionTarget,
+  ExecutionWait,
+} from '../types/executions.js'
 import type { GoalState, GoalUpdate } from '../types/goal.js'
 import type {
   ContextMaintenancePage,
@@ -93,7 +99,7 @@ export interface ModulesHost {
   kernel(): Pick<OperationRuntimeApi, 'list' | 'describe'>
 }
 /** 系统包共用宿主的两个窄端口。 */
-export interface SystemHost extends GoalHost, ModulesHost, ProgramsHost {
+export interface SystemHost extends GoalHost, ModulesHost, ProgramsHost, ExecutionsHost {
   /** 当前运行时固定的 npm 环境。 */
   readonly packageEnvironment?: EnvironmentRegistryApi
   /** 持久状态存储可用时装配的共享能力。 */
@@ -288,4 +294,38 @@ export interface GoalOperationContext {
   readonly goal: GoalLedger
   /** 调用的取消信号。 */
   readonly abortSignal: AbortSignal
+}
+
+/** 当前调用会话的作业口，由 Runtime 按逻辑任务核对。 */
+export interface ExecutionsHost {
+  /** 按真实会话取得当前任务的执行端口。 */
+  readonly executions?: (sessionId: string) => ExecutionsPort
+}
+/** 执行状态与停止走同一持久身份，绝不自动重放源码。 */
+export interface ExecutionsPort {
+  /** 检查当前任务身份后读取状态与有界输出。 */
+  read(input: ExecutionRead, signal: AbortSignal): Promise<ExecutionSnapshot>
+  /** 有界等待已有执行终态；取消只结束本次等待，不能等待调用者自身。 */
+  wait(
+    input: ExecutionWait,
+    callerExecutionId: string,
+    signal: AbortSignal
+  ): Promise<ExecutionSnapshot>
+  /** 请求定向停止，防止调用者停止自己。 */
+  stop(
+    input: ExecutionTarget,
+    callerExecutionId: string,
+    signal: AbortSignal
+  ): Promise<ExecutionSnapshot>
+}
+/** 宿主绑定当前执行身份，模型参数不能伪造调用者。 */
+export interface ExecutionsOperationContext {
+  /** 已固定当前会话的执行控制口。 */
+  readonly executions: ExecutionsPort
+  /** 实际发起调用的程序身份。 */
+  readonly executionId: string
+  /** 当前调用的取消信号。 */
+  readonly abortSignal: AbortSignal
+  /** 记录停止请求是否已经提交。 */
+  recordEffect(effect: 'none' | 'committed' | 'unknown'): void
 }

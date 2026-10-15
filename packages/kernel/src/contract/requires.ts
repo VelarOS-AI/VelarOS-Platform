@@ -485,6 +485,8 @@ import type {
 
 /** 主干依赖的中立模型驱动；供应商编码与使用量归驱动负责。 */
 export interface ModelDriver {
+  /** 驱动会在准备及排队之后、实际发送之前等待 beforeDispatch；旧驱动按调用入口保守记账。 */
+  readonly dispatchAware?: boolean
   /** 支持完整的原生工具往返；未声明的自定义驱动使用文本协议。 */
   readonly nativeTools?: boolean
   /** 请求所用的模型身份。 */
@@ -494,7 +496,11 @@ export interface ModelDriver {
   /** 按最终编码估算输入，包括工具 schema 与协议开销。 */
   estimate(request: ModelTurnRequest): Promise<ModelInputEstimate>
   /** 发起一轮请求；工具参数完整到达后才能输出 call。 */
-  stream(request: ModelTurnRequest, signal: AbortSignal): AsyncIterable<ModelTurnDelta>
+  stream(
+    request: ModelTurnRequest,
+    signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>
+  ): AsyncIterable<ModelTurnDelta>
 }
 
 import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../types/approval.js'

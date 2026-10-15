@@ -5,6 +5,7 @@ import { isSystemMember } from '../utils/members.js'
 
 import { contextModule } from './ContextModule.js'
 import { environmentModule } from './EnvironmentModule.js'
+import { executionsModule } from './ExecutionsModule.js'
 import { goalModule } from './GoalModule.js'
 import { memoryModule } from './MemoryModule.js'
 import { modulesModule } from './ModulesModule.js'
@@ -31,6 +32,7 @@ class SystemModules implements SystemModulesApi {
           ]
         : []),
       modulesModule.create(host),
+      ...(host.executions ? [executionsModule.create(host)] : []),
       ...(host.programCatalog ? [programsModule.create(host)] : []),
       goalModule.create(host),
       memoryModule.create(host, false),

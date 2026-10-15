@@ -13,8 +13,15 @@ export type { ShellCommandPolicyApi } from './impl/ShellCommandPolicy.js'
 export { shellCommandPolicy } from './impl/ShellCommandPolicy.js'
 
 // ── 产品面：本机实现的接口（值在 `./local` 入口）──────────────────
+export type { LocalNodeValidationOptions } from './contract/requires.js'
 export type { ConfinedShellRunnerApi } from './impl/local/ConfinedShellRunner.js'
 export type { LocalShellHostApi } from './impl/local/LocalShellHost.js'
+export type { NodeValidationHostApi } from './impl/local/NodeValidationHost.js'
+export type {
+  NodeValidationFile,
+  NodeValidationRequest,
+  NodeValidationResult,
+} from './types/node-validation.js'
 
 // ── 注入面：空间要给的东西，与本机实现的配置 ──────────────────────
 export type {

@@ -15,7 +15,12 @@ export interface NativeProgramOptions {
 
 /** 一次性执行独有的调度与租约选项。 */
 export interface NativeExecutionOptions extends NativeProgramOptions {
+  /** 省略时短等待后返回作业身份，true 立即后台受理，false 优先等待完整结果；新输入、并行程序收束或子任务进展可提前返回，原程序继续且同批依赖顺序不变。 */
   readonly async?: boolean
+  /** 空 code 时检查、等待或停止已有执行；等待通道与检查/停止通道独立，可在普通执行槽满时使用。 */
+  readonly control?: NativeExecutionControl
+  /** 本次程序计时，整数毫秒 1..86400000；省略为 120000，父任务期限和取消优先。 */
+  readonly timeoutMs?: number
   readonly retain?: ScriptRetention
 }
 
@@ -50,3 +55,21 @@ export interface NativeDoneInput {
   readonly completion?: string
   readonly message?: string
 }
+
+/** 当前任务作业控制，源码由宿主固定；调用者不能在控制通道运行自定义代码。 */
+export type NativeExecutionControl =
+  | {
+      readonly kind: 'read'
+      readonly executionId: string
+      readonly cursor?: number
+      readonly limit?: number
+    }
+  | { readonly kind: 'stop'; readonly executionId: string }
+  | {
+      readonly kind: 'wait'
+      readonly executionId: string
+      /** 有界等待终态，整数毫秒 1..60000，默认 60000；到期返回当前状态。 */
+      readonly waitMs?: number
+      readonly cursor?: number
+      readonly limit?: number
+    }

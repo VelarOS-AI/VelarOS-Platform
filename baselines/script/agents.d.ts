@@ -1,6 +1,6 @@
 /**
  * 在同一个运行时上派发子任务：它继承你的能力与权限，自己开一个会话去做，预算由宿主配置（profiles 列出）。
- * 派发、等待、回答、续跑、引导、取消都只能在 execute 里做；wait 不额外调用模型，遇到子任务提问或结束就返回。
+ * 派发、等待、回答、续跑、引导、取消都只能在 execute 里做；wait/waitAny 不额外调用模型，遇到子任务提问或结束就返回。并行任务用 waitAny 逐个接收可处理结果，同时继续推进独立工作。
  */
 declare module 'velaros:agents' {
   /** 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。
@@ -26,6 +26,10 @@ declare module 'velaros:agents' {
   /** 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。
    */
   export function wait(input: AgentJobTarget): Promise<AgentJob>
+
+  /** 等集合内任一子任务提问或结束，立即返回该 job；ids 最多 32 个且不能重复。仅结束本次等待，其余子任务继续运行；下一次等待传入仍未处理的任务。
+   */
+  export function waitAny(input: AgentJobTargets): Promise<AgentJob>
 
   /** 取消子任务并等它收束。
    */
@@ -97,6 +101,11 @@ declare module 'velaros:agents' {
   /** 指定一个子任务：id 是 start 返回的 job.id。 */
   interface AgentJobTarget {
     readonly id: string
+  }
+
+  /** 要等待的子任务，ids 需要 1 到 32 个互不重复的 job.id；返回后把已处理的任务移出下一次等待集合。 */
+  interface AgentJobTargets {
+    readonly ids: readonly string[]
   }
 
   /** 给正在跑的子任务发引导：input 不能为空，它会抢占子任务还没采纳的那次模型回复。 */

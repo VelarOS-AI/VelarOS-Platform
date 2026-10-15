@@ -49,16 +49,16 @@ function terminalBody(
     if (cancel) {
       try {
         void reader.cancel(reason).catch(() => {
-          Log.tag('ModelStream').debug('Responses 终态后的传输取消未完成')
+          Log.tag('ModelStream').debug('Responses 响应流的传输取消未完成')
         })
       } catch {
-        Log.tag('ModelStream').debug('Responses 终态后的传输清理未完成')
+        Log.tag('ModelStream').debug('Responses 响应流的传输清理未完成')
       }
     }
     try {
       reader.releaseLock()
     } catch {
-      Log.tag('ModelStream').debug('Responses 终态后的传输清理未完成')
+      Log.tag('ModelStream').debug('Responses 响应流的传输清理未完成')
     }
   }
   const append = (part: Uint8Array) => {

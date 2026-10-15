@@ -30,6 +30,21 @@ export function checkAgentMaterials(materials: Optional<readonly unknown[]>): vo
     throw new AppError('VALIDATION', `materials 最多 ${AgentsLimits.materials} 条`)
 }
 
+/** 等待集合先整体验证，避免空集合挂起、重复等待或超过有界资源数量。 */
+export function checkAgentTargets(ids: readonly string[]): void {
+  if (
+    !isArray(ids) ||
+    isEmpty(ids) ||
+    ids.length > AgentsLimits.waitTargets ||
+    ids.some((id) => !isString(id) || isBlank(id)) ||
+    new Set(ids).size !== ids.length
+  )
+    throw new AppError(
+      'VALIDATION',
+      `ids 需要 1 到 ${AgentsLimits.waitTargets} 个互不重复的非空 job.id`
+    )
+}
+
 const FieldKinds = ['text', 'number', 'boolean', 'choice']
 
 /** 提问的选项与表单核对：数量、id 唯一、文字长度和互斥关系不对就直接拒绝，一次交互都不发起。 */

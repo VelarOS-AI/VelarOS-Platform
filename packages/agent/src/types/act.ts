@@ -1,4 +1,8 @@
-import type { ContextProjection, ContextVerificationReport } from '@velaros-ai/context'
+import type {
+  ContextCompletionResult,
+  ContextProjection,
+  ContextVerificationReport,
+} from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
@@ -121,7 +125,7 @@ export type ActRunEvent =
       readonly completed: boolean
       readonly verified: boolean
       readonly reason: string
-      readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
+      readonly recovery?: ContextCompletionResult['recovery']
       /** 领域实际核查的范围与依据；成功、失败和未知项均按真实检查记录。 */
       readonly report?: ContextVerificationReport
     }
@@ -157,6 +161,8 @@ export interface ActContextPolicy {
   readonly minTurns?: number
   /** 工作窗口上限（token），与模型输入上限取较小值，默认 200000。 */
   readonly windowTokens?: number
+  /** 已接受历史帧占输入工作窗口的上限比例，默认 1，仅受总容量限制；0 每次重建。按同一驱动校准后的边际输入估算，非供应商账单。 */
+  readonly retainedFrameRatio?: number
   /** 供应商超窗拒绝与完成检查的修复次数，默认 2。 */
   readonly recoveryAttempts?: number
 }
@@ -216,4 +222,10 @@ export type ActComposedFrame = {
   readonly body: string
   /** 出线历史是否保留了此前的帧；增长只在同一布局之间比较。 */
   readonly retained: boolean
+  /** 本地历史帧计量供请求审计；重建前的超额值另存，账单仍取真实 usage。 */
+  readonly retention: {
+    readonly limitTokens: number
+    readonly historyTokens: number
+    readonly rebuiltFromTokens?: number
+  }
 } & CompiledModelRequest

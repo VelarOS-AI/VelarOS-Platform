@@ -5,7 +5,7 @@ export const AgentTuning = Object.freeze({
   /** 限速错误没带等待时长时，等这么久再预留。 */
   rateRetryMs: 60_000,
 })
-/** 上下文规划的缺省值；宿主经 frames.policy 覆盖前四项。 */
+/** 上下文规划的缺省值；宿主经 frames.policy 覆盖容量与恢复策略。 */
 export const ContextPlanTuning = Object.freeze({
   /** 无可延续的可发送前缀时，剩余不足这么多轮就封段；也是严重预警阈值。 */
   foldTurns: 2,
@@ -15,6 +15,8 @@ export const ContextPlanTuning = Object.freeze({
   minTurns: 4,
   /** 工作窗口上限，token；与模型输入上限取较小值。 */
   windowTokens: 200_000,
+  /** 历史状态帧的独立工作窗比例；在有界窗口内保留已接受前缀。 */
+  retainedFrameRatio: 1,
   /** 供应商超窗拒绝与完成检查的修复次数。 */
   recoveryAttempts: 2,
   /** 估算校准取最近多少次实测。 */

@@ -29,6 +29,8 @@ export const ScriptProtocolLimits = Object.freeze({
   maxBlocks: 32,
   /** 后台脚本默认并发数。 */
   concurrency: 4,
+  /** 模型普通执行的返回窗口，超时后程序继续运行。 */
+  yieldAfterMs: 10_000,
 })
 
 /** 可信观察探测的有限时限与身份长度。 */
@@ -167,4 +169,22 @@ export const RuntimeSearchProfile = Object.freeze({
   reads: 128,
   /** 真实证据读取字节上限。 */
   readBytes: 2_000_000,
+})
+
+/** 执行观测的存储、读取与控制通道边界。 */
+export const ExecutionObservabilityLimits = Object.freeze({
+  /** 每次读取默认字符数。 */
+  pageChars: 8000,
+  /** 每次读取字符上限。 */
+  maxPageChars: 16000,
+  /** 每个作业保留的末尾字符数。 */
+  retainedChars: 32768,
+  /** 交错输出保留段数上限。 */
+  chunks: 512,
+  /** 独立控制程序的最大计时。 */
+  controlTimeoutMs: 5000,
+  /** 持久输出合并的毫秒间隔。 */
+  flushMs: 1000,
+  /** 过程输出合并唤醒的毫秒间隔。 */
+  wakeMs: 60000,
 })
