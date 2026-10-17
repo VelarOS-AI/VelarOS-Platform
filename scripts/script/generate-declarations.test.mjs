@@ -88,6 +88,22 @@ test('method call examples in AgentView preserve complete comments and every gen
       }
     )
     const emitted = readFileSync(join(root, 'output/fixture.d.ts'), 'utf8')
+    writeFileSync(
+      join(root, 'packages/fixture/src/operations.ts'),
+      source.replace(/\r?\n/g, '\r\n')
+    )
+    execFileSync(
+      process.execPath,
+      [join(root, 'scripts/script/generate-declarations.mjs'), '--write', '--out', 'output-crlf'],
+      { cwd: root, timeout: 30000, encoding: 'utf8' }
+    )
+    assert.equal(readFileSync(join(root, 'output-crlf/fixture.d.ts'), 'utf8'), emitted)
+    writeFileSync(join(root, 'output-crlf/fixture.d.ts'), emitted.replace(/\n/g, '\r\n'))
+    execFileSync(
+      process.execPath,
+      [join(root, 'scripts/script/generate-declarations.mjs'), '--out', 'output-crlf'],
+      { cwd: root, timeout: 30000, encoding: 'utf8' }
+    )
     const input = ts.createSourceFile('operations.ts', source, ts.ScriptTarget.Latest, true)
     const expected = input.statements
       .find((node) => ts.isInterfaceDeclaration(node) && node.name.text === 'FixtureApi')

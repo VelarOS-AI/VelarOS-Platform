@@ -27,6 +27,7 @@ import {
   builtinSkillDirectories,
   BuiltinSkillNames,
   createSkillRegistry,
+  createSkillSession,
   skillCapabilityModules,
   skillComposition,
   type SkillRegistryApi,
@@ -142,6 +143,51 @@ test('INV-1 纯说明目录和标准 npm 包使用相同安装索引，来源目
     'Read the actual diff.'
   )
   await lease.release()
+})
+
+test('INV-9 按需会话发现全部 Skill，未勾选也能加载，重复并发加载只取得一份环境', async () => {
+  const f = await fixture()
+  const directory = await source(f.root, 'lazy-proof', '1.0.0', {
+    instructions: 'SKILL.md',
+    packages: ['lazy-proof'],
+  })
+  await writeFile(join(directory, 'SKILL.md'), 'Only read this when the task needs proof.')
+  await f.registry.install({ directory }, new AbortController().signal)
+  const session = await createSkillSession({ registry: f.registry })
+  const signal = new AbortController().signal
+  const context: SkillsOperationContext = {
+    registry: f.registry,
+    lease: session,
+    session,
+    cwd: f.root,
+    sourceScope: 'unrestricted',
+    abortSignal: signal,
+    authorize: async () => {
+      throw new Error('Read-only loading must not ask permission')
+    },
+    recordEffect: () => {},
+  }
+  expect(session.skills).toHaveLength(0)
+  expect(session.environment.packages).toHaveLength(0)
+  expect((await skillsOperations.list(context))[0]!.available).toBe(true)
+  const before = await session.acquireRuntime(signal)
+  expect(before.environment.skills).toHaveLength(1)
+  const loaded = await Promise.all([
+    skillsOperations.load({ name: 'lazy-proof' }, context),
+    skillsOperations.load({ name: 'lazy-proof' }, context),
+  ])
+  expect(loaded[0]!.instructions).toBe('Only read this when the task needs proof.')
+  expect(loaded[1]).toEqual(loaded[0])
+  expect(session.skills).toHaveLength(1)
+  expect(before.environment.packages).toHaveLength(0)
+  expect((await session.acquireRuntime(signal)).environment.packages[0]!.name).toBe('lazy-proof')
+  await f.registry.remove('lazy-proof')
+  await expect(skillsOperations.load({ name: 'lazy-proof' }, context)).rejects.toThrow('未安装')
+  expect(await Bun.file(join(loaded[0]!.directory, 'SKILL.md')).exists()).toBe(true)
+  await Promise.all([session.release(), session.release()])
+  await expect(session.activate('lazy-proof', signal)).rejects.toThrow('已关闭')
+  await f.registry.collect()
+  expect(await Bun.file(join(loaded[0]!.directory, 'SKILL.md')).exists()).toBe(false)
 })
 
 test('INV-1 依赖安装失败与取消都保留原来的安装版本', async () => {
@@ -279,6 +325,14 @@ test('INV-5 公开包冲突不会覆盖另一个 Skill 的版本', async () => {
   const selected = await selectAll(f.registry)
   await expect(f.registry.acquire(selected)).rejects.toThrow('已由 first 提供')
   for (const item of selected) await (await f.registry.acquire([item])).release()
+  const session = await createSkillSession({ registry: f.registry })
+  const signal = new AbortController().signal
+  expect(session.skills).toHaveLength(0)
+  await session.activate('first', signal)
+  await expect(session.activate('second', signal)).rejects.toThrow('已由 first 提供')
+  expect((await session.activate('first', signal)).manifest.name).toBe('first')
+  expect(session.skills).toHaveLength(1)
+  await session.release()
 })
 
 test('INV-2 两个注册实例从当前索引发布，互不丢失已安装包', async () => {

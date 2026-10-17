@@ -23,7 +23,7 @@ import {
 import { containedSkillPath, readSkillText } from '../utils/package-io.js'
 
 /** @AgentView Skill 开发、管理与按需加载。guide 查询内置开发规范和示例；list 查询安装状态；load 读取本轮可用 Skill。
- * 标准 npm 直接 import。安装只加入本机库；宿主按会话选择加载的 Skill 和能力。卸载和升级立即阻止旧代次后续的能力调用。
+ * 标准 npm 直接 import。按需会话允许自行加载已安装 Skill，无须用户勾选；load 后从下一次程序执行使用新增 npm 包。卸载和升级立即阻止旧代次后续的能力调用。
  */
 export interface SkillsOperationsApi {
   /** @AgentView 查询内置文档，默认 authoring；management 说明生命周期，example 返回可用的示例文件。
@@ -76,7 +76,9 @@ export class SkillsOperations implements SkillsOperationsApi {
 
   public async list(ctx: SkillsOperationContext): Promise<SkillSummary[]> {
     ctx.abortSignal.throwIfAborted()
-    return (await ctx.registry.list()).map((item) => skillSummary(item, ctx.lease.skills))
+    return (await ctx.registry.list()).map((item) =>
+      skillSummary(item, ctx.session?.catalog ?? ctx.lease.skills)
+    )
   }
 
   public async load(input: SkillNameInput, ctx: SkillsOperationContext): Promise<SkillLoaded> {
@@ -84,7 +86,9 @@ export class SkillsOperations implements SkillsOperationsApi {
     const { name } = parseSkillInput(SkillOperationInputs.name, input)
     const current = (await ctx.registry.list()).find((item) => item.manifest.name === name)
     if (!current) throw new AppError('NOT_FOUND', `Skill 未安装：${name}`)
-    const selected = ctx.lease.skills.find((item) => item.generation === current.generation)
+    const selected = ctx.session
+      ? await ctx.session.activate(name, ctx.abortSignal)
+      : ctx.lease.skills.find((item) => item.generation === current.generation)
     if (!selected)
       throw new AppError('UNAVAILABLE', `Skill ${name} 未被本轮选择；请在会话中选择后加载`)
     const file = selected.manifest.contribution.instructions

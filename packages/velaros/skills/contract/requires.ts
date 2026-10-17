@@ -3,9 +3,17 @@ import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { NodeCodeRunnerOptions, NodeRuntimePackage } from '@velaros-ai/script'
 import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 
-import type { PluginSkillSource, SkillMutation } from '../types/skills.js'
+import type { PluginSkillSource, SkillMutation, SkillSelection } from '../types/skills.js'
 
-import type { SkillEnvironmentLease, SkillRegistryApi } from './provides.js'
+import type { SkillEnvironmentLease, SkillRegistryApi, SkillSessionApi } from './provides.js'
+
+/** 宿主允许模型按需加载本机已安装的 Skill；显式选择只决定预加载项。 */
+export interface SkillSessionOptions {
+  /** 本机安装库，加载时重新核对固定代次。 */
+  readonly registry: SkillRegistryApi
+  /** 工作区默认项与显式选择；其余安装项保留按需加载资格。 */
+  readonly selection?: readonly SkillSelection[]
+}
 
 /** 包管理器由宿主选择，安装在独立暂存目录并返回完整锁文件。 */
 export interface SkillDependencyInstaller {
@@ -54,6 +62,8 @@ export interface SkillCapabilityModuleOptions {
   readonly registry: SkillRegistryApi
   /** 当前会话持有的安装代次和依赖集合。 */
   readonly lease: SkillEnvironmentLease
+  /** 按需模式的发现目录和加载所有者；不提供时沿用固定授权租约。 */
+  readonly session?: SkillSessionApi
   /** 第三方代码使用同一受控 Node 执行口。 */
   readonly node: NodeCodeRunnerOptions
   /** 宿主已绑定资源的能力；只装配租约授予的模块。 */
@@ -68,6 +78,8 @@ export interface SkillsOperationContext {
   readonly registry: SkillRegistryApi
   /** 当前会话已选择的环境租约。 */
   readonly lease: SkillEnvironmentLease
+  /** 按需模式允许模型加载目录中的 Skill，无须先在聊天框勾选。 */
+  readonly session?: SkillSessionApi
   /** 相对来源路径的解析根。 */
   readonly cwd: string
   /** 沙箱开启时，来源目录和真实符号链接必须在工作区内。 */

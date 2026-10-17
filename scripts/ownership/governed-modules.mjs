@@ -70,6 +70,7 @@ export const GovernedModules = [
         'SkillCapabilityModules.ts',
         'NpmSkillInstaller.ts',
         'SkillsOperations.ts',
+        'SkillSession.ts',
       ],
       ['BuiltinSkills.ts'],
       ['SkillPackageFiles.ts'],

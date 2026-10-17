@@ -4,10 +4,11 @@ import { guide, list, load, validate, install } from 'velaros:skills'
 console.log(await guide())
 console.log(await list())
 
-// 按名称加载已经在本轮环境中的 Skill。
+// 按任务需要加载已安装 Skill；按需模式不要求用户先勾选。
 const needed = ['guided-review']
 console.log(await Promise.all(needed.map((name) => load({ name }))))
 
-// 在工作目录用 Node 创建包后，静态校验并安装；安装后在会话中选择使用。
+// 新加载的 npm 包从下一次程序执行开始直接 import。
+// 在工作目录用 Node 创建包后，静态校验并安装；新安装代次在下一轮进入目录。
 console.log(await validate({ directory: './my-skill' }))
 console.log(await install({ directory: './my-skill' }))

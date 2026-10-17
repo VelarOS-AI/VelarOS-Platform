@@ -23,7 +23,8 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
   ): Promise<readonly OperationModuleDefinition[]> {
     const modules: OperationModuleDefinition[] = []
     const mountedHosts = new Set<string>()
-    for (const skill of options.lease.skills) {
+    const catalog = options.session?.catalog ?? options.lease.skills
+    for (const skill of catalog) {
       for (const name of skill.manifest.contribution.hostCapabilities ?? []) {
         if (
           !skill.grants.includes(name) ||
@@ -32,11 +33,14 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
         )
           continue
         mountedHosts.add(name)
-        const owners = options.lease.skills.filter((owner) => owner.grants.includes(name))
+        const owners = catalog.filter((owner) => owner.grants.includes(name))
         const host = options.hostModules?.[name]
-        if (!host || host.binding.moduleId !== name)
+        if (!host || host.binding.moduleId !== name) {
+          if (options.session && !options.lease.skills.some((owner) => owner.grants.includes(name)))
+            continue
           throw new AppError('UNAVAILABLE', `Skill 需要的宿主能力未绑定：${name}`)
-        const authorize = async (): Promise<void> => {
+        }
+        const authorize = async (signal: AbortSignal): Promise<void> => {
           const grants = await Promise.allSettled(
             owners.map((owner) =>
               options.registry.assertGranted(owner.manifest.name, owner.generation, name)
@@ -44,6 +48,14 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
           )
           if (!grants.some((grant) => grant.status === 'fulfilled'))
             throw new AppError('PERMISSION', `Skill 能力授权已失效：${name}`)
+          if (options.session) {
+            const available = owners.filter((_, index) => grants[index]!.status === 'fulfilled')
+            const owner =
+              available.find((candidate) =>
+                options.lease.skills.some((active) => active.generation === candidate.generation)
+              ) ?? available[0]!
+            await options.session.activate(owner.manifest.name, signal)
+          }
         }
         const operations: Record<string, OperationDefinition> = Object.create(null)
         for (const [operation, definition] of Object.entries(host.operations)) {
@@ -51,14 +63,14 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
             ...definition,
             prepare: definition.prepare
               ? async (input, context) => {
-                  await authorize()
+                  await authorize(context.signal)
                   return definition.prepare!(input, context)
                 }
               : undefined,
             observe: definition.observe
               ? async (input, context) => {
                   try {
-                    await authorize()
+                    await authorize(context.signal)
                   } catch (error) {
                     context.recordEffect('none')
                     throw error
@@ -68,13 +80,13 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
               : undefined,
             reconcile: definition.reconcile
               ? async (invocation, signal) => {
-                  await authorize()
+                  await authorize(signal)
                   return definition.reconcile!(invocation, signal)
                 }
               : undefined,
             run: async (input, context) => {
               try {
-                await authorize()
+                await authorize(context.signal)
               } catch (error) {
                 context.recordEffect('none')
                 throw error
@@ -102,6 +114,9 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
         const runner = createNodeCodeRunner({
           ...options.node,
           runtime: options.lease.environment,
+          acquireRuntime: options.session
+            ? (signal) => options.session!.acquireRuntime(signal)
+            : options.node.acquireRuntime,
           execute: (request, output, signal) => options.node.execute(request, output, signal),
         })
         const operations: Record<string, OperationDefinition> = Object.create(null)
@@ -112,6 +127,7 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
             run: async (input, context) => {
               context.signal.throwIfAborted()
               try {
+                await options.session?.activate(skill.manifest.name, context.signal)
                 await options.registry.assertGranted(
                   skill.manifest.name,
                   skill.generation,

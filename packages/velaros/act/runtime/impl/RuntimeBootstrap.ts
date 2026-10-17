@@ -194,7 +194,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             : undefined
           : code
       const languageOwners =
-        options.skills?.lease.skills.filter((skill) =>
+        (options.skills?.session?.catalog ?? options.skills?.lease.skills)?.filter((skill) =>
           skill.grants.some((name) => name.startsWith('project:language:'))
         ) ?? []
       const query = codeIndex
@@ -234,6 +234,8 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             if (!checks.some((check) => check.status === 'fulfilled'))
               throw new AppError('PERMISSION', `语言 Skill 授权已失效：${grant}`)
           }
+          for (const owner of languageOwners)
+            await options.skills?.session?.activate(owner.manifest.name, context.abortSignal)
           return query(input, context)
         },
       }

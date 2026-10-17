@@ -34,9 +34,16 @@
 //      （模块级数字常量、`?? 数字`、参数缺省写数字、名字像超时/上限/缓冲的属性写数字；0 与 1 除外）；
 //      工具定义里的数字引常量表（示例与 1000、1024 这类单位换算除外），说明文字里不写两位以上的裸数字。
 //  13. 模型和用户看得到的文字用中文：报错文字与 message、suggestedNextAction、note 字段不许是纯英文句子。
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync as nativeReadFileSync, statSync } from 'node:fs'
 import { builtinModules } from 'node:module'
-import { basename, dirname, extname, join, relative, resolve } from 'node:path'
+import {
+  basename,
+  dirname,
+  extname,
+  join as nativeJoin,
+  relative as nativeRelative,
+  resolve as nativeResolve,
+} from 'node:path'
 
 import ts from 'typescript'
 
@@ -47,6 +54,14 @@ import {
   ReadmeSections,
 } from './governed-modules.mjs'
 
+// 登记表和 import 使用 /，文本检查使用 LF；先统一本机路径与检出换行。
+const join = (...parts) => nativeJoin(...parts).replaceAll('\\', '/')
+const relative = (...parts) => nativeRelative(...parts).replaceAll('\\', '/')
+const resolve = (...parts) => nativeResolve(...parts).replaceAll('\\', '/')
+const readFileSync = (file, encoding) => {
+  const content = nativeReadFileSync(file, encoding)
+  return typeof content === 'string' ? content.replace(/\r\n/g, '\n') : content
+}
 const RepoRoot = resolve(import.meta.dir, '../..')
 /** 生成的 contract/surface.ts 的第一行；手写的文件冒充不了。 */
 const GeneratedSurfaceHeader =

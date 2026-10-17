@@ -4,6 +4,7 @@ import type { SkillActivation } from '../types/skills.js'
 
 export type { SkillCapabilityModulesApi } from '../impl/SkillCapabilityModules.js'
 export type { SkillRegistryApi } from '../impl/SkillRegistry.js'
+export type { SkillSessionApi } from '../impl/SkillSession.js'
 export type { SkillsOperationsApi } from '../impl/SkillsOperations.js'
 
 /** 会话持有的环境租约，释放前安装文件和依赖保持可用。 */

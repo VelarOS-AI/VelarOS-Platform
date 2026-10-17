@@ -1,5 +1,5 @@
 /** Skill 开发、管理与按需加载。guide 查询内置开发规范和示例；list 查询安装状态；load 读取本轮可用 Skill。
- * 标准 npm 直接 import。安装只加入本机库；宿主按会话选择加载的 Skill 和能力。卸载和升级立即阻止旧代次后续的能力调用。
+ * 标准 npm 直接 import。按需会话允许自行加载已安装 Skill，无须用户勾选；load 后从下一次程序执行使用新增 npm 包。卸载和升级立即阻止旧代次后续的能力调用。
  */
 declare module 'velaros:skills' {
   /** 查询内置文档，默认 authoring；management 说明生命周期，example 返回可用的示例文件。

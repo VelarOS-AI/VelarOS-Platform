@@ -71,7 +71,15 @@ function createProgram(directory) {
   const config = ts.readConfigFile(resolve(packageRoot, 'tsconfig.json'), ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, packageRoot)
   const roots = [...parsed.fileNames, ...workspaceSourceFiles(packageRoot)]
-  return ts.createProgram(roots, { ...parsed.options, noEmit: true, skipLibCheck: true })
+  return createSourceProgram(roots, { ...parsed.options, noEmit: true, skipLibCheck: true })
+}
+
+/** 源码与模板使用统一换行，避免 Windows 检出改变模型合同与内容哈希。 */
+function createSourceProgram(roots, options) {
+  const host = ts.createCompilerHost(options)
+  const read = host.readFile
+  host.readFile = (file) => read(file)?.replace(/\r\n/g, '\n')
+  return ts.createProgram(roots, options, host)
 }
 
 /**
@@ -353,10 +361,12 @@ function uniqueSourceDeclaration(program, name) {
  * 只在这件能力自己的源码目录里找：别的单元有同名接口也不会被错拿（签名引用到的类型另按符号解析，见 `resolveDeclaration`）。
  */
 function findOperationInterface(program, name, home) {
+  // TypeScript 的源文件路径统一使用 /；Windows 的 resolve 返回反斜杠。
+  const directory = home.replaceAll('\\', '/')
   for (const file of program.getSourceFiles()) {
     if (
       file.isDeclarationFile ||
-      !file.fileName.startsWith(home) ||
+      !file.fileName.replaceAll('\\', '/').startsWith(directory) ||
       file.fileName.includes('/node_modules/')
     )
       continue
@@ -643,7 +653,7 @@ function generate(surface) {
     .flat()
     .map((name) => resolve(RepoRoot, templateHome, name))
   const templateParts = templatePaths.map((path) =>
-    ts.sys.fileExists(path) ? readFileSync(path, 'utf8').trim() : ''
+    ts.sys.fileExists(path) ? readFileSync(path, 'utf8').replace(/\r\n/g, '\n').trim() : ''
   )
   const template = templateParts.includes('') ? '' : templateParts.join('\n')
   if (template.length === 0) {
@@ -833,7 +843,7 @@ const nativeSurfaceBlocks = new Map()
 // 执行入口是传输合同，单独从类型生成；不将它注册成可 import 的应用能力。
 if (!OutputOption) {
   const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
-  const program = ts.createProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
+  const program = createSourceProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
   const checker = program.getTypeChecker()
   const declarations = ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone'].map(
     (name) => {
@@ -878,7 +888,9 @@ for (const surface of CodeSurfaces) {
     continue
   }
 
-  const current = ts.sys.fileExists(outputPath) ? readFileSync(outputPath, 'utf8') : null
+  const current = ts.sys.fileExists(outputPath)
+    ? readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n')
+    : null
   if (current === result.text) {
     process.stdout.write(
       `✓ ${surface.namespace}: ${result.methodCount} 个方法、${result.typeCount} 个类型，与源码一致\n`
@@ -910,7 +922,9 @@ for (const entry of StandardSurfaces) {
     )
     continue
   }
-  const current = ts.sys.fileExists(outputPath) ? readFileSync(outputPath, 'utf8') : null
+  const current = ts.sys.fileExists(outputPath)
+    ? readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n')
+    : null
   if (current === result.text) {
     process.stdout.write(
       `✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型，与源码一致\n`
@@ -927,7 +941,9 @@ for (const entry of StandardSurfaces) {
 // 空间挂它时交给代码面的门；和上面那份 baselines 是同一份。写到别的目录（--out）时不碰包里的文件。
 if (!OutputOption) {
   for (const [path, text] of surfaceModules()) {
-    const current = ts.sys.fileExists(path) ? readFileSync(path, 'utf8') : null
+    const current = ts.sys.fileExists(path)
+      ? readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
+      : null
     if (current === text) continue
     if (ShouldWrite) {
       writeFileSync(path, text)
