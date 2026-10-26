@@ -1,6 +1,6 @@
 # 浏览器日常任务与 ScriptAct Bridge
 
-Platform 负责可复用桥合同和当前 Runtime 执行链；Extension 负责无界面 CLI Host、浏览器传输、日常任务 UI 与权限决策。具体产品使用和 wire 消息见 [Extension Bridge](../../../VelarOS-Extension/docs/scriptact-platform-bridge.md)。
+Platform 负责可复用桥合同和当前 Runtime 执行链；Extension 负责无界面 CLI Host、浏览器传输、日常任务 UI 与权限决策。本文说明 Platform 侧的桥接边界；具体产品使用和 wire 消息由 Extension 仓库的 `docs/scriptact-platform-bridge.md` 维护。
 
 ## 当前链路
 
