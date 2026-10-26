@@ -528,18 +528,20 @@ function scanReleaseIdentityBoundary() {
         'persist-credentials: false',
         'bun-version-file: package.json',
         'contents: write',
-        'GH_TOKEN: ${{ github.token }}',
+        'GH_TOKEN: ${{ secrets.PLATFORM_RELEASE_TOKEN || github.token }}',
         'run: bun run release:github "$RELEASE_TAG"',
         'cancel-in-progress: false',
       ],
       forbiddenMarkers: [
         'push:',
         'pull_request',
-        'secrets.',
+        'secrets[',
+        'secrets: inherit',
         'packages: write',
         '--skip-build',
         'continue-on-error:',
       ],
+      forbiddenPatterns: [/secrets\.(?!PLATFORM_RELEASE_TOKEN\b)/u],
     },
     {
       file: '.github/workflows/ci.yml',
@@ -638,6 +640,11 @@ function scanReleaseIdentityBoundary() {
     const source = readFileSync(contractPath, 'utf8').replaceAll('\r\n', '\n')
     const missing = contract.markers.filter((marker) => !source.includes(marker))
     const forbidden = (contract.forbiddenMarkers ?? []).filter((marker) => source.includes(marker))
+    forbidden.push(
+      ...(contract.forbiddenPatterns ?? [])
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => pattern.source)
+    )
     if (missing.length === 0 && forbidden.length === 0) continue
     violations.push({
       rule: 'release-artifact-identity',

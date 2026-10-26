@@ -20,6 +20,6 @@ GitHub Release 资产可匿名下载，不依赖 GitHub Packages 的读取令牌
 
 ## 权限与回归
 
-工作流只允许在官方仓库 main 上手动触发，发布 job 仅授予 contents:write，使用短期 GITHUB_TOKEN，不配置个人令牌。Actions 固定到提交 SHA，checkout 不持久化凭据。并发发布串行且不会取消正在进行的发布。
+工作流只允许在官方仓库 main 上手动触发，发布 job 仅授予 contents:write，默认使用短期 GITHUB_TOKEN。若目标提交与 main 的工作流文件不同，GitHub 创建 Release 可能额外要求 Workflows 写权限；可通过仓库 secret `PLATFORM_RELEASE_TOKEN` 提供限于本仓库、具备 Contents 与 Workflows 写权限的发布身份。该凭据只注入正式发布步骤，不进入 PR 检查；临时配置应在发布后移除。权限规则见 [GitHub Release API](https://docs.github.com/en/rest/releases/releases#create-a-release)。Actions 固定到提交 SHA，checkout 不持久化凭据。并发发布串行且不会取消正在进行的发布。
 
 `bun run check:release-source` 覆盖参数、仓库地址、轻量/annotated tag、远端不一致、检查期间身份变化、完整检查的顺序和失败传播。架构门继续独立核对发布工作流、完整检查调用与同一 tarball 发布，不再强制禁用托管 CI。

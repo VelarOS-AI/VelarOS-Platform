@@ -41,5 +41,5 @@ jobs:
       - name: Verify, check, pack and publish GitHub release
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PLATFORM_RELEASE_TOKEN || github.token }}
         run: bun run release:github "$RELEASE_TAG"
