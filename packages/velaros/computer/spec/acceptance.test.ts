@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 桌面控制的不变量验收：`spec/invariants.md` 里每一条「测试」档的检验器。
  * 用例名以 INV-<编号> 开头，`check:module-ownership` 按这个前缀核对登记表与实现对得上。
@@ -25,6 +26,8 @@ import {
   SnapshotId,
   typecheckTemplate,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 describe('运行时', () => {
   test('INV-1 ensureAvailable 永不抛，环境问题一律是结构化结果', async () => {
@@ -157,7 +160,7 @@ describe('模型面', () => {
     expect(ComputerDeclarations).not.toContain('screenSize')
   })
 
-  test('INV-11 声明从源码生成、只放出五个操作；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
+  it('INV-11 声明从源码生成、只放出五个操作；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
     expect(VelarComputerModule.specifier).toBe('velaros:computer')
     expect(VelarComputerModule.declarations).toBe(ComputerDeclarations)
     // 放出的方法就是空间挂上的那些操作。

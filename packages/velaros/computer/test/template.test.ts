@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 代码模版是给模型看的日常用法示例：只过类型检查不够，结果取错一个键、写法跑不通，模型照着写就跟着错。
  * 仓库里没有真桌面，所以在假桌面上把每个函数经真的代码面会话调一遍（和模型交程序是同一条路），
@@ -10,11 +11,13 @@ import { describe, expect, test } from 'bun:test'
 
 import { computerDesk, Display, runModelProgram, SnapshotId } from '../spec/support'
 
+const it = test.skipIf(process.platform === 'win32')
+
 /** 模版原文：程序就是它，后面接上这次要调的那几个函数。 */
 const Template = readFileSync(resolve(import.meta.dir, '../template.js'), 'utf8')
 
 describe('代码模版', () => {
-  test('每个函数照写法跑通：截图交给模型看、按截图坐标动手、快捷键、截图过期时重截', async () => {
+  it('每个函数照写法跑通：截图交给模型看、按截图坐标动手、快捷键、截图过期时重截', async () => {
     const desk = computerDesk()
     const { result, attachments } = await runModelProgram(
       desk,
@@ -65,7 +68,7 @@ export const status = await whyUnavailable()
     expect(attachments).toHaveLength(3)
   }, 60_000)
 
-  test('桌面控制不可用时 whyUnavailable 交回的是给用户看的原因', async () => {
+  it('桌面控制不可用时 whyUnavailable 交回的是给用户看的原因', async () => {
     const desk = computerDesk({
       available: { available: false, reason: 'helper-missing', detail: null },
     })

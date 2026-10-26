@@ -212,7 +212,7 @@ describe('坏头与读不了的路径', () => {
     )
     expect(result.files[0]).toEqual({
       path: 'shot.png/child.png',
-      error: { code: 'NOT_FOUND', message: '文件不存在：shot.png/child.png' },
+      error: { code: 'NOT_FOUND', message: `文件不存在：${join('shot.png', 'child.png')}` },
     })
   })
 })

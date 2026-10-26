@@ -222,3 +222,39 @@ test.skipIf(process.platform === 'win32')(
   },
   5000
 )
+
+test.each([undefined, 'configured'])(
+  'Windows shell self-check does not pin shared environment; explicit selection=%s',
+  async (selected) => {
+    const host = { Path: 'C:\\tools', ...(selected ? { VELAROS_SHELL_PATH: selected } : {}) }
+    const base = resolver(async () => ({
+      env: { Path: 'C:\\refreshed' },
+      revision: 'new',
+      refreshed: true,
+    }))
+    const environment = new ShellEnvironment(
+      { platform: 'win32', env: () => host },
+      {
+        ...base,
+        resolveReady: async (options) =>
+          resolved({
+            ...options?.env,
+            VELAROS_SHELL_PATH: 'auto-selected',
+            VELAROS_SHELL_READY: '1',
+          }),
+      }
+    )
+    try {
+      for (let i = 0; i < 2; i++) {
+        const snapshot = i ? await environment.refresh() : await environment.getEnvironment()
+        expect(snapshot.Path).toBe('C:\\refreshed')
+        expect(snapshot.VELAROS_SHELL_PATH).toBe(selected)
+        expect(snapshot.VELAROS_SHELL_READY).toBeUndefined()
+        expect((await environment.resolveShell()).env.VELAROS_SHELL_PATH).toBe('auto-selected')
+      }
+      expect(host.Path).toBe('C:\\tools')
+    } finally {
+      await environment.dispose()
+    }
+  }
+)

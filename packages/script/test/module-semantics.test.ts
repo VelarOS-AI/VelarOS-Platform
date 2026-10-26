@@ -9,6 +9,9 @@ import { createKernelScriptSession } from '../src/impl/KernelScriptSession'
 import { nodeSubprocessCodeRunner } from '../src/impl/NodeSubprocessCodeRunner'
 import { readModuleSpecifiers } from '../src/utils/module-form'
 
+// executeNativeNode / nodeSubprocessCodeRunner 的进程组宿主仅支持 POSIX。
+const it = test.skipIf(process.platform === 'win32')
+
 const cases = [
   {
     name: '动态 import 延迟求值且未执行分支不初始化模块',
@@ -162,7 +165,7 @@ const cases = [
 ] as const
 
 for (const fixture of cases)
-  test(`INV-40 原生模块语义：${fixture.name}`, async () => {
+  it(`INV-40 原生模块语义：${fixture.name}`, async () => {
     const session = createCodeSurfaceSession({
       checker: codeProgramChecker,
       runner: nodeSubprocessCodeRunner,
@@ -175,7 +178,7 @@ for (const fixture of cases)
     expect(outcome.rawValue).toEqual(fixture.value)
   })
 
-test('INV-40 namespace 重导出语法降级保持后续错误行号', async () => {
+it('INV-40 namespace 重导出语法降级保持后续错误行号', async () => {
   const session = createCodeSurfaceSession({
     checker: codeProgramChecker,
     runner: nodeSubprocessCodeRunner,
@@ -195,7 +198,7 @@ test('INV-40 namespace 重导出语法降级保持后续错误行号', async () 
   expect(outcome.result.failed?.message).toContain('line proof')
 })
 
-test('INV-40 namespace 桥只链接原来授权的能力并保持直接导入身份', async () => {
+it('INV-40 namespace 桥只链接原来授权的能力并保持直接导入身份', async () => {
   let calls = 0
   const session = createCodeSurfaceSession({
     checker: codeProgramChecker,
@@ -244,7 +247,7 @@ test('INV-40 动态字面量依赖按 AST 收集，保留首次出现顺序', ()
   ).toEqual(['./a.js', 'velaros:proof', './b.js'])
 })
 
-test('INV-40 动态字面量能力进入统一绑定，计算模块名不扩大授权', async () => {
+it('INV-40 动态字面量能力进入统一绑定，计算模块名不扩大授权', async () => {
   let calls = 0
   const records = new Map<string, InvocationRecord>()
   const key = (value: { sessionId: string; id: string }) =>
@@ -370,7 +373,7 @@ test('INV-40 动态字面量路径在任何能力副作用前预检并保留目�
   expect(calls).toBe(0)
 })
 
-test('INV-40 原生动态导入加载标准库，缺失模块可 catch 并保留目标路径', async () => {
+it('INV-40 原生动态导入加载标准库，缺失模块可 catch 并保留目标路径', async () => {
   const session = createCodeSurfaceSession({
     checker: codeProgramChecker,
     runner: nodeSubprocessCodeRunner,

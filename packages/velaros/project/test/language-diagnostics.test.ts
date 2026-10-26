@@ -505,7 +505,11 @@ describe('language_diagnostics 多配置与并发', () => {
       paths.map((path) => join(workspace, path))
     )
 
-    expect(groups.map((group) => group.map((path) => path.slice(workspace.length + 1)))).toEqual([
+    expect(
+      groups.map((group) =>
+        group.map((path) => path.slice(workspace.length + 1).replaceAll('\\', '/'))
+      )
+    ).toEqual([
       ['app.ts'],
       ['pkg/src/b.ts', 'pkg/tests/t0.ts', 'pkg/tests/t1.ts'],
       ['pkg/tests/helper.js'],

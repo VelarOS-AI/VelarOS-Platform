@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 会话之间交活、传话的验收测试：每一条对应 spec/invariants.md 里的一个编号。只测对外承诺的行为，实现细节的测试在 test/ 目录。
  * 宿主用 `spec/support.ts` 的假宿主：会话表、ask 与 tell 怎么回都能按用例换，收到的入参与取消信号都记下来。
@@ -23,6 +24,8 @@ import {
   sessionsSpace,
   typecheckTemplate,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 describe('交给宿主的东西', () => {
   test('INV-1 list 不收入参，照宿主的原样交回这个对话里的会话，宿主调一次', async () => {
@@ -278,7 +281,7 @@ describe('入参核对', () => {
 })
 
 describe('代码面 sessions 命名空间', () => {
-  test('INV-8 模型写的程序照生成的声明调到真实操作：list、同时 ask 两件、tell；失败时程序接得住 error.code', async () => {
+  it('INV-8 模型写的程序照生成的声明调到真实操作：list、同时 ask 两件、tell；失败时程序接得住 error.code', async () => {
     const space = sessionsSpace()
     const result = await runModelProgram(
       space,

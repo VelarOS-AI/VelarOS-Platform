@@ -461,21 +461,28 @@ describe('会话与守护进程', () => {
     await service.dispose()
   })
 
-  test('INV-15 descriptor 与锁文件 0600、运行目录 0700', async () => {
-    const runtimeDirectory = join(await temporaryRuntimeDirectory(), 'runtime')
-    const paths = createDefaultKernelDaemonPaths('velaros-kernel-spec', runtimeDirectory)
-    const service = serviceWithTwoCapabilities()
-    await service.start()
-    const daemon = new KernelLocalDaemon({ paths, service })
-    await daemon.start()
-
-    expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o700)
-    expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
-    expect((await stat(paths.lockPath)).mode & 0o777).toBe(0o600)
-
-    await daemon.dispose()
-    await service.dispose()
-  })
+  test.skipIf(process.platform === 'win32')(
+    'INV-15 POSIX descriptor 与锁文件 0600、运行目录 0700',
+    async () => {
+      const runtimeDirectory = join(await temporaryRuntimeDirectory(), 'runtime')
+      const paths = createDefaultKernelDaemonPaths('velaros-kernel-spec', runtimeDirectory)
+      const service = serviceWithTwoCapabilities()
+      await service.start()
+      const daemon = new KernelLocalDaemon({ paths, service })
+      try {
+        await daemon.start()
+        expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o700)
+        expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
+        expect((await stat(paths.lockPath)).mode & 0o777).toBe(0o600)
+      } finally {
+        try {
+          await daemon.dispose()
+        } finally {
+          await service.dispose()
+        }
+      }
+    }
+  )
 
   test('INV-16 单实例锁：活着的持有者不会被抢', async () => {
     const runtimeDirectory = join(await temporaryRuntimeDirectory(), 'runtime')

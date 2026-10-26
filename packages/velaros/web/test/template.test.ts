@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 代码模版是给模型看的日常用法示例：只过类型检查不够，结果取错一个键、写法跑不通，模型照着写就跟着错。
  * 这里把模版的每个函数接在假无头浏览器上，经真的代码面会话调一遍——和模型交程序是同一条路；搜索结果与网页都是写好的，钟是假钟。
@@ -10,6 +11,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { VelarWebModule, WebErrorCodes } from '../index'
 import type { FakeSite } from '../spec/support'
 import { runModelProgram, scanOf, webSpace } from '../spec/support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** 模版里读的那一页：三百段，每五十段有一段讲 event loop，整页比一次最多能读的还长，readAll 要接着读。 */
 const Learn = Array.from({ length: 300 }, (_, index) =>
@@ -41,7 +44,7 @@ function site(url: string): FakeSite {
 }
 
 describe('代码模版', () => {
-  test('每个函数照写法跑通：搜一次、读开头、整页读完、找段落、搜完读原文、两边都搜不了时照实说', async () => {
+  it('每个函数照写法跑通：搜一次、读开头、整页读完、找段落、搜完读原文、两边都搜不了时照实说', async () => {
     const space = webSpace({ sites: site })
     const outcome = await runModelProgram(
       space,

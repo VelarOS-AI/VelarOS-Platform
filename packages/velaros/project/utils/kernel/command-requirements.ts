@@ -3,7 +3,7 @@
  * 让 ripgrep 搜索、命令型校验器这类调用方回退到别的路径，而不是把退出码当成普通失败。
  */
 import { existsSync } from 'node:fs'
-import { delimiter, extname, isAbsolute, resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 
 import { isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -13,6 +13,8 @@ import type {
   CommandToolRequirement,
   MissingCommandDetectionInput,
 } from '../../types/provider.js'
+
+import { executableCandidates, executablePathEntries } from './executable-path.js'
 
 /** 生成一条「命令不在 PATH 里」的要求；没给原因时用缺省说明。 */
 export function createMissingCommandRequirement(input: {
@@ -106,17 +108,10 @@ export function isWindowsCommandAvailable(
   cwd: LooseOptional<string>,
   env: NodeJS.ProcessEnv
 ): boolean {
-  const candidates = extname(command)
-    ? [command]
-    : [
-        command,
-        ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
-          .split(';')
-          .map((extension) => `${command}${extension.toLowerCase()}`),
-      ]
+  const candidates = [command, ...executableCandidates(command, 'win32', env)]
   const roots =
     isAbsolute(command) || command.includes('/') || command.includes('\\')
       ? [cwd ?? process.cwd()]
-      : (env.PATH ?? '').split(delimiter).filter(Boolean)
+      : executablePathEntries('win32', env)
   return roots.some((root) => candidates.some((candidate) => existsSync(resolve(root, candidate))))
 }

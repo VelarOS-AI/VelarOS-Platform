@@ -192,7 +192,7 @@ export class LocalShellHost implements LocalShellHostApi {
         release: release(),
         homeDir: homedir(),
       },
-      shells: this.detectShells(shell.env),
+      shells: this.detectShells(await this.hostEnvironment()),
       shell: {
         path: shell.shellPath,
         kind: shell.kind,
@@ -353,7 +353,7 @@ export class LocalShellHost implements LocalShellHostApi {
     const result: ShellEnvironmentRefreshResult = {
       shell: shell.shellPath,
       runtime: toShellDescriptor(shell),
-      shells: this.detectShells(shell.env),
+      shells: this.detectShells(await this.hostEnvironment()),
       variableCount: Object.keys(shell.env).length,
       refreshedAt: Date.now(),
       revision,
@@ -405,6 +405,11 @@ export class LocalShellHost implements LocalShellHostApi {
       this.environment?.resolveShell() ??
       this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
     )
+  }
+
+  /** 枚举使用宿主原始环境，避免自检后注入的 VELAROS_SHELL_PATH 把候选缩成默认 shell。 */
+  private hostEnvironment(): Promise<NodeJS.ProcessEnv> {
+    return this.environment?.getEnvironment() ?? Promise.resolve(process.env)
   }
 
   /** 本机可用的 shell 清单，按挑选优先顺序，第一个就是默认的那个；只查文件不试跑，所以每回合报告都付得起。 */

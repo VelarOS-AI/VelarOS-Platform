@@ -44,17 +44,21 @@ async function fixture(durable: boolean) {
   await chmod(join(root, 'a.txt'), 0o640)
   const transactionStatePath = durable ? join(root, '.private', 'transactions.json') : undefined
   const kernel = await createProjectKernel({ root, transactionStatePath })
-  return { kernel, transactionStatePath }
+  return {
+    kernel,
+    transactionStatePath,
+    originalMode: (await stat(join(root, 'a.txt'))).mode & 0o777,
+  }
 }
 
 test.each([false, true])(
   'byte aliases and mixed newlines survive edit, undo, and replay; durable=%s',
   async (durable) => {
-    const { kernel, transactionStatePath } = await fixture(durable)
+    const { kernel, transactionStatePath, originalMode } = await fixture(durable)
     const prepared = await kernel.prepareEdit({ operations: [replace()] })
     await kernel.applyEdit({ transactionId: prepared.transactionId })
     expect(await readFile(join(root, 'a.txt'))).toEqual(modified)
-    expect((await stat(join(root, 'a.txt'))).mode & 0o777).toBe(0o640)
+    expect((await stat(join(root, 'a.txt'))).mode & 0o777).toBe(originalMode)
     const publicObjects = JSON.stringify([
       prepared,
       kernel.getTransaction(prepared.transactionId),

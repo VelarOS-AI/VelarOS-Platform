@@ -122,7 +122,7 @@ describe('edit 的 recode', () => {
       call('project', 'edit', { steps: [{ action: 'recode', paths: ['docs/missing.txt'] }] })
     )
     expect(missing.code).toBe('TARGET_NOT_FOUND')
-    expect(missing.message).toContain('docs/missing.txt')
+    expect(missing.message).toContain(join('docs', 'missing.txt'))
     expect(missing.message).toContain('list')
     expect((await bytes('docs/a.txt')).equals(textCodec.encode(text, 'gb18030'))).toBe(true)
   })

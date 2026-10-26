@@ -2,6 +2,8 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { closeSync, openSync, writeSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import type { Socket } from 'node:net'
+import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -279,7 +281,24 @@ class NodeCodeRunner implements CodeRunnerApi {
     server.requestTimeout = 30_000
     server.headersTimeout = 10_000
     server.maxConnections = 64
+    // Bun 的 HTTP 监听暂不支持 Windows 管道；net 接受连接，HTTP 解析、鉴权与响应仍走同一个 server。
+    const pipeConnections = new Set<Socket>()
+    const pipeServer =
+      process.platform === 'win32' && process.versions.bun && server.listenerCount('connection') > 0
+        ? createNetServer((connection) => {
+            pipeConnections.add(connection)
+            connection.once('close', () => pipeConnections.delete(connection))
+            server.emit('connection', connection)
+          })
+        : undefined
+    const listener = pipeServer ?? server
+    listener.maxConnections = 64
     try {
+      if (process.platform === 'win32' && process.versions.bun && !pipeServer)
+        throw new AppError(
+          'UNAVAILABLE',
+          '当前 Bun 不支持通过本地命名管道处理 HTTP 连接；请使用 Node 宿主或支持此连接处理器的 Bun。'
+        )
       controller.signal.throwIfAborted()
       runtimeLease = await this.options.acquireRuntime?.(controller.signal)
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
@@ -373,13 +392,14 @@ class NodeCodeRunner implements CodeRunnerApi {
               'rpc.sock'
             )
       await new Promise<void>((resolve, reject) => {
-        server.once('error', reject)
-        server.listen(socket, () => {
-          server.off('error', reject)
+        listener.once('error', reject)
+        listener.listen(socket, () => {
+          listener.off('error', reject)
           resolve()
         })
       })
       server.on('error', (error) => controller.abort(error))
+      pipeServer?.on('error', (error) => controller.abort(error))
       const logPath = join(directory, 'output.log')
       log = openSync(logPath, 'wx', 0o600)
       controller.signal.throwIfAborted()
@@ -510,8 +530,9 @@ class NodeCodeRunner implements CodeRunnerApi {
       timers.dispose()
       signal?.removeEventListener('abort', cancel)
       controller.abort(new AppError('CANCELLED', '执行已经结束。'))
+      for (const connection of pipeConnections) connection.destroy()
       server.closeAllConnections()
-      if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()))
+      if (listener.listening) await new Promise<void>((resolve) => listener.close(() => resolve()))
       if (!isUndefined(log)) closeSync(log)
       if (socketDirectory) await rm(socketDirectory, { recursive: true, force: true })
       if (runtimeLease) {

@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 代码模版是给模型看的日常用法示例：只过类型检查不够，结果取错一个键、写法跑不通，模型照着写就跟着错。
  * 这里把三份模版的每个函数经真的代码面会话调一遍——和模型交程序是同一条路；空间端口是 spec/support.ts 的替身，
@@ -8,8 +9,10 @@ import { describe, expect, test } from 'bun:test'
 import { VelarBrowserModule, VelarCdpModule, VelarDevtoolsModule } from '../index.js'
 import { browserSpace, createHarness, runModelProgram } from '../spec/support.js'
 
+const it = test.skipIf(process.platform === 'win32')
+
 describe('代码模版', () => {
-  test('velaros:browser：每个函数照写法跑通', async () => {
+  it('velaros:browser：每个函数照写法跑通', async () => {
     const harness = createHarness({ open: false })
     const outcome = await runModelProgram(
       browserSpace(harness),
@@ -64,7 +67,7 @@ export const downloaded = await saveDownload()
     )
   }, 180_000)
 
-  test('velaros:devtools：每个函数照写法跑通', async () => {
+  it('velaros:devtools：每个函数照写法跑通', async () => {
     const harness = createHarness()
     const outcome = await runModelProgram(
       browserSpace(harness),
@@ -92,7 +95,10 @@ export const script = await hidePopup()
       lcp: 'LCP 分解：TTFB 40 ms',
     })
     expect(values.mocked).toContain('500')
-    expect(values.recorded).toEqual({ path: 'artifacts/recordings/checkout-flow.gif', frames: 12 })
+    expect(values.recorded).toEqual({
+      path: 'artifacts/recordings/checkout-flow.gif',
+      frames: 12,
+    })
     expect(values.script).toEqual({ id: 'script-1', enabled: false })
     expect(harness.methods()).toEqual(
       expect.arrayContaining([
@@ -104,7 +110,7 @@ export const script = await hidePopup()
     )
   }, 180_000)
 
-  test('velaros:cdp：每个函数照写法跑通', async () => {
+  it('velaros:cdp：每个函数照写法跑通', async () => {
     const harness = createHarness()
     const outcome = await runModelProgram(
       browserSpace(harness),

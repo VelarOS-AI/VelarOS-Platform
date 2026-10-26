@@ -1,4 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -8,6 +10,14 @@ import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
 import type { CodeRunRequest } from '../src/types/runner'
 import { executeNativeNode } from '../src/utils/native-process'
+
+// executeNativeNode / nodeSubprocessCodeRunner 的进程组宿主仅支持 POSIX。
+const it = test.skipIf(process.platform === 'win32')
+// 老版 Bun 没有 HTTP connection 处理器；明确拒绝，不静默悬挂等待。
+const unsupportedBridge =
+  process.platform === 'win32' &&
+  !!process.versions.bun &&
+  createServer().listenerCount('connection') === 0
 
 const request = (source: string, extra: Partial<CodeRunRequest> = {}): CodeRunRequest => ({
   source,
@@ -57,7 +67,7 @@ async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
 }
 
 describe('INV-28 宿主 Node 进程注入与回收', () => {
-  test('Execa 启动文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
+  it('Execa 启动文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
     fixture(async (root, directory) => {
       const cwd = join(root, '有 空格')
       await mkdir(cwd)
@@ -169,7 +179,7 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
       expect(result.error?.code).toBe('RUNNER_CRASHED')
       expect(result.process?.stdout).toBe('partial')
     }))
-  test('真实 Node 同步失败、输出与 Execa heredoc 使用同一进程口', () =>
+  it('真实 Node 同步失败、输出与 Execa heredoc 使用同一进程口', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
       const result = await runner.run(
@@ -192,7 +202,7 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
       expect(failed.error?.message).toBe('failed')
       expect(failed.process?.stdout).toContain('before')
     }))
-  test('超时后回收同一进程组中的子进程', () =>
+  it('超时后回收同一进程组中的子进程', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
       const result = await runner.run(
@@ -207,7 +217,7 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
       const pid = Number(await readFile(join(cwd, 'pid.txt'), 'utf8'))
       expect(() => process.kill(pid, 0)).toThrow()
     }))
-  test('输出在异常和 CPU 超时后仍保留，不会被 catch 隐藏非法输出', () =>
+  it('输出在异常和 CPU 超时后仍保留，不会被 catch 隐藏非法输出', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
       for (const tail of ["throw new Error('failed')", 'while(true){}']) {
@@ -223,7 +233,7 @@ describe('INV-28 宿主 Node 进程注入与回收', () => {
 })
 
 describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
-  test('工作区旧版 CJS 与宿主 Execa 独立导入，目录保留两种实际身份', () =>
+  it('工作区旧版 CJS 与宿主 Execa 独立导入，目录保留两种实际身份', () =>
     fixture(async (cwd, directory) => {
       const local = join(cwd, 'node_modules', 'execa')
       await mkdir(local, { recursive: true })
@@ -274,7 +284,7 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
       expect(bare.process?.stderr).toContain('execa')
     }))
 
-  test('作用域别名、公开子路径、ESM/CJS 子进程使用同一宿主快照', () =>
+  it('作用域别名、公开子路径、ESM/CJS 子进程使用同一宿主快照', () =>
     fixture(async (cwd, directory) => {
       const host = join(cwd, 'host')
       for (const name of ['tool-alias', '@tools/alias']) {
@@ -329,7 +339,7 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
       expect(hidden).toMatchObject({ ok: false, error: { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' } })
     }))
 
-  test('未授权安装和路径越界拒绝，能力与组合包不能覆盖宿主命名空间', () =>
+  it('未授权安装和路径越界拒绝，能力与组合包不能覆盖宿主命名空间', () =>
     fixture(async (cwd, directory) => {
       let launches = 0
       const runner = createNodeCodeRunner({
@@ -374,7 +384,7 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
       expect(launches).toBe(dispatched)
     }))
 
-  test('后续执行获取新租约，显式导入与目录版本同步，旧租约正常释放', () =>
+  it('后续执行获取新租约，显式导入与目录版本同步，旧租约正常释放', () =>
     fixture(async (cwd, directory) => {
       const roots = ['one', 'two'].map((version) => join(cwd, version))
       for (const [index, root] of roots.entries())
@@ -416,3 +426,141 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
       expect(released).toBe(2)
     }))
 })
+
+// 传输测试注入受控宿主端口，不依赖默认运行器的 POSIX 进程组；Windows 也必须实跑。
+function bridgeRequest(socketPath: string, token: string, body: string, path = '/') {
+  return new Promise<string>((resolve, reject) => {
+    const socket = connect(socketPath)
+    let response = ''
+    socket.setEncoding('utf8')
+    socket.setTimeout(2000, () => socket.destroy(new Error('bridge request timed out')))
+    socket.on('error', reject)
+    socket.on('data', (chunk) => {
+      response += chunk
+    })
+    socket.on('end', () => resolve(response))
+    socket.on('connect', () =>
+      socket.write(
+        `POST ${path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer ${token}\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`
+      )
+    )
+  })
+}
+
+test.skipIf(unsupportedBridge)(
+  'local capability bridge validates authorization, handles concurrent calls and closes idle connections',
+  () =>
+    fixture(async (cwd, directory) => {
+      let calls = 0
+      let socketPath = ''
+      let idleClosed: Promise<void> | undefined
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async (input) => {
+          socketPath = input.environment.VELAROS_HOST_SOCKET!
+          const token = input.environment.VELAROS_HOST_TOKEN!
+          const body = JSON.stringify({ namespace: 'demo', operation: 'read', input: 'hello' })
+          expect(await bridgeRequest(socketPath, 'wrong-token', body)).toContain('403')
+          expect(await bridgeRequest(socketPath, token, body, '/unknown')).toContain('403')
+          expect(await bridgeRequest(socketPath, token, '{}')).toContain('403')
+          expect(await bridgeRequest(socketPath, token, '{')).toContain('400')
+          const responses = await Promise.all(
+            Array.from({ length: 16 }, () => bridgeRequest(socketPath, token, body))
+          )
+          for (const response of responses) {
+            expect(response).toContain('200 OK')
+            expect(response).toContain('hello')
+          }
+          expect(
+            await bridgeRequest(socketPath, token, JSON.stringify({ value: 42 }), '/result')
+          ).toContain('200 OK')
+          const idle = connect(socketPath)
+          idleClosed = new Promise<void>((resolve) => idle.once('close', () => resolve()))
+          await new Promise<void>((resolve, reject) => {
+            idle.once('connect', resolve)
+            idle.once('error', reject)
+          })
+          return { exitCode: 0, signal: null, stdout: '', stderr: '' }
+        },
+      })
+      const outcome = await runner.run(
+        request('', { operations: { demo: ['read'] }, timeoutMs: 5000 }),
+        async (call) => {
+          calls++
+          return { value: call.input }
+        },
+        log
+      )
+      expect(outcome).toMatchObject({ ok: true, value: 42 })
+      expect(calls).toBe(16)
+      await idleClosed
+      await expect(bridgeRequest(socketPath, '', '{}')).rejects.toThrow()
+    })
+)
+
+test.skipIf(unsupportedBridge)(
+  'local capability bridge cancels pending calls and closes sockets at timeout',
+  () =>
+    fixture(async (cwd, directory) => {
+      let pending: Promise<string> | undefined
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async (input, _output, signal) => {
+          pending = bridgeRequest(
+            input.environment.VELAROS_HOST_SOCKET!,
+            input.environment.VELAROS_HOST_TOKEN!,
+            JSON.stringify({ namespace: 'demo', operation: 'hang', input: null })
+          )
+          // 连接被取消时可能以 EOF 或 reset 结束；两种情况都必须被回收。
+          pending.catch(() => {})
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true })
+          )
+          return { exitCode: null, signal: null, stdout: '', stderr: '', aborted: true }
+        },
+      })
+      const outcome = await runner.run(
+        request('', { operations: { demo: ['hang'] }, timeoutMs: 1000 }),
+        () => new Promise(() => {}),
+        log
+      )
+      expect(outcome).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } })
+      expect(outcome.pendingCalls).toHaveLength(1)
+      await pending?.catch(() => {})
+    })
+)
+
+test.skipIf(process.platform !== 'win32')(
+  'default POSIX executor refuses Windows rather than launching an unowned process',
+  () => {
+    expect(() =>
+      executeNativeNode(
+        { source: "throw new Error('must not run')", cwd: process.cwd(), environment: {} },
+        log,
+        new AbortController().signal
+      )
+    ).toThrow(expect.objectContaining({ code: 'UNAVAILABLE' }))
+  }
+)
+
+test.skipIf(!unsupportedBridge)(
+  'unsupported Bun HTTP connection handler refuses before host execution',
+  () =>
+    fixture(async (cwd, directory) => {
+      let launched = false
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async () => {
+          launched = true
+          throw new Error('must not launch')
+        },
+      })
+      const outcome = await runner.run(request(''), noCalls, log)
+      expect(outcome).toMatchObject({ ok: false, error: { code: 'UNAVAILABLE' } })
+      expect(outcome.error?.message).toContain('HTTP')
+      expect(launched).toBe(false)
+    })
+)

@@ -1,6 +1,6 @@
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 
-import type { ActContextPolicy, ActRunLimits, ActRunEvent, AgentJob } from '@velaros-ai/agent'
+import type { ActContextPolicy, ActRunEvent, ActRunLimits, AgentJob } from '@velaros-ai/agent'
 import type {
   ContextCompletionPort,
   ContextSourcePort,

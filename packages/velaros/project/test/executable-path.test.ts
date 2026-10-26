@@ -1,5 +1,10 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { expect, test } from 'bun:test'
 
+import { isWindowsCommandAvailable } from '../utils/kernel/command-requirements'
 import {
   executableCandidates,
   executablePathEntries,
@@ -79,4 +84,20 @@ test('POSIX 上同样只查 PATH', () => {
       exists: (path) => present.has(path),
     })
   ).toBe('/opt/homebrew/bin/rg')
+})
+
+test('Windows command availability honors mixed-case Path and PathExt and excludes cwd', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'windows-command-'))
+  try {
+    await writeFile(join(root, 'git.custom'), '')
+    expect(isWindowsCommandAvailable('git', undefined, { Path: root, pAtHeXt: '.CUSTOM' })).toBe(
+      true
+    )
+    expect(
+      isWindowsCommandAvailable('missing', undefined, { Path: root, pAtHeXt: '.CUSTOM' })
+    ).toBe(false)
+    expect(isWindowsCommandAvailable('git', root, { Path: '', pAtHeXt: '.CUSTOM' })).toBe(false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })

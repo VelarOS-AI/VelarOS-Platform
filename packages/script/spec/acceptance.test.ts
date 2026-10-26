@@ -18,6 +18,9 @@ import {
 import type { GrantedModule } from '../src/types/script'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
 
+// executeNativeNode / nodeSubprocessCodeRunner 的进程组宿主仅支持 POSIX。
+const it = test.skipIf(process.platform === 'win32')
+
 /** 这一轮授权的命名空间；没授权的模块不在声明里，import 它就落不到。 */
 const granted: GrantedModule[] = [
   {
@@ -122,7 +125,7 @@ void describe('代码面验收', () => {
     expect(first?.message).toContain("')' expected")
   })
 
-  test('INV-1 类型不查：字段名写错、空数组推不出类型的程序照跑，写错的字段读到 undefined', async () => {
+  it('INV-1 类型不查：字段名写错、空数组推不出类型的程序照跑，写错的字段读到 undefined', async () => {
     const outcome = await submit(`${importDemo}
 const r = await read({ paths: ['a.ts'] })
 const found = { items: [] }
@@ -134,7 +137,7 @@ export default { missing: r.files[0].contents ?? '没有这个字段', items: fo
     expect(outcome.result.value).toEqual({ missing: '没有这个字段', items: ['a.ts'] })
   })
 
-  test('INV-1 通过检查的程序照常跑完，只有它交出的那点东西出来', async () => {
+  it('INV-1 通过检查的程序照常跑完，只有它交出的那点东西出来', async () => {
     const outcome = await submit(`${importDemo}
 const r = await read({ paths: ['a.ts', 'b.ts'] })
 export default r.files.flatMap((f) => f.content.split('\\n')
@@ -149,7 +152,7 @@ export default r.files.flatMap((f) => f.content.split('\\n')
     ])
   })
 
-  test('INV-2 Node 标准库与子进程使用宿主授权范围', async () => {
+  it('INV-2 Node 标准库与子进程使用宿主授权范围', async () => {
     const result = await nodeSubprocessCodeRunner.run(
       {
         source:
@@ -167,14 +170,14 @@ export default r.files.flatMap((f) => f.content.split('\\n')
     expect(result.value).toEqual(['function', '42'])
   })
 
-  test('INV-3 死循环到时必停', async () => {
+  it('INV-3 死循环到时必停', async () => {
     const outcome = await submit('while (true) {}\nexport default 1', { timeoutMs: 800 })
     expect(outcome.checked).toBe(true)
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
   })
 
-  test('INV-3 阻塞事件循环时仍由宿主终止进程', async () => {
+  it('INV-3 阻塞事件循环时仍由宿主终止进程', async () => {
     const outcome = await submit(
       "import { hang } from 'velaros:demo'; void hang({tag:'cpu-wait'}); while(true){}",
       { timeoutMs: 300 }
@@ -184,7 +187,7 @@ export default r.files.flatMap((f) => f.content.split('\\n')
     expect(outcome.result.completed).toBeUndefined() // 事件循环阻塞前尚未派发的 I/O 不记作已执行
   }, 5_000)
 
-  test('INV-2 Node 原生全局可用，运行之间隔离全局状态', async () => {
+  it('INV-2 Node 原生全局可用，运行之间隔离全局状态', async () => {
     const first = await submit(
       "export default Function('globalThis.testMark=1;return [typeof fetch,typeof WebSocket,typeof process,typeof require]')()"
     )
@@ -195,7 +198,7 @@ export default r.files.flatMap((f) => f.content.split('\\n')
     expect(second.result.value).toBe('undefined')
   })
 
-  test('INV-4 拒绝是能 try/catch 的异常，并且进 notices', async () => {
+  it('INV-4 拒绝是能 try/catch 的异常，并且进 notices', async () => {
     const outcome = await submit(`${importDemo}
 let caught = '没拦住'
 try {
@@ -209,7 +212,7 @@ export default { 捕获到: caught }`)
     expect(outcome.result.notices?.some((notice) => notice.action === 'denied')).toBe(true)
   })
 
-  test('INV-4 只有拒绝进 notices：调用自己的失败程序接得住，不再回放；程序死在拒绝上时 failed 说了就不重复', async () => {
+  it('INV-4 只有拒绝进 notices：调用自己的失败程序接得住，不再回放；程序死在拒绝上时 failed 说了就不重复', async () => {
     const missing = createCodeSurfaceSession({
       checker: codeProgramChecker,
       runner: nodeSubprocessCodeRunner,
@@ -263,7 +266,7 @@ export default outcome`,
     expect(NodeSubprocessRunnerIsReleaseReady).toBe(false)
   })
 
-  test('INV-6 blobs 原样送达，反引号与转义一个不错', async () => {
+  it('INV-6 blobs 原样送达，反引号与转义一个不错', async () => {
     const patch = 'const x = `反引号 ${不是插值} \\ 反斜杠 "双引号" \'单引号\'`\n'
     const outcome = await submit(
       [
@@ -277,7 +280,7 @@ export default outcome`,
     expect(outcome.result.value).toEqual({ received: patch })
   })
 
-  test('INV-7 返回值超预算按结尾保留并说明', async () => {
+  it('INV-7 返回值超预算按结尾保留并说明', async () => {
     const outcome = await submit(`${importDemo}
 const r = await bulk({ size: ${CodeSurfaceLimits.valueChars + 5_000} })
 export default r.text`)
@@ -295,7 +298,7 @@ export default r.text`)
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.tooLarge)
   })
 
-  test('INV-10 手滑写 TypeScript 照跑，并提醒下次写 JavaScript', async () => {
+  it('INV-10 手滑写 TypeScript 照跑，并提醒下次写 JavaScript', async () => {
     const outcome = await submit(`${importDemo}
 const r = await read({ paths: ['a.ts'] })
 const first = r.files[0] as { path: string }
@@ -343,7 +346,7 @@ export default first.path)`)
     expect(outcome.needsModules).toEqual(['git'])
   })
 
-  test('INV-13 没 import 直接用没授权的名字，不是要补模块：跑到那一行干净地报错', async () => {
+  it('INV-13 没 import 直接用没授权的名字，不是要补模块：跑到那一行干净地报错', async () => {
     const outcome = await submit('export default await git.log({})')
     if (!outcome.checked) throw new Error('没有 import 就不是要补模块')
     expect(outcome.result.failed?.message).toContain('git')
@@ -383,7 +386,7 @@ export default first.path)`)
     ])
   })
 
-  test('INV-15 blobs 必须导入，不是隐形全局；velaros:program 不占授权名额也不进租约账', async () => {
+  it('INV-15 blobs 必须导入，不是隐形全局；velaros:program 不占授权名额也不进租约账', async () => {
     // 不导入直接用 → 干净的报错，不是「有个全局你本来就该知道」
     const bare = await submit('export default blobs.patch', { blobs: { patch: 'x' } })
     if (!bare.checked) throw new Error('语法没错，应当照跑')
@@ -400,7 +403,7 @@ export default first.path)`)
     expect(imported.imports).toBeUndefined()
   })
 
-  test('INV-16 被时间掐断时交出执行账，模型知道自己做到哪了', async () => {
+  it('INV-16 被时间掐断时交出执行账，模型知道自己做到哪了', async () => {
     const outcome = await submit(
       [
         importDemo,
@@ -420,7 +423,7 @@ export default first.path)`)
     ])
   })
 
-  test('INV-16 跑完了不交账：程序是模型自己写的，它知道自己调了什么', async () => {
+  it('INV-16 跑完了不交账：程序是模型自己写的，它知道自己调了什么', async () => {
     const outcome = await submit(
       `${importDemo}\nawait read({ paths: ['a.ts'] })\nexport default 'ok'`
     )
@@ -429,7 +432,7 @@ export default first.path)`)
     expect(outcome.result.completed).toBeUndefined()
   })
 
-  test('INV-17 堆爆了是 TOO_LARGE 并说清怎么改，不是一句「意外退出」', async () => {
+  it('INV-17 堆爆了是 TOO_LARGE 并说清怎么改，不是一句「意外退出」', async () => {
     const outcome = await submit(
       [
         'const kept = []',
@@ -444,7 +447,7 @@ export default first.path)`)
     expect(outcome.result.failed?.message).toContain('堆')
   }, 90_000)
 
-  test('INV-18 能力调用的时间不计进程序超时：命令跑多久由它自己的时限管', async () => {
+  it('INV-18 能力调用的时间不计进程序超时：命令跑多久由它自己的时限管', async () => {
     // 调用本身要 1.5 秒，而程序自己的预算只有 1 秒：调用期间不停表的话，这段程序必被我们自己杀掉。
     const outcome = await submit(
       "import { slow } from 'velaros:demo'\nconst { done } = await slow({ ms: 1500 })\nexport default done",
@@ -455,7 +458,7 @@ export default first.path)`)
     expect(outcome.result.value).toBe(true)
   }, 20_000)
 
-  test('INV-18 等用户点头的时间不计进程序超时', async () => {
+  it('INV-18 等用户点头的时间不计进程序超时', async () => {
     // 审批等 1.5 秒，而程序自己的预算只有 1 秒：不停表的话这段程序必被我们自己杀掉。
     const outcome = await submit(
       [
@@ -472,7 +475,7 @@ export default first.path)`)
     expect(outcome.result.value).toBe('grant-1')
   }, 20_000)
 
-  test('INV-18 停表只扣等人的那段，程序自己的预算一点不变', async () => {
+  it('INV-18 停表只扣等人的那段，程序自己的预算一点不变', async () => {
     const outcome = await submit(
       [
         "import { request } from 'velaros:approval'",
@@ -488,7 +491,7 @@ export default first.path)`)
     expect(outcome.result.completed).toEqual([{ call: 'approval.request', ok: true }])
   }, 20_000)
 
-  test('INV-21 把读到的大段内容塞进 throw，回到模型那里的仍然只有开头一小段', async () => {
+  it('INV-21 把读到的大段内容塞进 throw，回到模型那里的仍然只有开头一小段', async () => {
     const outcome = await submit(
       `${importDemo}\nconst r = await bulk({ size: 3_000_000 })\nthrow new Error(r.text)`
     )
@@ -499,7 +502,7 @@ export default first.path)`)
     expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.resultChars)
   })
 
-  test('INV-21 被拒两百次、每次一万字：连着的同一件事折成一条', async () => {
+  it('INV-21 被拒两百次、每次一万字：连着的同一件事折成一条', async () => {
     const outcome = await submit(`import { refuse } from 'velaros:demo'
 for (let i = 0; i < 150; i++) { try { await refuse({ n: i }) } catch (error) { void error } }
 export default 1`)
@@ -520,7 +523,7 @@ export default 1`)
     expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.diagnosticChars + 500)
   })
 
-  test('INV-22 只有 export default 就交它；有具名导出就交 { default?, ...具名 }，跟 import * 的形状一样', async () => {
+  it('INV-22 只有 export default 就交它；有具名导出就交 { default?, ...具名 }，跟 import * 的形状一样', async () => {
     const onlyDefault = await submit('export default 42')
     if (!onlyDefault.checked) throw new Error('应当通过检查')
     expect(onlyDefault.result.value).toBe(42)
@@ -540,7 +543,7 @@ export default 1`)
     expect(nothing.result.value).toBeUndefined()
   })
 
-  test('INV-22 export default 不中断执行：它后面的代码照样跑，运行时报错的行号仍是模型写的那一行', async () => {
+  it('INV-22 export default 不中断执行：它后面的代码照样跑，运行时报错的行号仍是模型写的那一行', async () => {
     const after = await submit('export default "先交"\nconsole.log("后面也跑了")')
     if (!after.checked) throw new Error('应当通过检查')
     expect(after.result.value).toBe('先交')
@@ -561,7 +564,7 @@ export default 1`)
     expect(uncaught.result.failed?.line).toBe(4)
   })
 
-  test('INV-23 能力交出的图走旁边的通道：程序拿不到像素，结果里没有 base64，超过张数上限按顺序丢后面的', async () => {
+  it('INV-23 能力交出的图走旁边的通道：程序拿不到像素，结果里没有 base64，超过张数上限按顺序丢后面的', async () => {
     const pixels = Buffer.from('fake-png-bytes').toString('base64')
     const imaging = createCodeSurfaceSession({
       checker: codeProgramChecker,
@@ -610,7 +613,7 @@ export default 1`)
 })
 
 describe('程序停下、数据与回执', () => {
-  test('INV-26 程序停下时还没落定的调用被叫停，并逐条列在 unsettled 里', async () => {
+  it('INV-26 程序停下时还没落定的调用被叫停，并逐条列在 unsettled 里', async () => {
     // 发出去不等就交卷：程序跑完了，那次调用还挂着。
     const leftBehind = await submit(
       "import { hang } from 'velaros:demo'\nvoid hang({ tag: 'left' })\nexport default 'done'"
@@ -649,7 +652,7 @@ describe('程序停下、数据与回执', () => {
     expect(hangAborted).toContain('stopped')
   }, 20_000)
 
-  test('INV-27 程序数据模块只导出本次 input 与 blobs，保持原文与冻结边界', async () => {
+  it('INV-27 程序数据模块只导出本次 input 与 blobs，保持原文与冻结边界', async () => {
     const input = { key: 'progress', nested: { version: 2 } }
     const blobs = { body: 'literal ` ${text} \\ 内容\nsecond line' }
     const read = await session.submit({
@@ -725,7 +728,7 @@ describe('程序编辑与附属模块', () => {
     ).toBe(false)
   })
 
-  test('INV-33 附属模块按提交版本执行一次，模块诊断带自己的源码位置', async () => {
+  it('INV-33 附属模块按提交版本执行一次，模块诊断带自己的源码位置', async () => {
     const program = {
       source:
         "import { n } from './lib/value.js'\nimport { twice } from './lib/use.js'\nexport default [n, twice]",

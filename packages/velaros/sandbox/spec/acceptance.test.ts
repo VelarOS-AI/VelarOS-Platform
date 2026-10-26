@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 演练沙箱的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
@@ -51,6 +52,8 @@ import {
   removeScratch,
   systemSandboxSpace,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {
   return {
@@ -277,7 +280,7 @@ describe('落回前的核对', () => {
 })
 
 describe('代码面 sandbox 命名空间', () => {
-  test('INV-5 一段真程序照生成的声明过检查，在隔离里跑完 create → run → diff → apply', async () => {
+  it('INV-5 一段真程序照生成的声明过检查，在隔离里跑完 create → run → diff → apply', async () => {
     const space = fakeSpace({ root: '/repo', clamp: true })
     const value = await runModelProgram(space, EndToEndProgram)
 
@@ -299,7 +302,7 @@ describe('代码面 sandbox 命名空间', () => {
     expect(space.confirmations).toEqual([])
   }, 30_000)
 
-  test('INV-5 作用域由宿主注入，不由模型挑：project 那样的端口把越界的 source 拒掉，system 那样的收任意绝对路径', async () => {
+  it('INV-5 作用域由宿主注入，不由模型挑：project 那样的端口把越界的 source 拒掉，system 那样的收任意绝对路径', async () => {
     const clamped = fakeSpace({ root: '/repo', clamp: true })
     const refused = await runModelProgram(
       clamped,
@@ -329,7 +332,7 @@ export default box.source`
 })
 
 describe('镜像里的危险命令', () => {
-  test('INV-7 镜像里的危险命令照常先问用户：高风险、手动、不可记忆；被拒就抛错，宿主一个进程都不起；不危险的不打扰', async () => {
+  it('INV-7 镜像里的危险命令照常先问用户：高风险、手动、不可记忆；被拒就抛错，宿主一个进程都不起；不危险的不打扰', async () => {
     const declined = fakeSpace({ root: '/repo', clamp: true, approved: false })
     const refused = await runModelProgram(
       declined,

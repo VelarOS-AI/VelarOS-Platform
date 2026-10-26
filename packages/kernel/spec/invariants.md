@@ -35,7 +35,7 @@
 | INV-12 | client 不引 runtime / serve，updater 不引别的切片，remote 两侧互不引用 | 门禁 | `check:kernel-arch` |
 | INV-13 | 协议只接受完全相同的版本，异版本给出升级方向 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 能力会话之外的调用一律 `CAPABILITY_NOT_GRANTED`，会话不跨连接 | 测试 | `spec/acceptance.test.ts` |
-| INV-15 | 本机 RPC：descriptor 与锁文件 0600、运行目录 0700 且属主是自己 | 测试 | `spec/acceptance.test.ts` |
+| INV-15 | POSIX 本机 RPC：descriptor 与锁文件 0600、运行目录 0700 且属主是自己；Windows ACL 由宿主验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 单实例锁与更新锁：活着的持有者不会被抢 | 测试 | `spec/acceptance.test.ts` |
 | INV-17 | 远程节点：签名通过前收到的调用一律断开 | 文字 |  |
 | INV-18 | 远程节点：一个 callId 恰好一帧终态，重连后同一 callId 回放已有结果 | 文字 |  |

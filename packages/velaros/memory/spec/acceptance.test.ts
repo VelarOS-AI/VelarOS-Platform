@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 长期记忆的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；记忆库落在系统临时目录下的真磁盘上，每个用例一个根目录。
@@ -24,6 +25,8 @@ import {
   runModelProgram,
   typecheckTemplate,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** 一条合法的记忆，按用例改几个字段。 */
 function entry(id: string, overrides: Partial<MemorySaveInput> = {}): MemorySaveInput {
@@ -405,7 +408,7 @@ describe('开场索引', () => {
 })
 
 describe('模型面', () => {
-  test('INV-9 程序照生成的声明调到真实操作；失败时看得到 code 与 message', async () => {
+  it('INV-9 程序照生成的声明调到真实操作；失败时看得到 code 与 message', async () => {
     const space = memorySpace(createMemoryStore({ root }).scope('system'))
     const result = await runModelProgram(
       space,
@@ -481,7 +484,7 @@ export const removed = await remove({ id: 'reply-style' })`
     expect(MemoryDeclarations).not.toContain('的代码模版')
   })
 
-  test('INV-11 代码模版在真的记忆库上逐个函数跑通', async () => {
+  it('INV-11 代码模版在真的记忆库上逐个函数跑通', async () => {
     const space = memorySpace(createMemoryStore({ root }).scope('system'))
     const result = await runModelProgram(
       space,

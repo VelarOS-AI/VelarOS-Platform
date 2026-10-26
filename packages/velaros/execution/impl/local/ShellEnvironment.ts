@@ -214,7 +214,8 @@ export class ShellEnvironment implements ShellEnvironmentApi {
         env,
         signal: this.controller.signal,
       })
-      return { env: shell.env, shell }
+      // 自检标记只属于选中的 shell，不能把共享宿主环境钉到这个候选上。
+      return { env, shell }
     }
     const platform = createPlatform({ platform: this.platform, env })
     for (const shell of platform.getLoginShellCandidates(env)) {

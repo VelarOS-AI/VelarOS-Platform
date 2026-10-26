@@ -53,3 +53,5 @@ if (result.checked) console.log(result.result.process)
 - `nodeSubprocessCodeRunner` 是 POSIX Node 宿主的便利入口，使用当前目录和本机 Node；Electron、Windows 以及受限权限执行通过 `NodeCodeRunnerOptions` 注入实际进程端口。`NodeSubprocessRunnerIsReleaseReady` 保持 false，部署权限仍由宿主验收。
 
 `NodeCodeRunnerOptions.acquireRuntime` 可在每次执行前获取 `NodeRuntimeLease`，其不可变环境优先于静态 `runtime`。租约的命令目录随 `NodeProcessRequest.binDirectories` 交给进程宿主；内置宿主会将其加入本次 PATH。进程树完整结束后释放，回收不完整时调用可选 retain 保留文件。
+
+能力桥使用本地 Unix socket / Windows 命名管道。Windows + Bun 在支持 HTTP connection 处理器时通过 net 监听并交给同一 HTTP 鉴权处理器；执行结束关闭监听和接入连接。Bun 1.3.13 缺少该处理器，会明确拒绝而不挂起；Bun 1.4.3 已通过该兼容路径回归。此兼容路径不改变默认 POSIX 进程宿主的适用范围，测试条件与本机验证结果见[测试与平台支持](../../docs/engineering/testing.md)。

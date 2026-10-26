@@ -44,5 +44,5 @@ for await (const chunk of textFileIo.readTextChunks(path)) console.log(chunk.byt
 
 - 失败一律抛 `AppError`，`code` 是 `TextFileErrorCodes` 里的码，`context` 带 path 与细节（`lossy` 带 `offset`、`codeUnit`，`tooLarge` 带 `size`、`maxBytes`）；文字里不拼路径，调用方按码翻成自己的错误。文件系统自己的错误（ENOENT、EACCES 这类）原样抛出。
 - 解码是严格的：非法字节、认不出编码、UTF-16 字节数不齐都不当文本（`decode`、`detect` 返回 `null`，流式读抛 `notText`），不用替换字符凑文字；正文写不成目标编码时抛 `lossy`，不静默替换。
-- 写入是原子替换：失败时磁盘一个字节都不动、不留临时文件；已有文件的权限位精确保留，符号链接写到它指向的文件，有多个硬链接的文件拒写（`notRegular`）。
+- 写入是原子替换：失败时磁盘一个字节都不动、不留临时文件；已有文件保留操作系统实际支持的权限（POSIX mode 精确恢复；Windows 只读目标拒绝覆盖），符号链接写到它指向的文件，有多个硬链接的文件拒写（`notRegular`）。
 - 只管字节与编码：换行、行号、编码转换的产品语义归调用方；Latin-1、Shift-JIS 这类单字节旧编码不认，能按 GB18030 解开的当 GB18030，解不开的当二进制。

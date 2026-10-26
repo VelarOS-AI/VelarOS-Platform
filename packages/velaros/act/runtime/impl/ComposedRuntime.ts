@@ -630,10 +630,7 @@ class ComposedRuntime implements VelarosRuntime {
     }
     const onEvent = this.options.agents?.onEvent
     return {
-      submit: async function* (
-        value: Parameters<typeof session.submit>[0],
-        runSignal?: AbortSignal
-      ) {
+      async *submit(value: Parameters<typeof session.submit>[0], runSignal?: AbortSignal) {
         const submission = isString(value) ? { text: value } : value
         for await (const event of session.submit(
           {

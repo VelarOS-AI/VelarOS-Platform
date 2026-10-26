@@ -52,7 +52,7 @@ describe('新文件', () => {
     expect(await readdir(root)).toEqual([])
   })
 
-  test('新文件给了权限位就精确设上', async () => {
+  test.skipIf(process.platform === 'win32')('POSIX 新文件给了权限位就精确设上', async () => {
     const path = join(root, 'script.sh')
     await textFileIo.writeBytes(path, Buffer.from('#!/bin/sh\n'), { mode: 0o700 })
     expect((await stat(path)).mode & 0o777).toBe(0o700)

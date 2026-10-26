@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 两件项目工具（`velaros:project`、`velaros:code`）、项目内核与项目给共用能力装的端口（`projectCapabilityPorts`）的验收测试：
  * 每一条对应 spec/invariants.md 里的一个编号。
@@ -35,6 +36,8 @@ import {
   fakeSandboxHost,
   pngHeader,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** UTF-8 的 BOM。 */
 const Bom = String.fromCharCode(0xfeff)
@@ -82,7 +85,7 @@ afterEach(async () => {
 })
 
 describe('模型面', () => {
-  test('INV-42 批量替换模板一次读取一次事务，读取缺口保留请求范围且不提交子集', async () => {
+  it('INV-42 批量替换模板一次读取一次事务，读取缺口保留请求范围且不提交子集', async () => {
     await writeFile(join(root, 'a.txt'), 'oldName\n')
     await writeFile(join(root, 'b.txt'), 'oldName twice oldName\n')
     const harness = await createProjectHarness(root)
@@ -109,7 +112,7 @@ describe('模型面', () => {
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('newName twice newName\n')
   }, 60_000)
 
-  test('INV-43 结构改写模板精确绑定 Python 方法，INV-48 增量模板只修正问题项', async () => {
+  it('INV-43 结构改写模板精确绑定 Python 方法，INV-48 增量模板只修正问题项', async () => {
     await writeFile(
       join(root, 'cache.py'),
       'class Cache:\n    def load(self, key):\n        return "old"\n\n# keep\n'

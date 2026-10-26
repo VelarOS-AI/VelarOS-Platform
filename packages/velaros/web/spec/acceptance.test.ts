@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 网上查资料的验收测试：每一条对应 spec/invariants.md 里的一个编号。只测对外承诺的行为，实现细节的测试在 test/ 目录。
  * 浏览器用 `spec/support.ts` 的假无头浏览器（按地址给写好的结果、记下开关了几页），钟用能快进的假钟，记住 Google 搜不通的十分钟不用真等；
@@ -28,6 +29,8 @@ import {
   WebDeclarations,
   webSpace,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** 一页正常的 Google 结果：两条直接链接。 */
 const GoogleResults = scanOf([
@@ -967,7 +970,7 @@ describe('读网页', () => {
 })
 
 describe('代码面 web 命名空间', () => {
-  test('INV-13 模型写的程序照生成的声明调到真实操作；失败时程序接得住 error.code 与 error.message', async () => {
+  it('INV-13 模型写的程序照生成的声明调到真实操作；失败时程序接得住 error.code 与 error.message', async () => {
     const space = webSpace({
       sites: sitesOf({
         google: { scan: GoogleResults },

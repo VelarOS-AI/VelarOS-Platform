@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 代码模版是给模型看的日常用法示例：只过类型检查不够，结果取错一个键、写法跑不通，模型照着写就跟着错。
  * 这里把模版的每个函数接在假宿主上，经真的代码面会话调一遍——和模型交程序是同一条路。
@@ -9,6 +10,8 @@ import { describe, expect, test } from 'bun:test'
 import type { SessionAnswer, SessionAskInput, SessionPeer } from '../index'
 import { VelarSessionsModule } from '../index'
 import { DefaultPeers, runModelProgram, sessionsSpace } from '../spec/support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** 后端项目的会话：正在跑，捎给它的话要排队。 */
 const BackendPeer: SessionPeer = {
@@ -40,7 +43,7 @@ export const notified = await notifyProjects()
 `
 
 describe('代码模版', () => {
-  test('已经有合适的会话：下单交给浏览器会话、停在付款前问，答复之后接着做；两个项目同时查；给后端捎话排了队', async () => {
+  it('已经有合适的会话：下单交给浏览器会话、停在付款前问，答复之后接着做；两个项目同时查；给后端捎话排了队', async () => {
     const space = sessionsSpace({
       peers: [...DefaultPeers, BackendPeer],
       answer: answerOf,
@@ -61,7 +64,7 @@ describe('代码模版', () => {
     ])
   }, 90_000)
 
-  test('对话里只有自己：开一个浏览器会话去下单，后端项目开一个项目会话', async () => {
+  it('对话里只有自己：开一个浏览器会话去下单，后端项目开一个项目会话', async () => {
     const space = sessionsSpace({ peers: [DefaultPeers[0]!], answer: answerOf })
     const outcome = await runModelProgram(space, Program, 60_000)
     expect(outcome.failed).toBeUndefined()

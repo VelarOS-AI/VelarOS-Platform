@@ -246,10 +246,11 @@ describe('挑哪个 shell', () => {
   test('挑了本机没有的那个，命令在起进程之前就被拒', async () => {
     const kernel = createLocalShellHost({ cwd: tmpdir() })
     try {
-      await expect(kernel.runCommand('echo 不该跑起来', { shell: 'pwsh' })).rejects.toThrow(
-        '本机没有 pwsh'
+      const missing = process.platform === 'win32' ? 'posix' : 'pwsh'
+      await expect(kernel.runCommand('echo 不该跑起来', { shell: missing })).rejects.toThrow(
+        `本机没有 ${missing}`
       )
-      expect((await kernel.runCommand('echo ok', { shell: 'posix' })).stdout.trim()).toBe('ok')
+      expect((await kernel.runCommand('echo ok')).stdout.trim()).toBe('ok')
     } finally {
       await kernel.dispose()
     }
@@ -259,7 +260,17 @@ describe('挑哪个 shell', () => {
     const kernel = createLocalShellHost({ cwd: tmpdir() })
     try {
       const inspection = await kernel.inspectEnvironment()
-      expect(inspection.shells.map((shell) => shell.kind)).toEqual(['posix'])
+      const candidates = detectAvailableShells({
+        platform: process.platform,
+        env: process.env,
+      }).map(toShellDescriptor)
+      expect(inspection.shells).toEqual(candidates)
+      const refreshed = await kernel.refreshShellEnvironment()
+      expect(refreshed.shells).toEqual(
+        detectAvailableShells({ platform: process.platform, env: process.env }).map(
+          toShellDescriptor
+        )
+      )
       expect(inspection.shells[0]?.kind).toBe(inspection.shell.kind!)
     } finally {
       await kernel.dispose()

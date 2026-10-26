@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 浏览器单元的验收测试：每一条对应 spec/invariants.md 里的一个编号，只测对外承诺的行为。
  * 宿主那一侧的纯策略、站点工作区与登录墙经根入口与 `./renderer` 入口测；两件模型面经真的能力端口与代码面会话测，
@@ -49,6 +50,8 @@ import {
   runModelProgram,
   typecheckTemplate,
 } from './support.js'
+
+const it = test.skipIf(process.platform === 'win32')
 
 let root = ''
 beforeEach(async () => {
@@ -175,7 +178,7 @@ describe('浏览器单元的对外承诺', () => {
     expect(gate.shouldPrompt('https://other.com', detection)).toBe(true)
   })
 
-  test('INV-17 模型面是 velaros:browser、velaros:devtools 与 velaros:cdp：声明从源码生成，模型的程序照它调到真实操作', async () => {
+  it('INV-17 模型面是 velaros:browser、velaros:devtools 与 velaros:cdp：声明从源码生成，模型的程序照它调到真实操作', async () => {
     expect(VelarBrowserModule.specifier).toBe('velaros:browser')
     expect(VelarDevtoolsModule.specifier).toBe('velaros:devtools')
     expect(VelarCdpModule.specifier).toBe('velaros:cdp')

@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto'
+import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import type { ProjectOperationContext } from '../contract/requires'
 import { readReceipt, saveReceipt } from '../utils/agent/file-refs'
 
-function context(sessionId: string, root = '/reference-collisions'): ProjectOperationContext {
+const collisionRoot =
+  process.platform === 'win32' ? 'C:\\reference-collisions' : '/reference-collisions'
+const collisionValues = process.platform === 'win32' ? [86432, 110733] : [82383, 159355]
+
+function context(sessionId: string, root = collisionRoot): ProjectOperationContext {
   return {
     sessionId,
     project: { getRootPath: () => root },
@@ -15,8 +20,9 @@ function context(sessionId: string, root = '/reference-collisions'): ProjectOper
 describe('项目短引用', () => {
   test('两个完整 SHA256 的前 8 位碰撞仍分别定位原回执，旧完整引用精确解析', () => {
     const ctx = context('collision-receipts')
-    // 下列两份合法回执的 SHA256 前缀都是 adf7de9b。
-    const values = [82383, 159355]
+    // 固定绝对根，分别保留 Windows 与 POSIX 的真实 SHA256 前缀碰撞。
+    const values = collisionValues
+    const hashes: string[] = []
     const refs = values.map((value) => saveReceipt(ctx, 'change', value))
     expect(refs[0]).toMatch(/^change:[a-f0-9]{8}$/)
     expect(refs[1]).toMatch(/^change:[a-f0-9]{8}$/)
@@ -29,13 +35,15 @@ describe('项目短引用', () => {
             kind: 'project-receipt',
             version: 1,
             receipt: 'change',
-            root: '/reference-collisions',
+            root: resolve(ctx.project.getRootPath()),
             value,
           })
         )
         .digest('hex')
+      hashes.push(hash)
       expect(readReceipt(ctx, 'change', `change:${hash}`)).toBe(value)
     }
+    expect(hashes[0]!.slice(0, 8)).toBe(hashes[1]!.slice(0, 8))
     expect(saveReceipt(ctx, 'change', values[0])).toBe(refs[0])
   })
 
@@ -50,12 +58,12 @@ describe('项目短引用', () => {
 
   test('整份会话淘汰后，碰撞记录不能拿走已失效引用', () => {
     const ctx = context('expired-collision')
-    const expired = saveReceipt(ctx, 'change', 82383)
+    const expired = saveReceipt(ctx, 'change', collisionValues[0])
     for (let index = 0; index < 40; index++)
       saveReceipt(context(`eviction-${index}`), 'change', index)
-    const replacement = saveReceipt(ctx, 'change', 159355)
+    const replacement = saveReceipt(ctx, 'change', collisionValues[1])
     expect(replacement).not.toBe(expired)
     expect(() => readReceipt(ctx, 'change', expired)).toThrow()
-    expect(readReceipt(ctx, 'change', replacement)).toBe(159355)
+    expect(readReceipt(ctx, 'change', replacement)).toBe(collisionValues[1])
   })
 })

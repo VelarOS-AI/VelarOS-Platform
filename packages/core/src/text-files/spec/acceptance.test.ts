@@ -140,11 +140,12 @@ describe('原子写入', () => {
       const path = join(root, 'source.txt')
       await writeFile(path, textCodec.encode(Sample, encoding))
       await chmod(path, 0o751)
+      const originalMode = (await stat(path)).mode & 0o777
       await symlink('source.txt', join(root, 'alias.txt'))
       const changed = Sample.replace('long', 'changed')
       await textFileIo.writeText(join(root, 'alias.txt'), changed)
       expect((await lstat(join(root, 'alias.txt'))).isSymbolicLink()).toBe(true)
-      expect((await stat(path)).mode & 0o777).toBe(0o751)
+      expect((await stat(path)).mode & 0o777).toBe(originalMode)
       expect(await readFile(path)).toEqual(textCodec.encode(changed, encoding))
       expect((await readdir(root)).sort()).toEqual(['alias.txt', 'source.txt'])
     }
@@ -187,29 +188,35 @@ describe('原子写入', () => {
     expect(await readFile(join(root, 'source.txt'), 'utf8')).toBe('original')
   })
 
-  test('INV-3 捕获来的权限位不受 umask 影响，新文件不给权限时由 umask 定，权限位越界拒写', async () => {
-    const mask = process.umask(0o077)
-    try {
-      await textFileIo.writeText(join(root, 'restored.sh'), 'original', { mode: 0o751 })
-      await textFileIo.writeBytes(join(root, 'wide.txt'), Buffer.from('wide'), { mode: 0o666 })
-      await textFileIo.writeText(join(root, 'new.txt'), 'new')
-      expect((await stat(join(root, 'restored.sh'))).mode & 0o777).toBe(0o751)
-      expect((await stat(join(root, 'wide.txt'))).mode & 0o777).toBe(0o666)
-      expect((await stat(join(root, 'new.txt'))).mode & 0o777).toBe(0o600)
-      // 已有文件改写后原来的权限位原样留下，umask 收不走。
-      await chmod(join(root, 'wide.txt'), 0o777)
-      await textFileIo.writeText(join(root, 'wide.txt'), 'still wide')
-      expect((await stat(join(root, 'wide.txt'))).mode & 0o777).toBe(0o777)
-      for (const mode of [-1, 0o1000, 0o4755, 1.5]) {
-        await expect(
-          textFileIo.writeText(join(root, 'invalid.txt'), 'bad', { mode })
-        ).rejects.toMatchObject({ code: TextFileErrorCodes.invalidMode })
+  test.skipIf(process.platform === 'win32')(
+    'INV-3 POSIX 权限不受 umask 影响，新文件不给权限时由 umask 定',
+    async () => {
+      const mask = process.umask(0o077)
+      try {
+        await textFileIo.writeText(join(root, 'restored.sh'), 'original', { mode: 0o751 })
+        await textFileIo.writeBytes(join(root, 'wide.txt'), Buffer.from('wide'), { mode: 0o666 })
+        await textFileIo.writeText(join(root, 'new.txt'), 'new')
+        expect((await stat(join(root, 'restored.sh'))).mode & 0o777).toBe(0o751)
+        expect((await stat(join(root, 'wide.txt'))).mode & 0o777).toBe(0o666)
+        expect((await stat(join(root, 'new.txt'))).mode & 0o777).toBe(0o600)
+        // 已有文件改写后原来的权限位原样留下，umask 收不走。
+        await chmod(join(root, 'wide.txt'), 0o777)
+        await textFileIo.writeText(join(root, 'wide.txt'), 'still wide')
+        expect((await stat(join(root, 'wide.txt'))).mode & 0o777).toBe(0o777)
+      } finally {
+        process.umask(mask)
       }
-      expect(await Bun.file(join(root, 'invalid.txt')).exists()).toBe(false)
-    } finally {
-      process.umask(mask)
     }
-  })
+  )
+})
+
+test('INV-3 权限位越界在所有平台拒写', async () => {
+  for (const mode of [-1, 0o1000, 0o4755, 1.5]) {
+    await expect(
+      textFileIo.writeText(join(root, 'invalid.txt'), 'bad', { mode })
+    ).rejects.toMatchObject({ code: TextFileErrorCodes.invalidMode })
+  }
+  expect(await Bun.file(join(root, 'invalid.txt')).exists()).toBe(false)
 })
 
 describe('写前核对', () => {

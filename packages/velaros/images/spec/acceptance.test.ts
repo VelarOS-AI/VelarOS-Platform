@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 看图能力的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
@@ -33,6 +34,8 @@ import {
   typecheckTemplate,
   webpImage,
 } from './support'
+
+const it = test.skipIf(process.platform === 'win32')
 
 /** 一个不该被调的缩放器：在上限以内的图要是请了它，用例当场失败。 */
 const untouchable = async (): Promise<never> => {
@@ -662,7 +665,7 @@ describe('入参与格式', () => {
 })
 
 describe('代码面 images 命名空间', () => {
-  test('INV-11 模型写的程序照生成的声明调到真实操作：图走代码面的图片通道，程序只拿到尺寸', async () => {
+  it('INV-11 模型写的程序照生成的声明调到真实操作：图走代码面的图片通道，程序只拿到尺寸', async () => {
     const shot = pngImage(40, 30)
     await writeFile(join(root, 'shot.png'), shot)
     await writeFile(join(root, 'big.png'), pngImage(4000, 3000))
@@ -692,7 +695,7 @@ export default files.map((f) => ('error' in f ? { path: f.path, code: f.error.co
       expect(serialized).not.toContain(attachment.data.slice(0, 64))
   }, 60_000)
 
-  test('INV-11 读像素的写法读不到东西：结果上根本没有这一格', async () => {
+  it('INV-11 读像素的写法读不到东西：结果上根本没有这一格', async () => {
     await writeFile(join(root, 'shot.png'), pngImage(40, 30))
     const { result } = await runModelProgram(
       imageSpace({ root, clamp: true }),
@@ -705,7 +708,7 @@ export default 'error' in image ? null : (image.data ?? '没有像素')`
     expect(result.value).toBe('没有像素')
   }, 60_000)
 
-  test('INV-11 全部失败时程序接得住：看得见的就是 error.code 与 error.message', async () => {
+  it('INV-11 全部失败时程序接得住：看得见的就是 error.code 与 error.message', async () => {
     const space = imageSpace({ root, clamp: true })
     const { result, attachments } = await runModelProgram(
       space,

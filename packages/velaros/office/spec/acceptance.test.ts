@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 办公文档单元的不变量验收：`spec/invariants.md` 里每一条「测试」档的检验器。
  * 用例名以 INV-<编号> 开头，`check:module-ownership` 按这个前缀核对登记表与实现对得上。
@@ -34,6 +35,8 @@ import {
   typecheckTemplate,
 } from './support.js'
 
+const it = test.skipIf(process.platform === 'win32')
+
 const harnesses: OfficeHarness[] = []
 
 afterEach(async () => {
@@ -48,7 +51,7 @@ async function workspace(options: Parameters<typeof createHarness>[0] = {}) {
 }
 
 describe('办公文档不变量验收', () => {
-  test('INV-20 生成模板直接流转原始行，解析实际落盘产物并保留检查范围', async () => {
+  it('INV-20 生成模板直接流转原始行，解析实际落盘产物并保留检查范围', async () => {
     const { harness, office } = await workspace()
     const template = await readFile(new URL('../template.js', import.meta.url), 'utf8')
     const outcome = await runModelProgram(
@@ -418,7 +421,7 @@ describe('办公文档不变量验收', () => {
       await expect(stat(join(harness.root, name))).rejects.toBeDefined()
   })
 
-  test('INV-15 模型面是 velaros:office：声明从源码生成，模型的程序照它调到真实操作', async () => {
+  it('INV-15 模型面是 velaros:office：声明从源码生成，模型的程序照它调到真实操作', async () => {
     expect(VelarOfficeModule.specifier).toBe('velaros:office')
     expect([...VelarOfficeModule.methods].sort()).toEqual(
       [

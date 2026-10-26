@@ -5,7 +5,7 @@
 
 import { existsSync } from 'node:fs'
 import { chmod, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, parse } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
@@ -76,7 +76,7 @@ describe('rehearsal sandbox', () => {
     const base = await makeScratch('base')
     const host = createLocalSandboxHost({ baseDir: base })
     try {
-      await expect(host.createSandbox({ source: '/' })).rejects.toMatchObject({
+      await expect(host.createSandbox({ source: parse(base).root })).rejects.toMatchObject({
         code: 'VALIDATION',
       })
       expect(await readdir(base)).toEqual([])

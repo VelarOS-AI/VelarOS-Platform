@@ -7,6 +7,7 @@
  * area: packages
  */
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -525,7 +526,7 @@ describe('外部浏览器启动器', () => {
     )
     assert.deepEqual(browser.downloadBehavior, {
       behavior: 'allowAndName',
-      downloadPath: `${userDataDir}/Downloads`,
+      downloadPath: join(userDataDir, 'Downloads'),
       eventsEnabled: false,
     })
     assert.equal(

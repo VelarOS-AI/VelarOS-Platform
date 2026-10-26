@@ -1,3 +1,4 @@
+// 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 代码模版是给模型看的日常用法示例：只过类型检查不够，结果取错一个键、写法跑不通，模型照着写就跟着错。
  * 这里把模版的每个函数接在真的临时工作区上，经真的代码面会话调一遍——和模型交程序是同一条路。
@@ -17,6 +18,8 @@ import {
   runModelProgram,
 } from '../spec/support.js'
 
+const it = test.skipIf(process.platform === 'win32')
+
 const harnesses: OfficeHarness[] = []
 
 afterEach(async () => {
@@ -24,7 +27,7 @@ afterEach(async () => {
 })
 
 describe('代码模版', () => {
-  test('每个函数照写法跑通：写 Word、追加、做演示文稿与表格、读 PDF、PDF 变 Word、导出 PDF、编 LaTeX、剪 PDF、预览、转 Markdown', async () => {
+  it('每个函数照写法跑通：写 Word、追加、做演示文稿与表格、读 PDF、PDF 变 Word、导出 PDF、编 LaTeX、剪 PDF、预览、转 Markdown', async () => {
     const harness = await createHarness({
       availableCommands: ['soffice', 'tectonic'],
       converters: 'working',
@@ -61,7 +64,10 @@ export const markdown = await asMarkdown()
       written: { path: join(harness.root, 'reports/weekly.docx') },
       structure: { kind: 'docx', summary: { headings: 2 } },
     })
-    expect(values.word).toMatchObject({ path: join(harness.root, 'docs/spec.docx'), created: true })
+    expect(values.word).toMatchObject({
+      path: join(harness.root, 'docs/spec.docx'),
+      created: true,
+    })
     expect(values.appended).toMatchObject({
       path: join(harness.root, 'reports/weekly.docx'),
       created: false,

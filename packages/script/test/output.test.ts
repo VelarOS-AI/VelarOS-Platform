@@ -16,6 +16,9 @@ import {
 } from '../src/index.js'
 import { createOutputCollector, validateOutputOptions } from '../src/utils/output-capture.js'
 
+// executeNativeNode / nodeSubprocessCodeRunner 的进程组宿主仅支持 POSIX。
+const it = test.skipIf(process.platform === 'win32')
+
 const session = createCodeSurfaceSession({
   checker: codeProgramChecker,
   runner: nodeSubprocessCodeRunner,
@@ -425,7 +428,7 @@ test('partial code selections locate the exact archived UTF-16 substring for hea
   }
 })
 
-test('invalid display declarations identify expected and actual types in host and isolated execution', async () => {
+it('invalid display declarations identify expected and actual types in host and isolated execution', async () => {
   for (const [value, type, expected] of [
     [['source'], 'code', '要求字符串，实际为数组'],
     [{ value: 1 }, 'text', '要求字符串，实际为object'],
@@ -536,7 +539,7 @@ test('INV-41 合法值、未知值、泛型和动态声明保留兼容执行边�
   }
 })
 
-test('INV-41 结构类型与动态属性不被静态推断误拒，真实执行仍交付原值', async () => {
+it('INV-41 结构类型与动态属性不被静态推断误拒，真实执行仍交付原值', async () => {
   for (const [body, value] of [
     [`function emit(value:{length:number}){output(value,{type:'text'})} emit('hello');`, 'hello'],
     [
@@ -610,7 +613,7 @@ test('INV-41 附属模块的真实标准输出也在执行前给出原始文件�
     expect(result.diagnostics[0]).toMatchObject({ file: 'lib/display.js', line: 2, code: 2345 })
 })
 
-test('INV-34 output snapshots values at call time and preserves full raw structured values before preview clipping', async () => {
+it('INV-34 output snapshots values at call time and preserves full raw structured values before preview clipping', async () => {
   const result = await run(
     `const value={text:'x'.repeat(80000),count:1};output(value,{key:'state',type:'json'});value.count=2;`
   )
@@ -620,7 +623,7 @@ test('INV-34 output snapshots values at call time and preserves full raw structu
   expect(JSON.stringify(result.result).length).toBeLessThan(60001)
 })
 
-test('capture survives later exception and timeout, and caught duplicate keys remain an issue', async () => {
+it('capture survives later exception and timeout, and caught duplicate keys remain an issue', async () => {
   for (const source of [
     `output(1,{key:'one'});throw Error('later');`,
     `output(1,{key:'one'});while(true){}`,
@@ -657,7 +660,7 @@ test('capture refuses lossy JSON, getters, cycles and raw limit without claiming
   expect(collector.snapshot().blocks).toHaveLength(0)
 })
 
-test('configure applies once before output and metadata does not change program value', async () => {
+it('configure applies once before output and metadata does not change program value', async () => {
   const result = await run(
     `output.configure({maxChars:900});output({value:42},{key:'value',view:{mode:'reference'}});`
   )
@@ -948,7 +951,7 @@ test('configuration and per-block zero budget produce references or explicit omi
   expect(none.omittedBlocks).toBe(1)
 })
 
-test('native image outputs use the attachment channel and file references carry bounded metadata', async () => {
+it('native image outputs use the attachment channel and file references carry bounded metadata', async () => {
   const data =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWAAAAABJRU5ErkJggg=='
   const result = await run(
@@ -993,11 +996,14 @@ test('a configuration-only edit does not evaluate calls and adding view supports
   ).toThrow('动态')
 })
 
-test('optional fields and sparse arrays preserve canonical JSON in the isolated output collector', async () => {
+it('optional fields and sparse arrays preserve canonical JSON in the isolated output collector', async () => {
   const result = await run(`output({a:{present:1,missing:undefined},items:[1,undefined,,4]});`)
   if (!result.checked) throw Error(JSON.stringify(result))
   expect(result.result.failed).toBeUndefined()
-  expect(result.output?.blocks[0]?.value).toEqual({ a: { present: 1 }, items: [1, null, null, 4] })
+  expect(result.output?.blocks[0]?.value).toEqual({
+    a: { present: 1 },
+    items: [1, null, null, 4],
+  })
   const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
   collector.output(Array.from({ length: 3 }))
   expect(collector.snapshot().blocks[0]?.value).toEqual([null, null, null])

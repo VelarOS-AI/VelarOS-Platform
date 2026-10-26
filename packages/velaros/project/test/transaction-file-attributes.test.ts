@@ -26,10 +26,10 @@ async function seed(path = 'source.sh', mode = 0o751) {
   const bytes = textCodec.encode('#!/bin/sh\n# 中文🙂\necho original\n', 'utf16le')
   await writeFile(join(root, path), bytes)
   await chmod(join(root, path), mode)
-  return bytes
+  return { bytes, mode: (await stat(join(root, path))).mode & 0o777 }
 }
 
-async function assertFile(path: string, bytes: Buffer, mode: number) {
+async function assertFile(path: string, { bytes, mode }: Awaited<ReturnType<typeof seed>>) {
   expect(await readFile(join(root, path))).toEqual(bytes)
   expect((await stat(join(root, path))).mode & 0o777).toBe(mode)
 }
@@ -44,9 +44,9 @@ test.each([false, true])(
     const tx = await project.prepareEdit({ operations: amend ? [first] : [first, second] })
     if (amend) await project.amendEdit({ transactionId: tx.transactionId, operations: [second] })
     await project.applyEdit({ transactionId: tx.transactionId })
-    await assertFile('final.sh', original, 0o751)
+    await assertFile('final.sh', original)
     await project.rollback({ transactionId: tx.transactionId })
-    await assertFile('source.sh', original, 0o751)
+    await assertFile('source.sh', original)
     expect(await Bun.file(join(root, 'final.sh')).exists()).toBe(false)
     expect(await Bun.file(join(root, 'middle.sh')).exists()).toBe(false)
   }
@@ -62,7 +62,7 @@ test('delete rollback after reopening retains private file permissions', async (
   await project.applyEdit({ transactionId: tx.transactionId })
   const reopened = await createProjectKernel({ root, transactionStatePath })
   await reopened.rollback({ transactionId: tx.transactionId })
-  await assertFile('private.txt', original, 0o600)
+  await assertFile('private.txt', original)
 })
 
 test.each([false, true])(
@@ -91,46 +91,50 @@ test.each([false, true])(
       await expect(project.applyEdit({ transactionId: tx.transactionId })).rejects.toThrow(
         'injected receipt failure'
       )
-      await assertFile('source.sh', original, 0o751)
+      await assertFile('source.sh', original)
       expect(await Bun.file(join(root, 'target.sh')).exists()).toBe(false)
       await project.applyEdit({ transactionId: tx.transactionId })
-      await assertFile('target.sh', original, 0o751)
+      await assertFile('target.sh', original)
     } finally {
       hook.mockRestore()
     }
   }
 )
 
-test('rollback preserves a subsequent external chmod on an existing file', async () => {
-  await seed('private.txt', 0o600)
-  const project = await createProjectKernel({ root })
-  const tx = await project.prepareEdit({
-    operations: [
-      {
-        operation: {
-          type: 'replace_text',
-          path: 'private.txt',
-          oldText: 'original',
-          newText: 'changed',
+test.skipIf(process.platform === 'win32')(
+  'POSIX rollback preserves a subsequent external chmod on an existing file',
+  async () => {
+    await seed('private.txt', 0o600)
+    const project = await createProjectKernel({ root })
+    const tx = await project.prepareEdit({
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'private.txt',
+            oldText: 'original',
+            newText: 'changed',
+          },
         },
-      },
-    ],
-  })
-  await project.applyEdit({ transactionId: tx.transactionId })
-  await chmod(join(root, 'private.txt'), 0o400)
-  await project.rollback({ transactionId: tx.transactionId })
-  expect((await stat(join(root, 'private.txt'))).mode & 0o777).toBe(0o400)
-})
+      ],
+    })
+    await project.applyEdit({ transactionId: tx.transactionId })
+    await chmod(join(root, 'private.txt'), 0o400)
+    await project.rollback({ transactionId: tx.transactionId })
+    expect((await stat(join(root, 'private.txt'))).mode & 0o777).toBe(0o400)
+  }
+)
 
 test('rename captures permissions changed after preparation', async () => {
   const original = await seed()
   const project = await createProjectKernel({ root })
   const tx = await project.prepareEdit({ operations: [rename('source.sh', 'target.sh')] })
   await chmod(join(root, 'source.sh'), 0o700)
+  original.mode = (await stat(join(root, 'source.sh'))).mode & 0o777
   await project.applyEdit({ transactionId: tx.transactionId })
-  await assertFile('target.sh', original, 0o700)
+  await assertFile('target.sh', original)
   await project.rollback({ transactionId: tx.transactionId })
-  await assertFile('source.sh', original, 0o700)
+  await assertFile('source.sh', original)
 })
 
 test('restart recovers an interrupted rename from its durable restore plan', async () => {
@@ -155,10 +159,10 @@ test('restart recovers an interrupted rename from its durable restore plan', asy
     hook.mockRestore()
   }
   const reopened = await createProjectKernel({ root, transactionStatePath })
-  await assertFile('source.sh', original, 0o700)
+  await assertFile('source.sh', original)
   expect(await Bun.file(join(root, 'target.sh')).exists()).toBe(false)
   await reopened.applyEdit({ transactionId: tx.transactionId })
-  await assertFile('target.sh', original, 0o700)
+  await assertFile('target.sh', original)
 })
 
 test('50-file rename batch and rollback restore exact bytes and varied permissions', async () => {
@@ -171,11 +175,9 @@ test('50-file rename batch and rollback restore exact bytes and varied permissio
     operations: originals.map((_, i) => rename(`source-${i}.txt`, `target-${i}.txt`)),
   })
   await project.applyEdit({ transactionId: tx.transactionId })
-  for (const [i, original] of originals.entries())
-    await assertFile(`target-${i}.txt`, original, modes[i % modes.length])
+  for (const [i, original] of originals.entries()) await assertFile(`target-${i}.txt`, original)
   await project.rollback({ transactionId: tx.transactionId })
-  for (const [i, original] of originals.entries())
-    await assertFile(`source-${i}.txt`, original, modes[i % modes.length])
+  for (const [i, original] of originals.entries()) await assertFile(`source-${i}.txt`, original)
 })
 
 test.each([-1, 0o1000, 0o4755, 1.5, '0755', null])(
@@ -193,5 +195,39 @@ test.each([-1, 0o1000, 0o4755, 1.5, '0755', null])(
     expect(
       () => new FileProjectTransactionStateStore({ path: transactionStatePath, root })
     ).toThrow('file mode')
+  }
+)
+
+test.skipIf(process.platform !== 'win32')(
+  'Windows read-only rollback refuses without overwriting and can retry after permission is restored',
+  async () => {
+    const original = await seed('private.txt', 0o600)
+    const path = join(root, 'private.txt')
+    const project = await createProjectKernel({ root })
+    const tx = await project.prepareEdit({
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'private.txt',
+            oldText: 'original',
+            newText: 'changed',
+          },
+        },
+      ],
+    })
+    await project.applyEdit({ transactionId: tx.transactionId })
+    const changed = await readFile(path)
+    await chmod(path, 0o400)
+    const readOnlyMode = (await stat(path)).mode & 0o777
+    try {
+      await expect(project.rollback({ transactionId: tx.transactionId })).rejects.toThrow()
+      expect(await readFile(path)).toEqual(changed)
+      expect((await stat(path)).mode & 0o777).toBe(readOnlyMode)
+    } finally {
+      await chmod(path, original.mode)
+    }
+    await project.rollback({ transactionId: tx.transactionId })
+    await assertFile('private.txt', original)
   }
 )

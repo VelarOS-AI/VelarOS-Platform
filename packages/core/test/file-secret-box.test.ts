@@ -17,7 +17,6 @@ test('one-time publication never overwrites a target or leaves a partial file on
     expect(writeFileOnceSync(path, 'second')).toBe(false)
     expect(readFileSync(path, 'utf8')).toBe('first')
     expect(readdirSync(root)).toEqual(['key'])
-    expect(statSync(path).mode & 0o777).toBe(0o600)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -82,6 +81,17 @@ test('concurrent processes encrypt using the same completely published key', asy
   } finally {
     for (const child of children) if (child.exitCode === null) child.kill()
     await Promise.all(children.map((child) => child.exited))
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test.skipIf(process.platform === 'win32')('POSIX secret files are private to their owner', () => {
+  const root = mkdtempSync(join(tmpdir(), 'secret-mode-'))
+  try {
+    const path = join(root, 'key')
+    expect(writeFileOnceSync(path, 'secret')).toBe(true)
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+  } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
