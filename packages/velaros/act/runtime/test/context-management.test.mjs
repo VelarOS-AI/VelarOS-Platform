@@ -807,6 +807,9 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
 })
 
 test('INV-53 automatic folds persist each busy volume narrative once, whether pressure or boundary maintenance supplies it', async (t) => {
+  const detailChars = 3000
+  // Leave room for at least one busy sealed volume after the recent tail is carried forward.
+  const narrationWindow = WINDOW + Math.ceil((detailChars * ActRuntimeTuning.narrateTurns) / 4)
   const narrated = []
   const maintenanceCalls = []
   const maintenance = {
@@ -882,7 +885,7 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
       }
       yield {
         type: 'text',
-        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(3000)});\n${marker(request)}`,
+        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(${detailChars})});\n${marker(request)}`,
       }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -901,7 +904,11 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
       protocol: { defaultRetain: 'segment' },
     },
     {
-      limits: { contextTokens: WINDOW + 4000, inputTokens: WINDOW, outputTokens: 2048 },
+      limits: {
+        contextTokens: narrationWindow + 4000,
+        inputTokens: narrationWindow,
+        outputTokens: 2048,
+      },
       estimate: async (request) => ({
         tokens: Math.ceil(requestSize(request) / 4),
         precision: 'estimate',
