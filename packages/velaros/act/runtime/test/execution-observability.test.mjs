@@ -911,7 +911,12 @@ for (const transport of ['tools', 'text']) {
     await f.collect()
     // Parallel completion may wake the model while the wait control records its own result.
     assert((await f.programs.state()).jobs.every((job) => job.status === 'succeeded'))
-    assert.equal(f.requests.length, 3, 'waiting must not poll the model')
+    // The target and its wait control can finish separately. Every follow-up above must
+    // already see the target complete; one later control-result turn is not polling.
+    assert(
+      f.requests.length >= 3 && f.requests.length <= 4,
+      'only target completion and wait-control completion may wake the model'
+    )
     const snapshot = await f.session.executions.wait(
       { executionId: target },
       'host',
