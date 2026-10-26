@@ -565,7 +565,28 @@ export class RuntimeTrace implements RuntimeTraceApi {
         selected.has(record.title.slice('script:version:'.length))
       )
         select(record)
+    const journal = new Map<string, Awaited<ReturnType<ContextInvocationJournalApi['list']>>>()
+    for (const executionId of executions)
+      journal.set(executionId, await this.journal.list(this.sessionId, executionId))
     let remaining = maxChars
+    const agentTasks = new Map<object, string>()
+    // 子任务的说明先占正文预算；大请求和日志不能把线程的身份说明挤成空字符串。
+    for (const entries of journal.values())
+      for (const invocation of entries) {
+        const { binding, operation, input } = invocation.prepared
+        if (binding.moduleId !== 'velaros:agents' || !['start', 'resume'].includes(operation))
+          continue
+        const task = isPlainObject(input) ? (operation === 'start' ? input.task : input.input) : ''
+        const text = (isString(task) ? task : '').slice(
+          0,
+          Math.max(
+            0,
+            fullContent ? remaining : Math.min(remaining, ActRuntimeTuning.parentTaskPreviewChars)
+          )
+        )
+        agentTasks.set(invocation, text)
+        remaining -= text.length
+      }
     const requestSummary = summarizeModelRequest(request, remaining, fullContent)
     remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
@@ -593,9 +614,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const record of records)
       if (selected.has(record.ref.id)) traceRecords.push(await project(record))
     const invocations: Array<ActTurnTrace['invocations'][number]> = []
-    const journal = new Map<string, Awaited<ReturnType<ContextInvocationJournalApi['list']>>>()
-    for (const executionId of executions)
-      journal.set(executionId, await this.journal.list(this.sessionId, executionId))
     for (const executionId of executions)
       for (const invocation of journal.get(executionId)!) {
         const summary = summarizeInvocation(invocation, remaining, fullContent)
@@ -725,7 +743,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const item of dispatched) {
       if (!item.executionId) continue
       for (const invocation of journal.get(item.executionId) ?? []) {
-        const { binding, operation, input } = invocation.prepared
+        const { binding, operation } = invocation.prepared
         const job: unknown = invocation.receipt?.value
         if (
           binding.moduleId !== 'velaros:agents' ||
@@ -740,9 +758,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         claimed.set(job.id, index + 1)
         const phase = (await childPhases(job.id))[index]
         const latest = phase?.job ?? job
-        const task = isPlainObject(input) ? (operation === 'start' ? input.task : input.input) : ''
-        const taskText = (isString(task) ? task : '').slice(0, Math.max(0, remaining))
-        remaining -= taskText.length
+        const taskText = agentTasks.get(invocation) ?? ''
         const resultId =
           isPlainObject(latest.result) && isString(latest.result.id) ? latest.result.id : ''
         const resultRecord = recordById.get(resultId)

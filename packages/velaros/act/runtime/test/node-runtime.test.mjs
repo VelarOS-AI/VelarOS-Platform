@@ -1504,6 +1504,12 @@ test('host filenames remain stable across catalog order and declarations are ord
     const result = await runner.run(
       {
         ...request(source, 10000, operations),
+        packages: [
+          {
+            specifier: 'example:public',
+            exports: { shared: 'example:host', denied: 'example:private' },
+          },
+        ],
         host: {
           sessionId: 'catalog',
           executionId: 'catalog',
@@ -1522,6 +1528,15 @@ test('host filenames remain stable across catalog order and declarations are ord
     assert.match(data.client, /import .*bridge\.mjs/)
     assert.doesNotMatch(data.client, /node:http|VELAROS_HOST_TOKEN/)
     assert.equal(new Set(data.index.map((item) => item.client)).size, 2)
+    const publicEntry = data.index.find(
+      (item) => item.module === 'example:public' && item.member === 'shared'
+    )
+    const internalEntry = data.index.find((item) => item.module === 'example:host')
+    assert.equal(publicEntry.namespace, 'example:host')
+    assert.equal(publicEntry.documentation, internalEntry.documentation)
+    assert.equal(publicEntry.operationDirectory, internalEntry.operationDirectory)
+    assert.deepEqual(publicEntry.operations, ['read'])
+    assert(!data.index.some((item) => item.member === 'denied'))
     catalogs.push(data.index.find((item) => item.module === 'example:host').client)
   }
   assert.equal(catalogs[0], catalogs[1])
@@ -1680,10 +1695,12 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       maxChildren: 1,
       profiles: {
         worker: {
+          instructions: 'Host child presentation rule.',
           node: true,
           modules: [],
           model: driver(
-            `import {writeFile} from 'node:fs/promises';await writeFile('child-proof.txt','child node');console.log('child-finished');`
+            `import {writeFile} from 'node:fs/promises';await writeFile('child-proof.txt','child node');console.log('child-finished');`,
+            (req) => assert.match(req.instructions, /Host child presentation rule\./)
           ),
         },
       },
@@ -1691,9 +1708,11 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('parent')
+  const parentTurns = []
   for await (const event of session.submit('Delegate the file creation and verify the result.'))
-    void event
+    if (event.type === 'turn') parentTurns.push(event.turnId)
   assert.equal((await session.inspect()).status, 'completed')
+  assert.equal((await session.trace(parentTurns[0], 256)).agents[0].task, 'write child proof')
   assert.equal(await readFile(join(f.cwd, 'child-proof.txt'), 'utf8'), 'child node')
   assert.ok(identities.includes('parent'))
   assert.equal(new Set(identities).size, 2)

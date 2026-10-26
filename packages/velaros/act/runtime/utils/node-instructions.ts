@@ -12,7 +12,6 @@ import { ContextMaterialsModuleId, SystemMembers } from '../../system/contract/c
 /** 标准编程环境只介绍运行边界与应用能力的发现入口。 */
 export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] = []): string {
   const capabilities = [
-    [AgentsModuleId, '委派任务并收集结果'],
     [SearchModuleId, '检索来源证据'],
     [ContextMaterialsModuleId, '读取父任务原文并提交整理补丁'],
   ]
@@ -37,12 +36,10 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '验证要经过用户实际使用的入口。新增测试先查项目的发现规则，再确认默认命令确实执行了这些文件和断言；命令退出 0 只证明它实际覆盖的范围。可用测试清单或临时必失败断言核对发现范围，恢复断言后重跑。生成或打包的交付物须检查源码改动是否传到消费入口。',
     '检查记录关联当时的产物、实际命令、结果和覆盖范围。后续改动补验受影响部分；相关检查通过后，只有新增改动、关联失败、尚未覆盖要求或明确要求才扩大验证。收尾逐项核对当前要求、最终差异与回执，报告实际结果和证据缺口。',
     '独立读/算批量逐项核结果；依赖 await。副作用留身份/回执；断流核状态，效果未知不重放。',
-    `目录根 process.env.${NodeEnvironmentVariables.directory.name}，读 index.json：execution=Node/路径，packages=身份，skills=用途/资源（velaros:skills 的 load({name}) 读全文）；capabilities 按 module 找项，每项的 documentation、operationDirectory/<操作名>.d.ts 是声明和操作示例，均相对目录根。子进程共用环境。`,
+    `目录根 process.env.${NodeEnvironmentVariables.directory.name}；index.json 含 execution/路径、packages/身份、skills/资源、capabilities/能力。capabilities 按 module/member 找项，每项的 documentation、operationDirectory/<操作名>.d.ts 是声明及示例，相对目录根；velaros:skills.load({name}) 读技能全文。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes(AgentsModuleId)
-      ? [
-          '任务调度/通信见 velaros:agents；共享状态与事件见 velaros:system 的 store，先读声明和示例。',
-        ]
+      ? ['velaros:agents 调度/通信；velaros:system 的 store 共享状态/事件；用前查声明。']
       : []),
     ...(modules.includes('velaros:project')
       ? [

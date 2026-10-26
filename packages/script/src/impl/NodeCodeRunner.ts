@@ -309,6 +309,8 @@ class NodeCodeRunner implements CodeRunnerApi {
       await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), { mode: 0o600 })
       const index: Array<{
         module: string
+        member?: string
+        namespace?: string
         summary: string
         client: string
         documentation: string
@@ -347,7 +349,7 @@ class NodeCodeRunner implements CodeRunnerApi {
           ),
           { mode: 0o600 }
         )
-        index.push({
+        const entry = {
           module: namespace,
           summary: request.host?.modules[namespace]?.summary ?? namespace,
           client,
@@ -357,7 +359,13 @@ class NodeCodeRunner implements CodeRunnerApi {
             !isEmpty(Object.keys(operationDocs)),
             operationDirectory
           ),
-        })
+        }
+        index.push(entry)
+        // 组合包的公开导入和底层模块共享同一份声明，发现面与实际 exports 保持一致。
+        for (const pkg of request.packages ?? [])
+          for (const [member, target] of Object.entries(pkg.exports))
+            if (target === namespace)
+              index.push({ ...entry, module: pkg.specifier, member, namespace })
       }
       await writeFile(
         join(catalog, 'index.json'),

@@ -504,6 +504,8 @@ export interface McpConnectionOptions {
  * 写入与共享空间跟父任务一样，不用另外授权。
  */
 export interface AgentProfile {
+  /** 宿主给该类子任务的通用指令；与派发任务分开，不自动继承主任务的角色或执行模式。 */
+  readonly instructions?: string
   /** 显式继承父任务的标准 Node 操作系统范围；能力目录仍受 modules 白名单约束。 */
   readonly node?: boolean
   /** 给主模型选择配置时看的任务用途。 */

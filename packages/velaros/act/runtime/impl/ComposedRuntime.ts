@@ -527,9 +527,14 @@ class ComposedRuntime implements VelarosRuntime {
         node: profile.node ? this.options.node : undefined,
         environment: this.options.environment,
         parentTask: parentTask?.path,
-        instructions: parentTask
-          ? '你负责本次派发指定的范围，父任务输入用于核对相关要求。环境中的 parentTask 是原始输入的文件索引；goals 按输入顺序列出原文和附件 path，摘录有缺口时用 Shell 或 node:fs 补读。'
-          : undefined,
+        instructions: [
+          profile.instructions,
+          parentTask
+            ? '你负责本次派发指定的范围，父任务输入用于核对相关要求。环境中的 parentTask 是原始输入的文件索引；goals 按输入顺序列出原文和附件 path，摘录有缺口时用 Shell 或 node:fs 补读。'
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n'),
         maintain: this.allows(job.sessionId, MemoryModuleId)
           ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
           : undefined,
