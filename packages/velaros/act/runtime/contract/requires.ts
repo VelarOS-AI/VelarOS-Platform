@@ -1,6 +1,6 @@
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 
-import type { ActContextPolicy, ActRunLimits } from '@velaros-ai/agent'
+import type { ActContextPolicy, ActRunLimits, ActRunEvent, AgentJob } from '@velaros-ai/agent'
 import type {
   ContextCompletionPort,
   ContextSourcePort,
@@ -522,6 +522,8 @@ export interface AgentProfile {
 
 /** 子任务调度的宿主配置。 */
 export interface VelarosAgentsOptions {
+  /** 子任务有序实时事件，只用于宿主展示；回调异常记录日志，不改变执行或持久事实。 */
+  onEvent?(job: Readonly<AgentJob>, event: ActRunEvent): void
   /** 可选配置及其能力范围。 */
   readonly profiles: Readonly<Record<string, AgentProfile>>
   /** 同时活动的业务子任务数；模型请求另受 modelTools.concurrency 约束。 */

@@ -1620,6 +1620,7 @@ test('native syntax errors do not execute an earlier file mutation', async (t) =
 
 test('business children inherit an explicitly enabled Node scope and retain their own process identity', async (t) => {
   const identities = []
+  const childEvents = []
   let manifest
   const f = await fixture(t, { output: (value) => identities.push(value.sessionId) })
   function driver(source, inspect) {
@@ -1632,6 +1633,9 @@ test('business children inherit an explicitly enabled Node scope and retain thei
         inspect?.(req)
         const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
         assert.match(req.instructions, /Node.js/)
+        assert.match(req.instructions, /process.env.VELAROS_HOST_DIR/)
+        assert.match(req.instructions, /每项的 documentation/)
+        yield { type: 'reasoning', text: 'Inspect the task inputs.' }
         yield {
           type: 'text',
           text:
@@ -1665,6 +1669,13 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       }
     ),
     agents: {
+      onEvent(job, event) {
+        childEvents.push({ job: structuredClone(job), event: structuredClone(event) })
+        // 展示端不能改变任务身份、正文或运行结局；异常同样不终止真实工作。
+        job.id = 'changed-by-observer'
+        if (event.type === 'text') event.text = 'changed-by-observer'
+        if (event.type === 'reasoning') throw Error('observer unavailable')
+      },
       concurrency: 1,
       maxChildren: 1,
       profiles: {
@@ -1686,6 +1697,16 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   assert.equal(await readFile(join(f.cwd, 'child-proof.txt'), 'utf8'), 'child node')
   assert.ok(identities.includes('parent'))
   assert.equal(new Set(identities).size, 2)
+  assert(childEvents.some(({ event }) => event.type === 'reasoning'))
+  assert(childEvents.some(({ event }) => event.type === 'program'))
+  assert(
+    childEvents.some(({ event }) => event.type === 'accepted' && event.text.includes('Finished.'))
+  )
+  assert(
+    childEvents.every(
+      ({ job }) => job.parentSessionId === 'parent' && job.id !== 'changed-by-observer'
+    )
+  )
   assert(manifest?.artifacts.length > 0)
   const recalled = await session.execute({
     source: `import {memory} from 'velaros:system';console.log(JSON.stringify(JSON.parse((await memory.read({ref:${JSON.stringify(manifest.ref)}})).text).artifacts));`,
@@ -1693,6 +1714,8 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   assert.equal(recalled.checked, true)
   assert.equal(recalled.result.process.exitCode, 0)
   assert.deepEqual(JSON.parse(recalled.result.process.stdout), manifest.artifacts)
+  // Windows 不允许删除打开的 SQLite 文件；fixture 清目录前先归还运行时。
+  await runtime.close()
 })
 
 test('Execa command source persists and is reusable by sourceRef', async (t) => {

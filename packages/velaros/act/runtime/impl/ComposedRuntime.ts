@@ -628,10 +628,14 @@ class ComposedRuntime implements VelarosRuntime {
         throw new AggregateError([error, ...failures], '子会话启动失败且清理异常')
       throw error
     }
+    const onEvent = this.options.agents?.onEvent
     return {
-      submit: (value: Parameters<typeof session.submit>[0], runSignal?: AbortSignal) => {
+      submit: async function* (
+        value: Parameters<typeof session.submit>[0],
+        runSignal?: AbortSignal
+      ) {
         const submission = isString(value) ? { text: value } : value
-        return session.submit(
+        for await (const event of session.submit(
           {
             ...submission,
             text: parentTask?.preview
@@ -641,7 +645,14 @@ class ComposedRuntime implements VelarosRuntime {
           },
           AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])]),
           { deadline: activity.binding.deadline }
-        )
+        )) {
+          try {
+            onEvent?.(structuredClone(job), structuredClone(event))
+          } catch (error) {
+            Log.tag('ActRuntime').warn('子任务展示回调失败，执行继续', { error })
+          }
+          yield event
+        }
       },
       answer: (value: Parameters<typeof session.answer>[0]) => session.answer(value),
       steer: (value: Parameters<typeof session.steer>[0]) => session.steer(value),

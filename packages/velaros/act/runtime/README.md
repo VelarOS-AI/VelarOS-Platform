@@ -63,7 +63,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 
 模型说明由共同运行语义和所选传输的用法组成，按 `allowed` 与 `names` 同步裁剪、命名。原生模式说明同一响应的多个调用、`code/options` 字段、JSON 转义与 `blobs` 的 `name/text`；文本模式说明本帧控制头、裸源码/原文段及闭合行。两套说明各自给出观察整体替换、编辑、刷新和退订的对应写法；原生 JSON 示例经过实际解码器验证。共享参数校验的修复错误采用通用的源码与选项术语。
 
-应用能力通过 `$VELAROS_HOST_DIR/index.json` 与按操作生成的 `.d.ts` 文件发现，保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node 和协议选择；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察使用受限执行器。审批由 `createNodeExecutionEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；宿主的实际约束证据随 Node 回执返回。
+宿主可在 `agents.onEvent(job, event)` 接收子任务有序的正文、思考与程序增量；`job.sessionId`、`parentSessionId` 标识子、父会话。回调只用于展示，收到隔离副本，异常不影响执行；恢复和结果仍从持久追踪读取。应用能力从 `process.env.VELAROS_HOST_DIR` 定位 `index.json`，`capabilities` 中每项的 `documentation`、`operationDirectory` 相对该目录根解析。保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node 和协议选择；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察使用受限执行器。审批由 `createNodeExecutionEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；宿主的实际约束证据随 Node 回执返回。
 
 自动封卷叙事优先将原始需求、当前事项和整卷工作材料完整交给结构化模型调用，生成事实摘要、本卷新增未解事项与失败尝试。材料标出本卷完整可见的真实执行见证；模型可选用这些结果中的唯一原文引文或一层 JSON 字符串值，逐项关闭已有 question。宿主将解码引文映射回不可变原文的 UTF-16 区间，核对原文与解码值之间的唯一性和原文长度上限，再绑定当前版本、最新完整用户原文，事项与叙事一起原子发布。用户约束及未提及的事项继续保留，每卷只保存该卷新增问题。只有供应商明确标记可等待重试的瞬时错误才原样重试，最多两次，单次退避不超过三十秒；每次都经过活动与祖先预算，取消立即生效，失败响应及已收到用量分别保留，每卷只发布一次完整叙事。完整材料超出容量时使用交互式分页整理。显式整理与容量压力整理仍可按证据调整各分区的展示。
 
