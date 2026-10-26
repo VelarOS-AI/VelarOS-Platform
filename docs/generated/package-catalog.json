@@ -67,7 +67,7 @@
       "domain": "foundations",
       "directory": "packages/script",
       "name": "@velaros-ai/script",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "description": "Native Node.js execution with Execa, ripgrep, globby, diff, YAML, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.4",
+      "version": "0.6.8",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
