@@ -13,8 +13,10 @@ import { assertLocalReleaseIdentity, parseReleaseArguments } from './local-relea
 import { collectReleasePackages, resolveReleaseSelection } from './releaseTopology.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../..')
-const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(process.argv.slice(2))
-if (dryRun || skipBuild || onlySelectors.length > 0) {
+const { dryRun, skipBuild, githubRelease, localTag, onlySelectors } = parseReleaseArguments(
+  process.argv.slice(2)
+)
+if (dryRun || skipBuild || githubRelease || onlySelectors.length > 0) {
   throw new Error('release:verify accepts exactly one local tag and no publication selectors')
 }
 

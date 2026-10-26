@@ -1,6 +1,10 @@
-# Platform 消费仓本机升级
+# Platform 消费仓升级
 
-Platform 包通过 `bun run release:local <tag> [--only ...]` 从维护者本机发布。`.github/workflows/release-packages.yml` 是静态跳过的策略哨兵，不发布包，也不自动修改消费仓。包在 GitHub Packages 可读后，维护者再逐个消费仓执行升级；这样产品所需的源码迁移、原生构建和发布仍由对应仓库及原生主机负责。
+Platform 正式归档由 GitHub Actions 完整检查后发布到 GitHub Releases，不自动修改消费仓。消费仓按 release-manifest.json 固定 tag、sourceSha、包版本、大小、SHA-256 与 SHA-512，再验证下载的同一归档。Desktop 使用 resources/runtime-snapshot.json 与 bun.lock 保存这些身份；UI 的独立来源仍由该快照记录。产品所需的源码迁移、安装验证和原生发布由对应仓库负责。
+
+## 旧 GitHub Packages 消费方式
+
+以下定向升级器仅适用于仍从 GitHub Packages 注册表消费的仓库，不适用于 Release tarball 快照。GitHub Release 发布成功不代表同版本已上传注册表；不要将两种来源或摘要混用。
 
 正式消费仓清单位于 `scripts/release/platform-consumers.json`，当前包含 Desktop、Workbench、Termel 和 VelarOS Labs。`scripts/release/sync-platform-consumer.mjs` 是保持的定向升级器，可在 Platform checkout 中显式运行：
 

@@ -65,7 +65,7 @@ The independently installable VelarOS Termel product owns its Host composition a
 
 This repository is public under Apache-2.0. That license does not apply to separate product repositories merely because they consume Platform. The root workspace remains private in package.json to prevent publishing the monorepo root.
 
-Packages are distributed through GitHub Packages under the @velaros-ai scope. Reading the source needs no account; registry access uses the NODE_AUTH_TOKEN referenced by .npmrc. Source development uses workspace dependencies and the committed lockfile. Product hosts provide model credentials, storage, process execution and authorization; do not import their private source trees.
+Official package tarballs and hash manifests are distributed through public GitHub Releases. The legacy GitHub Packages registry under the @velaros-ai scope requires the NODE_AUTH_TOKEN referenced by .npmrc. Source development uses workspace dependencies and the committed lockfile. Product hosts provide model credentials, storage, process execution and authorization; do not import their private source trees.
 
 ## Validation boundaries
 

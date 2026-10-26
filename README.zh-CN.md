@@ -59,7 +59,7 @@ bun run check
 
 本仓库按 Apache-2.0 公开。独立产品仓库不会因为依赖 Platform 而自动适用本仓许可证。根 package.json 保持 private，防止误发布整个 monorepo 根包。
 
-各包发布到 GitHub Packages 的 @velaros-ai 作用域。读取源码无需登录；访问包注册表使用 .npmrc 引用的 NODE_AUTH_TOKEN。源码开发使用 workspace 依赖与已提交锁文件。模型凭据、存储、进程执行和授权由产品宿主注入，不导入私有产品源码。
+正式包归档与校验清单通过公开 GitHub Releases 分发。旧 GitHub Packages 的 @velaros-ai 注册表仍需 .npmrc 引用的 NODE_AUTH_TOKEN。源码开发使用 workspace 依赖与已提交锁文件。模型凭据、存储、进程执行和授权由产品宿主注入，不导入私有产品源码。
 
 ## 验证边界
 
