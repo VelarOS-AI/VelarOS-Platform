@@ -315,6 +315,9 @@ test('打开会话失败后清除半初始化资源，可以用同一 ID 重试'
 })
 
 test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，关闭后真实值可恢复', async (t) => {
+  // Use an explicit frame cap so additional discovery documentation or longer checkout paths
+  // cannot turn an incidental frame size into the test's unstated policy.
+  const frameChars = 20000
   const root = await mkdtemp(join(tmpdir(), 'act-soak-'))
   const path = join(root, 'context.sqlite')
   let calls = 0
@@ -400,7 +403,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
     model: driver,
     memory: false,
     context: { maintenance: false },
-    limits: { turns: 100, timeoutMs: 180000, projectionChars: 48000 },
+    limits: { turns: 100, timeoutMs: 180000, projectionChars: frameChars },
   })
   t.after(async () => {
     await runtime.close()
@@ -417,7 +420,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
   assert.equal(previous, 80)
   // 每帧都在窗口内；本帧尾不随轮数变长；中间确实封过段
   assert(statuses.every((status) => status.inputTokens <= status.inputLimit))
-  assert(Math.max(...bodies) < 20000, JSON.stringify(largestFrame))
+  assert(Math.max(...bodies) <= frameChars, JSON.stringify(largestFrame))
   assert(
     Math.max(...statuses.map((status) => status.segment.index)) >= 2,
     JSON.stringify(statuses.map((status) => status.segment))

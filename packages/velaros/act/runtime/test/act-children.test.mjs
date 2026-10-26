@@ -302,7 +302,19 @@ test('INV-31 parent and child run the same ScriptAct loop and charge the shared 
       (sum, item) => sum + item.summary.input.length + item.summary.output.length,
       0
     )
-  assert.equal(bodyChars + summaryChars, 64)
+  const executionChars = bounded.executions.reduce(
+    (sum, item) => sum + item.source.length + (item.processOutput?.length ?? 0),
+    0
+  )
+  const observationChars =
+    (bounded.observation.registration?.source.length ?? 0) +
+    (bounded.observation.run?.source.length ?? 0)
+  const agentChars = bounded.agents.reduce(
+    (sum, item) => sum + item.task.length + item.answer.length,
+    0
+  )
+  assert.equal(bounded.agents[0].task, 'investigate')
+  assert.equal(bodyChars + summaryChars + executionChars + observationChars + agentChars, 64)
 })
 
 test('shared material is copied with provenance and caller cannot forge another parent scope', async (t) => {

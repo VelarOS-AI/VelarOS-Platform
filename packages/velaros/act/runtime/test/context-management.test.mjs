@@ -816,6 +816,22 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
     async *stream(request) {
       const call = { volume: null }
       maintenanceCalls.push(call)
+      if (request.response.type === 'json') {
+        const material = JSON.parse(request.materials[0].text)
+        assert.equal(material.kind, 'context-narration')
+        call.volume = material.volume.ref.id
+        narrated.push(call.volume)
+        yield {
+          type: 'text',
+          text: JSON.stringify({
+            summary: `Volume ${material.volume.from + 1}-${material.volume.through} printed step outputs`,
+            unresolved: ['decide the final format'],
+            negativeAttempts: [`printing again after ${material.volume.through}`],
+          }),
+        }
+        yield { type: 'finish', reason: 'stop' }
+        return
+      }
       const snapshot = JSON.parse(
         JSON.parse(request.materials[0].text).partitions.task.goals[0].text
       ).snapshot

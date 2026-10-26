@@ -1229,25 +1229,27 @@ test('explicit runtime deadlines reach Node and source reuse restores the defaul
 test('timeout and cancellation terminate real Node and retain failure output', async (t) => {
   const f = await fixture(t)
   const runner = createNodeCodeRunner(f.node)
+  // Exercise timeout cleanup after output, not the runner's ability to cold-start Node in 300 ms.
+  const timeoutMs = 3000
   const timeout = await runner.run(
-    request('console.log("before-timeout"); while(true) {}', 300),
+    request('console.log("before-timeout"); while(true) {}', timeoutMs),
     noCalls,
     () => {}
   )
   assert.equal(timeout.error.code, 'TIMEOUT')
-  assert.match(timeout.error.message, /程序计时时限 300 ms/u)
+  assert.match(timeout.error.message, new RegExp(`程序计时时限 ${timeoutMs} ms`, 'u'))
   assert.match(timeout.process.stdout, /before-timeout/)
   const childSource = 'console.log("child-started"); setInterval(()=>{},1000)'
   const childTimeout = await runner.run(
     request(
       `import {execa} from 'execa'; await execa(process.execPath,['-e',${JSON.stringify(childSource)}],{stdin:'ignore',stdout:'inherit',timeout:60000});`,
-      800
+      timeoutMs
     ),
     noCalls,
     () => {}
   )
   assert.equal(childTimeout.error.code, 'TIMEOUT')
-  assert.match(childTimeout.error.message, /程序计时时限 800 ms/u)
+  assert.match(childTimeout.error.message, new RegExp(`程序计时时限 ${timeoutMs} ms`, 'u'))
   assert.match(childTimeout.process.stdout, /child-started/u)
   assert.equal(childTimeout.process.cleanupIncomplete, false)
   const controller = new AbortController()

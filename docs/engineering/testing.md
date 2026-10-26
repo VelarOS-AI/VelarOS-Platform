@@ -93,3 +93,9 @@ Skill JS/TS 没有独立 test 命令。Core 的权限断言、Script 的 Bun 命
 由于那次全量命令仍有超时失败，Velaros 后续 Node/Act、根 test:act-eval 和 test:suites 未执行。完整发布门没有全部通过；固定 Bun 的 Windows HTTP 处理器限制和上一轮宿主消费门的安装错误仍需在适合的工具链上解决，不把定向重跑或平台跳过等同于发布认证。
 
 最终串行复核：`bun run typecheck`、`bun run lint`、`bun run check:format` 均通过；模块所有权与 33 个 README 示例检查通过。`bun run format` 已执行，暂存差量检查无空白错误。本轮还修正了同期 Runtime 提交的 import 排序与方法简写两处 lint 问题，未改变其行为。
+
+## GitHub Linux 发布检查（2026-10-26）
+
+正式 CI 和发布已迁到 GitHub Actions，使用固定 Bun、Node 24.22.0、bubblewrap 与 ripgrep。首次运行缺少 rg 的六项真实搜索后端失败已通过补齐环境依赖处理，未跳过搜索验收。
+
+后续完整运行的 Runtime Node 用例为 1,192 通过、5 失败、8 跳过。修订五处夹具与断言：追踪预算纳入已经展示的子任务正文并保持 64 字符总额；自动封卷模型支持当前 JSON 叙事合同，同时继续核对持久化与每卷唯一计费；长期记忆检查当前声明发现键；80 轮状态用例明确配置 20,000 字符上限并继续检查同一上限、封卷与最终计数；超时回收用例保留真实超时/取消和输出断言，为 Node 冷启动提供 3 秒测试期限，不改变产品默认期限。这些调整不修改模型提示词，不移除完整质量门；是否可以发布以最新 Actions 全量结果为准。
