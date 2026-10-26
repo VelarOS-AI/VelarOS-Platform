@@ -289,7 +289,7 @@ export function collectTextHygieneFailures(root = repositoryRoot) {
   const hygieneFailures = []
   for (const filePath of walk(root, root).filter(isTextFile)) {
     const content = readFileSync(filePath, 'utf8')
-    const displayPath = relative(root, filePath)
+    const displayPath = relative(root, filePath).replaceAll('\\', '/')
     for (const { label, pattern } of forbiddenText) {
       pattern.lastIndex = 0
       const match = pattern.exec(content)
