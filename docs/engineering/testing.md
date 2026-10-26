@@ -5,6 +5,7 @@ Platform 的生产程序在宿主提供的 Node.js 中执行；Bun 用于包管�
 ## 环境与命令
 
 - 发布必须使用根 package.json 固定的 Bun 版本；日常验证报告同时记录实际 Bun 与 Node 版本。
+- Linux CI 与发布 runner 安装 bubblewrap 和 ripgrep。项目搜索的真实后端合同必须调用实际 rg，不能把缺失依赖后的 adapter 回退当成 ripgrep 验收。
 - 完整工作区包含要求 Node.js 22.15 的 JS/TS Skill。SQLite 适配器的单独最低要求为 22.13；本次 Windows 核验使用 Node.js 24.22.0 与 Bun 1.4.3，不代表固定发布工具链已全量验收。
 - 先执行 `bun install --frozen-lockfile`。根开发依赖提供浏览器合同检查所用的 Vite；Velaros 开发依赖提供 React 和 Electron，产品消费者按公开 peer 合同提供自己的宿主。
 - `bun run format` 统一源码格式；`bun run check` 顺序运行构建、类型检查、lint、格式、测试、套件与门禁。类型检查只通过 `bun run typecheck` 进入既有逐包流程。

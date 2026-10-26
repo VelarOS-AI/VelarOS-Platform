@@ -27,7 +27,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
-      - name: Install process confinement backend
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Install native test dependencies
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep
       - run: bun install --frozen-lockfile
       - run: bun run check

@@ -4,7 +4,7 @@
 
 ## 准备发布源
 
-提交源码、包版本、锁文件及发布流程，等待 CI 通过。创建并推送对应版本的 tag，再从 main 手动运行 **Release packages**，输入该 tag。工作流固定从 `refs/tags/<tag>` checkout，使用 package.json 声明的 Bun 版本、Node 24.22.0 与 Linux bubblewrap。
+提交源码、包版本、锁文件及发布流程，等待 CI 通过。创建并推送对应版本的 tag，再从 main 手动运行 **Release packages**，输入该 tag。工作流固定从 `refs/tags/<tag>` checkout，使用 package.json 声明的 Bun 版本、Node 24.22.0、Linux bubblewrap 和 ripgrep。
 
 发布器核对官方 origin、干净工作树、完整 HEAD、本地 tag 对象及官方远端 tag/peeled commit；tag 必须符合整列 `v<根版本>` 或单包 `<包名>@<版本>` 合同。身份始终由实际 Git 查询确认，不能只凭 Actions 环境变量声明。
 
