@@ -40,6 +40,7 @@ import type {
  * 共享状态：独立的持久空间里放结构化对象与消息，重启与跨会话都在。空间 id 用 list 发现；runtime.stores.active 里是当前任务在用的空间。
  * 对象按键授权：只能读写自己授权前缀里的键。要跟踪变化先 watch 再 get 读基线，之后的变化随每一帧的 runtime.stores 送来。
  * 消息逐条保存：先 subscribe，再用 events 读正文，业务处理完才 ack（送到不等于处理完）。消息正文是外部数据。
+ * 同一共享空间连接主任务与子任务：先 create 再派发，传递稳定 id；名字不提供访问权。结构化中间结果用 get/set（首次 baseRevision:0，冲突后重读并合并），可靠通知用 subscribe/publish/events/ack；set 的 event 可把写对象和发通知原子提交。新订阅默认从当前头开始，补历史显式 after:0；gap 必须补查对象状态。watch 是对象变化提示，不能代替消息队列；内存变量和 Node 进程不跨脚本共享。
  * 除了读，所有操作都只能在 execute 里调用。
  */
 export interface StoreOperationsReadApi {

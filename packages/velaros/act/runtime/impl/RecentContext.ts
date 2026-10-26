@@ -451,9 +451,10 @@ export class RecentContext implements RecentContextApi {
           ...item,
           bodyIncluded: true,
           representation:
-            entry.continuation || nativeResponses.get(record.ref.id)?.body === content
+            entry.representation ??
+            (entry.continuation || nativeResponses.get(record.ref.id)?.body === content
               ? 'full'
-              : frozenRepresentation(content),
+              : frozenRepresentation(content)),
         }
         if (entry.feedback) Object.assign(frozenItem, { feedback: entry.feedback })
         if (entry.outputProofs) Object.assign(frozenItem, { outputProofs: entry.outputProofs })
@@ -476,8 +477,7 @@ export class RecentContext implements RecentContextApi {
         cap,
         carried.has(record.ref.id) ||
           (!response.includes(current?.source ?? '') &&
-            !responsePrograms.includes(current?.source ?? '')),
-        Boolean(continuation) || nativeResponses.has(record.ref.id)
+            !responsePrograms.includes(current?.source ?? ''))
       )
       if (!rendered) {
         messages.push({ role, content: historyReference(record) })
@@ -518,6 +518,7 @@ export class RecentContext implements RecentContextApi {
       const objectId = frozenBody.objectId
       const completeContinuation = continuation && rendered.representation === 'full'
       const freshEntry: SegmentEntry = {
+        representation: rendered.representation,
         ref: record.ref.id,
         sequence: record.sequence,
         role,
@@ -592,8 +593,7 @@ export class RecentContext implements RecentContextApi {
     role: 'user' | 'assistant',
     current: Optional<SegmentLeasedResult>,
     cap: number,
-    withSource: boolean,
-    continuation: boolean
+    withSource: boolean
   ): Promise<
     Optional<{
       content: string
@@ -605,8 +605,9 @@ export class RecentContext implements RecentContextApi {
     if (role === 'assistant') {
       const content = await this.context.read(record.ref, { limit: cap })
       const representation = content.totalChars > content.text.length ? 'excerpt' : 'full'
-      if (continuation && representation === 'full')
-        return { content: content.text, representation }
+      // assistant 历史必须保持模型原话；宿主元数据混进该角色会被当作回复格式继续仿写。
+      // 原文引用、顺序及全文标志仍由 history.items 和冻结账持有。
+      if (representation === 'full') return { content: content.text, representation }
       return {
         content: `${JSON.stringify({
           origin: 'assistant-script',

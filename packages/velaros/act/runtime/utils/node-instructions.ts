@@ -39,6 +39,11 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '独立读/算批量逐项核结果；依赖 await。副作用留身份/回执；断流核状态，效果未知不重放。',
     `目录根 process.env.${NodeEnvironmentVariables.directory.name}，读 index.json：execution=Node/路径，packages=身份，skills=用途/资源（velaros:skills 的 load({name}) 读全文）；capabilities 按 module 找项，每项的 documentation、operationDirectory/<操作名>.d.ts 是声明和操作示例，均相对目录根。子进程共用环境。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
+    ...(modules.includes(AgentsModuleId)
+      ? [
+          '任务调度/通信见 velaros:agents；共享状态与事件见 velaros:system 的 store，先读声明和示例。',
+        ]
+      : []),
     ...(modules.includes('velaros:project')
       ? [
           'velaros:project 提供项目内修改前核对、编码保留、事务、差异及冲突撤回；普通文件遵循 Node 语义。',

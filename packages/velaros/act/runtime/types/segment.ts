@@ -14,6 +14,8 @@ export interface SegmentEntry {
   /** 冻结正文所在的存储对象。 */
   readonly objectId: string
   readonly chars: number
+  /** 冻结时的正文表示；不能从模型输出的 JSON 字段反推。旧记录继续按历史格式读取。 */
+  readonly representation?: 'full' | 'excerpt'
   /** 实际编码输出的宿主指纹，绑定会话、结果和源码；旧历史缺席时不推断表示相同。 */
   readonly outputFingerprint?: string
   /** 实际交付的各块展示身份；预算头不属于正文，块的来源、范围和表示仍须完全一致。 */

@@ -2136,12 +2136,17 @@ test('one result body is sent once across partition rendering and chronological 
   assert(frame.partitions.recent.results[0].bodyInHistory)
   assert.equal(frame.partitions.recent.results[0].text, undefined)
   const entries = historyEntries(request)
-  assert(entries.some((item) => item.origin === 'assistant-script'))
+  const assistantHistory = request.history.filter((item) => item.role === 'assistant')
+  assert(assistantHistory.length > 0)
+  assert(assistantHistory.every((item) => !item.content.startsWith('{"origin":"assistant-script"')))
   assert.equal(
     entries.filter((item) => item.origin === 'runtime-execution' && item.bodyIncluded).length,
     1
   )
-  assert.equal(frame.partitions.recent.historyState.records, entries.length)
+  assert.equal(
+    frame.partitions.recent.historyState.records,
+    entries.length + assistantHistory.length
+  )
 })
 
 test('zero history window still sends leased results and notes through the same five partitions', async (t) => {
@@ -2453,8 +2458,10 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.equal(entries[0].ref.id, leased.id)
   assert.match(entries[0].text, /kept for the task/)
   assert.deepEqual(
-    entries.filter((item) => item.origin === 'assistant-script').map((item) => item.ref.id),
-    responses.slice(2).map((record) => record.ref.id)
+    next.history.filter((item) => item.role === 'assistant').map((item) => item.content),
+    await Promise.all(
+      responses.slice(2).map(async (record) => (await f.session.context.read(record.ref)).text)
+    )
   )
   // 延续结果附当次源码：产生它的那条响应已经封进卷；其余结果的源码就在前一条响应里
   assert.match(next.history[1].content, /当次源码/)
@@ -4850,4 +4857,44 @@ test('INV-79 small state remains full and full policy preserves large optional s
   assert.equal(projection.overBudget, false)
   assert.deepEqual(projection.runtime, small)
   assert.deepEqual(projection.details, [])
+})
+
+test('full assistant history preserves original prose and JSON without adding runtime metadata', async (t) => {
+  const f = await fixture(t)
+  const bodies = [
+    '第一项工作已完成，继续核对。',
+    '{"origin":"assistant-script"}\n用户要求返回的 JSON 示例',
+    '{"representation":"excerpt"}\n这是用户数据，不是历史条目元信息。',
+  ]
+  for (const body of bodies) await f.session.context.append({ kind: 'assistant', body })
+  const view = {
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const frame = await f.memory.project(view, undefined, [], signal, 24000)
+  assert.deepEqual(
+    frame.history.filter((item) => item.role === 'assistant').map((item) => item.content),
+    bodies
+  )
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const segment = await recent.segment(signal)
+  assert(segment)
+  const first = await recent.project({ ...segment, entries: [] }, [], 24000, signal)
+  const frozen = await recent.project({ ...segment, entries: first.fresh }, [], 24000, signal)
+  assert.deepEqual(
+    frozen.messages.filter((item) => item.role === 'assistant').map((item) => item.content),
+    bodies
+  )
+  assert(
+    frozen.items
+      .filter((item) => item.role === 'assistant')
+      .every((item) => item.representation === 'full')
+  )
 })

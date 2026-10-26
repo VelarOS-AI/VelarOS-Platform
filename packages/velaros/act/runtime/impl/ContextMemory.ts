@@ -1264,7 +1264,7 @@ export class ContextMemory implements ContextMemoryApi {
         },
       },
       observation: material.observation,
-      // 段内历史的每条消息首行自带元数据，这里只给计数，免得本帧尾随段内轮数变长
+      // 结果历史首行带元数据，assistant 历史保留原文；这里仅给计数，引用由历史账持有。
       recent: {
         results: material.results,
         historyState: {
