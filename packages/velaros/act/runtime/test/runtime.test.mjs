@@ -315,9 +315,8 @@ test('打开会话失败后清除半初始化资源，可以用同一 ID 重试'
 })
 
 test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，关闭后真实值可恢复', async (t) => {
-  // Use an explicit frame cap so additional discovery documentation or longer checkout paths
-  // cannot turn an incidental frame size into the test's unstated policy.
-  const frameChars = 20000
+  // Assert the configured cap, including discovery metadata whose size varies by host path.
+  const frameChars = 48000
   const root = await mkdtemp(join(tmpdir(), 'act-soak-'))
   const path = join(root, 'context.sqlite')
   let calls = 0

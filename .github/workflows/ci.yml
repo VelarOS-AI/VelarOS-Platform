@@ -5,16 +5,22 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      runtime_diagnostics:
+        description: Run focused runtime diagnostics (does not qualify a release)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ inputs.runtime_diagnostics || false }}
   cancel-in-progress: true
 
 jobs:
   check:
+    name: ${{ inputs.runtime_diagnostics && 'Runtime diagnostics' || 'Full check' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -30,4 +36,12 @@ jobs:
       - name: Install native test dependencies
         run: sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - name: Complete quality gate
+        if: ${{ !inputs.runtime_diagnostics }}
+        run: bun run check
+      - name: Focused runtime diagnostics
+        if: ${{ inputs.runtime_diagnostics }}
+        run: |
+          bun run build
+          cd packages/velaros
+          node --test --test-name-pattern 'INV-53 automatic folds|INV-32 长任务|explicit runtime deadlines' act/runtime/test/context-management.test.mjs act/runtime/test/runtime.test.mjs act/runtime/test/node-runtime.test.mjs

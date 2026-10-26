@@ -914,13 +914,20 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
   assert.equal(f.calls, 44)
   assert(statuses.every((status) => status.inputTokens <= statuses[0].inputLimit))
   // 调度可先由压力整理交付叙事；后续边界消费自动意图时不得再分配一次模型调用。
-  assert(narrated.length >= 1)
   assert.equal(new Set(narrated).size, narrated.length)
   const state = await f.storage.load('s')
   const outcomes = await Promise.all(
     state.records
       .filter((record) => record.title === 'context-maintenance:outcome')
       .map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
+  )
+  assert(
+    narrated.length >= 1,
+    JSON.stringify({
+      maintenanceCalls,
+      outcomes,
+      segments: statuses.map((status) => status.segment),
+    })
   )
   assert.equal(
     outcomes.filter((item) => item.changes?.volume).length,

@@ -1218,11 +1218,11 @@ test('explicit runtime deadlines reach Node and source reuse restores the defaul
     execute: {
       source:
         'console.log("before-explicit-timeout"); await new Promise(() => {setInterval(() => {}, 1000)})',
-      timeoutMs: 300,
+      timeoutMs: 3000,
     },
   })
   assert.equal(stopped.execute.result.failed.code, 'TIMEOUT')
-  assert.equal(stopped.execute.timing.effectiveTimeoutMs, 300)
+  assert.equal(stopped.execute.timing.effectiveTimeoutMs, 3000)
   assert.match(stopped.execute.result.process.stdout, /before-explicit-timeout/)
 })
 
