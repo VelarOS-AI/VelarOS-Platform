@@ -61,6 +61,7 @@ test('release arguments require explicit local intent and preserve dry-run selec
     {
       dryRun: false,
       skipBuild: false,
+      githubRelease: false,
       localTag: tag,
       onlySelectors: ['agent', 'model', 'memory'],
     }
@@ -68,6 +69,7 @@ test('release arguments require explicit local intent and preserve dry-run selec
   assert.deepEqual(parseReleaseArguments(['--dry-run', '--skip-build']), {
     dryRun: true,
     skipBuild: true,
+    githubRelease: false,
     localTag: undefined,
     onlySelectors: [],
   })
@@ -90,6 +92,8 @@ for (const args of [
   ['--local-tag', tag, '--dry-run'],
   ['--only'],
   ['--only', ', ,'],
+  ['--github-release', '--dry-run'],
+  ['--github-release', '--local-tag', tag, '--only', 'agent'],
 ]) {
   test(`rejects unsafe release arguments ${JSON.stringify(args)}`, () => {
     assert.throws(() => parseReleaseArguments(args))
@@ -106,6 +110,20 @@ test('repository identity accepts equivalent official HTTPS and SSH URLs', () =>
   ]) {
     assert.equal(githubRepositoryIdentity(value), 'velaros-ai/velaros-platform')
   }
+})
+
+test('GitHub publication keeps an explicit tag and cannot bypass checks', () => {
+  assert.deepEqual(parseReleaseArguments(['--github-release', '--local-tag', tag]), {
+    dryRun: false,
+    skipBuild: false,
+    githubRelease: true,
+    localTag: tag,
+    onlySelectors: [],
+  })
+  assert.throws(() => parseReleaseArguments(['--github-release']))
+  assert.throws(() =>
+    parseReleaseArguments(['--github-release', '--local-tag', tag, '--skip-build'])
+  )
 })
 
 test('repository identity rejects alternate hosts, credentials, paths and protocols', () => {

@@ -1,11 +1,18 @@
 // 显式本地发布的输入与 Git 身份门；不读取或改写 GitHub Actions 身份变量。
 
 export function parseReleaseArguments(argv) {
-  const options = { dryRun: false, skipBuild: false, localTag: undefined, onlySelectors: [] }
+  const options = {
+    dryRun: false,
+    skipBuild: false,
+    githubRelease: false,
+    localTag: undefined,
+    onlySelectors: [],
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
     if (argument === '--dry-run') options.dryRun = true
     else if (argument === '--skip-build') options.skipBuild = true
+    else if (argument === '--github-release') options.githubRelease = true
     else if (argument === '--local-tag' || argument === '--only') {
       const value = argv[++index]
       if (!value?.trim() || value.startsWith('--')) {
@@ -33,6 +40,9 @@ export function parseReleaseArguments(argv) {
     throw new Error(
       'A real publication requires --local-tag <tag> from a maintained local checkout'
     )
+  }
+  if (options.githubRelease && (options.dryRun || options.onlySelectors.length > 0)) {
+    throw new Error('GitHub releases require the complete release selection and real quality gates')
   }
   if (!options.dryRun && options.skipBuild) {
     throw new Error(

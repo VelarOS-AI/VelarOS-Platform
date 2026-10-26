@@ -1,43 +1,25 @@
-# 本机发布与验证
+# GitHub 发布与验证
 
-Platform 的包、质量门和安全检查都只从维护者的本机 checkout 执行。`.github/workflows/ci.yml`、`codeql.yml`与 `release-packages.yml` 是名称带 `[DISABLED]`、`on: []`、零权限且静态跳过的策略哨兵，不承载构建、凭据或发布，也不产生 GitHub Actions 用量。质量门对 `.github/workflows` 中的 YAML 文件执行精确 allowlist，新增托管 workflow 会直接失败；Dependabot 的 `github-actions` 更新入口也保持关闭。
+正式包发布由 `.github/workflows/release-packages.yml` 在 GitHub Actions 的 Linux runner 执行，不要求维护者拥有 Linux/macOS 发布机。CI 在 main 推送、PR 和手动触发时运行完整 `bun run check`；PR 不取得写权限或发布凭据。独立 CodeQL 暂未启用，现有依赖安全与架构检查仍在完整质量门中运行。
 
 ## 准备发布源
 
-将本次源码、包版本、锁文件和发布流程一起提交。工作树必须干净，包括未跟踪文件。发布 tag 必须已经存在于 `package.repository` 指定的官方 GitHub 仓库，且满足：
+提交源码、包版本、锁文件及发布流程，等待 CI 通过。创建并推送对应版本的 tag，再从 main 手动运行 **Release packages**，输入该 tag。工作流固定从 `refs/tags/<tag>` checkout，使用 package.json 声明的 Bun 版本、Node 24.22.0 与 Linux bubblewrap。
 
-- `origin` 是该仓库的 HTTPS 或 Git SSH 地址。
-- 本地 `tag^{commit}` 等于 `HEAD`。
-- `git ls-remote origin` 返回的同名 tag 对象及其 peeled commit，与本地 tag 和 `HEAD` 精确一致。
-- tag 符合现有整列 `v<根版本>` 或单包 `<包名>@<包版本>` 契约。
+发布器核对官方 origin、干净工作树、完整 HEAD、本地 tag 对象及官方远端 tag/peeled commit；tag 必须符合整列 `v<根版本>` 或单包 `<包名>@<版本>` 合同。身份始终由实际 Git 查询确认，不能只凭 Actions 环境变量声明。
 
-本地模式使用 `packageManager` 声明的精确 Bun 版本。发布凭据由进程环境中的 `NODE_AUTH_TOKEN` 提供，权限应限于目标 GitHub Packages 注册表；不要把凭据写进仓库或日志。
+## 检查与产物
 
-## 执行
+工作流调用 `bun run release:github <tag>`。发布器执行冻结安装、完整 `bun run check` 和新构建；安装后、检查后、构建后、逐包上传前及正式公布前重新确认源码身份。真实发布不接受跳过构建、dry-run 或手动缩减整列包集合。
 
-在经过核验的 tag checkout 中运行：
+每个包使用 `safePackPackage` 在独占临时目录打包，保留路径边界、超时和进程组回收。发布前核对 tarball 内包名、版本、可安装依赖及 dist，并重新确认 SHA-256。GitHub Release 上传的是已核验的同一份 tarball。
 
-```sh
-bun run release:verify v0.6.26
-bun run release:local v0.6.26 --only agent,agent-lab,model
-```
+所有归档先上传到 draft。`release-manifest.json` 记录 sourceSha、releaseTag、每包版本、文件名、大小、SHA-256 和 SHA-512 integrity，最后才把 draft 公布。失败不会公开不完整版本；留下的 draft 可供维护者检查，重跑前需明确清理失败 draft，发布器不会覆盖已有 release 或资产。检查和打包日志保留在对应 Actions run。
 
-`release:verify` 只读取当前 checkout、官方 origin 与发布拓扑，确认本地/远端 tag、HEAD、
-工作树、包版本和锁文件身份；它不安装、不构建、不发布。该命令与真实发布都要求命令行显式
-传入 tag，不接受托管运行器的事件或 ref 环境作为发布身份。
+GitHub Release 资产可匿名下载，不依赖 GitHub Packages 的读取令牌。消费者应按发布清单更新源码身份、下载地址和所有摘要，再完成冻结安装与消费验证。此次入口不修改消费者仓库，也不声称旧 GitHub Packages 同版本 tarball 与新资产相同。旧 `release:local` 注册表入口仅为兼容保留，正式工作流不调用它。
 
-`--only` 沿用现有发布拓扑的规则：只收窄整列 tag 的包集合，全量声明、版本与锁文件、平台代和依赖拓扑仍需通过验证。单包 tag 已确定范围，不能再加 `--only`。缺失、重复或未知参数直接失败。`--local-tag` 是真实发布模式；本地模拟仍使用 `bun run release:dry-run`。
+## 权限与回归
 
-发布器依次执行身份和凭据检查、`bun install --frozen-lockfile`、完整 `bun run check`、新构建和逐包发布。冻结安装后、质量门后、新构建后以及每个包真正发布前都会重新核验 `HEAD`、本地及远端 tag、工作树。任一步失败立即停止，真实发布不接受 `--skip-build`。
+工作流只允许在官方仓库 main 上手动触发，发布 job 仅授予 contents:write，使用短期 GITHUB_TOKEN，不配置个人令牌。Actions 固定到提交 SHA，checkout 不持久化凭据。并发发布串行且不会取消正在进行的发布。
 
-每个包通过 `safePackPackage` 在独占临时目录中打包。发布器验证 tarball 的包名、版本、可安装依赖和构建产物，记录源码 SHA、tag、文件大小及 SHA256；发布前再次检查字节摘要，`bun publish` 接收的就是该 tarball 路径。现有安全入口的超时、进程组回收和路径保护保持生效。
-
-该入口只发布选定的包。产品依赖安装与验证由各消费者维护；它不运行跨仓更新、创建 PR 或修改 Actions 账单。已经发布的版本不会被覆盖；发布器沿用 `--tolerate-republish`，因此恢复一次中途失败的发布后，应从注册表核实目标版本及实际包内容，再进行消费者冻结安装。
-
-## 本机质量与安全门
-
-提交或发布前运行 `bun run check`。它包含构建、类型检查、lint、测试、依赖审计、架构门；源码 workflow 哨兵的零权限、静态跳过和禁用敏感步骤也由测试与两份域架构门校验。
-
-## 回归检查
-
-`bun run check:release-source` 执行不访问注册表的构造测试，覆盖参数、仓库地址、轻量/annotated tag、远端不一致、检查期间身份变化，以及完整质量门的执行顺序和失败传播。该命令已接入 `check:gates`；它本身不会安装、构建或发布任何包。
+`bun run check:release-source` 覆盖参数、仓库地址、轻量/annotated tag、远端不一致、检查期间身份变化、完整检查的顺序和失败传播。架构门继续独立核对发布工作流、完整检查调用与同一 tarball 发布，不再强制禁用托管 CI。

@@ -65,7 +65,7 @@ bun run check
 
 [测试与平台支持](docs/engineering/testing.md)说明测试运行器、Windows 限制与专项检查。Bun 用于仓库工具和 TypeScript 测试，应用中的程序执行引擎是 Node.js。Bun 下的失败需要区分宿主差异，类型检查通过也不等于真实运行通过。
 
-依赖安全门先核验已安装补丁字节，再应用有文档依据的审计例外，见[依赖安全策略](docs/engineering/dependency-security.md)。公开仓库不会自动发布新包版本，包发布仍走[本机发布流程](docs/engineering/local-package-release.md)。
+依赖安全门先核验已安装补丁字节，再应用有文档依据的审计例外，见[依赖安全策略](docs/engineering/dependency-security.md)。CI 与正式包发布在 GitHub Actions 使用固定工具链执行完整质量门；GitHub Releases 提供可公开下载的归档及源码、哈希清单，见[发布流程](docs/engineering/local-package-release.md)。
 
 ## 贡献与安全
 

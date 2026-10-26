@@ -29,14 +29,14 @@
 // 而 dry-run 的用处恰恰是改完发布链之后先验一遍)。这三条在真发布路径上一条不减。
 //
 // 谁核验它:kernel / agent 两域的 check:*-arch「防线:发布身份」按字面标记核对本文件与
-// verify-release-ref.mjs，并独立核对 release-packages.yml 只能是本机发布策略哨兵。
+// verify-release-ref.mjs，并独立核对 release-packages.yml 的权限、固定源码与完整检查入口。
 // 被核验的标记 = git rev-parse / git status --porcelain --untracked-files=all / 安全打包入口 /
 // artifact 里的 sourceSha·fileName·sizeBytes·sha256 / publish 的第一参数是 tarballPath。
 // 改这些写法要同时改门,别加豁免。
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -55,7 +55,9 @@ import { safePackPackage } from './safe-package-pack.mjs'
 import { normalizeTarEntryPaths } from './tar-entry-paths.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
-const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(process.argv.slice(2))
+const { dryRun, skipBuild, githubRelease, localTag, onlySelectors } = parseReleaseArguments(
+  process.argv.slice(2)
+)
 
 const runForOutput = (command, args, cwd) => {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', env: process.env })
@@ -162,8 +164,11 @@ const workingTreeStatus = runForOutput(
 if (workingTreeStatus && !dryRun) {
   throw new Error(`Release artifacts require a clean working tree:\n${workingTreeStatus}`)
 }
-if (!dryRun && !process.env.NODE_AUTH_TOKEN) {
+if (!dryRun && !githubRelease && !process.env.NODE_AUTH_TOKEN) {
   throw new Error('NODE_AUTH_TOKEN is required to publish packages')
+}
+if (githubRelease && !process.env.GH_TOKEN) {
+  throw new Error('GH_TOKEN is required to publish a GitHub release')
 }
 if (!dryRun && skipBuild) {
   throw new Error(
@@ -173,7 +178,7 @@ if (!dryRun && skipBuild) {
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
 if (!dryRun)
-  console.info('release mode: explicit local tag; full quality gates run before publication')
+  console.info('release mode: explicit verified tag; full quality gates run before publication')
 console.info(`registry: ${ReleaseRegistry}`)
 console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
@@ -214,6 +219,28 @@ if (!skipBuild) {
   run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
 }
 if (!dryRun) assertLocalIdentity()
+
+const artifacts = []
+if (githubRelease) {
+  // Existing releases are never overwritten. An interrupted draft remains inspectable.
+  run(
+    'gh',
+    [
+      'release',
+      'create',
+      releaseTag,
+      '--draft',
+      '--verify-tag',
+      '--target',
+      sourceSha,
+      '--title',
+      `Platform ${releaseTag}`,
+      '--notes',
+      `Built and checked on GitHub Actions from ${sourceSha}. Package hashes are recorded in release-manifest.json.`,
+    ],
+    root
+  )
+}
 
 for (const item of selected) {
   const packDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-pack-'))
@@ -259,8 +286,10 @@ for (const item of selected) {
       fileName: tarballs[0],
       sizeBytes: (await stat(tarballPath)).size,
       sha256: createHash('sha256').update(bytes).digest('hex'),
+      integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
     }
     console.info(`release artifact: ${JSON.stringify(artifact)}`)
+    artifacts.push(artifact)
 
     // —— ③ 发布那一份已验明的 tarball ——
     const publishArgs = [
@@ -287,9 +316,26 @@ for (const item of selected) {
       }
       if (!dryRun) assertLocalIdentity()
     }
-    run('bun', publishArgs, root)
+    if (githubRelease) run('gh', ['release', 'upload', releaseTag, tarballPath], root)
+    else run('bun', publishArgs, root)
   } finally {
     await rm(packDirectory, { recursive: true, force: true })
+  }
+}
+
+if (githubRelease) {
+  const manifestDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-manifest-'))
+  try {
+    const manifestPath = path.join(manifestDirectory, 'release-manifest.json')
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify({ sourceSha, releaseTag, packages: artifacts }, null, 2)}\n`
+    )
+    assertLocalIdentity()
+    run('gh', ['release', 'upload', releaseTag, manifestPath], root)
+    run('gh', ['release', 'edit', releaseTag, '--draft=false'], root)
+  } finally {
+    await rm(manifestDirectory, { recursive: true, force: true })
   }
 }
 

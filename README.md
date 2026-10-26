@@ -71,7 +71,7 @@ Packages are distributed through GitHub Packages under the @velaros-ai scope. Re
 
 [Testing and platform support](docs/engineering/testing.md) explains the test runners, Windows limitations and targeted checks. Bun is the repository tool and TypeScript test runner; the application execution engine is Node.js. A Bun test failure is not automatically a failure in the Node host, and a passing type check is not runtime verification.
 
-The dependency-security gate verifies installed patch bytes before applying its documented audit exceptions. See the [dependency policy](docs/engineering/dependency-security.md). Repository publication does not publish a new package version; package releases use the [local release procedure](docs/engineering/local-package-release.md).
+The dependency-security gate verifies installed patch bytes before applying its documented audit exceptions. See the [dependency policy](docs/engineering/dependency-security.md). CI and official package releases run on GitHub Actions with the pinned toolchain and complete quality gates. Release tarballs and their source/hash manifest are publicly downloadable from GitHub Releases; see the [release procedure](docs/engineering/local-package-release.md).
 
 ## Contributing and security
 

@@ -500,7 +500,7 @@ function scanReleaseIdentityBoundary() {
     violations.push({
       rule: 'release-artifact-identity',
       fingerprint: `release-artifact-identity::workflow-allowlist::${actualWorkflowFiles.join(',')}`,
-      message: `.github/workflows: 只允许本机策略哨兵 ${expectedWorkflowFiles.join(', ')}；实际为 ${actualWorkflowFiles.join(', ') || '空'}。`,
+      message: `.github/workflows: 只允许已审查的工作流 ${expectedWorkflowFiles.join(', ')}；实际为 ${actualWorkflowFiles.join(', ') || '空'}。`,
     })
   }
   for (const workflowFile of expectedWorkflowFiles) {
@@ -508,47 +508,55 @@ function scanReleaseIdentityBoundary() {
     if (!existsSync(workflowPath)) continue
     const source = readFileSync(workflowPath, 'utf8').replaceAll('\r\n', '\n')
     const triggerDeclarations = source.match(/^on:.*$/gmu) ?? []
-    if (triggerDeclarations.length === 1 && triggerDeclarations[0] === 'on: []') continue
+    const expectedTrigger = workflowFile === 'codeql.yml' ? 'on: []' : 'on:'
+    if (triggerDeclarations.length === 1 && triggerDeclarations[0] === expectedTrigger) continue
     violations.push({
       rule: 'release-artifact-identity',
       fingerprint: `release-artifact-identity::workflow-trigger::${workflowFile}`,
-      message: `.github/workflows/${workflowFile}: 必须且只能声明无触发入口的 on: []。`,
+      message: `.github/workflows/${workflowFile}: 必须且只能声明 ${expectedTrigger}。`,
     })
   }
   const contracts = [
     {
       file: '.github/workflows/release-packages.yml',
       markers: [
-        'name: "[DISABLED] Release packages (local only)"',
-        'on: []',
-        'permissions: {}',
-        'if: ${{ false }}',
-        'bun run release:local',
+        'name: Release packages',
+        'workflow_dispatch:',
+        "github.repository == 'VelarOS-AI/VelarOS-Platform' && github.ref == 'refs/heads/main'",
+        'ref: refs/tags/${{ inputs.tag }}',
+        'fetch-depth: 0',
+        'persist-credentials: false',
+        'bun-version-file: package.json',
+        'contents: write',
+        'GH_TOKEN: ${{ github.token }}',
+        'run: bun run release:github "$RELEASE_TAG"',
+        'cancel-in-progress: false',
       ],
       forbiddenMarkers: [
         'push:',
-        'actions/checkout',
-        'scripts/release/publish-packages.mjs',
+        'pull_request',
         'secrets.',
         'packages: write',
-        'workflow_dispatch:',
+        '--skip-build',
+        'continue-on-error:',
       ],
     },
     {
       file: '.github/workflows/ci.yml',
       markers: [
-        'name: "[DISABLED] CI (local only)"',
-        'on: []',
-        'permissions: {}',
-        'if: ${{ false }}',
+        'name: CI',
+        'pull_request:',
+        'contents: read',
+        'persist-credentials: false',
+        'bun-version-file: package.json',
+        'bun install --frozen-lockfile',
         'bun run check',
       ],
       forbiddenMarkers: [
-        'pull_request:',
-        'push:',
-        'actions/checkout',
-        'setup-bun',
-        'workflow_dispatch:',
+        'pull_request_target:',
+        'contents: write',
+        'secrets.',
+        'continue-on-error:',
       ],
     },
     {
@@ -600,6 +608,9 @@ function scanReleaseIdentityBoundary() {
         'sizeBytes:',
         "sha256: createHash('sha256')",
         "'publish',\n      tarballPath,",
+        'runLocalReleaseChecks({',
+        "['release', 'upload', releaseTag, tarballPath]",
+        "['release', 'edit', releaseTag, '--draft=false']",
       ],
       forbiddenMarkers: ['process.env.GITHUB_', 'expectedRef'],
     },
@@ -608,6 +619,7 @@ function scanReleaseIdentityBoundary() {
       markers: [
         '"release:verify": "node scripts/release/verify-release-ref.mjs --local-tag"',
         '"release:local": "node scripts/release/publish-packages.mjs --local-tag"',
+        '"release:github": "node scripts/release/publish-packages.mjs --github-release --local-tag"',
       ],
       forbiddenMarkers: ['GITHUB_EVENT_NAME', 'GITHUB_REF_NAME', 'GITHUB_SHA'],
     },
@@ -630,7 +642,7 @@ function scanReleaseIdentityBoundary() {
     violations.push({
       rule: 'release-artifact-identity',
       fingerprint: `release-artifact-identity::${contract.file}`,
-      message: `${contract.file}: 本地发布策略门不完整，缺失=${missing.join(', ') || '无'}，禁用标记=${forbidden.join(', ') || '无'}。`,
+      message: `${contract.file}: 发布策略门不完整，缺失=${missing.join(', ') || '无'}，禁用标记=${forbidden.join(', ') || '无'}。`,
     })
   }
   return violations
