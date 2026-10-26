@@ -896,9 +896,9 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
         timeoutMs: 120000,
       },
       context: { sources: [], maintenance: { model: maintenance } },
-      // 此支线会为当前卷交叙事；压力整理也可能先完成该卷，自动补写不得再次请求。
-      // 默认期限的工作窗口约束由上面的 INV-50 长程用例验证。
-      protocol: { defaultRetain: 2 },
+      // Keep real output until the segment seals: expiring it after two turns can avoid
+      // pressure entirely with compact history and would never exercise narration.
+      protocol: { defaultRetain: 'segment' },
     },
     {
       limits: { contextTokens: WINDOW + 4000, inputTokens: WINDOW, outputTokens: 2048 },
