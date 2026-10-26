@@ -1013,7 +1013,7 @@ describe('模型面', () => {
     const template = readFileSync(fileURLToPath(new URL('../template.js', import.meta.url)), 'utf8')
     expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
-    expect(VelarWebModule.template).toBe(template.trim())
+    expect(VelarWebModule.template).toBe(template.replace(/\r\n/g, '\n').trim())
     expect(WebDeclarations).not.toContain('的代码模版')
   })
 

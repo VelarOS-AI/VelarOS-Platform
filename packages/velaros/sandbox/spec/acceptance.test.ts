@@ -405,7 +405,7 @@ describe('代码模版', () => {
       granted: [{ namespace: 'sandbox', declarations }],
     })
     expect(checked.ok ? [] : checked.diagnostics).toEqual([])
-    expect(VelarSandboxModule.template).toBe(template.trim())
+    expect(VelarSandboxModule.template).toBe(template.replace(/\r\n/g, '\n').trim())
     expect(declarations).not.toContain('的代码模版')
   })
 })

@@ -22,7 +22,7 @@ Velaros composes Agent, Context, Script, Model and Kernel through their public c
 
 Governed modules use `contract/types/impl/utils`. Ordinary packages use `src/`; Core units and Velaros capability units use their own directory as source root. Registry entries specify implementation layers, source assets and browser-safe exports. See [module ownership](module-ownership.md).
 
-Velaros keeps the complete implementation of a domain together: files, images, shell, sandbox, project, computer, memory, office and browser. Project also owns language services and code queries. A domain may expose several model modules, such as `velaros:project` / `velaros:code` or `velaros:browser` / `velaros:devtools`.
+Velaros keeps the complete implementation of a domain together: images, execution, sandbox, project, computer, memory, office, browser, web, sessions and skills. Project owns file transactions, language services and code queries; execution owns process and shell infrastructure. A domain may expose several model modules, such as `velaros:project` / `velaros:code` or `velaros:browser` / `velaros:devtools`.
 
 Act has four responsibility groups: `act/runtime` composes sessions and requests; `act/system` supplies model self-management through `velaros:system`; `act/search` implements bounded search; `act/agents` exposes child tasks and interaction. The generated [Act catalog](../../packages/velaros/act/README.md) lists actual operations, effects and templates.
 

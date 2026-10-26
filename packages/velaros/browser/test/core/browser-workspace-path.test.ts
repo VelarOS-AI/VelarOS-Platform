@@ -71,7 +71,7 @@ void describe('站点工作区的路径包含判定', () => {
       'savePath'
     )
     assert.equal(resolved.relativePath, 'artifacts/exports/page.pdf')
-    assert.ok(resolved.path.endsWith('artifacts/exports/page.pdf'))
+    assert.ok(resolved.path.endsWith(join('artifacts', 'exports', 'page.pdf')))
   })
 
   void test('.. 穿越与绝对路径都拒绝', async () => {

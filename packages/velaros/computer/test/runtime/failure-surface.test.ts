@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
@@ -67,7 +67,7 @@ describe('桌面控制的失败面', () => {
   test('随包 helper 资产目录真的存在，并且装着本平台的脚本', () => {
     const root = createComputerHelperLocator().bundledSourceRoot()
 
-    expect(root.endsWith(ComputerResourceLayout.bundledRuntimeDirectory)).toBe(true)
+    expect(root.endsWith(normalize(ComputerResourceLayout.bundledRuntimeDirectory))).toBe(true)
     expect(existsSync(join(root, 'mac_helper.py'))).toBe(true)
     expect(existsSync(join(root, HelperScriptNames[process.platform] ?? 'mac_helper.py'))).toBe(
       true

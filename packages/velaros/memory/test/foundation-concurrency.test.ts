@@ -57,7 +57,7 @@ test('expected absence is an exclusive create across separate store instances', 
 test('cooperating separate processes have one CAS winner for the same revision', async () => {
   const scope = createMemoryStore({ root }).scope('same')
   const saved = await scope.save(entry)
-  const modulePath = new URL('../impl/MemoryStore.ts', import.meta.url).pathname
+  const modulePath = new URL('../impl/MemoryStore.ts', import.meta.url).href
   const run = async (content: string) => {
     const code = `import { createMemoryStore } from ${JSON.stringify(modulePath)};
       try { await createMemoryStore({ root: ${JSON.stringify(root)} }).scope('same').save(${JSON.stringify({ ...entry, content, expectedRevision: saved.revision })}); console.log('saved') }

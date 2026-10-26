@@ -8,7 +8,7 @@ This page maps the maintained repository gates to their ownership. The root `pac
 bun run check
 ```
 
-The full check builds every package, runs type checking, lint, tests, maintained suites, and all repository gates. A package-local check is useful during development but is not equivalent to the full repository result.
+The full check builds every package, runs type checking, lint, formatting, tests, maintained suites, and all repository gates. A package-local check is useful during development but is not equivalent to the full repository result.
 
 ## Domain gates
 
@@ -32,11 +32,23 @@ The full check builds every package, runs type checking, lint, tests, maintained
 
 | Gate | Responsibility |
 | --- | --- |
+| `check:format` | Checks repository Prettier formatting |
+| `check:package-pack-boundary` / `check:package-pack-safety` | Enforces isolated temporary pack directories and verifies safe packing |
+| `check:host-contract-consumer` | Verifies consumers of the published host contracts |
+| `check:release-source` | Validates local release identity and archive boundaries |
+| `check:readme-examples` | Checks module README examples against actual public TypeScript contracts |
+| `check:lockfile-consistency` | Keeps workspace declarations and lockfile metadata aligned |
+| `check:error-construction` | Enforces Core-owned runtime errors |
+| `check:dependency-licenses` | Verifies the dependency license policy |
+| `check:script` / `check:act-catalog` | Verifies generated model declarations, templates and Act documentation |
+| `check:package-catalog` | Verifies the generated package inventory |
 | `check:code-style` | Requires zero language-level architecture/style errors without a baseline |
 | `check:dependency-security` | Runs patched-dependency probes and the documented dependency audit policy |
 | `check:devtools-performance-engine` | Rebuilds and byte-compares the pinned third-party performance bundle |
 | `check:public-readiness` | Verifies public metadata, licenses, links, secret patterns, and local-path hygiene |
 | `check:platform-generation` | Ensures all packages declare the same Platform generation |
+
+For runner and platform limitations, see [testing and platform support](engineering/testing.md).
 
 ## Baselines
 

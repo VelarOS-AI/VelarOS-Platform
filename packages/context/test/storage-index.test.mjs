@@ -15,15 +15,32 @@ import { localContextStorage } from '../dist/node.js'
 
 async function fixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'act-storage-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  return join(dir, 'context.sqlite')
+  const path = join(dir, 'context.sqlite')
+  const connections = []
+  const databases = []
+  t.after(async () => {
+    for (const storage of connections) await storage.close()
+    for (const database of databases) if (database.isOpen) database.close()
+    await rm(dir, { recursive: true, force: true })
+  })
+  return {
+    open() {
+      const storage = localContextStorage({ path })
+      connections.push(storage)
+      return storage
+    },
+    openDatabase() {
+      const database = new DatabaseSync(path)
+      databases.push(database)
+      return database
+    },
+  }
 }
 const empty = { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
 
 test('original input projection keeps its interpretation and tail when the read page is smaller than the caller budget', async (t) => {
-  const path = await fixture(t)
-  const storage = localContextStorage({ path })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const context = createContextRuntime({ sessionId: 's', storage })
   const original = `FIRST_CONSTRAINT\n${'材料😀\n'.repeat(ContextLimits.readChars / 4)}\nLAST_CONSTRAINT`
   for (const withAttachment of [false, true]) {
@@ -66,15 +83,13 @@ test('original input projection keeps its interpretation and tail when the read 
 })
 
 test('task accounting avoids full history and task replacement archives atomically', async (t) => {
-  const path = await fixture(t)
-  const storage = localContextStorage({ path })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const context = createContextRuntime({ sessionId: 's', storage })
   const goal = await context.append({ kind: 'user', body: 'goal' })
   const view = createContextView({ sessionId: 's', storage, context, sources: [] })
   await view.begin(goal.ref)
-  const db = new DatabaseSync(path)
-  t.after(() => db.close())
+  const db = files.openDatabase()
   db.exec(
     "CREATE TRIGGER no_history_update BEFORE UPDATE ON context_records BEGIN SELECT RAISE(ABORT,'rewritten'); END; CREATE TRIGGER no_history_delete BEFORE DELETE ON context_records BEGIN SELECT RAISE(ABORT,'deleted'); END"
   )
@@ -103,13 +118,9 @@ test('task accounting avoids full history and task replacement archives atomical
 })
 
 test('journal indexes use incremental transactions and simultaneous claims keep one owner', async (t) => {
-  const path = await fixture(t)
-  const a = localContextStorage({ path })
-  const b = localContextStorage({ path })
-  t.after(async () => {
-    await a.close()
-    await b.close()
-  })
+  const files = await fixture(t)
+  const a = files.open()
+  const b = files.open()
   const key = JSON.stringify(['kernel-invocation-index', 's'])
   for (const storage of [a, b]) {
     const load = storage.load.bind(storage)
@@ -136,14 +147,12 @@ test('journal indexes use incremental transactions and simultaneous claims keep 
 })
 
 test('atomic append rolls back the record when metadata publication fails', async (t) => {
-  const path = await fixture(t)
-  const storage = localContextStorage({ path })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const context = createContextRuntime({ sessionId: 's', storage })
   await context.append({ kind: 'user', body: 'goal' })
   const before = await storage.load('s')
-  const db = new DatabaseSync(path)
-  t.after(() => db.close())
+  const db = files.openDatabase()
   db.exec(
     "CREATE TRIGGER fail_publish BEFORE UPDATE ON sessions BEGIN SELECT RAISE(ABORT,'publish failed'); END"
   )
@@ -154,13 +163,9 @@ test('atomic append rolls back the record when metadata publication fails', asyn
 })
 
 test('INV-7 索引记录保持原引用、分页和跨连接 CAS，元数据更新不重写历史', async (t) => {
-  const path = await fixture(t)
-  const a = localContextStorage({ path })
-  const b = localContextStorage({ path })
-  t.after(async () => {
-    await a.close()
-    await b.close()
-  })
+  const files = await fixture(t)
+  const a = files.open()
+  const b = files.open()
   const context = createContextRuntime({ sessionId: 's', storage: a })
   const record = await context.append({ kind: 'user', title: 'goal', body: 'task' })
   const initial = await a.load('s')
@@ -169,7 +174,7 @@ test('INV-7 索引记录保持原引用、分页和跨连接 CAS，元数据更�
     version: initial.version + 1,
     workingSet: { ...initial.workingSet, revision: 1, items: [record.ref] },
   }
-  const db = new DatabaseSync(path)
+  const db = files.openDatabase()
   db.exec(
     "CREATE TRIGGER forbid_rewrite BEFORE UPDATE ON context_records BEGIN SELECT RAISE(ABORT,'history rewritten'); END"
   )
@@ -189,9 +194,8 @@ test('INV-7 索引记录保持原引用、分页和跨连接 CAS，元数据更�
 })
 
 test('long directories keep the CAS state small and indexed pages cover every record exactly once', async (t) => {
-  const path = await fixture(t)
-  const storage = localContextStorage({ path })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const objectId = await storage.put('s', 'immutable evidence')
   const records = Array.from({ length: 1200 }, (_, i) => ({
     ref: { sessionId: 's', id: `r${i}` },
@@ -222,7 +226,7 @@ test('long directories keep the CAS state small and indexed pages cover every re
         workingSet: { revision: version, cursor: version, items: [] },
       })
     )
-  const db = new DatabaseSync(path)
+  const db = files.openDatabase()
   const chars = Number(
     db.prepare('SELECT length(state) AS size FROM sessions WHERE id=?').get('s').size
   )
@@ -240,14 +244,13 @@ test('long directories keep the CAS state small and indexed pages cover every re
 })
 
 test('object collection is opt-in, version-checked, grace-protected and keeps every archived body', async (t) => {
-  const path = await fixture(t)
-  const storage = localContextStorage({ path })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const context = createContextRuntime({ sessionId: 's', storage })
   const record = await context.append({ kind: 'user', body: 'retained task' })
   const orphan = await storage.put('s', 'unpublished candidate')
   const staged = await storage.put('s', 'candidate reused before publishing')
-  const db = new DatabaseSync(path)
+  const db = files.openDatabase()
   db.prepare('UPDATE objects SET touched=1 WHERE session=?').run('s')
   db.close()
   await storage.put('s', 'candidate reused before publishing')
@@ -308,13 +311,9 @@ test('journal execution lookup loads matching receipts rather than every session
 })
 
 test('selected snapshots keep one version while another connection commits between queries', async (t) => {
-  const path = await fixture(t)
-  const a = localContextStorage({ path })
-  const b = localContextStorage({ path })
-  t.after(async () => {
-    await a.close()
-    await b.close()
-  })
+  const files = await fixture(t)
+  const a = files.open()
+  const b = files.open()
   const context = createContextRuntime({ sessionId: 's', storage: a })
   const first = await context.append({ kind: 'audit', title: 'state', body: 'first' })
   const old = await a.loadMetadata('s')
@@ -355,8 +354,8 @@ test('selected snapshots keep one version while another connection commits betwe
 })
 
 test('input recall retains compatibility with archived fixed-width chunks', async (t) => {
-  const storage = localContextStorage({ path: await fixture(t) })
-  t.after(() => storage.close())
+  const files = await fixture(t)
+  const storage = files.open()
   const context = createContextRuntime({ sessionId: 'legacy', storage })
   const a = await context.append({
     kind: 'audit',
@@ -379,8 +378,8 @@ test('input recall retains compatibility with archived fixed-width chunks', asyn
 
 for (const mode of ['indexed', 'selection-only', 'fallback'])
   test(`${mode}: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
-    const storage = localContextStorage({ path: await fixture(t) })
-    t.after(() => storage.close())
+    const files = await fixture(t)
+    const storage = files.open()
     const port =
       mode === 'indexed'
         ? storage

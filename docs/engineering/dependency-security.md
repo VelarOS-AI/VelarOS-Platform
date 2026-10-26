@@ -2,6 +2,14 @@
 
 VelarOS Platform treats the lockfile, dependency overrides, and Bun patches as reviewed source. The default rule is to upgrade to a non-vulnerable version. An audit exception is allowed only when the repository also contains a narrow justification and a mechanical regression check.
 
+## Current security pins
+
+The root and Velaros development manifests pin Electron to 42.11.16. This fixes the compromised eMudhra intermediate-certificate mitigation advisory [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9), which appeared as two alerts because both manifests declared the older Electron. This changes Platform's development/test host; separately shipped products must update their own Electron distribution.
+
+The root override table also fixes the installed dependency graph at body-parser 2.4.0, fast-uri 3.1.9, Hono 4.13.11, ip-address 10.7.5, undici 7.30.1 and Zod 4.6.6. These are fixes within the existing major versions for the advisories reported by the 2026-10-26 audit. The committed lockfile records the exact resolved packages; consumers of separately published packages must check their own graph because root overrides do not automatically propagate to another repository.
+
+Run the complete security gate after a frozen install. A clean audit here includes the explicitly reviewed exceptions below; it is not a claim that an unpatched upstream version is safe in other installations.
+
 ## Current exceptions
 
 ### `braces@3.0.3` with the reviewed depth patch
@@ -27,4 +35,4 @@ The audit exception applies only after `check:dependency-security` verifies the 
 
 Mammoth's argument parser is resolved to `argparse@2.0.1`, which keeps the command-line APIs Mammoth uses and removes the `sprintf-js` dependency affected by [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c). The security gate runs Mammoth's actual help, invalid-choice, and DOCX-to-HTML command-line paths and rejects any reachable `sprintf-js`. `@velaros-ai/velaros` bundles the installed Mammoth closure so the compatible parser upgrade also reaches fresh consumers.
 
-`pptxgenjs@4.0.1` used to retain an unused `image-size` dependency whose published versions were affected by CVE-2025-71329 and CVE-2025-71330. Office now vendors the PptxGenJS 4.0.1 ESM runtime with narrow local security patches, plus the unchanged upstream declarations, MIT license, and notice. The patches use Web Crypto for UUIDs and reject media relationship paths that escape the presentation archive root. `scripts/security/checkPatchedDependencies.mjs` pins both vendored file hashes, checks the patch markers, and fails if either file references `image-size`, so the vulnerable package is absent from the production graph instead of being carried behind an audit exception.
+`pptxgenjs@4.0.1` used to retain an unused `image-size` dependency whose published versions were affected by CVE-2025-71329 and CVE-2025-71330. Office now vendors the PptxGenJS 4.0.1 ESM runtime with narrow local security patches, plus the unchanged upstream declarations. The vendor README records upstream provenance and the reviewed changes; license-file placement follows the repository public-readiness policy. The patches use Web Crypto for UUIDs and reject media relationship paths that escape the presentation archive root. `scripts/security/checkPatchedDependencies.mjs` pins both vendored file hashes, checks the patch markers, and fails if either file references `image-size`, so the vulnerable package is absent from the production graph instead of being carried behind an audit exception.

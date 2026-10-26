@@ -26,6 +26,8 @@
 
 ## 开发与交付
 
+- [测试与平台支持](engineering/testing.md)：运行器区别、Windows 验证限制、检查入口与修复范围。
+
 - [维护交接指南](engineering/maintainer-handoff.md)：新机器恢复、共享包所有权、联调和发布经验。
 - [ScriptAct 评测经验](engineering/scriptact-evaluation-lessons.md)与[2026 年 10 月交接快照](engineering/handoff-state-20261015.md)：通用失败机制、近期实测与接续边界。
 - [仓库说明](../README.md)与[包目录](generated/package-catalog.json)：安装、工作区和公开包。

@@ -13,7 +13,7 @@ Security vulnerabilities must follow [SECURITY.md](SECURITY.md), not the public 
 
 ## Development setup
 
-VelarOS Platform uses Bun 1.3.13 and Node.js 22.13 or newer for the full workspace and default SQLite adapter.
+VelarOS Platform uses the Bun version pinned in package.json (currently 1.3.13) and Node.js 22.15 or newer for the complete workspace. The SQLite adapter alone requires Node.js 22.13 or newer.
 
 ```bash
 bun install --frozen-lockfile
@@ -21,6 +21,8 @@ bun run check
 ```
 
 Format code with `bun run format` (Prettier, same configuration as Desktop); `bun run check` includes `check:format`. Pure formatting commits are listed in `.git-blame-ignore-revs`.
+
+See [testing and platform support](docs/engineering/testing.md) for the distinction between Bun tests and the Node host, Windows constraints, and current validation evidence.
 
 Use narrower package or domain checks while iterating, but run `bun run check` before requesting review. If an unrelated baseline failure blocks the full gate, identify it explicitly and include evidence for the checks covering your changed chain.
 

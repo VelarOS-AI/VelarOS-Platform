@@ -1,6 +1,6 @@
 # Platform 维护交接指南
 
-换机或接手维护时，先恢复可构建的源码，再沿合同定位问题。本指南保存跨会话容易丢失的工程经验；接口和约束以当前仓库中的可执行合同为准。最近一次本机工作状态见 [2026 年 10 月交接快照](handoff-state-20261015.md)，评测经验见 [ScriptAct 评测与故障诊断](scriptact-evaluation-lessons.md)。
+换机或接手维护时，先恢复可构建的源码，再沿合同定位问题。本指南保存跨会话容易丢失的工程经验；接口和约束以当前仓库中的可执行合同为准。当前验证边界见[测试与平台支持](testing.md)，历史工作状态见 [2026 年 10 月交接快照](handoff-state-20261015.md)，评测经验见 [ScriptAct 评测与故障诊断](scriptact-evaluation-lessons.md)。
 
 ## 恢复开发环境
 
@@ -16,7 +16,7 @@ git branch -vv
 
 历史 IDE 会话中的工作目录曾指向旧位置或外层目录。路径应从当前 Git checkout 推导；共享包的真实来源还要核对依赖链接。
 
-工具版本以根 [package.json](../../package.json) 和 [开发要求](../../CONTRIBUTING.md) 为准。交接时 Bun 为 1.3.13，完整工作区及默认 SQLite 适配器要求 Node.js 22.13 或更新版本。注册表配置使用 `NODE_AUTH_TOKEN` 环境变量，新机器需要具备相应 GitHub Packages 读取权限的凭据。
+工具版本以根 [package.json](../../package.json) 和 [开发要求](../../CONTRIBUTING.md) 为准。交接时 Bun 为 1.3.13，完整工作区含 JS/TS Skill，要求 Node.js 22.15 或更新版本；默认 SQLite 适配器单独要求 22.13 或更新版本。注册表配置使用 `NODE_AUTH_TOKEN` 环境变量，新机器需要具备相应 GitHub Packages 读取权限的凭据。
 
 ```sh
 bun install --frozen-lockfile
@@ -24,7 +24,7 @@ bun run build
 bun run check
 ```
 
-交接时的干净源码核验发现一处既有跨仓库文档链接依赖，新机器的公开检查会因此失败；具体文件、基线和接续方式见 [交接快照](handoff-state-20261015.md)。先区分这类环境依赖与产品行为回归。
+当前公开链接以 bun run check:public-readiness 的结果为准。旧交接快照保留当时的失败记录，不作为当前失败清单；Windows 与 Bun 的运行差异、测试资源清理顺序见[测试指南](testing.md)。
 
 源码拉取后立刻出现依赖缺失，先核对冻结安装是否完成。链接包更新后消费者仍表现为旧接口，先核对它实际加载的 `dist` 是否来自新构建。消费仓的源码检查与独立安装消费验证承担不同职责，两者都要覆盖公开 API 变更。
 

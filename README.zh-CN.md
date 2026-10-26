@@ -14,7 +14,7 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 仓库结构
 
-VelarOS Platform 包含 8 个 package workspace，均独立发布。公开包各自遵循 semver，
+VelarOS Platform 包含 9 个 package workspace，各自独立发布。公开包各自遵循 semver，
 并通过统一的 `velaros.platform` 代号声明跨包兼容性。
 
 | 领域 | 包 |
@@ -25,13 +25,14 @@ VelarOS Platform 包含 8 个 package workspace，均独立发布。公开包各
 | 能力公共件 | `@velaros-ai/script`、`@velaros-ai/context`、`@velaros-ai/velaros` |
 | 模型供应方 | `@velaros-ai/model` |
 | 评测 | `@velaros-ai/agent-lab` |
+| 可安装 JS/TS Skill | `@velaros-ai/skill-jsts` |
 
 根 `package.json` 中的包清单是机械核对的身份单源。公开 API 以包 manifest 和包 README 为准；架构与协议裁决归本仓 `docs/` 所有。
 
 ## 环境要求
 
 - [Bun](https://bun.sh/) 1.3.13
-- Node.js 22.13 或更高版本，用于完整工作区检查和默认 SQLite 存储适配器
+- 完整工作区（含 JS/TS Skill）要求 Node.js 22.15 或更新版本；当前 Windows 核验使用 Node.js 24.22.0。默认 SQLite 适配器单独要求 Node.js 22.13 或更新版本。
 - 单包消费者还需遵守各包 engines 及宿主依赖要求
 
 ## 开发
@@ -48,6 +49,23 @@ bun run check
 
 架构、包边界与开发者指南从[文档索引](docs/readme.md)开始阅读。
 独立安装的 VelarOS Termel 产品负责自己的 Host 组合与原生发布生命周期；共享远程节点传输归 Kernel。
+
+## 从这里开始
+
+- [Runtime 接入](packages/velaros/act/runtime/README.md)：创建运行时、注入宿主端口、提交输入并消费事件。
+- [Script](packages/script/README.md)：使用标准 Node.js 执行程序，通过已授权的 Kernel 能力桥调用宿主。
+- [Skills](packages/velaros/skills/README.md)：安装包，按需加载说明、依赖与能力。
+- [运行主链](docs/architecture/platform-runtime.md)和[生成包目录](docs/generated/package-catalog.json)：当前执行架构与公开入口。
+
+本仓库按 Apache-2.0 公开。独立产品仓库不会因为依赖 Platform 而自动适用本仓许可证。根 package.json 保持 private，防止误发布整个 monorepo 根包。
+
+各包发布到 GitHub Packages 的 @velaros-ai 作用域。读取源码无需登录；访问包注册表使用 .npmrc 引用的 NODE_AUTH_TOKEN。源码开发使用 workspace 依赖与已提交锁文件。模型凭据、存储、进程执行和授权由产品宿主注入，不导入私有产品源码。
+
+## 验证边界
+
+[测试与平台支持](docs/engineering/testing.md)说明测试运行器、Windows 限制与专项检查。Bun 用于仓库工具和 TypeScript 测试，应用中的程序执行引擎是 Node.js。Bun 下的失败需要区分宿主差异，类型检查通过也不等于真实运行通过。
+
+依赖安全门先核验已安装补丁字节，再应用有文档依据的审计例外，见[依赖安全策略](docs/engineering/dependency-security.md)。公开仓库不会自动发布新包版本，包发布仍走[本机发布流程](docs/engineering/local-package-release.md)。
 
 ## 贡献与安全
 

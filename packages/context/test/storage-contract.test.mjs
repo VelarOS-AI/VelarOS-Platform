@@ -15,8 +15,19 @@ import {
 
 async function sqliteFixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'storage-contract-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  return { open: () => localContextStorage({ path: join(dir, 'state.sqlite') }) }
+  const connections = []
+  // fixture 拥有目录和连接，清理顺序不能依赖后续登记的测试钩子。
+  t.after(async () => {
+    for (const storage of connections) await storage.close()
+    await rm(dir, { recursive: true, force: true })
+  })
+  return {
+    open: () => {
+      const storage = localContextStorage({ path: join(dir, 'state.sqlite') })
+      connections.push(storage)
+      return storage
+    },
+  }
 }
 
 describe('INV-12 storage adapters preserve persistence and lifecycle contracts', () => {

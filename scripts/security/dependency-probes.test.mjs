@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 import {
   assertBracesPatch,
@@ -68,7 +69,9 @@ test('globby async, sync and stream APIs preserve matching and reject deeply nes
   await mkdir(join(directory, 'src'))
   for (const file of ['a.js', 'b.ts', 'ignored.js', '文字.ts'])
     await writeFile(join(directory, 'src', file), 'fixture')
-  const { globby, globbySync, globbyStream } = await import(scriptRequire.resolve('globby'))
+  const { globby, globbySync, globbyStream } = await import(
+    pathToFileURL(scriptRequire.resolve('globby')).href
+  )
   const patterns = ['src/*.{js,ts}', '!**/ignored.js']
   const options = { cwd: directory }
   const expected = ['src/a.js', 'src/b.ts', 'src/文字.ts']

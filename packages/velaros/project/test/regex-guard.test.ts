@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { execa } from 'execa'
@@ -68,7 +69,7 @@ test('Node（生产用的 V8/Electron 引擎）下灾难回溯确实被时限打
     expect(bundle).toContain('dist')
     return
   }
-  const script = `import { execGuardedRegex } from ${JSON.stringify(bundle)}
+  const script = `import { execGuardedRegex } from ${JSON.stringify(pathToFileURL(bundle).href)}
 try { execGuardedRegex('(x+x+)+y', 'gi', 'x'.repeat(40), 10); console.log('COMPLETED') }
 catch (error) { console.log(error.reason, '|', error.message.slice(0, 40)) }`
   const result = await execa('node', ['--input-type=module', '--eval', script], {

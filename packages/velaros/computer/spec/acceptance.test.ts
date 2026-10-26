@@ -270,7 +270,7 @@ export default await typeText({ text: 'hi' })`
     const template = readFileSync(resolve(import.meta.dir, '../template.js'), 'utf8')
     expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
-    expect(VelarComputerModule.template).toBe(template.trim())
+    expect(VelarComputerModule.template).toBe(template.replace(/\r\n/g, '\n').trim())
     expect(ComputerDeclarations).not.toContain('的代码模版')
   })
 })

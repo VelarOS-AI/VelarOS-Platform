@@ -477,7 +477,7 @@ export const removed = await remove({ id: 'reply-style' })`
     const template = readFileSync(fileURLToPath(new URL('../template.js', import.meta.url)), 'utf8')
     expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
-    expect(VelarMemoryModule.template).toBe(template.trim())
+    expect(VelarMemoryModule.template).toBe(template.replace(/\r\n/g, '\n').trim())
     expect(MemoryDeclarations).not.toContain('的代码模版')
   })
 

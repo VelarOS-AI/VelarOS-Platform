@@ -204,7 +204,7 @@ describe('模型面', () => {
         file,
         diagnostics: [],
       })
-      expect(surface.template).toBe(template.trim())
+      expect(surface.template).toBe(template.replace(/\r\n/g, '\n').trim())
       expect(declarations).not.toContain('的代码模版')
     }
   })
