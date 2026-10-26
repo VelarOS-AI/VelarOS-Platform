@@ -900,12 +900,17 @@ for (const transport of ['tools', 'text']) {
         }
         assert(Date.now() - waitingAt >= 6000, 'waiting returned before target completion')
         assert.equal(await readFile(join(f.root, 'first'), 'utf8'), 'yes')
-        assert((await f.programs.state()).jobs.every((job) => job.status === 'succeeded'))
+        assert.equal(
+          (await f.programs.state()).jobs.find((job) => job.executionId === target).status,
+          'succeeded'
+        )
       },
       { concurrency: 1, maxBlocks: 1 }
     )
     t.after(() => clearTimeout(release))
     await f.collect()
+    // Parallel completion may wake the model while the wait control records its own result.
+    assert((await f.programs.state()).jobs.every((job) => job.status === 'succeeded'))
     assert.equal(f.requests.length, 3, 'waiting must not poll the model')
     const snapshot = await f.session.executions.wait(
       { executionId: target },
