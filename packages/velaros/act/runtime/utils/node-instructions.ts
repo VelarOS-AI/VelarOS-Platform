@@ -19,15 +19,15 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     .map(([module, purpose]) => `${module}（${purpose}）`)
   return [
     `Node.js ESM/顶层 await；预装 ${NodeDefaultPackages.join('、')}；宿主：import {execa} from "${NodeRuntimePackagePrefix}execa"。`,
-    `cwd:${JSON.stringify(cwd)}；fetch/工作区依赖。独立进程，跨轮状态/脚本存文件。`,
+    `cwd:${JSON.stringify(cwd)}；独立进程，跨轮状态存文件或 store。`,
     `默认时限 ${CodeSurfaceLimits.timeoutMs} ms，I/O/子进程计时，宿主等待停表。options.timeoutMs:1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数ms，受父期限/取消约束；引用不继承，值见回执。options.async:true 只改变受理方式，子进程 timeout 不延长外层。长负载用受管后台，恢复核进度/回执；脱组清理未知。`,
     '非交互命令用 stdin:"ignore"、timeout；默认等输入。rg 给路径，字面量用 ["-F","-e",pattern,"--","."]，多项重复 -e；正则用 String.raw。退出 1 无匹配，其他查 stderr。',
     '输入用 execa(command,args,{input:text,timeout:10000}) 或写后关闭 child.stdin；与 stdin:"ignore" 互斥。child_process.execFile 无 input；读 stdin 需 EOF。',
-    'runtime.inventory:runtimeImport/fallbackVersion=宿主安装；裸名按工作区解析，身份/README 见目录。',
+    'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
     '编辑用 node:fs/promises；长文本用 velaros:program 的 blobs，写后读回核对；事务查声明。',
     ...(modules.includes('velaros:system-environment')
       ? [
-          'velaros:system 导出的 environment 是 npm 管理对象：list/search/describe 查询，apply 安装、换版或卸载。跨会话持久化，下次 Node/Shell 可用，单次固定版本。查该版 README/类型并验证功能，可 rollback。',
+          'velaros:system 的 environment 是 npm 管理对象：list/search/describe 查询，apply 安装/换版/卸载；跨会话持久，单次固定版本。查该版 README/类型并验证，rollback 回退。',
         ]
       : []),
     'execa 9：command/cwd/durationMs（子进程耗时）；reject:false 查 failed/stdout/stderr；exitCode 可缺失，查 timedOut/signal/code。',
@@ -35,8 +35,8 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '把当前有效要求对应到交付物与必要检查，随进度更新待办和证据。编码前从既有实现、合同、测试与调用方确认行为边界；新增实现和自写测试不能自行定义兼容范围。',
     '验证要经过用户实际使用的入口。新增测试先查项目的发现规则，再确认默认命令确实执行了这些文件和断言；命令退出 0 只证明它实际覆盖的范围。可用测试清单或临时必失败断言核对发现范围，恢复断言后重跑。生成或打包的交付物须检查源码改动是否传到消费入口。',
     '检查记录关联当时的产物、实际命令、结果和覆盖范围。后续改动补验受影响部分；相关检查通过后，只有新增改动、关联失败、尚未覆盖要求或明确要求才扩大验证。收尾逐项核对当前要求、最终差异与回执，报告实际结果和证据缺口。',
-    '独立读/算批量逐项核结果；依赖 await。副作用留身份/回执；断流核状态，效果未知不重放。',
-    `目录根 process.env.${NodeEnvironmentVariables.directory.name}；index.json 含 execution/路径、packages/身份、skills/资源、capabilities/能力。capabilities 按 module/member 找项，每项的 documentation、operationDirectory/<操作名>.d.ts 是声明及示例，相对目录根；velaros:skills.load({name}) 读技能全文。`,
+    '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
+    `读 process.env.${NodeEnvironmentVariables.directory.name} 下 index.json；capabilities 按 module/member 找项，每项的 documentationPath、operationPaths[操作名] 是可直接读的绝对路径（声明/示例）；旧 documentation/operationDirectory 相对目录根。packages 查包身份，velaros:skills.load({name}) 读技能全文。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes(AgentsModuleId)
       ? ['velaros:agents 调度/通信；velaros:system 的 store 共享状态/事件；用前查声明。']

@@ -314,6 +314,8 @@ class NodeCodeRunner implements CodeRunnerApi {
         summary: string
         client: string
         documentation: string
+        documentationPath: string
+        operationPaths: Readonly<Record<string, string>>
         operations: readonly string[]
         operationDirectory?: string
       }> = []
@@ -354,6 +356,13 @@ class NodeCodeRunner implements CodeRunnerApi {
           summary: request.host?.modules[namespace]?.summary ?? namespace,
           client,
           documentation,
+          documentationPath: join(catalog, documentation),
+          operationPaths: Object.fromEntries(
+            Object.keys(operationDocs).map((operation) => [
+              operation,
+              join(catalog, operationDirectory, `${encodeURIComponent(operation)}.d.ts`),
+            ])
+          ),
           operations,
           operationDirectory: optionalWhen(
             !isEmpty(Object.keys(operationDocs)),

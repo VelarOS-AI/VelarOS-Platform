@@ -1494,7 +1494,10 @@ test('host filenames remain stable across catalog order and declarations are ord
     const docs=await readFile(join(root,files.find(name=>name.includes('example')&&name.endsWith('.d.ts'))),'utf8');
     const index=JSON.parse(await readFile(join(root,'index.json'),'utf8')).capabilities;
     const client=await readFile(join(root,index.find(item=>item.module==='example:host').client),'utf8');
-    console.log(JSON.stringify({index,docs,client}));
+    const publicEntry=index.find(item=>item.module==='example:public'&&item.member==='shared');
+    const directDocs=await readFile(publicEntry.documentationPath,'utf8');
+    const directOperation=await readFile(publicEntry.operationPaths.read,'utf8');
+    console.log(JSON.stringify({index,docs,client,directDocs,directOperation}));
   `
   const catalogs = []
   for (const operations of [
@@ -1522,6 +1525,8 @@ test('host filenames remain stable across catalog order and declarations are ord
     assert.equal(result.ok, true, JSON.stringify(result))
     const data = JSON.parse(result.process.stdout)
     assert.match(data.docs, /export function read/)
+    assert.equal(data.directDocs, data.docs)
+    assert.match(data.directOperation, /export function read/)
     assert.match(data.docs, /export interface Item/)
     assert.match(data.docs, /通用宿主约束|读取实际值/)
     assert.doesNotMatch(data.docs, /declare module/)

@@ -131,7 +131,7 @@
     },
     "packages/script": {
       "name": "@velaros-ai/script",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -160,7 +160,7 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.7",
+      "version": "0.6.8",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@modelcontextprotocol/sdk": "^1.31.0",
