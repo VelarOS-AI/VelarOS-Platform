@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, request as httpRequest } from 'node:http'
 import { connect, createServer as createNetServer, type Socket } from 'node:net'
@@ -10,6 +11,7 @@ import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
 import type { CodeRunRequest } from '../src/types/runner'
 import { executeNativeNode } from '../src/utils/native-process'
+import { nodeCapabilityBridge } from '../src/utils/node-client'
 
 // executeNativeNode / nodeSubprocessCodeRunner 的进程组宿主仅支持 POSIX。
 const it = test.skipIf(process.platform === 'win32')
@@ -67,6 +69,79 @@ async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
 }
 
 describe('INV-28 宿主 Node 进程注入与回收', () => {
+  test('reused Node capability sockets retain one close observer and release only live sockets', () =>
+    fixture(async (cwd) => {
+      await writeFile(join(cwd, 'bridge.mjs'), nodeCapabilityBridge())
+      const entrypoint = join(cwd, 'reuse.mjs')
+      await writeFile(
+        entrypoint,
+        `import assert from 'node:assert/strict';
+import {once} from 'node:events';
+import {createServer, globalAgent} from 'node:http';
+import {join} from 'node:path';
+import {invoke, releaseCalls} from './bridge.mjs';
+const warnings = [];
+process.on('warning', warning => warnings.push(warning.name));
+const socketPath = process.platform === 'win32' ? '\\\\\\\\.\\\\pipe\\\\velaros-reuse-'+process.pid : join(process.cwd(), 'bridge.sock');
+process.env.VELAROS_HOST_SOCKET = socketPath;
+process.env.VELAROS_HOST_TOKEN = 'test-token';
+const clients = new Set(), counts = [], unrefs = new Map();
+globalAgent.on('free', socket => {
+  if (!clients.has(socket)) {
+    clients.add(socket);
+    const unref = socket.unref;
+    socket.unref = function () { unrefs.set(socket, (unrefs.get(socket) ?? 0) + 1); return unref.call(this); };
+  }
+  counts.push(socket.listenerCount('close'));
+});
+let calls = 0;
+const server = createServer((request, response) => {
+  request.resume();
+  request.on('end', () => response.end(JSON.stringify({value: ++calls})));
+});
+try {
+  server.listen(socketPath);
+  await once(server, 'listening');
+  for (let index = 1; index <= 32; index++) assert.equal(await invoke('demo', 'read', {}), index);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(clients.size, 1, 'the requests must actually reuse one socket');
+  assert.equal(Math.max(...counts), counts[0], 'close observers must not accumulate');
+  assert.deepEqual(warnings, []);
+  const first = [...clients][0];
+  unrefs.set(first, 0);
+  releaseCalls();
+  assert.equal(unrefs.get(first), 1);
+  const closed = once(first, 'close');
+  first.destroy();
+  await closed;
+  unrefs.set(first, 0);
+  releaseCalls();
+  assert.equal(unrefs.get(first), 0, 'closed sockets must leave the release set');
+  assert.equal(await invoke('demo', 'read', {}), 33);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(clients.size, 2);
+  const second = [...clients][1];
+  unrefs.set(second, 0);
+  releaseCalls();
+  assert.equal(unrefs.get(first), 0);
+  assert.equal(unrefs.get(second), 1, 'a replacement socket must be tracked');
+  assert.deepEqual(warnings, []);
+  console.log(JSON.stringify({calls, sockets: clients.size, closeObservers: counts[0]}));
+} finally {
+  globalAgent.destroy();
+  server.closeAllConnections();
+  await new Promise(resolve => server.close(resolve));
+}
+`
+      )
+      const result = execFileSync('node', [entrypoint], {
+        cwd,
+        encoding: 'utf8',
+        timeout: 5000,
+      })
+      expect(JSON.parse(result)).toMatchObject({ calls: 33, sockets: 2 })
+    }))
+
   test.skipIf(unsupportedBridge)('能力目录准备中取消会停止后续写入并释放租约，不启动进程', () =>
     fixture(async (cwd, directory) => {
       const controller = new AbortController()

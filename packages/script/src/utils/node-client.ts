@@ -24,7 +24,7 @@ export const send = (path, input) => new Promise((resolve, reject) => {
       else resolve(result.value);
     } catch (error) { reject(error); } });
   });
-  if (path === '/') req.on('socket', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  if (path === '/') req.on('socket', socket => { if (!sockets.has(socket)) { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); } });
   req.on('error', reject);
   req.end(JSON.stringify(input));
 });
