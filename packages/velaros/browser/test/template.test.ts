@@ -50,7 +50,7 @@ export const downloaded = await saveDownload()
     const actions = harness.calls
       .filter((call) => call.method === 'performTargetAction')
       .map((call) => (call.args[0] as { action: string }).action)
-    expect(actions).toEqual(expect.arrayContaining(['select_all', 'focus', 'click']))
+    expect(actions).toEqual(expect.arrayContaining(['fill', 'focus', 'click']))
     expect(
       harness.calls
         .filter((call) => call.method === 'insertText')

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -67,6 +67,93 @@ async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
 }
 
 describe('INV-28 宿主 Node 进程注入与回收', () => {
+  test.skipIf(unsupportedBridge)('能力目录准备中取消会停止后续写入并释放租约，不启动进程', () =>
+    fixture(async (cwd, directory) => {
+      const controller = new AbortController()
+      let released = 0
+      let authorized = 0
+      let launched = 0
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        acquireRuntime: async () => ({
+          environment: { id: 'preparation', packages: [], skills: [] },
+          release: async () => {
+            released++
+          },
+        }),
+        authorize: async () => {
+          authorized++
+        },
+        execute: async () => {
+          launched++
+          return { exitCode: 0, signal: null, stdout: '', stderr: '' }
+        },
+      })
+      const result = await runner.run(
+        request('', {
+          operations: { demo: ['read'], later: ['read'] },
+          host: {
+            sessionId: 'preparation',
+            executionId: 'cancel',
+            modules: {
+              demo: {
+                summary: '取消发生在实际能力声明准备时',
+                get declarations() {
+                  controller.abort()
+                  return "declare module 'velaros:demo' { export function read(): Promise<string> }"
+                },
+              },
+            },
+          },
+        }),
+        noCalls,
+        log,
+        controller.signal
+      )
+      expect(result).toMatchObject({ ok: false, error: { code: 'ABORTED' } })
+      expect(result.process).toBeUndefined()
+      expect({ released, authorized, launched }).toEqual({
+        released: 1,
+        authorized: 0,
+        launched: 0,
+      })
+      const [run] = await readdir(directory)
+      expect(await readdir(join(directory, run!, 'host'))).toEqual(['bridge.mjs'])
+    })
+  )
+
+  test.skipIf(unsupportedBridge)('准备阶段超时通知租约获取并回收迟到租约', () =>
+    fixture(async (cwd, directory) => {
+      let released = 0
+      let launched = 0
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        acquireRuntime: async (signal) => {
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true })
+          )
+          return {
+            environment: { id: 'late-preparation', packages: [], skills: [] },
+            release: async () => {
+              released++
+            },
+          }
+        },
+        execute: async () => {
+          launched++
+          return { exitCode: 0, signal: null, stdout: '', stderr: '' }
+        },
+      })
+      const result = await runner.run(request('', { timeoutMs: 30 }), noCalls, log)
+      expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } })
+      expect(result.error?.message).toContain('准备')
+      expect(result.process).toBeUndefined()
+      expect({ released, launched }).toEqual({ released: 1, launched: 0 })
+    })
+  )
+
   it('Execa 启动文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
     fixture(async (root, directory) => {
       const cwd = join(root, '有 空格')
@@ -446,6 +533,42 @@ function bridgeRequest(socketPath: string, token: string, body: string, path = '
     )
   })
 }
+
+test.skipIf(unsupportedBridge)(
+  'preparation deadline excludes approval and preserves host wait clock suspension',
+  () =>
+    fixture(async (cwd, directory) => {
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        authorize: async (_request, signal) => {
+          await Bun.sleep(1100)
+          expect(signal.aborted).toBe(false)
+        },
+        execute: async (input, _output, signal) => {
+          const reply = await bridgeRequest(
+            input.environment.VELAROS_HOST_SOCKET!,
+            input.environment.VELAROS_HOST_TOKEN!,
+            JSON.stringify({ namespace: 'demo', operation: 'read', input: null })
+          )
+          expect(reply).toContain('200 OK')
+          expect(signal.aborted).toBe(false)
+          return { exitCode: 0, signal: null, stdout: '', stderr: '' }
+        },
+      })
+      const outcome = await runner.run(
+        request('', { operations: { demo: ['read'] }, timeoutMs: 1000 }),
+        async (_call, holdClock) => {
+          const release = holdClock()
+          await Bun.sleep(1100)
+          release()
+          return { value: 'ready' }
+        },
+        log
+      )
+      expect(outcome.ok).toBe(true)
+    })
+)
 
 test.skipIf(unsupportedBridge)(
   'local capability bridge validates authorization, handles concurrent calls and closes idle connections',

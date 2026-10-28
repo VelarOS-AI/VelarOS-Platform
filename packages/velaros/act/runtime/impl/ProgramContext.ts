@@ -1242,7 +1242,7 @@ export class ProgramContext implements ProgramContextApi {
         totalChars: number
         truncated: boolean
         location: { executionId: string; pointer: string }
-        read: { module: string; export: string; operation: string; ref: string; rangeUnit: string }
+        read: { module: string; export: string; operation: string; ref: string }
       }
     > = []
     let feedback: Optional<{
@@ -1430,7 +1430,6 @@ export class ProgramContext implements ProgramContextApi {
           export: 'memory',
           operation: 'read',
           ref: lease.ref,
-          rangeUnit: 'utf16',
         },
       })
       // 图像按自己的完整性限制读取，不把截取的 JSON 当完整结果解析。

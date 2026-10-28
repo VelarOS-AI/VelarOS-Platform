@@ -512,7 +512,7 @@ export const cookieCount = cookies.length
     expect(waited.code).toBe(BrowserErrorCodes.scriptFailed)
   })
 
-  test('INV-25 fill 是真实输入：全选、插入、再读状态，不在页面里直接改 value', async () => {
+  test('INV-25 文本 fill 保持真实输入：准备全选、插入、再读状态', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)
     const filled = await space.call('browser', 'fill', {
@@ -525,7 +525,7 @@ export const cookieCount = cookies.length
     const actions = harness.calls
       .filter((call) => call.method === 'performTargetAction')
       .map((call) => (call.args[0] as { action: string }).action)
-    expect(actions).toEqual(['select_all', 'focus'])
+    expect(actions).toEqual(['fill', 'focus'])
     expect(harness.calls[1]!.args[0]).toEqual({ text: 'user@example.com' })
 
     // 清空就是全选之后按退格。

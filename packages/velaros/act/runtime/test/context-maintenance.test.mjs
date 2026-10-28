@@ -507,7 +507,7 @@ async function setupTool(t, main, maintenance, extra = {}) {
     runner: nodeSubprocessCodeRunner,
     modules: [],
     model: main,
-    context: { sources: [], maintenance: { model: maintenance } },
+    context: { sources: [], maintenance: { model: maintenance, execution: 'script' } },
     ...extra,
   })
   t.after(() => runtime.close())
@@ -838,7 +838,12 @@ test('native maintenance publishes a validated final-call patch without another 
       yield* done(request)
     }),
     maintenance,
-    { context: { sources: [], maintenance: { model: maintenance, profile: { modelCalls: 2 } } } }
+    {
+      context: {
+        sources: [],
+        maintenance: { execution: 'script', model: maintenance, profile: { modelCalls: 2 } },
+      },
+    }
   )
   await f.session.execute({
     source:
@@ -1365,7 +1370,12 @@ test('last maintenance call directly delivers a partial patch with gaps and no r
       yield* done(request)
     }),
     maintenance,
-    { context: { sources: [], maintenance: { model: maintenance, profile: { modelCalls: 2 } } } }
+    {
+      context: {
+        sources: [],
+        maintenance: { execution: 'script', model: maintenance, profile: { modelCalls: 2 } },
+      },
+    }
   )
   await f.session.execute({
     source:

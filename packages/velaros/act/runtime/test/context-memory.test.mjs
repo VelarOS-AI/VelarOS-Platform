@@ -21,7 +21,13 @@ import {
   memoryVerificationProjection,
 } from '../../../dist/act/runtime/utils/context-memory.js'
 import { decisionStateProjection } from '../../../dist/act/runtime/utils/decision-state.js'
-import { projectMaterial, readMaterialField } from '../../../dist/act/runtime/utils/materials.js'
+import {
+  materialHistoryDelta,
+  projectMaterial,
+  readMaterialField,
+} from '../../../dist/act/runtime/utils/materials.js'
+import { VelarSystemMemoryModule } from '../../../dist/act/system/contract/surface.js'
+import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 
 import { baseNotes, baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
@@ -424,6 +430,65 @@ async function execute(f, source) {
   assert(result.checked && !result.result.failed, JSON.stringify(result))
   return result.result.value?.default
 }
+
+test('generated material read hints satisfy the live memory contract and recall original bytes', async (t) => {
+  const f = await fixture(t)
+  const input = await f.session.context.append({ kind: 'user', body: 'Recall the archived result' })
+  await f.session.view.begin(input.ref)
+  await f.session.view.build({ maxChars: 12000 })
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const text = 'line 😀 quoted " text\n'.repeat(1000)
+  const original = JSON.stringify({ result: { value: { stdout: text } } })
+  const source = await f.session.context.append({
+    kind: 'audit',
+    title: 'script:12345678',
+    body: JSON.stringify({ source: 'export default null' }),
+  })
+  const result = await f.session.context.append({
+    kind: 'audit',
+    title: 'script:12345678:result',
+    body: original,
+  })
+  await programs.add(result.ref, source.ref, 'recall', 'task')
+  const ref = result.ref
+  const before = projectMaterial(original, ref, 1800)
+  const after = projectMaterial(original, ref, 4000)
+  const delta = JSON.parse(materialHistoryDelta(original, after.text, before.text, ref))
+  const projection = JSON.parse(
+    (await programs.project((await f.session.view.inspect()).view, undefined, [], signal, 12000))
+      .body
+  )
+  const hints = [
+    JSON.parse(before.text).result.value.stdout.read,
+    delta.result.value.stdout.read,
+    projection.results[0].read,
+  ]
+  for (const hint of hints) {
+    const { module, export: member, operation, ...input } = hint
+    assert.equal(module, 'velaros:system')
+    assert.equal(member, 'memory')
+    assert.equal(operation, 'read')
+    const validated = modelRequestEncoder.output(
+      {
+        type: 'json',
+        name: 'memory_read',
+        description: '',
+        schema: VelarSystemMemoryModule.operations.read.input,
+      },
+      input
+    )
+    const recalled = await new SystemMemoryOperations().read(validated, {
+      memory: f.memory,
+      abortSignal: signal,
+    })
+    const full = input.pointer ? text : original
+    assert.equal(
+      recalled.text,
+      full.slice(input.offset ?? 0, (input.offset ?? 0) + (input.limit ?? 60000))
+    )
+    assert.equal(recalled.totalChars, full.length)
+  }
+})
 
 test('INV-79 omitted verification details retain trusted current, historical and unknown counts', async (t) => {
   const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })

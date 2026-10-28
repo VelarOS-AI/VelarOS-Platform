@@ -20,7 +20,11 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { NodeExecutionLimits, ScriptOutputLimits } from '../contract/constants.js'
+import {
+  CodeSurfaceLimits,
+  NodeExecutionLimits,
+  ScriptOutputLimits,
+} from '../contract/constants.js'
 import type {
   CodeRunnerApi,
   NodeCodeRunnerOptions,
@@ -300,13 +304,28 @@ class NodeCodeRunner implements CodeRunnerApi {
           '当前 Bun 不支持通过本地命名管道处理 HTTP 连接；请使用 Node 宿主或支持此连接处理器的 Bun。'
         )
       controller.signal.throwIfAborted()
+      // 准备不使用运行期的停表时钟；控制调用取消后不得继续生成整份能力目录。
+      const preparation = timers.after(
+        Math.min(request.timeoutMs, CodeSurfaceLimits.timeoutMs),
+        () => {
+          timedOut = true
+          controller.abort(new AppError('TIMEOUT', 'Node 执行环境准备超过时限。'))
+        }
+      )
       runtimeLease = await this.options.acquireRuntime?.(controller.signal)
+      controller.signal.throwIfAborted()
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
+      controller.signal.throwIfAborted()
       directory = await realpath(await mkdtemp(join(this.options.directory, 'node-')))
+      controller.signal.throwIfAborted()
       const catalog = join(directory, 'host')
       packageCatalog = join(catalog, 'index.json')
       await mkdir(catalog, { mode: 0o700 })
-      await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), { mode: 0o600 })
+      controller.signal.throwIfAborted()
+      await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), {
+        mode: 0o600,
+        signal: controller.signal,
+      })
       const index: Array<{
         module: string
         member?: string
@@ -321,6 +340,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       }> = []
       const clients: Record<string, string> = Object.create(null)
       for (const [namespace, operations] of Object.entries(request.operations)) {
+        controller.signal.throwIfAborted()
         const name = `host-${encodeURIComponent(namespace)}`
         const client = `${name}.mjs`
         const documentation = `${name}.d.ts`
@@ -330,26 +350,32 @@ class NodeCodeRunner implements CodeRunnerApi {
           namespace,
           operations
         )
+        controller.signal.throwIfAborted()
         if (!isEmpty(Object.keys(operationDocs))) {
           await mkdir(join(catalog, operationDirectory), { mode: 0o700 })
-          for (const [operation, text] of Object.entries(operationDocs))
+          for (const [operation, text] of Object.entries(operationDocs)) {
+            controller.signal.throwIfAborted()
             await writeFile(
               join(catalog, operationDirectory, `${encodeURIComponent(operation)}.d.ts`),
               text,
-              { mode: 0o600 }
+              { mode: 0o600, signal: controller.signal }
             )
+          }
         }
+        controller.signal.throwIfAborted()
         clients[namespace] = client
         await writeFile(join(catalog, client), nodeCapabilityClient(namespace, operations), {
           mode: 0o600,
+          signal: controller.signal,
         })
+        controller.signal.throwIfAborted()
         await writeFile(
           join(catalog, documentation),
           nodeCapabilityDeclarations(
             request.host?.modules[namespace]?.declarations ?? '',
             namespace
           ),
-          { mode: 0o600 }
+          { mode: 0o600, signal: controller.signal }
         )
         const entry = {
           module: namespace,
@@ -376,6 +402,7 @@ class NodeCodeRunner implements CodeRunnerApi {
             if (target === namespace)
               index.push({ ...entry, module: pkg.specifier, member, namespace })
       }
+      controller.signal.throwIfAborted()
       await writeFile(
         join(catalog, 'index.json'),
         stringifyPretty({
@@ -399,8 +426,9 @@ class NodeCodeRunner implements CodeRunnerApi {
           ),
           capabilities: index,
         }),
-        { mode: 0o600 }
+        { mode: 0o600, signal: controller.signal }
       )
+      controller.signal.throwIfAborted()
       const socket =
         process.platform === 'win32'
           ? `\\\\.\\pipe\\velaros-node-${randomUUID()}`
@@ -408,6 +436,7 @@ class NodeCodeRunner implements CodeRunnerApi {
               (socketDirectory = await realpath(await mkdtemp(join(tmpdir(), 'vn-')))),
               'rpc.sock'
             )
+      controller.signal.throwIfAborted()
       await new Promise<void>((resolve, reject) => {
         listener.once('error', reject)
         listener.listen(socket, () => {
@@ -415,13 +444,15 @@ class NodeCodeRunner implements CodeRunnerApi {
           resolve()
         })
       })
+      controller.signal.throwIfAborted()
       server.on('error', (error) => controller.abort(error))
       pipeServer?.on('error', (error) => controller.abort(error))
       const logPath = join(directory, 'output.log')
       log = openSync(logPath, 'wx', 0o600)
       controller.signal.throwIfAborted()
       outputFile = join(directory, 'output.ndjson')
-      await writeFile(outputFile, '', { mode: 0o600 })
+      await writeFile(outputFile, '', { mode: 0o600, signal: controller.signal })
+      controller.signal.throwIfAborted()
       const program = await nodeProgramSource(
         request,
         catalog,
@@ -430,6 +461,9 @@ class NodeCodeRunner implements CodeRunnerApi {
         this.options.packageDirectory,
         runtimeLease?.environment ?? this.options.runtime
       )
+      controller.signal.throwIfAborted()
+      // 用户审批不消耗准备额度，后续执行仍从完整计时额度开始并保留宿主等待停表。
+      preparation.cancel()
       const processRequest = {
         binDirectories: runtimeLease?.binDirectories,
         source: request.source,
@@ -539,7 +573,10 @@ class NodeCodeRunner implements CodeRunnerApi {
       }
     } catch (error) {
       return {
-        ...failure(signal?.aborted ? 'ABORTED' : shapeOperationFailure(error).code, String(error)),
+        ...failure(
+          signal?.aborted ? 'ABORTED' : timedOut ? 'TIMEOUT' : shapeOperationFailure(error).code,
+          String(error)
+        ),
         pendingCalls: pendingAtStop ?? [...pending],
       }
     } finally {

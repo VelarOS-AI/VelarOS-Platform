@@ -90,7 +90,6 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
       ref: ref.id,
     }
     if (pointer) Object.assign(read, { pointer })
-    Object.assign(read, { rangeUnit: 'utf16' })
     return {
       ref,
       position: pointer || '/',
@@ -306,7 +305,6 @@ export function materialHistoryDelta(
           operation: 'read',
           ref: ref.id,
           pointer,
-          rangeUnit: 'utf16',
           offset: after.length,
           limit: Math.min(ContextLimits.readChars, raw.length - after.length),
         },

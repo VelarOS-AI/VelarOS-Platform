@@ -13,6 +13,7 @@ export function buildTargetActionScript(
     action: options.action,
     clickMode,
     target: options.target,
+    value: options.value,
   })
   const coordinatePointReturnScript = `return {
           action: payload.action,
@@ -403,11 +404,35 @@ export function buildTargetActionScript(
     }
 
     const visibleText = elementText(element) || readFieldLabelText(element)
+    let inputRequired
     element.scrollIntoView({ block: 'center', inline: 'center' })
     if (payload.action === 'focus') {
       element.focus()
-    } else if (payload.action === 'select_all') {
-      if (!selectEditableContents(element)) {
+    } else if (payload.action === 'select_all' || payload.action === 'fill') {
+      const nativeValue = payload.action === 'fill' && isHtmlInputElement(element)
+        && ['date', 'time', 'datetime-local', 'month', 'week'].includes(element.type)
+      const editable = !element.matches(':disabled') && !element.readOnly
+      let accepted = editable
+      if (editable && nativeValue) {
+        // 日期分段控件不接受 insertText；调用所属 frame 的原生 setter，绕开受控表单的值追踪。
+        const ownerWindow = element.ownerDocument.defaultView
+        const setter = Object.getOwnPropertyDescriptor(ownerWindow.HTMLInputElement.prototype, 'value').set
+        const candidate = element.ownerDocument.createElement('input')
+        candidate.type = element.type
+        setter.call(candidate, payload.value)
+        accepted = payload.value === '' || candidate.value !== ''
+        if (accepted) {
+          element.focus()
+          setter.call(element, candidate.value)
+          element.dispatchEvent(new ownerWindow.Event('input', { bubbles: true, composed: true }))
+          element.dispatchEvent(new ownerWindow.Event('change', { bubbles: true }))
+        }
+        inputRequired = false
+      } else if (editable) {
+        accepted = selectEditableContents(element)
+        inputRequired = true
+      }
+      if (!accepted) {
         return {
           action: payload.action,
           url: location.href,
@@ -468,6 +493,7 @@ export function buildTargetActionScript(
       clickPoint: null,
       clickMethod: payload.action === 'click' ? 'dom' : null,
       controlState: readControlState(element),
+      ...(payload.action === 'fill' ? { inputRequired } : {}),
       failureReason: null,
       blockedBy: null,
       capturedAt: Date.now(),

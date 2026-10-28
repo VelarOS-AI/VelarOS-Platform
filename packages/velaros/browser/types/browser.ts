@@ -578,12 +578,14 @@ export interface BrowserScreenshotArtifact {
   loginGate?: BrowserLoginGateRecord
 }
 
-/** 页面里按元素做的一步：click、hover 发真实的鼠标事件；focus 聚焦；select_all 聚焦并全选（fill 在页面里只做这一步，文字由宿主插入）。 */
-export type BrowserTargetActionKind = 'click' | 'hover' | 'focus' | 'select_all'
+/** 页面元素动作；fill 对日期类控件设置原生值，其余可编辑控件全选后由宿主输入。 */
+export type BrowserTargetActionKind = 'click' | 'hover' | 'focus' | 'select_all' | 'fill'
 
 export interface BrowserTargetActionOptions {
   action: BrowserTargetActionKind
   target: BrowserElementTargetHint
+  /** fill 要填入的完整值；日期类使用 HTML 标准格式。 */
+  value?: string
   waitForNavigation?: boolean
   /** 点击用哪个键，缺省 left。 */
   button?: BrowserMouseButton
@@ -619,6 +621,8 @@ export interface BrowserTargetActionOutcome {
 /** 页面里按元素做一步的结果：action 是请求的那一步。 */
 export interface BrowserTargetActionResult extends BrowserTargetActionOutcome {
   action: BrowserTargetActionKind
+  /** fill 已完成原生赋值时为假；文本全选后仍需宿主输入时为真。 */
+  inputRequired?: boolean
 }
 
 /** @AgentView 动手前或动手后页面的一份指纹：地址、标题、正文的哈希与长度。 */

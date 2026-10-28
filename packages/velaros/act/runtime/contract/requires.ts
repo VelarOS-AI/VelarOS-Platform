@@ -310,6 +310,8 @@ export interface ObservationReuseOptions {
 export interface ContextMaintenanceOptions {
   /** 独立模型选择；省略时使用调用会话的模型驱动。 */
   readonly model?: ModelDriver
+  /** 原生工具模型默认用 data，只接收 list/read/submit 数据，不启动脚本进程；script 保留已有受限 ScriptAct 路径。 */
+  readonly execution?: 'data' | 'script'
   /** 可覆盖充分但有限的默认资源档位。 */
   readonly profile?: Partial<ContextMaintenanceProfile>
 }

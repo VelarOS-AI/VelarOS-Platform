@@ -43,7 +43,7 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-22 | 截图的图经交图通道交给模型，不进返回值：返回值只有落盘位置、尺寸、坐标换算、标注说明与比较；宿主没给交图通道时截图照样落盘并交回这些，只是不要压缩图 | 测试 | `spec/acceptance.test.ts` |
 | INV-23 | 不替模型折叠：没给上限时，看页面、页面脚本的结果、读诊断、读响应体一律按常量表的上限向端口要，要多少由程序自己切 | 测试 | `spec/acceptance.test.ts` |
 | INV-24 | 页面脚本（evaluate、waitForFunction）的结果按 JSON 整份交回程序，不截数组、不截深度；参数经 args 交进页面，不拼进源码；页面里抛错是 `BROWSER_SCRIPT_FAILED`（message 带错误名、原话与它在 script 里的行列），结果超过只为守住内存的上限是 `BROWSER_RESULT_TOO_LARGE`，不交半截 | 测试 | `spec/acceptance.test.ts` |
-| INV-25 | fill 是真实输入：页面里全选，宿主像输入法一样插入（空字符串按退格），再读一次控件状态；不在页面里直接改 value——那样 React 的受控输入认不到 | 测试 | `spec/acceptance.test.ts` |
+| INV-25 | 文本 fill 全选后由宿主真实输入，空字符串按退格；日期类控件使用所属 frame 的原生 setter 和 input/change 事件（非 trusted），均重新定位并读取实际状态；禁用、只读或非法日期不修改原值 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 等待一个口径：waitForFunction 交回判定式为真的值，waitForLoad 交回页面状态，waitForEvent 交回事件；等不到一律抛 `TIMEOUT`，不回「没等到」的结果让程序带着没到位的页面往下走 | 测试 | `spec/acceptance.test.ts` |
 | INV-27 | state 进了站点时带上标签页与挂着的弹窗、下载、权限；离站（leave）先断开模型的 CDP 会话，它设的仿真与拦截不带到下一个站点 | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 模型的 CDP 会话与宿主那条分开：模型开关的域、设的仿真与 Fetch 拦截只算在它自己身上，宿主的诊断、录屏与 mock 不受影响，宿主的事件监听不收子会话的事件；只认它自己挂出来的子会话（**未验证**：要真实 Electron，实现测试与真机探针在 `test/core/browser-protocol-sessions.test.ts` 与 ADR 0012 的验证里） | 文字 | |

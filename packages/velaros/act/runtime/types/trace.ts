@@ -74,8 +74,8 @@ export interface ActExecutionSummary {
   readonly executionId: string
   /** 在本回合响应的 execute 声明里排第几，从 0 起；同一回合的第几个 execute 程序事件与它对应。 */
   readonly position: number
-  /** 还没有结果时是 running；unknown 表示有调用的外部效果未知，需要先核对。 */
-  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
+  /** queued 表示等待执行槽；running 表示已开始；unknown 表示有调用的外部效果未知，需要先核对。 */
+  readonly status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
   /** 脚本没成功时的原因；运行中、成功，或只是效果未知时为 null。 */
   readonly failure: Nullable<ActExecutionFailure>
   /** 这次执行用了多少毫秒，取自持久结果；还没有结果或没过检查时为 null。 */

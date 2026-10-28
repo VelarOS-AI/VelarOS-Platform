@@ -56,6 +56,7 @@ import {
 } from '@velaros-ai/script'
 
 import {
+  ExecutionsModuleId,
   ExecutionWaitLimits,
   GoalLimits,
   ScriptLeaseLimits,
@@ -2145,7 +2146,8 @@ export class RuntimeSession implements VelarosSession {
     executionId: string = crypto.randomUUID(),
     parentRef?: string,
     basis?: LooseOptional<ModelView>,
-    timeoutMs?: number
+    timeoutMs?: number,
+    executionControl = false
   ): Promise<CodeSurfaceOutcome> {
     if (this.closed || this.active.has(executionId))
       return Promise.reject(new AppError('CLOSED', '会话已关闭或执行身份已占用'))
@@ -2163,7 +2165,8 @@ export class RuntimeSession implements VelarosSession {
         executionId,
         parentRef,
         basis,
-        timeoutMs
+        timeoutMs,
+        executionControl
       )
     )
     this.active.set(executionId, { pending, controller })
@@ -2513,7 +2516,8 @@ export class RuntimeSession implements VelarosSession {
               executionId,
               item.receipt.parentRef,
               basis,
-              input.executions[index].program.timeoutMs
+              input.executions[index].program.timeoutMs,
+              Boolean(input.executions[index].control)
             )) as ScriptExecutionReceipt
             results[index] = outcome
             const { status, failure } = executionOutcome(
@@ -2748,7 +2752,8 @@ export class RuntimeSession implements VelarosSession {
     identity?: string,
     parentRef?: string,
     basis?: LooseOptional<ModelView>,
-    timeoutMs?: number
+    timeoutMs?: number,
+    executionControl = false
   ): Promise<CodeSurfaceOutcome> {
     if (signal.aborted) throw new AppError('CANCELLED', '程序已取消')
     const executionId = identity ?? crypto.randomUUID()
@@ -2787,9 +2792,22 @@ export class RuntimeSession implements VelarosSession {
     const timing = { requestedTimeoutMs: timeoutMs, effectiveTimeoutMs }
     let durationMs = 0
     try {
+      // 仅编译器验证过的空源码控制操作缩小目录；普通源码保持原有能力与动态导入。
+      const allowedModules = this.dependencies.allowedModules()
       const session = createKernelScriptSession({
-        packages: this.dependencies.packages,
-        allowedModules: this.dependencies.allowedModules(),
+        packages: executionControl
+          ? this.dependencies.packages
+              .map((pkg) => ({
+                ...pkg,
+                exports: Object.fromEntries(
+                  Object.entries(pkg.exports).filter(([, target]) => target === ExecutionsModuleId)
+                ),
+              }))
+              .filter((pkg) => !isEmpty(Object.keys(pkg.exports)))
+          : this.dependencies.packages,
+        allowedModules: executionControl
+          ? allowedModules.filter((id) => id === ExecutionsModuleId)
+          : allowedModules,
         runtime: this.dependencies.kernel,
         runner: mode === 'execute' ? this.executionRunner : this.dependencies.runner,
         sessionId: this.id,

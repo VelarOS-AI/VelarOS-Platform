@@ -17,7 +17,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelToolBinding } from '../types/model-tools.js'
-import type { ScriptControlReceipt } from '../types/runtime.js'
+import type { ProgramLeaseState, ScriptControlReceipt } from '../types/runtime.js'
 import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
 import type {
   ActAgentSummary,
@@ -655,6 +655,10 @@ export class RuntimeTrace implements RuntimeTraceApi {
         language,
       }
     }
+    // 执行摘要跟踪异步任务的最新事实；历史请求帧仍只关联当时的租约记录。
+    const leaseRecord = records.findLast((record) => record.title === 'script:lease-state')
+    const leaseBody = leaseRecord ? await raw(leaseRecord) : null
+    const lease: Optional<ProgramLeaseState> = isNull(leaseBody) ? undefined : JSON.parse(leaseBody)
     const summaries: ActExecutionSummary[] = []
     for (const [position, item] of dispatched.entries()) {
       if (!item.executionId) continue
@@ -677,6 +681,14 @@ export class RuntimeTrace implements RuntimeTraceApi {
         executionId: item.executionId,
         position,
         ...outcome,
+        status:
+          !rejected &&
+          isUndefined(persisted) &&
+          lease?.jobs?.some(
+            (job) => job.executionId === item.executionId && job.status === 'queued'
+          )
+            ? 'queued'
+            : outcome.status,
         durationMs: rejected ? null : executionDuration(persisted),
         ...(isUndefined(processText)
           ? {}

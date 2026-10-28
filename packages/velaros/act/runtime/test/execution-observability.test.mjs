@@ -221,6 +221,13 @@ for (const transport of ['tools', 'text']) {
           const results = f.requests.at(-1).history.flatMap((m) => m.toolExchange?.results ?? [])
           assert(results.some((r) => r.output.executionId === executionId))
         }
+        const turnId = f.events.find((event) => event.type === 'turn').turnId
+        const traced = await f.session.trace(turnId)
+        assert.deepEqual(
+          traced.executions.map((item) => item.status),
+          ['running', 'queued']
+        )
+        assert.equal(traced.executions[1].durationMs, null)
         await assert.rejects(readFile(join(f.root, 'second')), { code: 'ENOENT' })
         await writeFile(join(f.root, 'release'), 'go')
         await until(async () =>
@@ -481,6 +488,8 @@ for (const transport of ['tools', 'text']) {
     await f.collect()
     assert.equal(await readFile(join(f.root, 'second'), 'utf8'), 'yes')
     assert((await f.programs.state()).jobs.every((j) => j.status === 'succeeded'))
+    const settled = await f.session.trace(f.events.find((event) => event.type === 'turn').turnId)
+    assert(settled.executions.every((item) => item.status === 'succeeded'))
   })
 
   for (const async of [true, false])
@@ -759,13 +768,100 @@ for (const transport of ['text', 'tools'])
     assert.equal(result.status, 'cancelled')
     assert.equal(result.stopRequested, true)
     await assert.rejects(readFile(join(f.root, 'first')), { code: 'ENOENT' })
-    assert.equal(f.requests.length, 4, JSON.stringify(f.frames.map((frame) => frame.jobs)))
+    // 控制进程可先于被停止的进程组收束；额外一帧是目标终态唤醒，不是再次轮询。
+    assert(
+      f.requests.length >= 4 && f.requests.length <= 5,
+      JSON.stringify(f.frames.map((frame) => frame.jobs))
+    )
+    assert.equal(
+      (await f.programs.state()).jobs.length,
+      3,
+      'one ordinary job plus exactly one read and one stop'
+    )
     await Array.fromAsync(f.session.submit({ task: 'new', text: 'Start an independent new task.' }))
     await assert.rejects(
       f.session.executions.read({ executionId: target }, new AbortController().signal),
       { code: 'NOT_FOUND' }
     )
   })
+
+test(
+  'a real control process stops one of four occupied slots and advances a queued program within its deadline',
+  { timeout: 60000 },
+  async (t) => {
+    let target
+    let queued
+    let started
+    let elapsed
+    const f = await fixture(
+      t,
+      'tools',
+      async (f) => {
+        if (f.requests.length === 1)
+          return Array.from({ length: 4 }, (_, index) => ({
+            code: held
+              .replaceAll("'started'", `'started-${index}'`)
+              .replaceAll("'first'", `'first-${index}'`),
+            options: { async: true },
+          }))
+        if (f.requests.length === 2) {
+          await until(async () => {
+            try {
+              await Promise.all(
+                Array.from({ length: 4 }, (_, index) => readFile(join(f.root, `started-${index}`)))
+              )
+              return true
+            } catch {
+              return false
+            }
+          })
+          const jobs = (await f.programs.state()).jobs
+          assert.equal(jobs.filter((job) => job.status === 'running').length, 4)
+          target = jobs[0].executionId
+          return [
+            {
+              code: "import {writeFile} from 'node:fs/promises'; await writeFile('queue-advanced','yes');",
+              options: { async: true },
+            },
+          ]
+        }
+        if (f.requests.length === 3) {
+          const jobs = (await f.programs.state()).jobs
+          queued = jobs.find((job) => job.status === 'queued')?.executionId
+          assert(queued, 'the fifth ordinary program must wait for a slot')
+          started = performance.now()
+          return [{ code: '', options: { control: { kind: 'stop', executionId: target } } }]
+        }
+        if (f.requests.length === 4) {
+          elapsed = performance.now() - started
+          assert(elapsed < 5000, `control preparation, process start and stop took ${elapsed} ms`)
+          await until(
+            async () =>
+              (await f.programs.state()).jobs.find((job) => job.executionId === queued)?.status ===
+              'succeeded'
+          )
+          assert.equal(await readFile(join(f.root, 'queue-advanced'), 'utf8'), 'yes')
+          await writeFile(join(f.root, 'release'), 'go')
+        }
+      },
+      { concurrency: 4, maxBlocks: 8 }
+    )
+    await f.collect()
+    const stopped = await f.session.executions.read(
+      { executionId: target },
+      new AbortController().signal
+    )
+    assert.equal(stopped.status, 'cancelled')
+    assert.equal(stopped.stopRequested, true)
+    assert.equal(
+      (await f.programs.state()).jobs.find((job) => job.executionId === queued)?.status,
+      'succeeded'
+    )
+    t.diagnostic(
+      `real four-slot stop including host directory and process preparation: ${Math.round(elapsed)} ms`
+    )
+  }
+)
 
 test('stopping an execution does not wait behind the write lock held by its in-flight call', async (t) => {
   let entered = false
