@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../index'
 import { createComputerRuntime } from '../../index'
 
-/** 假 helper 用 `sh` 扮演：EPIPE、半行崩溃、卡在启动这三种故障都要真管道才复现得出来。 */
+/** POSIX 断管用 sh，恢复时序用跨平台 Node；故障均经真实子进程管道触发。 */
 const posixTest = process.platform === 'win32' ? test.skip : test
 
 const HelperSpec: ComputerHelperLaunchSpec = {
@@ -60,29 +60,42 @@ describe('computer sidecar 韧性', () => {
     }
   })
 
-  posixTest('helper 死在半行 JSON 上之后，下一次请求仍能完成握手', async () => {
-    let launches = 0
-    const manager = createComputerRuntime({
-      resolveHelper: () => HelperSpec,
-      spawnProcess: shellSpawner(() => {
-        launches += 1
-        return launches === 1
-          ? String.raw`printf '{"id":0,"ok":true,"result":{}}\n{"id":1,"ok":tr'; exit 3`
-          : `${Handshake}; while read line; do printf '{"id":2,"ok":true,"result":{"width":1}}\n'; done`
-      }),
-      requestTimeoutMs: 2_000,
-      startupTimeoutMs: 3_000,
-    })
+  for (const receivedRequest of [false, true]) {
+    test(`helper 在${receivedRequest ? '收到请求后' : '握手前'}死在半行 JSON 后仍能重启`, async () => {
+      let launches = 0
+      const manager = createComputerRuntime({
+        resolveHelper: () => HelperSpec,
+        spawnProcess: () => {
+          launches += 1
+          const script =
+            launches === 1
+              ? receivedRequest
+                ? String.raw`process.stdout.write('{"id":0,"ok":true,"result":{"ready":true}}\n'); process.stdin.once('data', () => process.stdout.write('{"id":1,"ok":tr', () => process.exit(3)));`
+                : String.raw`process.stdout.write('{"id":0,"ok":tr', () => process.exit(3));`
+              : String.raw`const {createInterface} = require('node:readline'); process.stdout.write('{"id":0,"ok":true,"result":{"ready":true}}\n'); createInterface({input:process.stdin}).on('line', line => { const {id} = JSON.parse(line); process.stdout.write(JSON.stringify({id,ok:true,result:{width:1,requestId:id}})+'\n'); });`
+          const child = spawn('node', ['-e', script], { stdio: ['pipe', 'pipe', 'pipe'] })
+          return child as unknown as ComputerSidecarProcess
+        },
+        requestTimeoutMs: 2_000,
+        startupTimeoutMs: 3_000,
+      })
 
-    try {
-      await expect(manager.screenSize()).rejects.toBeDefined()
-      // 残片若留在行缓冲里，会粘在第二个 helper 的握手行前面，整行被当坏帧丢掉 → 永远挂起。
-      expect(await manager.screenSize()).toMatchObject({ width: 1 })
-      expect(launches).toBe(2)
-    } finally {
-      manager.dispose()
-    }
-  })
+      try {
+        await expect(manager.screenSize()).rejects.toMatchObject({
+          code: 'COMPUTER_SIDECAR_EXITED',
+          context: { exitCode: 3 },
+        })
+        // 残片若留在行缓冲里，会粘在第二个 helper 的握手行前面，整行被当坏帧丢掉 → 永远挂起。
+        expect(await manager.screenSize()).toMatchObject({
+          width: 1,
+          requestId: receivedRequest ? 2 : 1,
+        })
+        expect(launches).toBe(2)
+      } finally {
+        manager.dispose()
+      }
+    })
+  }
 
   posixTest('helper 不打握手时按 startupTimeoutMs 失败，请求不会永远挂起', async () => {
     const manager = createComputerRuntime({
