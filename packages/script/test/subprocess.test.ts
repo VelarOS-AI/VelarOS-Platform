@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
-import { connect } from 'node:net'
+import { createServer, request as httpRequest } from 'node:http'
+import { connect, createServer as createNetServer, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -517,22 +517,63 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
 // 传输测试注入受控宿主端口，不依赖默认运行器的 POSIX 进程组；Windows 也必须实跑。
 function bridgeRequest(socketPath: string, token: string, body: string, path = '/') {
   return new Promise<string>((resolve, reject) => {
-    const socket = connect(socketPath)
-    let response = ''
-    socket.setEncoding('utf8')
-    socket.setTimeout(2000, () => socket.destroy(new Error('bridge request timed out')))
-    socket.on('error', reject)
-    socket.on('data', (chunk) => {
-      response += chunk
-    })
-    socket.on('end', () => resolve(response))
-    socket.on('connect', () =>
-      socket.write(
-        `POST ${path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer ${token}\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`
-      )
+    const outgoing = httpRequest(
+      {
+        socketPath,
+        path,
+        method: 'POST',
+        agent: false,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-length': Buffer.byteLength(body),
+          connection: 'close',
+        },
+      },
+      (incoming) => {
+        let response = `${incoming.statusCode} ${incoming.statusMessage}\n`
+        incoming.setEncoding('utf8')
+        incoming.on('error', reject)
+        incoming.on('data', (chunk) => {
+          response += chunk
+        })
+        // HTTP 正文完整即完成；TCP 半关闭时间不属于能力等待或程序执行预算。
+        incoming.on('end', () => resolve(response))
+      }
     )
+    outgoing.on('error', reject)
+    outgoing.setTimeout(2000, () => outgoing.destroy(new Error('bridge request timed out')))
+    outgoing.end(body)
   })
 }
+
+test.skipIf(unsupportedBridge)(
+  'bridge test client completes a framed HTTP response before TCP closes',
+  () =>
+    fixture(async (_cwd, directory) => {
+      await mkdir(directory, { recursive: true })
+      const socketPath =
+        process.platform === 'win32'
+          ? `\\\\.\\pipe\\velaros-bridge-test-${process.pid}-${Date.now()}`
+          : join(directory, 'response.sock')
+      const sockets = new Set<Socket>()
+      const server = createNetServer((socket) => {
+        sockets.add(socket)
+        socket.once('data', () =>
+          socket.write('HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\n{}')
+        )
+      })
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject)
+          server.listen(socketPath, resolve)
+        })
+        expect(await bridgeRequest(socketPath, 'test', '{}')).toBe('200 OK\n{}')
+      } finally {
+        for (const socket of sockets) socket.destroy()
+        await new Promise<void>((resolve) => server.close(() => resolve()))
+      }
+    })
+)
 
 test.skipIf(unsupportedBridge)(
   'preparation deadline excludes approval and preserves host wait clock suspension',
@@ -566,7 +607,7 @@ test.skipIf(unsupportedBridge)(
         },
         log
       )
-      expect(outcome.ok).toBe(true)
+      expect(outcome).toMatchObject({ ok: true })
     })
 )
 

@@ -21,6 +21,27 @@ test('all reachable copies are patched and standard brace semantics remain compa
   assert(assertInstalledDependencyRepairs(manifests) > 0)
 })
 
+test('reachable qs copies safely serialize hostile comma-array elements and preserve normal values', () => {
+  const copies = installedDependencyGraph(manifests).filter(
+    ({ manifest }) => manifest.name === 'qs'
+  )
+  assert(copies.length > 0)
+  for (const { root: directory } of copies) {
+    const qs = createRequire(join(directory, 'package.json'))(directory)
+    const inputs = [
+      { a: [{ toString: 'x' }] },
+      { a: [[{ toString: 'x' }]] },
+      qs.parse('a[0][toString]=x', { allowPrototypes: true }),
+      qs.parse('a[][b]=c', { plainObjects: true }),
+    ]
+    for (const input of inputs)
+      for (const encodeValuesOnly of [false, true])
+        assert.doesNotThrow(() => qs.stringify(input, { arrayFormat: 'comma', encodeValuesOnly }))
+    assert.equal(qs.stringify({ a: ['x', 'y'] }, { arrayFormat: 'comma' }), 'a=x%2Cy')
+    assert.deepEqual(qs.parse('a[0]=x&a[1]=y'), { a: ['x', 'y'] })
+  }
+})
+
 test('security gate rejects an altered or missing patch', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'velaros-braces-integrity-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
