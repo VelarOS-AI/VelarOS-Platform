@@ -185,6 +185,9 @@ test('INV-74 bounded state windows rebuild without losing real Node results or r
 
 for (const explicit of [true, false])
   test(`real Node requests keep the prompt prefix and route tool cache points (explicit=${explicit})`, async (t) => {
+    const owned = { runtime: null }
+    // 先关闭 SQLite 所有者，再由 fixture 删除目录；Windows 不允许删除打开的数据库。
+    t.after(() => owned.runtime?.close())
     const f = await fixture(t)
     const bodies = []
     t.mock.method(globalThis, 'fetch', async (_url, init) => {
@@ -250,7 +253,7 @@ for (const explicit of [true, false])
       storage: localContextStorage({ path: join(f.root, 'prompt-cache.sqlite') }),
       environment: () => ({ changingState: `revision-${++revision}` }),
     })
-    t.after(() => runtime.close())
+    owned.runtime = runtime
     const session = await runtime.openSession('prompt-cache')
     const events = []
     for await (const event of session.submit('Print the requested result and finish.'))
@@ -287,7 +290,9 @@ for (const explicit of [true, false])
     assert(system.includes('Node.js ESM'))
     assert(system.includes(`默认时限 ${CodeSurfaceLimits.timeoutMs} ms`))
     assert(system.includes('options.timeoutMs'))
-    assert(system.includes('options.async:true 只改变受理方式'))
+    assert(system.includes('true 立即返回身份'))
+    assert(system.includes('异步执行仍属于本任务'))
+    assert(system.includes('完成声明不会停止或分离仍在运行的程序'))
     assert(system.includes('execution'))
     assert(!system.includes('revision-'))
     assert(!system.includes('apply_patch'))
@@ -1176,16 +1181,31 @@ test('approval denial launches no process; approval waiting is outside the progr
   const result = await denied.run(request('console.log(1)'), noCalls, () => {})
   assert.equal(result.ok, false)
   assert.equal(launched, false)
+  // 仅推进审批等待的虚拟时钟；文件系统准备不再依赖 20 ms 内完成的机器速度。
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let approvedWait = false
   const approved = createNodeCodeRunner({
     cwd: f.cwd,
     directory: join(f.root, 'approved'),
-    authorize: async () => new Promise((resolve) => setTimeout(resolve, 150)),
+    authorize: async () => {
+      const waiting = new Promise((resolve) => setTimeout(resolve, 150))
+      t.mock.timers.tick(150)
+      await waiting
+      approvedWait = true
+    },
     execute: async (_request, _output, signal) => {
       signal.throwIfAborted()
       return { exitCode: 0, signal: null, stdout: 'approved', stderr: '' }
     },
   })
-  assert.equal((await approved.run(request('console.log(1)', 20), noCalls, () => {})).ok, true)
+  let outcome
+  try {
+    outcome = await approved.run(request('console.log(1)', 20), noCalls, () => {})
+  } finally {
+    t.mock.timers.reset()
+  }
+  assert.equal(approvedWait, true)
+  assert.equal(outcome.ok, true, JSON.stringify(outcome))
 })
 
 test('explicit runtime deadlines reach Node and source reuse restores the default deadline', async (t) => {

@@ -518,6 +518,7 @@ test('INV-51 the main run renews at its turn limit and keeps going instead of fa
 
 test('a host deadline cancels after renewal and does not leak into the next submission', async (t) => {
   let calls = 0
+  let checkpoints = 0
   let initialWindow
   const f = await setup(
     t,
@@ -546,13 +547,24 @@ test('a host deadline cancels after renewal and does not leak into the next subm
         yield* done(request)
       }
     },
-    { limits: { turns: 3, timeoutMs: 60000 } }
+    {
+      limits: { turns: 3, timeoutMs: 60000 },
+      // 本例核对主机期限跨续段的归属；真实 Node 启动耗时由 node-runtime 回归覆盖。
+      runner: {
+        environment: 'node',
+        run: async () => {
+          checkpoints++
+          return { ok: true, value: 'checkpoint', logs: [] }
+        },
+      },
+    }
   )
   const deadline = Date.now() + 2500
   const events = []
   for await (const event of f.session.submit('bounded work', undefined, { deadline }))
     events.push(event)
   assert.equal(calls, 4)
+  assert.equal(checkpoints, 3)
   assert(events.some((event) => event.type === 'renewed'))
   assert.equal(events.at(-1).status, 'cancelled')
   assert(Date.now() >= deadline)
