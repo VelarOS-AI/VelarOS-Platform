@@ -528,6 +528,7 @@ test('a host deadline cancels after renewal and does not leak into the next subm
       if (calls === 1) initialWindow = time.runWindowDeadline
       if (calls <= 3) {
         assert.equal(time.deadline, deadline)
+        t.mock.timers.tick(1)
         yield {
           type: 'text',
           text: block(request, "import {output} from 'velaros';output('checkpoint');"),
@@ -540,6 +541,7 @@ test('a host deadline cancels after renewal and does not leak into the next subm
         await new Promise((resolve) => {
           signal.addEventListener('abort', resolve, { once: true })
           if (signal.aborted) resolve()
+          t.mock.timers.setTime(deadline)
         })
       } else {
         assert.equal(time.deadline, null)
@@ -559,16 +561,21 @@ test('a host deadline cancels after renewal and does not leak into the next subm
       },
     }
   )
+  // 固定日期推进，避免把 SQLite/投影速度当作续段合同；取消仍由真实期限计时器触发。
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() })
   const deadline = Date.now() + 2500
-  const events = []
-  for await (const event of f.session.submit('bounded work', undefined, { deadline }))
-    events.push(event)
-  assert.equal(calls, 4)
-  assert.equal(checkpoints, 3)
-  assert(events.some((event) => event.type === 'renewed'))
-  assert.equal(events.at(-1).status, 'cancelled')
-  assert(Date.now() >= deadline)
-  assert(Date.now() < deadline + 5000)
+  try {
+    const events = []
+    for await (const event of f.session.submit('bounded work', undefined, { deadline }))
+      events.push(event)
+    assert.equal(calls, 4)
+    assert.equal(checkpoints, 3)
+    assert(events.some((event) => event.type === 'renewed'))
+    assert.equal(events.at(-1).status, 'cancelled')
+    assert.equal(Date.now(), deadline)
+  } finally {
+    t.mock.timers.reset()
+  }
   const next = []
   for await (const event of f.session.submit('fresh work')) next.push(event)
   assert.equal(next.at(-1).status, 'completed')
