@@ -12,6 +12,7 @@ import type {
   BrowserPagePreviewFrame,
   BrowserUserActivityEvent,
   BrowserViewportOptions,
+  BrowserViewportResult,
 } from './browser'
 import type {
   BrowserScreenshotCaptureRegion,
@@ -147,6 +148,13 @@ export interface BrowserRuntimePageDriverSession extends BrowserPageDriverSessio
  * 新增成员前先问：这是不是又在把 kernel 养成第二个上帝类。
  */
 export interface BrowserRuntimeKernel extends BrowserPageDriverKernel {
+  /** 已在动作队列内：应用视口并同步会话/宿主状态，不再次排队。 */
+  applyViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserViewportResult>
   /** 统一多态入口：优先外部 CDP 会话，否则包裹 webview driver。 */
   getLivePageDriverSession(
     sessionId: string,

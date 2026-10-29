@@ -87,7 +87,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const record = state.records.findLast((item) => item.title === 'script:lease-state')
     const leases = record ? JSON.parse((await this.storage.get(this.id, record.objectId))!) : {}
     const ignored =
-      /^(model-tool:|model-budget:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u
+      /^(model-tool:|model-budget:|act:event$|act:state$|model-request(?::image-data)?$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u
     const material = {
       records: state.records.filter((item) => !ignored.test(item.title)).map((item) => item.ref.id),
       workingSet: state.workingSet,
@@ -128,7 +128,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         selected?.records.filter(
           (record) =>
             record.sequence > snapshot.through &&
-            !/^(model-tool:|model-budget:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u.test(
+            !/^(model-tool:|model-budget:|act:event$|act:state$|model-request(?::image-data)?$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u.test(
               record.title
             )
         ) ?? []

@@ -606,6 +606,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   private readonly latestPresentationTargets = new Map<string, BrowserPagePresentationTarget>()
   /** 各领域 engine 依赖的内核面；只暴露取会话/刷状态/共享工具，防止 engine 反向抓 runtime。 */
   private readonly kernel: BrowserRuntimeKernel = {
+    applyViewport: (sessionId, context, options, abortSignal) =>
+      this.applyViewport(sessionId, context, options, abortSignal),
     getLivePageDriverSession: (sessionId, abortSignal) =>
       this.getLivePageDriverSessionUnlocked(sessionId, abortSignal),
     getLivePageSession: (sessionId, abortSignal) =>
@@ -1468,23 +1470,33 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserViewportOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserViewportResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      const result = await this.interaction.setViewport(sessionId, context, options, abortSignal)
-      const viewport = {
-        width: result.width,
-        height: result.height,
-        mobile: Boolean(result.mobile),
-      }
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession) {
-        externalSession.viewport = viewport
-      } else {
-        const browserSession = this.sessionManager.getSession(sessionId)
-        if (browserSession) browserSession.viewport = viewport
-      }
-      this.sessionManager.notifyViewportChanged(sessionId, viewport)
-      return result
-    })
+    return this.actionQueue.run(sessionId, () =>
+      this.applyViewport(sessionId, context, options, abortSignal)
+    )
+  }
+
+  /** 队列内共享视口提交：截图与显式设置沿同一状态/通知链，不递归等待自己。 */
+  private async applyViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserViewportResult> {
+    const result = await this.interaction.setViewport(sessionId, context, options, abortSignal)
+    const viewport = {
+      width: result.width,
+      height: result.height,
+      mobile: Boolean(result.mobile),
+    }
+    const externalSession = this.getExternalPageSession(sessionId)
+    if (externalSession) {
+      externalSession.viewport = viewport
+    } else {
+      const browserSession = this.sessionManager.getSession(sessionId)
+      if (browserSession) browserSession.viewport = viewport
+    }
+    this.sessionManager.notifyViewportChanged(sessionId, viewport)
+    return result
   }
 
   public async setPageZoom(

@@ -20,7 +20,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
   return [
     `Node.js ESM/顶层 await；预装 ${NodeDefaultPackages.join('、')}；宿主：import {execa} from "${NodeRuntimePackagePrefix}execa"。`,
     `cwd:${JSON.stringify(cwd)}；独立进程，跨轮状态存文件或 store。`,
-    `默认时限 ${CodeSurfaceLimits.timeoutMs} ms，I/O/子进程计时，宿主等待停表。options.timeoutMs:1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数ms，受父期限/取消约束；引用不继承，值见回执。options.async:true 只改变受理方式，子进程 timeout 不延长外层。长负载用受管后台，恢复核进度/回执；脱组清理未知。`,
+    `默认时限 ${CodeSurfaceLimits.timeoutMs} ms，I/O/子进程计时，宿主等待停表。options.timeoutMs:1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数ms，受父期限/取消约束；引用不继承，值见回执。options.async:true 只改变受理方式，执行仍属于本任务，子进程 timeout 不延长外层。临时服务器验收后停止并确认退出；只有当前能力目录明确提供独立持久后台入口时才能按其合同跨任务保留，不得靠脱组冒充持久托管；脱组清理未知。`,
     '非交互命令用 stdin:"ignore"、timeout；默认等输入。rg 给路径，字面量用 ["-F","-e",pattern,"--","."]，多项重复 -e；正则用 String.raw。退出 1 无匹配，其他查 stderr。',
     '输入用 execa(command,args,{input:text,timeout:10000}) 或写后关闭 child.stdin；与 stdin:"ignore" 互斥。child_process.execFile 无 input；读 stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',

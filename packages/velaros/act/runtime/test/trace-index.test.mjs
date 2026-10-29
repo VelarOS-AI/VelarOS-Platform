@@ -7,10 +7,113 @@ import { test } from 'node:test'
 import { createContextRuntime } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 
+import { RuntimeDiagnostics } from '../../../dist/act/runtime/impl/RuntimeDiagnostics.js'
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker } from './support/model-turn.mjs'
+
+test('exhausted trace budgets check presence without loading historical bodies and preserve the legacy projection', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  const context = createContextRuntime({ sessionId: 'budget', storage })
+  const request = await context.append({
+    kind: 'audit',
+    title: 'model-request',
+    body: JSON.stringify({ runId: 'run', turn: 0, repair: 0 }),
+  })
+  const response = await context.append({
+    kind: 'assistant',
+    body: 'completed',
+    sources: [request.ref],
+  })
+  const decision = await context.append({
+    kind: 'audit',
+    title: 'model-response',
+    body: JSON.stringify({
+      rawRef: response.ref,
+      status: 'accepted',
+      decoded: { done: true },
+      usage: { inputTokens: 123, outputTokens: 45 },
+    }),
+    sources: [request.ref],
+  })
+  const history = []
+  for (let index = 0; index < 120; index++)
+    history.push(
+      await context.append({
+        kind: 'audit',
+        title: 'script:lease-state',
+        body: JSON.stringify({ jobs: [], index, output: 'x'.repeat(10_000) }),
+      })
+    )
+  const snapshot = await storage.load('budget')
+  const objectOf = (ref) => snapshot.records.find((record) => record.ref.id === ref.id).objectId
+  const read = async (indexed, query, missing) => {
+    const gets = []
+    const checks = []
+    let chars = 0
+    const metrics = []
+    const port = {
+      load: (id) => storage.load(id),
+      get: async (id, objectId) => {
+        gets.push(objectId)
+        const body = objectId === missing ? null : await storage.get(id, objectId)
+        chars += body?.length ?? 0
+        return body
+      },
+      ...(indexed
+        ? {
+            has: async (id, objectId) => {
+              checks.push(objectId)
+              return objectId !== missing && storage.has(id, objectId)
+            },
+          }
+        : {}),
+    }
+    const measured = new RuntimeDiagnostics(port, (metric) => metrics.push(metric)).storage
+    const startedAt = performance.now()
+    const trace = await new RuntimeTrace('budget', measured, { list: async () => [] }).page(query)
+    return { trace, gets, checks, chars, metrics, durationMs: performance.now() - startedAt }
+  }
+  for (const missing of [undefined, objectOf(history[7].ref), objectOf(decision.ref)]) {
+    for (const maxChars of [1, 32_768]) {
+      const legacy = await read(false, { limit: 1, maxChars }, missing)
+      const indexed = await read(true, { limit: 1, maxChars }, missing)
+      assert.deepEqual(indexed.trace, legacy.trace)
+      if (missing !== objectOf(decision.ref)) {
+        assert.equal(indexed.trace.turns[0].modelAccounting.usage.inputTokens, 123)
+        assert.equal(indexed.trace.accounting.modelRequests.known, 1)
+      }
+      assert(indexed.gets.length < legacy.gets.length / 10)
+      assert(indexed.chars < legacy.chars / 10)
+      assert(indexed.metrics.some((metric) => metric.operation === 'has'))
+      assert(!indexed.checks.includes(objectOf(request.ref)), 'cached request is not checked twice')
+      assert(
+        !indexed.checks.includes(objectOf(decision.ref)),
+        'cached decision/missing fact is retained'
+      )
+      assert(
+        indexed.gets.includes(objectOf(history.at(-1).ref)),
+        'latest lease still determines execution state'
+      )
+      if (missing)
+        assert(
+          indexed.trace.turns[0].gaps.some((gap) =>
+            gap.includes(missing === objectOf(decision.ref) ? decision.ref.id : history[7].ref.id)
+          )
+        )
+      t.diagnostic(
+        `budget=${maxChars}, missing=${Boolean(missing)}: get ${legacy.gets.length}->${indexed.gets.length}, body chars ${legacy.chars}->${indexed.chars}, elapsed ${legacy.durationMs.toFixed(2)}->${indexed.durationMs.toFixed(2)}ms`
+      )
+    }
+  }
+  const legacyFull = await read(false, { limit: 1, maxChars: 1, fullContent: true })
+  const indexedFull = await read(true, { limit: 1, maxChars: 1, fullContent: true })
+  assert.deepEqual(indexedFull.trace, legacyFull.trace)
+  assert.deepEqual(indexedFull.gets, legacyFull.gets)
+  assert.deepEqual(indexedFull.checks, [])
+})
 
 test('trace pages use one metadata snapshot and query only associated execution journals', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })

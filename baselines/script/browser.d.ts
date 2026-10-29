@@ -323,8 +323,9 @@ declare module 'velaros:browser' {
 
   /**
    * 往输入框、文本域或可编辑区域写入文字，替换原来的内容：value 最多 20000 个字符，空字符串就是清空。
-   * 是真实输入：聚焦、全选，再像输入法一样插入，React、Vue 与富文本编辑器都认。勾选框、下拉框、日期这类不是文本的控件回 matched 为假：
-   * 勾选用 click，下拉框与日期在 evaluate 里设值再派发 change。
+   * 文本控件聚焦、全选后使用真实输入，React、Vue 与富文本编辑器都认。
+   * date/time/datetime-local/month/week 按 HTML 标准格式设置原生值并触发 input/change，事件不标为 isTrusted；用返回的 controlState 核对实际值。
+   * 勾选框与下拉框回 matched 为假：勾选用 click，下拉框在 evaluate 里设值再派发 change。
    */
   interface BrowserFillInput {
     target: BrowserTarget

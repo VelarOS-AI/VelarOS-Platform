@@ -63,6 +63,19 @@ const patch = (snapshot, extra = {}) => ({
   ...extra,
 })
 
+test('archived model image audit does not invalidate maintenance or enter its material snapshot', async (t) => {
+  const f = await fixture(t)
+  const snapshot = await f.state.snapshot(8000, signal)
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'model-request:image-data',
+    body: 'PRIVATE_IMAGE_PIXELS',
+  })
+  await f.state.apply(snapshot, patch(snapshot), signal)
+  const next = await f.state.snapshot(8000, signal)
+  assert(!JSON.stringify(next).includes('PRIVATE_IMAGE_PIXELS'))
+})
+
 test('cancelling a stalled candidate validator returns promptly and a late result cannot publish', async (t) => {
   const f = await fixture(t)
   const entered = Promise.withResolvers()

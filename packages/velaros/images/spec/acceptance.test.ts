@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
+import { ModelImageLimits } from '@velaros-ai/kernel'
 
 import { VelarImagesModule } from '../contract/surface'
 import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../index'
@@ -45,6 +46,10 @@ const untouchable = async (): Promise<never> => {
 /** base64 之后正好压在上限上的原文件字节数：每 3 字节变 4 个字符。 */
 const BytesAtBase64Limit = (ImageLimits.base64Bytes / 4) * 3
 
+test('图片公开单图容量与 Kernel 真正交付边界一致', () => {
+  expect(ImageLimits.base64Bytes).toBe(ModelImageLimits.imageBytes)
+})
+
 let root = ''
 beforeEach(async () => {
   root = await makeScratch()
@@ -74,7 +79,7 @@ describe('原样交出，超了才压、要了才裁', () => {
     expect(Buffer.from(space.attached[0]!.data, 'base64').equals(photo)).toBe(true)
   })
 
-  test('INV-1 压线的也在上限以内：长边正好 2000 px（横竖都算）、base64 之后正好 5 MB，都原样交出', async () => {
+  test('INV-1 压线的也在上限以内：长边正好 2000 px（横竖都算）、base64 之后正好 4 MB，都原样交出', async () => {
     const images = [
       pngImage(ImageLimits.edge, 10),
       pngImage(10, ImageLimits.edge),
@@ -746,9 +751,13 @@ describe('模型面', () => {
     expect(ImageDeclarations).toContain(`base64 后 ${ImageLimits.base64Bytes / 1024 / 1024} MB`)
     // 说明文字里带单位的数字一个都不许漂：每一处都得是常量表里的某个上限（嵌着的代码模版另由 INV-12 守）
     const limitsByUnit: Record<string, number[]> = {
-      张: [ImageLimits.viewFiles],
+      张: [ImageLimits.viewFiles, ModelImageLimits.count],
       px: [ImageLimits.edge],
-      MB: [ImageLimits.base64Bytes / 1024 / 1024, ImageLimits.fileBytes / 1024 / 1024],
+      MB: [
+        ImageLimits.base64Bytes / 1024 / 1024,
+        ImageLimits.fileBytes / 1024 / 1024,
+        ModelImageLimits.totalBytes / 1024 / 1024,
+      ],
     }
     const prose = ImageDeclarations.replace(/```js[\s\S]*?```/u, '')
     const mentioned = [...prose.matchAll(/(\d+)\s*(张|px|MB)/gu)].map((match) => ({

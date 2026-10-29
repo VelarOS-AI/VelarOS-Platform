@@ -590,7 +590,18 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const requestSummary = summarizeModelRequest(request, remaining, fullContent)
     remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
-      const body = await raw(record)
+      // 正文预算耗尽后只核对存在性；不能为返回空字符串再加载整份历史租约。
+      // 身份、状态等解析所需的 raw 仍完整读取，已有缓存也保留其缺失事实。
+      const presenceOnly = remaining === 0 && !cache.has(record.ref.id) && !!this.storage.has
+      const body = presenceOnly
+        ? (await this.storage.has!(this.sessionId, record.objectId))
+          ? ''
+          : null
+        : await raw(record)
+      if (presenceOnly && isNull(body)) {
+        cache.set(record.ref.id, null)
+        gaps.push(`原文缺失：${record.ref.id}`)
+      }
       const text = isNull(body) ? null : body.slice(0, remaining)
       remaining -= text?.length ?? 0
       return {
@@ -600,7 +611,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         title: record.title,
         chars: record.chars,
         body: text,
-        truncated: !isNull(body) && text!.length < body.length,
+        truncated: !isNull(body) && text!.length < (presenceOnly ? record.chars : body.length),
         sources: record.sources,
       }
     }

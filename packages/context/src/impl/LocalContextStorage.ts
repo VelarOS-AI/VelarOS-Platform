@@ -452,6 +452,11 @@ export class LocalContextStorage implements ContextStorage {
       .get(sessionId, objectId)
     return row ? String(row.body) : null
   }
+  public async has(sessionId: string, objectId: string): Promise<boolean> {
+    return Boolean(
+      this.db.prepare('SELECT 1 FROM objects WHERE session=? AND id=?').get(sessionId, objectId)
+    )
+  }
   public async collect(
     sessionId: string,
     options: ContextObjectCollection

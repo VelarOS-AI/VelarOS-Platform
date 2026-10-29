@@ -7,13 +7,16 @@ import { test } from 'node:test'
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
+import { createProviderRequestCompiler } from '@velaros-ai/model'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import {
   createCapabilityModule,
+  createNodeExecutionEnvironment,
   createProjectCapabilityModule,
   createRuntime,
 } from '../../../dist/act/runtime/index.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
   createProjectContextSource,
   createProjectKernel,
@@ -21,7 +24,7 @@ import {
   VelarProjectModule,
 } from '../../../dist/project/index.js'
 
-import { done, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
 
 async function storageFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'platform-integration-'))
@@ -608,6 +611,219 @@ test('INV-7 real image capability persists attachments and sends them as images 
   const content = await s.context.read(state.lastStep.attachments[0])
   assert.equal(JSON.parse(content.text).data, data)
 })
+
+for (const scenario of [
+  { name: 'three executions', batches: [10, 10, 6], delivered: 20 },
+  { name: 'one execution', batches: [10, 10, 6], delivered: 20, singleExecution: true },
+  {
+    name: 'persistent observation and new views',
+    batches: [10, 10, 6],
+    delivered: 20,
+    observation: true,
+  },
+  { name: 'aggregate byte capacity', batches: [3, 3], delivered: 5, bytes: 3 * 1024 * 1024 },
+  {
+    name: 'cancel during image audit',
+    batches: [3, 3],
+    delivered: 5,
+    bytes: 3 * 1024 * 1024,
+    cancelAudit: true,
+  },
+])
+  test(
+    `image delivery defers overflow and recovers via release and bounded view (${scenario.name})`,
+    {
+      skip:
+        scenario.observation && process.platform === 'win32'
+          ? 'Windows does not provide the required read-only Node observation sandbox'
+          : false,
+    },
+    async (t) => {
+      const { imageOperations, VelarImagesModule } = await import('../../../dist/images/index.js')
+      const f = await storageFixture(t)
+      const pixel =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII='
+      const original = Buffer.from(pixel, 'base64')
+      const data = scenario.bytes
+        ? Buffer.concat([original, Buffer.alloc(scenario.bytes - original.length)])
+        : original
+      await writeFile(join(f.root, 'tiny.png'), data)
+      const module = createCapabilityModule({
+        surface: VelarImagesModule,
+        implementation: imageOperations,
+        instanceId: f.root,
+        context: (call) => ({
+          abortSignal: call.signal,
+          images: { locate: async (path) => ({ target: join(f.root, 'tiny.png'), shown: path }) },
+          attachImage: (image) => call.attach({ type: 'image-data', ...image }),
+        }),
+      })
+      const count = scenario.batches.reduce((total, size) => total + size, 0)
+      const files = Array.from({ length: count }, (_, i) => ({ path: `image-${i}.png` }))
+      const seen = new Set()
+      const actualRequests = []
+      let calls = 0
+      const model = {
+        id: 'image-overflow-recovery',
+        limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
+        estimate: async () => ({ tokens: 1000, precision: 'estimate', basis: 'test' }),
+        async *stream(request) {
+          actualRequests.push(request)
+          calls++
+          if (calls === 1) {
+            let offset = 0
+            const groups = scenario.batches.map((size) => {
+              const batch = files.slice(offset, offset + size)
+              offset += size
+              return batch
+            })
+            const sources = groups.map((batch) => `await view({files:${JSON.stringify(batch)}});`)
+            if (scenario.observation) {
+              yield turn(request, {
+                observe: {
+                  source: `import {view} from 'velaros:images';${sources.slice(0, 2).join('')}`,
+                },
+                execute: { source: `import {view} from 'velaros:images';${sources[2]}` },
+              })
+              yield { type: 'finish', reason: 'stop' }
+              return
+            }
+            for (const source of scenario.singleExecution ? [sources.join('')] : sources) {
+              yield turn(request, {
+                execute: { source: `import {view} from 'velaros:images';${source}` },
+              })
+              yield { type: 'text', text: '\n' }
+            }
+            yield { type: 'finish', reason: 'stop' }
+            return
+          }
+          assert(calls <= 3, 'bounded recovery must not loop')
+          for (const image of request.images) seen.add(image.label.match(/image-\d+\.png/)[0])
+          assert(request.images.every((image) => image.data === data.toString('base64')))
+          const frame = JSON.parse(
+            request.materials.findLast((item) => item.origin === 'runtime-view').text
+          )
+          const status = frame.partitions.runtime.materialStatus
+          if (calls === 2) {
+            assert.equal(
+              request.images.length,
+              scenario.delivered,
+              JSON.stringify(runtimeFrame(request).results.map(({ ref, text }) => ({ ref, text })))
+            )
+            const deferred = scenario.singleExecution ? 0 : count - scenario.delivered
+            assert.equal(status.imageDelivery.deferred, deferred)
+            assert.equal(
+              status.imageReferences.filter((item) => item.attached).length,
+              scenario.delivered
+            )
+            assert.equal(status.imageReferences.filter((item) => item.deferred).length, deferred)
+            if (scenario.bytes) assert.equal(status.imageDelivery.base64Bytes, 20 * 1024 * 1024)
+            if (deferred) {
+              assert.match(status.imageDelivery.advice, /memory\.release/)
+              assert.match(status.imageDelivery.advice, /不会自动补送/)
+            } else {
+              assert.match(JSON.stringify(runtimeFrame(request).results), /只给了前 20 张/)
+            }
+            const results = [...new Set(status.imageReferences.map((item) => item.resultRef))]
+            assert(results.every(Boolean))
+            const remaining = files.filter((file) => !seen.has(file.path))
+            if (scenario.observation)
+              yield {
+                type: 'text',
+                text: `${marker(request)} observe({clear:true})\n${marker(request)}\n`,
+              }
+            yield turn(request, {
+              execute: {
+                source: `import {memory} from 'velaros:system';import {view} from 'velaros:images';for(const ref of ${JSON.stringify(results)})await memory.release({ref});await view({files:${JSON.stringify(remaining)}});`,
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+            return
+          }
+          assert.equal(request.images.length, count - scenario.delivered)
+          assert.equal(status.imageDelivery.deferred, 0)
+          assert.deepEqual([...seen].sort(), files.map((file) => file.path).sort())
+          yield* done(request, 'All images were actually delivered in bounded requests.')
+        },
+      }
+      const shell = createLocalShellHost({
+        cwd: f.root,
+        processConfinement: { mode: 'danger-full-access', workspaceRoot: f.root },
+      })
+      f.cleanup.push(() => shell.dispose())
+      const node = createNodeExecutionEnvironment({
+        cwd: f.root,
+        directory: join(f.root, 'runs'),
+        host: shell,
+      })
+      const runtime = await createRuntime({
+        storage: f.storage,
+        node,
+        modules: [module],
+        model,
+        context: { maintenance: false },
+      })
+      f.cleanup.push(() => runtime.close())
+      const session = await runtime.openSession('s')
+      const controller = new AbortController()
+      if (scenario.cancelAudit) {
+        const append = session.context.append.bind(session.context)
+        t.mock.method(session.context, 'append', async (input, signal) => {
+          const result = await append(input, signal)
+          if (input.title === 'model-request:image-data') controller.abort()
+          return result
+        })
+      }
+      const events = []
+      for await (const event of session.submit(
+        `Inspect all ${count} images in batches.`,
+        controller.signal
+      ))
+        events.push(event)
+      if (scenario.cancelAudit) {
+        assert.equal(calls, 1, 'cancelled image audit never dispatches the second request')
+        assert.equal((await f.storage.records('s', { title: 'model-request' })).items.length, 1)
+        assert.notEqual(events.at(-1).status, 'completed')
+        return
+      }
+      assert.equal(
+        events.at(-1).status,
+        'completed',
+        JSON.stringify(events.filter((event) => event.type === 'error'))
+      )
+      assert.equal(calls, 3)
+      if (scenario.bytes) {
+        const audits = (await f.storage.records('s', { title: 'model-request' })).items
+        const auditRecord = audits[1]
+        const raw = await f.storage.get('s', auditRecord.objectId)
+        assert(raw.length < 8000000)
+        assert.equal(
+          auditRecord.sources.length,
+          1,
+          'identical pixels are archived once despite different labels'
+        )
+        const pixels = new Map()
+        for (const ref of auditRecord.sources) {
+          const record = await session.context.read(ref, { limit: 1 })
+          pixels.set(ref.id, await f.storage.get('s', record.record.objectId))
+        }
+        const restored = JSON.parse(raw, (_key, value) => {
+          if (value?.$velarosType !== 'context-image') return value
+          const body = pixels.get(value.ref.id)
+          assert.equal(typeof body, 'string')
+          return value.encoding === 'data-url' ? value.prefix + body : body
+        })
+        assert.deepEqual(restored.request, JSON.parse(JSON.stringify(actualRequests[1])))
+        const compiler = createProviderRequestCompiler()
+        const expected = await compiler.compileModelTurn(actualRequests[1], model, 0)
+        assert.deepEqual(
+          restored.providerRequest,
+          JSON.parse(JSON.stringify(expected.providerRequest))
+        )
+        await compiler.verify(restored.providerRequest)
+      }
+    }
+  )
 
 test('Node data codecs preserve UTF-8 and binary roundtrips without host objects', async (t) => {
   const f = await storageFixture(t)

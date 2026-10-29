@@ -1,6 +1,8 @@
 /**
  * 看图：把 PNG、JPEG、GIF、WebP 交到你眼前。路径怎么写、能到哪儿由当前空间决定（环境报告里写着），越界的那一张看不了。
- * 在上限以内（长边 2000 px、base64 后 5 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
+ * 在上限以内（长边 2000 px、base64 后 4 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
+ * 多次调用共享下一帧的 20 张、base64 合计 20 MB 容量。调用成功只表示已归档；以帧的 attached 状态确认是否看到了图。
+ * 若帧标 deferred，先释放已看结果的租约，再按原路径分批 view；memory.read 只读归档 JSON，不会重新展示像素。
  * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
  */
 declare module 'velaros:images' {
@@ -14,9 +16,9 @@ declare module 'velaros:images' {
   }
 
   /**
-   * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
-   * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
-   * 图**只给你看一次**：你一回应它就撤出上下文（那行说明还在），要再看就再调一次 view。
+   * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 把图归档等待交付，
+   * 程序跑完之后，帧里的 attached 状态才代表图片实际交付；deferred 没有交付，不能声称已看。
+   * 图片随结果租约进入后续帧；分批查看时先用 memory.release 释放旧结果，再按原路径 view 下一批。
    */
   interface ImageViewResult {
     files: Array<ImageResult | ImageFailure>

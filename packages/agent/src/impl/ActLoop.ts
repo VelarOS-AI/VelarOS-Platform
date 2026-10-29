@@ -1,4 +1,4 @@
-import type { ContextCompletionResult } from '@velaros-ai/context'
+import { type ContextCompletionResult, ContextLimits, type ContextRef } from '@velaros-ai/context'
 import { isNull, optionalWhen } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isUndefined } from '@velaros-ai/core'
@@ -292,21 +292,52 @@ export class ActLoop implements ActLoopApi {
             }
           let dispatched = false
           try {
+            const auditPayload = {
+              runId,
+              turn,
+              repair,
+              preparation: repair === 0 ? { observationMs, contextMs } : undefined,
+              retention: frame.retention,
+              model: this.options.model.id,
+              estimate: compiled.estimate,
+              providerRequest: compiled.providerRequest,
+              request: compiled.request,
+            }
+            let auditBody = JSON.stringify(auditPayload)
+            const imageRefs = new Map<string, ContextRef>()
+            if (auditBody.length > ContextLimits.objectChars) {
+              // 审计仍可逐字重建；图片拆成合法大小的独立对象，不改变真正发送的请求。
+              for (const image of compiled.request.images ?? []) {
+                if (imageRefs.has(image.data)) continue
+                const archived = await this.options.context.append(
+                  { kind: 'audit', title: 'model-request:image-data', body: image.data },
+                  controller.signal
+                )
+                imageRefs.set(image.data, archived.ref)
+              }
+              auditBody = JSON.stringify(auditPayload, (_key, value) => {
+                if (!isString(value)) return value
+                const ref = imageRefs.get(value)
+                if (ref) return { $velarosType: 'context-image', ref, encoding: 'base64' }
+                if (!value.startsWith('data:image/')) return value
+                const comma = value.indexOf(',')
+                const dataRef = imageRefs.get(value.slice(comma + 1))
+                return dataRef
+                  ? {
+                      $velarosType: 'context-image',
+                      ref: dataRef,
+                      encoding: 'data-url',
+                      prefix: value.slice(0, comma + 1),
+                    }
+                  : value
+              })
+            }
             const audit = await this.options.context.append(
               {
                 kind: 'audit',
                 title: 'model-request',
-                body: JSON.stringify({
-                  runId,
-                  turn,
-                  repair,
-                  preparation: repair === 0 ? { observationMs, contextMs } : undefined,
-                  retention: frame.retention,
-                  model: this.options.model.id,
-                  estimate: compiled.estimate,
-                  providerRequest: compiled.providerRequest,
-                  request: compiled.request,
-                }),
+                body: auditBody,
+                sources: [...imageRefs.values()],
               },
               controller.signal
             )

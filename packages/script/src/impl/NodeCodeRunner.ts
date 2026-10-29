@@ -31,7 +31,7 @@ import type {
   NodeRuntimeLease,
 } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
-import { shapeOperationFailure } from '../utils/capability-failure.js'
+import { shapeExecutionStop, shapeOperationFailure } from '../utils/capability-failure.js'
 import {
   nodeCapabilityBridge,
   nodeCapabilityClient,
@@ -65,7 +65,10 @@ class NodeCodeRunner implements CodeRunnerApi {
       logs: [],
       error: { code, message },
     })
-    if (signal?.aborted) return failure('ABORTED', '执行已取消。')
+    if (signal?.aborted) {
+      const stopped = shapeExecutionStop(signal.reason)
+      return failure(stopped.code, stopped.message)
+    }
     if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0)
       return failure('TIMEOUT', '需要有限的执行时限。')
     const controller = new AbortController()
@@ -155,14 +158,17 @@ class NodeCodeRunner implements CodeRunnerApi {
         }
       }
       if (
-        stopping ||
-        controller.signal.aborted ||
         incoming.method !== 'POST' ||
         !['/', '/result', '/packages'].includes(incoming.url ?? '') ||
         (incoming.url === '/packages' && packagesPublished) ||
         incoming.headers.authorization !== `Bearer ${token}`
       ) {
         reply(403, { error: { code: 'PERMISSION', message: '当前执行没有此能力桥授权。' } })
+        incoming.resume()
+        return
+      }
+      if (stopping || controller.signal.aborted) {
+        reply(409, { error: shapeExecutionStop(controller.signal.reason) })
         incoming.resume()
         return
       }
@@ -185,7 +191,11 @@ class NodeCodeRunner implements CodeRunnerApi {
         } else body += chunk
       })
       incoming.on('end', () => {
-        if (stopping || controller.signal.aborted || response.writableEnded) return
+        if (response.writableEnded) return
+        if (stopping || controller.signal.aborted) {
+          reply(409, { error: shapeExecutionStop(controller.signal.reason) })
+          return
+        }
         let input: unknown
         try {
           input = JSON.parse(body)
@@ -562,7 +572,8 @@ class NodeCodeRunner implements CodeRunnerApi {
         },
         error: optionalWhen(
           !ok,
-          programError ??
+          (signal?.aborted ? shapeExecutionStop(signal.reason) : undefined) ??
+            programError ??
             (/heap out of memory|Allocation failed/u.test(result.stderr)
               ? describeChildExit(result.exitCode, result.stderr)
               : {
@@ -572,10 +583,11 @@ class NodeCodeRunner implements CodeRunnerApi {
         ),
       }
     } catch (error) {
+      const stopped = signal?.aborted ? shapeExecutionStop(signal.reason) : undefined
       return {
         ...failure(
-          signal?.aborted ? 'ABORTED' : timedOut ? 'TIMEOUT' : shapeOperationFailure(error).code,
-          String(error)
+          stopped?.code ?? (timedOut ? 'TIMEOUT' : shapeOperationFailure(error).code),
+          stopped?.message ?? String(error)
         ),
         pendingCalls: pendingAtStop ?? [...pending],
       }

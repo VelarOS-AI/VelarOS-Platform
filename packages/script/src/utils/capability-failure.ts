@@ -35,6 +35,18 @@ export function shapeOperationFailure(cause: unknown): NonNullable<CodeCapabilit
     : { code: CodeSurfaceErrorCodes.operationFailed, message }
 }
 
+/** 上游超时与取消保留原原因；停止执行不等于能力授权失败。 */
+export function shapeExecutionStop(reason: unknown): NonNullable<CodeCapabilityOutcome['error']> {
+  const error = reason instanceof Error ? reason : undefined
+  return {
+    code:
+      error?.name === 'TimeoutError' || (error && 'code' in error && error.code === 'TIMEOUT')
+        ? 'TIMEOUT'
+        : 'ABORTED',
+    message: error?.message || '执行已取消。',
+  }
+}
+
 /** 能力报的码里带这几个词的，是用户或空间的策略说了不（PERMISSION、PERMISSION_DENIED、FILES_EDIT_DENIED、APPROVAL_DENIED……）。 */
 const RefusalCodePattern = /DENIED|PERMISSION/u
 

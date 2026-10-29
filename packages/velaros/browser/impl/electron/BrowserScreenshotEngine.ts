@@ -4,7 +4,14 @@ import { dirname } from 'node:path'
 
 import electron from 'electron'
 
-import { isNumber, isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import {
+  isNumber,
+  isPlainObject,
+  isPresent,
+  optionalWhenLazy,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
@@ -461,6 +468,8 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotArtifact> {
     abortSignal?.throwIfAborted()
+    await this.applyScreenshotViewport(sessionId, context, options, abortSignal)
+    abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
     if (externalSession)
       return this.captureExternalScreenshot(sessionId, context, externalSession, options)
@@ -591,6 +600,31 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         capturedAt: Date.now(),
       }
     })
+  }
+
+  /** width/height 改页面 CSS 视口而非缩放图片；未给的一边沿用实测尺寸，设置在截图后保留。 */
+  private async applyScreenshotViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserCaptureScreenshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    if (!isPresent(options.width) && !isPresent(options.height)) return
+    const page = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+    const current = await page.driver.executeJavaScript<{ width: number; height: number }>(
+      '({ width: window.innerWidth, height: window.innerHeight })'
+    )
+    const viewport = page.externalSession?.viewport ?? page.browserSession?.viewport
+    await this.kernel.applyViewport(
+      sessionId,
+      context,
+      {
+        width: options.width ?? current.width,
+        height: options.height ?? current.height,
+        mobile: !!viewport?.mobile,
+      },
+      abortSignal
+    )
   }
 
   private async captureExternalScreenshot(

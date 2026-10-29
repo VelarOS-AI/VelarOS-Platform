@@ -46,6 +46,9 @@ export class RuntimeDiagnostics implements RuntimeDiagnosticsApi {
             this.measure(id, 'compareAndSwap', () => storage.compareAndSwap(id, version, state)),
           put: (id, body) => this.measure(id, 'put', () => storage.put(id, body)),
           get: (id, objectId) => this.measure(id, 'get', () => storage.get(id, objectId)),
+          has: optionalWhen(Boolean(storage.has), (id: string, objectId: string) =>
+            this.measure(id, 'has', () => storage.has!(id, objectId))
+          ),
           records: optionalWhen(
             Boolean(storage.records),
             (...args: Parameters<NonNullable<ContextStorage['records']>>) =>

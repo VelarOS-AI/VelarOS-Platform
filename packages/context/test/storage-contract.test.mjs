@@ -36,6 +36,19 @@ describe('INV-12 storage adapters preserve persistence and lifecycle contracts',
   storageContract('opaque asynchronous test adapter', async () => volatileStorageBackend())
 })
 
+test('SQLite object presence preserves session isolation, empty bodies and IO failure semantics', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  const empty = await storage.put('owner', '')
+  const large = await storage.put('owner', 'x'.repeat(100_000))
+  assert.equal(await storage.has('owner', empty), true)
+  assert.equal(await storage.has('owner', large), true)
+  assert.equal(await storage.has('other', large), false)
+  assert.equal(await storage.has('owner', 'missing'), false)
+  await storage.close()
+  await assert.rejects(storage.has('owner', large))
+})
+
 test('INV-18 local lease ownership only proves exit for an absent process on the same host', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())

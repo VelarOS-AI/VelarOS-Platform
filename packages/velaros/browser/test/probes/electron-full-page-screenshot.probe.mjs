@@ -7,7 +7,10 @@
 // 跑法（先在 packages/velaros 下 bun run build），在 Platform 根：
 //   perl -e 'alarm 240; exec @ARGV' node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/browser/test/probes/electron-full-page-screenshot.probe.mjs
 // 产品里用的 Electron 版本不同时，换成产品仓 node_modules 里的 Electron 再跑一遍。每一项打一行 ✓ 或 ✗，全过退出码 0。
-import { mkdtempSync } from 'node:fs'
+// 只验 screenshot.width/height 连续改视口可追加 --viewport-only；全部窗口保持隐藏，不接现有产品页面。
+// Windows 从未显示的窗口可能没有合成帧；追加 --offscreen 使用真正离屏合成，仍核对原 PNG/网格断言。
+// --report=<绝对路径> 直接保存核验日志，避免 GUI 子系统吞 stdout；--diagnostic 另记录 CDP 阶段。
+import { appendFileSync, mkdtempSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +20,18 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import { createElectronBrowserRuntime } from '../../../dist/browser/electron.js'
 
 const results = []
+const reportPath = process.argv.find((argument) => argument.startsWith('--report='))?.slice(9)
+const report = (message) => {
+  console.info(message)
+  if (reportPath) appendFileSync(reportPath, `${message}\n`)
+}
+// Give this standalone test its own Chromium profile and a bounded lifetime.
+app.setPath('userData', mkdtempSync(join(tmpdir(), 'velaros-screenshot-profile-')))
+const deadlineSeconds = process.argv.includes('--viewport-only') ? 120 : 240
+const deadline = setTimeout(() => {
+  report(`✗ 探针超过 ${deadlineSeconds} 秒，退出自有 Electron 进程`)
+  app.exit(1)
+}, deadlineSeconds * 1000)
 
 /** 一格的底色：只为看图时分得清，核对只看黑白条码。 */
 const cellColor = (row, column) => [
@@ -132,7 +147,7 @@ const checkerOf =
   (label) =>
   (name, ok, detail = '') => {
     results.push(ok)
-    console.info(`${ok ? '✓' : '✗'} [${label}] ${name}${detail ? `：${detail}` : ''}`)
+    report(`${ok ? '✓' : '✗'} [${label}] ${name}${detail ? `：${detail}` : ''}`)
   }
 
 /** 元素标注框的蓝（rgba(10,132,255,0.88) 叠在按钮上）：蓝为主、红低。 */
@@ -154,7 +169,11 @@ async function openWebviewStage(url, size, displayScale) {
     show: false,
     width: 1000,
     height: 800,
-    webPreferences: { webviewTag: true },
+    webPreferences: {
+      webviewTag: true,
+      backgroundThrottling: false,
+      offscreen: process.argv.includes('--offscreen'),
+    },
   })
   const guestReady = new Promise((resolve) => {
     window.webContents.once('did-attach-webview', (_event, guest) => {
@@ -174,7 +193,10 @@ async function openWindowStage(url) {
     show: false,
     width: 1280,
     height: 800,
-    webPreferences: { backgroundThrottling: false },
+    webPreferences: {
+      backgroundThrottling: false,
+      offscreen: process.argv.includes('--offscreen'),
+    },
   })
   await window.loadURL(url)
   return { window, page: window.webContents }
@@ -320,6 +342,89 @@ async function scenario(runtime, site, workspaceRoot, spec, freezes) {
   }
 }
 
+/** 只经 screenshot 的尺寸参数连续缩窄，不能先调用 setViewport 掩盖截图入口丢参。 */
+async function screenshotViewportScenario(runtime, site, workspaceRoot, kind) {
+  const check = checkerOf(`截图尺寸·${kind}`)
+  const url = `${site.origin}/?rows=12&columns=3&meta=1`
+  report(`阶段 ${kind}: 创建隐藏页面`)
+  const stage =
+    kind === 'window'
+      ? await openWindowStage(url)
+      : await openWebviewStage(url, { width: 1280, height: 900 }, 0.5)
+  const sessionId = `screenshot-viewport-${kind}`
+  const context = { url, workspaceRoot }
+  try {
+    report(`阶段 ${kind}: presentPage`)
+    await runtime.presentPage(sessionId, context, stage.page.id)
+    if (process.argv.includes('--diagnostic')) {
+      const sendCommand = stage.page.debugger.sendCommand.bind(stage.page.debugger)
+      stage.page.debugger.sendCommand = async (method, ...args) => {
+        report(`CDP 开始 ${method}`)
+        const value = await sendCommand(method, ...args)
+        report(`CDP 完成 ${method}`)
+        return value
+      }
+    }
+    // Full-page PNG excludes native scrollbars on some platforms. Remove only that platform
+    // difference so PNG width can prove the requested CSS viewport rather than OS decoration.
+    await stage.page.executeJavaScript(
+      `(() => { const style = document.createElement('style'); style.textContent = 'html{scrollbar-width:none}::-webkit-scrollbar{display:none}'; document.head.appendChild(style) })()`,
+      true
+    )
+    for (const dimensions of [
+      { width: 390, height: 844 },
+      { width: 320, height: 568 },
+    ]) {
+      report(`阶段 ${kind}: screenshot ${dimensions.width}×${dimensions.height}`)
+      const { artifact, reading } = await shoot(
+        runtime,
+        sessionId,
+        context,
+        {
+          ...dimensions,
+          fullPage: true,
+          includeModelImage: false,
+          path: `viewport-${kind}-${dimensions.width}.png`,
+        },
+        12,
+        3
+      )
+      const actual = await pageState(stage.page)
+      report(`阶段 ${kind}: 实测 ${JSON.stringify(actual)}，PNG ${artifact.path}`)
+      const pixels = nativeImage.createFromPath(artifact.path).getSize()
+      check(
+        `screenshot 参数把 CSS 视口设成 ${dimensions.width}×${dimensions.height} 并保留`,
+        actual.innerWidth === dimensions.width && actual.innerHeight === dimensions.height,
+        `实际 ${actual.innerWidth}×${actual.innerHeight}`
+      )
+      check(
+        '实际 PNG 与回执宽度一致，仍捕获完整长页而非缩放旧图',
+        pixels.width === dimensions.width &&
+          artifact.width === pixels.width &&
+          pixels.height === 1200 &&
+          artifact.height === pixels.height &&
+          artifact.capture.mode === 'full-page',
+        `PNG ${pixels.width}×${pixels.height}，回执 ${artifact.width}×${artifact.height}`
+      )
+      checkGrid(check, reading, 0)
+    }
+    const subsequent = await runtime.captureScreenshot(sessionId, context, {
+      path: `viewport-${kind}-retained.png`,
+      fullPage: true,
+      includeModelImage: false,
+    })
+    const retained = await pageState(stage.page)
+    check(
+      '随后不带尺寸的截图不会还原视口',
+      retained.innerWidth === 320 && retained.innerHeight === 568 && subsequent.width === 320,
+      `视口 ${retained.innerWidth}×${retained.innerHeight}，PNG 宽 ${subsequent.width}`
+    )
+  } finally {
+    await runtime.closeSession(sessionId)
+    stage.window.destroy()
+  }
+}
+
 const Desktop = { width: 1440, height: 900, mobile: false }
 const Phone = { width: 390, height: 844, mobile: true }
 
@@ -433,16 +538,24 @@ app.whenReady().then(async () => {
     },
   })
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'velaros-full-page-probe-'))
-  console.info(`Electron ${process.versions.electron}，截图落在 ${workspaceRoot}`)
+  report(
+    `Electron ${process.versions.electron}，offscreen=${process.argv.includes('--offscreen')}，截图落在 ${workspaceRoot}`
+  )
   try {
-    for (const spec of Scenarios) await scenario(runtime, site, workspaceRoot, spec, freezes)
+    if (!process.argv.includes('--viewport-only')) {
+      for (const spec of Scenarios) await scenario(runtime, site, workspaceRoot, spec, freezes)
+    }
+    for (const kind of ['window', 'webview']) {
+      await screenshotViewportScenario(runtime, site, workspaceRoot, kind)
+    }
   } catch (error) {
     results.push(false)
-    console.info(`✗ 探针没跑完：${error.stack}`)
+    report(`✗ 探针没跑完：${error.stack}`)
   }
   runtime.dispose()
   site.close()
   const passed = results.filter(Boolean).length
-  console.info(`\n${passed}/${results.length} 通过`)
+  report(`\n${passed}/${results.length} 通过`)
+  clearTimeout(deadline)
   app.exit(passed === results.length ? 0 : 1)
 })

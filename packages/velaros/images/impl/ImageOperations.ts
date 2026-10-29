@@ -27,7 +27,9 @@ const log = Log.tag('ImageOperations')
 /**
  * @AgentView
  * 看图：把 PNG、JPEG、GIF、WebP 交到你眼前。路径怎么写、能到哪儿由当前空间决定（环境报告里写着），越界的那一张看不了。
- * 在上限以内（长边 2000 px、base64 后 5 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
+ * 在上限以内（长边 2000 px、base64 后 4 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
+ * 多次调用共享下一帧的 20 张、base64 合计 20 MB 容量。调用成功只表示已归档；以帧的 attached 状态确认是否看到了图。
+ * 若帧标 deferred，先释放已看结果的租约，再按原路径分批 view；memory.read 只读归档 JSON，不会重新展示像素。
  * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
  */
 export interface ImageOperationsApi {

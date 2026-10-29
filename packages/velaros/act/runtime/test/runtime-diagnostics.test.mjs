@@ -32,6 +32,8 @@ test('INV-42 storage diagnostics preserve optional methods, detached results and
   assert.deepEqual(selected.records[0].ref, record.ref)
   assert(metrics.some((metric) => metric.operation === 'selectSnapshot'))
   assert.equal((await underlying.load('s')).records.length, 1)
+  assert.equal(await diagnostics.storage.has('s', selected.records[0].objectId), true)
+  assert(metrics.some((metric) => metric.operation === 'has'))
   assert(
     metrics.every((metric) => metric.durationMs >= 0 && metric.succeeded && Object.isFrozen(metric))
   )
@@ -75,6 +77,7 @@ test('observers cannot change business results and optional capabilities remain 
     assert.equal(diagnostics.storage.compareAndSwapMetadata, undefined)
     assert.equal(diagnostics.storage.records, undefined)
     assert.equal(diagnostics.storage.collect, undefined)
+    assert.equal(diagnostics.storage.has, undefined)
     assert.equal(diagnostics.storage.leaseOwner, undefined)
     assert.equal(diagnostics.storage.leaseOwnerActive, undefined)
   }

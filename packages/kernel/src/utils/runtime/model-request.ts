@@ -2,6 +2,7 @@ import { isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { ModelImageLimits } from '../../contract/constants.js'
 import type {
   ModelContextStatus,
   ModelContinuation,
@@ -103,8 +104,8 @@ export function driverModelPrompt(request: ModelTurnRequest): string {
 /** 附件在能力边界与发送边界使用同一数据及容量规则。 */
 export function validateModelImages(images: readonly ModelImage[]): void {
   if (
-    images.length > 20 ||
-    images.reduce((bytes, image) => bytes + image.data.length, 0) > 20 * 1024 * 1024
+    images.length > ModelImageLimits.count ||
+    images.reduce((bytes, image) => bytes + image.data.length, 0) > ModelImageLimits.totalBytes
   )
     throw new AppError('LIMIT', '图像附件超过单次容量')
   for (const image of images)
@@ -116,7 +117,7 @@ export function validateModelImages(images: readonly ModelImage[]): void {
       image.label.length > 4000 ||
       !isString(image.data) ||
       isEmpty(image.data) ||
-      image.data.length > 4 * 1024 * 1024 ||
+      image.data.length > ModelImageLimits.imageBytes ||
       image.data.length % 4 !== 0 ||
       !/^[A-Za-z0-9+/]*={0,2}$/u.test(image.data)
     )

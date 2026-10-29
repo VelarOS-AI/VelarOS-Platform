@@ -5,6 +5,16 @@
  * 类自己固定用的写成类内 `private static readonly`。
  */
 
+/** 能力附件与模型请求共用的图像容量；字节按 base64 字符计。 */
+export const ModelImageLimits = Object.freeze({
+  /** 单次模型请求最多附带的原生图片数量。 */
+  count: 20,
+  /** 单次模型请求所有图片 base64 字符串的累计字节上限。 */
+  totalBytes: 20 * 1024 * 1024,
+  /** 单张图片 base64 字符串的字节上限。 */
+  imageBytes: 4 * 1024 * 1024,
+})
+
 /**
  * 四根独立演进的版本轴。
  *

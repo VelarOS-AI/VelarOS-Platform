@@ -11,7 +11,7 @@ system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 看图只做模型做不了的事，大多数图不用动：在上限以内（长边不超过 2000 px、base64 之后不超过 5 MB，都以 `ImageLimits` 为准，正好压线的也算以内）又没要 `region` 的图**原样交出、一个字节不动、不碰空间的缩放器** | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 看图只做模型做不了的事，大多数图不用动：在上限以内（长边不超过 2000 px、base64 之后不超过 4 MB，都以 `ImageLimits` 为准，正好压线的也算以内）又没要 `region` 的图**原样交出、一个字节不动、不碰空间的缩放器** | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 超了才请空间压：长边或 base64 之后的体积任一超限，就请空间的 `resizeImage` 把原字节缩到长边 2000；交回的 base64 仍超就把长边再收一截重请，有限次数，压不进去报 `VALIDATION` 并指向换更小的 `region`。条目里的 `width`、`height` 是原图的，`sent` 与格式以空间实际交回的为准 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 要了 `region` 才请空间裁（在上限以内的图也照裁）：region 按原图像素算，超出图的部分先收进图里再交给空间；整块在图外直接拒（`VALIDATION`），不请空间 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 结果里只有尺寸、没有像素：成功的条目只有 `path`、`mediaType`、原图 `width`/`height` 与实际给出的 `sent`；图经调用上下文的 `attachImage` 交出（base64，已在上限以内），按批里的顺序、每张前面一行说明（第几张、哪个文件、原图多大、要了哪一块、给出多大），失败的那张不交 | 测试 | `spec/acceptance.test.ts` |

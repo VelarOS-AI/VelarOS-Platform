@@ -30,7 +30,7 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
       ? 'options.sourceRef 复用归档源码，options.edits:[{oldText,newText,module?}] 精确编辑；引用或编辑时 code 为 ""。options.format:"program" 时 code 是序列化后的完整程序 JSON，程序字段在该对象内提供。示例中的原文、源码片段和引用应换成本轮实际值。'
       : '',
     allowed.includes('execute')
-      ? `${name('execute')} 执行一次 code；省略 options.async 使用短等待返回，options.async:true 立即后台受理，options.async:false 优先等待完成，新输入、并行程序收束或子任务进展可提前返回执行身份，原程序继续；options.timeoutMs 指定本次程序计时，源码引用不继承。等待已有作业用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}，无需循环 read 或运行定时器；waitMs 为 1..60000 的整数，默认 60000，到期返回当前状态。检查/停止用 kind:"read"/"stop"，最多 5000 毫秒；read/wait 可加 cursor/limit。每次只受理一个等待，其通道与检查/停止独立，普通执行槽满时仍可用。options.retain:1..32 控制结果曝光次数，"segment" 随历史封段退役，"task" 保留至任务结束；默认 ${defaultRetain}。`
+      ? `${name('execute')} 执行一次 code；省略 options.async 使用短等待返回，options.async:true 立即返回执行身份，options.async:false 优先等待完成，新输入、并行程序收束或子任务进展可提前返回执行身份，原程序继续；options.timeoutMs 指定本次程序计时，源码引用不继承。等待已有作业用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}，无需循环 read 或运行定时器；waitMs 为 1..60000 的整数，默认 60000，到期返回当前状态。检查/停止用 kind:"read"/"stop"，最多 5000 毫秒；read/wait 可加 cursor/limit。每次只受理一个等待，其通道与检查/停止独立，普通执行槽满时仍可用。options.retain:1..32 控制结果曝光次数，"segment" 随历史封段退役，"task" 保留至任务结束；默认 ${defaultRetain}。`
       : '',
     allowed.includes('observe')
       ? `${name('observe')} 的 code 提供完整只读源码时登记或整体替换当前观察，所需程序参数通过 options 提供。观察采用自己的 Schema，刷新、编辑和退订都调用这个工具。`

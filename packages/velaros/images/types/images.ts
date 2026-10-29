@@ -53,9 +53,9 @@ export interface ImageFailure {
 
 /**
  * @AgentView
- * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
- * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
- * 图**只给你看一次**：你一回应它就撤出上下文（那行说明还在），要再看就再调一次 view。
+ * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 把图归档等待交付，
+ * 程序跑完之后，帧里的 attached 状态才代表图片实际交付；deferred 没有交付，不能声称已看。
+ * 图片随结果租约进入后续帧；分批查看时先用 memory.release 释放旧结果，再按原路径 view 下一批。
  */
 export interface ImageViewResult {
   files: Array<ImageResult | ImageFailure>

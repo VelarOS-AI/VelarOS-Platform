@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "9.9.0",
+      "version": "9.9.1",
       "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",
@@ -54,7 +54,7 @@
       "domain": "foundations",
       "directory": "packages/context",
       "name": "@velaros-ai/context",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "description": "Shared task state, immutable evidence and runtime materialization for ScriptAct.",
       "exportSubpaths": [
         ".",
@@ -67,7 +67,7 @@
       "domain": "foundations",
       "directory": "packages/script",
       "name": "@velaros-ai/script",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "description": "Native Node.js execution with Execa, ripgrep, globby, diff, YAML, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.11",
+      "version": "0.6.12",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -137,7 +137,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",

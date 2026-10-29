@@ -85,6 +85,7 @@ await session.close()
 - 输入或已接受的响应落不了盘时，不派发模型也不执行脚本：`submit` 的迭代抛出原错误，运行记为可恢复的 `failed`。
 - 运行事件与状态都在 `ContextStorage` 里：`events(after)` 按持久序号重放，重启后 `inspect()` 给出恢复的状态；运行服务自己只持有本进程的取消权与待回答的交互。
 - 模型报告的缓存读写用量同时保存在 `usage` 事件和 `model-response` 审计中；缺省表示供应商没有报告，不能当作零命中。
+- 模型请求审计超过单对象容量时，将原生图片 base64 独立归档为 `model-request:image-data`，审计中的像素使用 `{$velarosType:'context-image', ref, encoding}` 引用；`encoding:'data-url'` 另保留原 `prefix`。按同会话引用回读后可逐字还原原请求及其指纹；审计 `sources` 列出这些引用。发送给模型的请求不变，取消或归档失败时不派发。
 - `createAgentSupervisor` 在启动子任务前就核对额度：累计超过 `maxChildren` 抛 `LIMIT`（跨重启与继续不重置，显式新任务才重新计数），并发已满抛 `CONFLICT`；父运行结束或取消时由宿主调 `cancelParent` 收束它的子任务。
 - 子任务的 `job.result` 指向父会话里的一条结果摘要：只内嵌有界的事件尾部并报告略去条数（`omittedEvents`），完整事件在子会话里。
 - 完整且通过协议校验的模型延续状态单独归档，由已接受响应引用；截断、协议拒绝或保存失败不会派发脚本，也不会把不透明状态交给宿主展示。

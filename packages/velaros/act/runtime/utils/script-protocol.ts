@@ -202,7 +202,7 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
   return [
     `完整响应全部校验后才执行，最多 ${maxBlocks} 个程序或原文操作；实际结果在后续模型请求返回。`,
     allowed.includes('execute')
-      ? `同批顺序执行；省略 async 最多等 ${yieldAfterMs} ms 后返回 executionId/状态，程序继续。async:true 立即后台，false 优先等结束；新输入、并行程序收束、子任务进展可提前返回执行身份，原程序继续。依赖 await，结果未知不重跑。`
+      ? `同批顺序执行；省略 async 最多等 ${yieldAfterMs} ms 后返回 executionId/状态，程序继续。async:true 立即返回执行身份，false 优先等结束；新输入、并行程序收束、子任务进展可提前返回执行身份，原程序继续。依赖 await，结果未知不重跑。异步执行仍属于本任务；临时服务器验收后用控制 stop 停止，再 read/wait 确认退出。只有当前能力目录明确提供独立持久后台入口时才能按其合同跨任务保留。`
       : '',
     allowed.includes('observe')
       ? '会话一份持续只读观察，每响应至多更新一次，下个业务轮采集；可靠依赖版本未变可复用。校验通过才替换，失败保留原版；清除停采集，历史保留。'
@@ -213,7 +213,9 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
     allowed.includes('execute') || allowed.includes('observe')
       ? '引用仅用当前会话归档；编辑原文需唯一匹配，冲突后按当前版本重改。'
       : '',
-    allowed.includes('done') ? '完成申请置末，经 Runtime 验收才完成；活动目标需非空完成依据。' : '',
+    allowed.includes('done')
+      ? '完成申请置末，经 Runtime 验收才完成；活动目标需非空完成依据。完成声明不会停止或分离仍在运行的程序；Runtime 等待本任务执行全部终态后才完成，不能把提交完成声明当作服务已退出。'
+      : '',
     '每轮须有决策；等后台回执可只写进度，需用户回答则用交互能力。',
   ]
     .filter(Boolean)
@@ -261,7 +263,7 @@ export function protocolRules(options: ScriptProtocolOptions): string {
       ? `${names.observe}({snapshot:{provider:"目录中的提供者",plan:"固定计划名",input:{领域输入}}}) 配空段登记纯快照；与 sourceRef、edits、程序正文互斥。输入合同从目录所列领域操作发现。每轮仍真实授权捕获，完整同值只省纯派生/程序运行，不能证明期间没有 ABA，也不授予写入凭据；clear 或逻辑任务结束退役，重启先实际捕获与派生。`
       : '',
     allowed.includes('execute')
-      ? `${names.execute}(options?) 运行一次，可多段；同批保持依赖顺序，省略 async 使用短等待返回，async:true 立即后台受理，async:false 优先等待完成，新输入、并行程序收束或子任务进展可提前返回执行身份且原程序继续，retain:1..32 控制结果实际曝光次数，retain:"segment" 在段内保留、随历史封段退役，retain:"task" 保留至逻辑任务结束；主动释放立即生效，默认 ${defaultRetain}；租约不保证全文驻留，也不重新执行。空段配 control:{kind:"wait",executionId,waitMs:60000} 等待已有作业终态，waitMs 为整数 1..60000，默认 60000，到期返回当前状态，无需循环查询或创建定时器。每次只受理一个等待；独立检查/停止通道用 kind:"read"/"stop"，最多 5000 毫秒；read/wait 可加 cursor/limit，普通执行槽满仍可用。后台结果未知时不得重跑整个脚本。`
+      ? `${names.execute}(options?) 运行一次，可多段；同批保持依赖顺序，省略 async 使用短等待返回，async:true 立即返回执行身份，async:false 优先等待完成，新输入、并行程序收束或子任务进展可提前返回执行身份且原程序继续，retain:1..32 控制结果实际曝光次数，retain:"segment" 在段内保留、随历史封段退役，retain:"task" 保留至逻辑任务结束；主动释放立即生效，默认 ${defaultRetain}；租约不保证全文驻留，也不重新执行。空段配 control:{kind:"wait",executionId,waitMs:60000} 等待已有作业终态，waitMs 为整数 1..60000，默认 60000，到期返回当前状态，无需循环查询或创建定时器。每次只受理一个等待；独立检查/停止通道用 kind:"read"/"stop"，最多 5000 毫秒；read/wait 可加 cursor/limit，普通执行槽满仍可用。后台结果未知时不得重跑整个脚本。`
       : '',
     hasProgram
       ? `带参数时传一个对象，例如 ${allowed.includes('execute') ? `${names.execute}({retain:"task",input:{stage:1}})` : `${names.observe}({input:{stage:1}})`}。程序选项：input 为字面量参数，inputRef 为宿主参数引用，两者互斥；modules/blobs 保持现有程序合同。sourceRef 复用归档源码，edits:[{oldText,newText,module?}] 对同一底稿精确修改；引用或 edits 模式段内留空。${allowed.includes('observe') ? `观察省略 sourceRef 的 edits 绑定本帧观察版本。${names.observe}({clear:true}) 配空段明确清除观察。` : ''}完整多模块程序可用 format:"program"，段内提供程序 JSON。`

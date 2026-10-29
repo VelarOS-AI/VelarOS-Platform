@@ -111,6 +111,49 @@ async function fixture(t, transport, onRequest, config = {}, extra = {}) {
 }
 
 for (const transport of ['tools', 'text']) {
+  test(`${transport}: async ownership guidance matches completion waiting for a stopped temporary service`, async (t) => {
+    const f = await fixture(t, transport, async (f, request) => {
+      assert.match(request.instructions, /异步执行仍属于本任务/)
+      assert.match(request.instructions, /完成声明不会停止或分离仍在运行的程序/)
+      assert.match(request.instructions, /临时服务器验收后用控制 stop 停止，再 read\/wait 确认退出/)
+      assert.match(request.instructions, /只有当前能力目录明确提供独立持久后台入口/)
+      assert.doesNotMatch(request.instructions, /长负载用受管后台|立即后台/)
+      if (f.requests.length === 1) return [{ code: held, options: { async: true } }]
+    })
+    let finished = false
+    const running = f.collect().then(() => {
+      finished = true
+    })
+    try {
+      await waitFile(f.root, 'started')
+      await until(async () => f.requests.length >= 2)
+      await until(async () => {
+        const snapshot = await f.storage.load('execution')
+        const decision = snapshot.records.findLast((record) => record.title === 'model-response')
+        if (!decision) return false
+        const body = JSON.parse(await f.storage.get('execution', decision.objectId))
+        return body.status === 'accepted' && body.decoded?.done === true
+      })
+      await pause(80)
+      assert.equal(finished, false, 'done cannot detach or terminate a running service')
+      const target = (await f.programs.state()).jobs[0].executionId
+      const signal = new AbortController().signal
+      assert.equal(
+        (await f.session.executions.read({ executionId: target }, signal)).status,
+        'running'
+      )
+      await f.session.executions.stop({ executionId: target }, 'test-controller', signal)
+      await running
+      const result = await f.session.executions.read({ executionId: target }, signal)
+      assert.equal(result.status, 'cancelled')
+      assert.equal(result.complete, true)
+      assert.equal(f.events.at(-1).status, 'completed')
+    } finally {
+      f.controller.abort()
+      await running
+    }
+  })
+
   test(`${transport}: the delivered model frame shows the shrinking host deadline`, async (t) => {
     const deadline = Date.now() + 60000
     const f = await fixture(t, transport, async (f, request) => {

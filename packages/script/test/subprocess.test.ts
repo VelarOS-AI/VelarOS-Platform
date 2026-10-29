@@ -7,6 +7,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+
 import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
 import type { CodeRunRequest } from '../src/types/runner'
@@ -590,7 +592,13 @@ describe('INV-46 显式宿主 npm 安装与工作区包身份', () => {
 })
 
 // 传输测试注入受控宿主端口，不依赖默认运行器的 POSIX 进程组；Windows 也必须实跑。
-function bridgeRequest(socketPath: string, token: string, body: string, path = '/') {
+function bridgeRequest(
+  socketPath: string,
+  token: string,
+  body: string,
+  path = '/',
+  afterContinue?: () => void
+) {
   return new Promise<string>((resolve, reject) => {
     const outgoing = httpRequest(
       {
@@ -602,6 +610,7 @@ function bridgeRequest(socketPath: string, token: string, body: string, path = '
           authorization: `Bearer ${token}`,
           'content-length': Buffer.byteLength(body),
           connection: 'close',
+          ...(afterContinue ? { expect: '100-continue' } : {}),
         },
       },
       (incoming) => {
@@ -617,9 +626,137 @@ function bridgeRequest(socketPath: string, token: string, body: string, path = '
     )
     outgoing.on('error', reject)
     outgoing.setTimeout(2000, () => outgoing.destroy(new Error('bridge request timed out')))
-    outgoing.end(body)
+    if (afterContinue) {
+      outgoing.once('continue', () => {
+        afterContinue()
+        outgoing.end(body)
+      })
+      outgoing.flushHeaders()
+    } else outgoing.end(body)
   })
 }
+
+test.skipIf(unsupportedBridge)(
+  'authorized bridge replies with the upstream timeout when stopped after headers but before the body',
+  () =>
+    fixture(async (cwd, directory) => {
+      const controller = new AbortController()
+      const reason = createTimeoutError('deadline after accepted headers')
+      let calls = 0
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async (input) => {
+          const response = await bridgeRequest(
+            input.environment.VELAROS_HOST_SOCKET!,
+            input.environment.VELAROS_HOST_TOKEN!,
+            JSON.stringify({ namespace: 'demo', operation: 'read', input: null }),
+            '/',
+            () => controller.abort(reason)
+          )
+          expect(response).toContain('409')
+          expect(response).toContain('TIMEOUT')
+          expect(response).toContain(reason.message)
+          return {
+            exitCode: 1,
+            signal: null,
+            stdout: '',
+            stderr: '',
+            aborted: true,
+            timedOut: false,
+          }
+        },
+      })
+      const result = await runner.run(
+        request('', { operations: { demo: ['read'] } }),
+        async () => {
+          calls++
+          return { value: null }
+        },
+        log,
+        controller.signal
+      )
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'TIMEOUT', message: reason.message },
+      })
+      expect(calls).toBe(0)
+    })
+)
+
+for (const scenario of [
+  {
+    name: 'timeout',
+    reason: () => createTimeoutError('upstream control deadline'),
+    code: 'TIMEOUT',
+  },
+  {
+    name: 'cancellation',
+    reason: () => createAbortError('upstream task cancellation'),
+    code: 'ABORTED',
+  },
+])
+  test.skipIf(unsupportedBridge)(
+    `authorized stopped bridge preserves upstream ${scenario.name} while invalid tokens stay denied`,
+    () =>
+      fixture(async (cwd, directory) => {
+        const controller = new AbortController()
+        const reason = scenario.reason()
+        let launches = 0
+        let calls = 0
+        const runner = createNodeCodeRunner({
+          cwd,
+          directory,
+          execute: async (input) => {
+            launches++
+            controller.abort(reason)
+            const body = JSON.stringify({ namespace: 'demo', operation: 'read', input: null })
+            const denied = await bridgeRequest(
+              input.environment.VELAROS_HOST_SOCKET!,
+              'wrong-token',
+              body
+            )
+            expect(denied).toContain('403')
+            expect(denied).toContain('PERMISSION')
+            const stopped = await bridgeRequest(
+              input.environment.VELAROS_HOST_SOCKET!,
+              input.environment.VELAROS_HOST_TOKEN!,
+              body
+            )
+            expect(stopped).toContain('409')
+            expect(stopped).toContain(scenario.code)
+            expect(stopped).toContain(reason.message)
+            expect(stopped).not.toContain('PERMISSION')
+            return {
+              exitCode: 1,
+              signal: null,
+              stdout: '',
+              stderr: '',
+              aborted: true,
+              timedOut: false,
+            }
+          },
+        })
+        const run = request('', { operations: { demo: ['read'] } })
+        const dispatch = async () => {
+          calls++
+          return { value: 'unexpected' }
+        }
+        const early = await runner.run(run, dispatch, log, AbortSignal.abort(reason))
+        expect(early).toMatchObject({
+          ok: false,
+          error: { code: scenario.code, message: reason.message },
+        })
+        expect(launches).toBe(0)
+        const result = await runner.run(run, dispatch, log, controller.signal)
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: scenario.code, message: reason.message },
+        })
+        expect(launches).toBe(1)
+        expect(calls).toBe(0)
+      })
+  )
 
 test.skipIf(unsupportedBridge)(
   'bridge test client completes a framed HTTP response before TCP closes',

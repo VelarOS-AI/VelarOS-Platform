@@ -18,7 +18,7 @@ export const ImageLimits = Object.freeze({
   edge: 2000,
   /**
    * 交给模型的图，**base64 之后**最多多少字节。API 按 base64 算，不是原文件大小。
-   * 取 5 MB 对齐 Bedrock 与 Google Cloud（直连 API 是 10 MB）；超了就继续压。
+   * 取 4 MiB 对齐 Kernel 单图交付上限；超了就继续压。验收核对两份公开合同。
    */
-  base64Bytes: 5 * 1024 * 1024,
+  base64Bytes: 4 * 1024 * 1024,
 })

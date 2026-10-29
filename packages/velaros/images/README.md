@@ -54,3 +54,4 @@ export const imagesModule = createCapabilityModule({
 - 宿主不给 `attachImage` 时整个 `view` 不可用（`PLATFORM`），一个文件都不读；图只经这个通道交出，结果里没有像素。
 - 在 `ImageLimits.edge` 与 `ImageLimits.base64Bytes` 以内、又没要 `region` 的图原样交出；超限或要 `region` 才请端口的 `resizeImage`。本机端口只在 macOS 上给这个口子（系统自带的 sips），别的平台这两种请求报 `PLATFORM`，message 里给出能用的缩图命令。
 - 一批最多 `ImageLimits.viewFiles` 张，单个文件最大 `ImageLimits.fileBytes` 字节，按文件头认格式；入参形状不对整批拒（`VALIDATION`），某一张看不了只标记那一项，全部失败才抛第一个失败。
+- 单图 base64 上限为 4 MiB；多次调用的结果、用户图片和持续观察共享每帧 20 张、20 MiB 的原生图片容量。`view` 成功表示已归档，帧里的 `attached` 才表示实际附图；`deferred` 没有交付，不自动补送。分批查看时释放旧执行结果租约，再按原路径 `view` 下一批；持续观察需缩小范围或清除后分批重看。用户图片占满时需在新任务仅附必要图片。`memory.read` 读取归档 JSON，不能代替看图。

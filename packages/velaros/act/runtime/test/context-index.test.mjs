@@ -59,6 +59,164 @@ async function fixture(t, mode = 'indexed') {
 }
 const signal = () => new AbortController().signal
 
+test('deferred required native image blocks completion and reprojection stays truthful until capacity is released', async (t) => {
+  const f = await fixture(t)
+  const image = { type: 'image-data', mediaType: 'image/png', data: 'YWJj', label: 'required' }
+  const source = { ref: { sessionId: 's', id: crypto.randomUUID() } }
+  await f.programs.publish(
+    [
+      {
+        program: { source: 'output(image)' },
+        version: { sourceRef: source.ref.id, kind: 'execution', reason: 'test' },
+      },
+    ],
+    { id: crypto.randomUUID(), fingerprint: 'images', expectedObservation: null },
+    { status: 'completed', executed: false },
+    false,
+    false,
+    signal()
+  )
+  const images = []
+  for (let i = 0; i < 21; i++)
+    images.push(
+      (
+        await f.context.append({
+          kind: 'audit',
+          title: 'script:image',
+          body: JSON.stringify({ ...image, label: String(i) }),
+        })
+      ).ref
+    )
+  const older = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: JSON.stringify({ attachments: images.slice(0, 20) }),
+  })
+  await f.programs.add(older.ref, source.ref, 'older', 'task')
+  const required = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: JSON.stringify({
+      attachments: images.slice(20),
+      outputAttachments: [{ key: 'image', index: 0 }],
+      output: {
+        config: {},
+        issues: [],
+        blocks: [
+          {
+            key: 'image',
+            value: image,
+            chars: JSON.stringify(image).length,
+            options: { key: 'image', type: 'image', required: true },
+          },
+        ],
+      },
+    }),
+  })
+  await f.programs.add(required.ref, source.ref, 'required', 'task')
+  const view = {
+    id: 'images',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const frame = await f.programs.project(view, undefined, [], signal(), 100000)
+    const body = JSON.parse(frame.body)
+    assert.equal(frame.images.length, 20)
+    assert(
+      body.decision.missing.some((item) => item.ref === required.ref.id && item.key === 'image')
+    )
+    assert(
+      body.materialStatus.imageReferences.some(
+        (item) => item.resultRef === required.ref.id && item.deferred && !item.attached
+      )
+    )
+  }
+  await f.programs.release(older.ref.id)
+  const recovered = await f.programs.project(view, undefined, [], signal(), 100000)
+  assert.equal(recovered.images.length, 1)
+  assert.equal(recovered.images[0].label, '20')
+  assert.deepEqual(JSON.parse(recovered.body).decision.missing, [])
+  const observing = await f.programs.project(
+    view,
+    older.ref,
+    Array.from({ length: 20 }, (_, i) => ({ ...image, label: `observation-${i}` })),
+    signal(),
+    100000
+  )
+  assert.equal(observing.images.length, 20)
+  assert.equal(
+    observing.images[0].label,
+    '20',
+    'new execution evidence precedes persistent observation images'
+  )
+  const observed = JSON.parse(observing.body)
+  assert.equal(observed.materialStatus.imageDelivery.deferred, 1)
+  assert.match(observed.materialStatus.imageDelivery.advice, /release 不会清除持续观察/)
+  assert.equal(
+    (await f.programs.project(view, undefined, [], signal(), 100000)).images.length,
+    1,
+    'clearing observation removes its image demand'
+  )
+})
+
+test('completed image receipts store references and replay identical attachments without changing output', async (t) => {
+  const f = await fixture(t)
+  const image = { type: 'image-data', mediaType: 'image/png', data: 'YWJj', label: 'original' }
+  const imageRecord = await f.context.append({
+    kind: 'audit',
+    title: 'script:image',
+    body: JSON.stringify(image),
+  })
+  const result = await f.context.append({
+    kind: 'audit',
+    title: 'script:source:result',
+    body: JSON.stringify({ attachments: [imageRecord.ref] }),
+  })
+  const control = { id: crypto.randomUUID(), fingerprint: 'image', expectedObservation: null }
+  await f.programs.publish(
+    [],
+    control,
+    { status: 'prepared', executed: false },
+    false,
+    false,
+    signal()
+  )
+  const entry = {
+    checked: true,
+    resultRef: result.ref.id,
+    attachments: [image],
+    result: { attachments: [image] },
+  }
+  const receipt = { status: 'completed', executed: true, execute: entry, executions: [entry] }
+  assert.deepEqual(await f.programs.finish(control, receipt), receipt)
+  assert.deepEqual(await f.programs.receipt(control), receipt)
+  const stored = (await f.storage.records('s', { title: `script:control:${control.id}` })).items.at(
+    -1
+  )
+  const archived = JSON.parse(await f.storage.get('s', stored.objectId))
+  assert.equal(archived.receipt.execute.attachments, undefined)
+  assert.equal(archived.receipt.executions[0].attachments, undefined)
+  assert.deepEqual(
+    archived.receipt.execute.result.attachments,
+    [image],
+    'business output named attachments is preserved'
+  )
+  assert.deepEqual(
+    await f.programs.finish(control, { status: 'completed', executed: false }),
+    receipt
+  )
+  await assert.rejects(f.programs.receipt({ ...control, fingerprint: 'different' }), {
+    code: 'SCRIPT_CALL_CONFLICT',
+  })
+})
+
 for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector'])
   test(`${mode}: program commits and notes preserve conflict, replay and task reset semantics`, async (t) => {
     const f = await fixture(t, mode)

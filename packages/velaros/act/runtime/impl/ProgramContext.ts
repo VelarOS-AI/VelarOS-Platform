@@ -24,6 +24,7 @@ import {
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelImage, ModuleBinding } from '@velaros-ai/kernel'
+import { ModelImageLimits } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
   type ScriptOutputCapture,
@@ -667,10 +668,42 @@ export class ProgramContext implements ProgramContextApi {
     if (!record) return undefined
     const body = await this.storage.get(this.sessionId, record.objectId)
     if (isNull(body)) throw new AppError('NOT_FOUND', '控制提交回执缺失')
-    const saved = JSON.parse(body) as { fingerprint: string; receipt: ScriptSubmissionReceipt }
+    const saved = JSON.parse(body) as {
+      fingerprint: string
+      receipt: ScriptSubmissionReceipt
+      imagesByReference?: boolean
+    }
     if (saved.fingerprint !== control.fingerprint)
       throw new AppError('SCRIPT_CALL_CONFLICT', '同一调用身份不能用于另一份输入')
-    return saved.receipt
+    if (!saved.imagesByReference) return saved.receipt
+    const restore = async (
+      entry: NonNullable<ScriptSubmissionReceipt['execute']>
+    ): Promise<NonNullable<ScriptSubmissionReceipt['execute']>> => {
+      if (!('checked' in entry) || !entry.checked) return entry
+      const result = await this.context.read(
+        { sessionId: this.sessionId, id: entry.resultRef },
+        { limit: 1 }
+      )
+      const raw = await this.storage.get(this.sessionId, result.record.objectId)
+      if (isNull(raw)) throw new AppError('NOT_FOUND', '执行结果原文缺失')
+      const refs = (JSON.parse(raw) as { attachments?: ContextRef[] }).attachments ?? []
+      if (isEmpty(refs)) return entry
+      const attachments: ModelImage[] = []
+      for (const ref of refs) {
+        if (ref.sessionId !== this.sessionId)
+          throw new AppError('SCOPE_MISMATCH', '控制回执图像不在当前会话')
+        const record = await this.context.read(ref, { limit: 1 })
+        const image = await this.storage.get(this.sessionId, record.record.objectId)
+        if (isNull(image)) throw new AppError('NOT_FOUND', '控制回执图像缺失')
+        attachments.push(JSON.parse(image) as ModelImage)
+      }
+      return { ...entry, attachments }
+    }
+    const restored = { ...saved.receipt }
+    if (saved.receipt.execute) restored.execute = await restore(saved.receipt.execute)
+    if (saved.receipt.executions)
+      restored.executions = await Promise.all(saved.receipt.executions.map(restore))
+    return restored
   }
 
   public async publish(
@@ -858,9 +891,21 @@ export class ProgramContext implements ProgramContextApi {
     const prior = await this.receipt(control)
     if (!prior) throw new AppError('INVARIANT', '脚本提交尚未占位')
     if (prior.status !== 'prepared') return prior
+    const imagesByReference = [receipt.execute, ...(receipt.executions ?? [])].some(
+      (entry) => entry && 'checked' in entry && entry.checked && entry.attachments?.length
+    )
+    const archive = (entry: NonNullable<ScriptSubmissionReceipt['execute']>) => {
+      if (!('checked' in entry) || !entry.checked || !entry.attachments?.length) return entry
+      const { attachments: _attachments, ...rest } = entry
+      return rest
+    }
+    const archived = { ...receipt }
+    if (receipt.execute) archived.execute = archive(receipt.execute)
+    if (receipt.executions) archived.executions = receipt.executions.map(archive)
     const record = await this.record(
       `script:control:${control.id}`,
-      JSON.stringify({ fingerprint: control.fingerprint, receipt }),
+      // 图片已经按 resultRef 单独归档；控制回执不再重复塞入像素，重放时按原引用还原。
+      JSON.stringify({ fingerprint: control.fingerprint, receipt: archived, imagesByReference }),
       `${control.id}:completed`
     )
     try {
@@ -1067,6 +1112,18 @@ export class ProgramContext implements ProgramContextApi {
     const resultBudgetChars = Math.max(1, Math.floor(maxChars / Math.max(1, visible.length) / 2))
     const excerptChars = Math.min(ScriptLeaseLimits.resultChars, resultBudgetChars)
     const images: ModelImage[] = []
+    let imageBytes = 0
+    const attachImage = (image: ModelImage): boolean => {
+      if (
+        images.length >= ModelImageLimits.count ||
+        image.data.length > ModelImageLimits.imageBytes ||
+        imageBytes + image.data.length > ModelImageLimits.totalBytes
+      )
+        return false
+      images.push(image)
+      imageBytes += image.data.length
+      return true
+    }
     const reset = Math.max(
       snapshot?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ??
         0,
@@ -1082,6 +1139,9 @@ export class ProgramContext implements ProgramContextApi {
     const imageReferences: Array<{
       ref: ContextRef
       attached: boolean
+      deferred?: boolean
+      label?: string
+      resultRef?: string
       read: { module: string; export: string; operation: string; input: { ref: ContextRef } }
     }> = []
     for (const record of snapshot?.records ?? [])
@@ -1095,10 +1155,13 @@ export class ProgramContext implements ProgramContextApi {
       ) {
         const data = await this.storage.get(this.sessionId, record.objectId)
         if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
-        images.push(JSON.parse(data) as ModelImage)
+        const image = JSON.parse(data) as ModelImage
+        const attached = attachImage(image)
         imageReferences.push({
           ref: record.ref,
-          attached: true,
+          attached,
+          deferred: !attached,
+          label: image.label,
           read: {
             module: 'velaros:system',
             export: 'memory',
@@ -1311,12 +1374,65 @@ export class ProgramContext implements ProgramContextApi {
       const display: Optional<ScriptOutputProjection> = rendered
         ? scriptOutputs.withoutBodies(rendered, finalCovered, allowance)
         : undefined
+      const rawProjection = display
+        ? undefined
+        : projectMaterial(
+            rawMaterial!,
+            result.record.ref,
+            rawInHistory ? 0 : Math.min(ScriptLeaseLimits.resultChars, allowance)
+          )
+      const saved = archived as {
+        attachments?: ContextRef[]
+        outputAttachments?: ReadonlyArray<{ key: string; index: number }>
+      }
+      const attachedIndexes = new Set<number>()
+      for (const [index, ref] of (saved.attachments ?? []).entries()) {
+        const binding = saved.outputAttachments?.find((item) => item.index === index)
+        const eligible =
+          maxChars > 6000 &&
+          (binding
+            ? Boolean(
+                display?.blocks.some(
+                  (block) =>
+                    block.key === binding.key && block.reason === 'native-attachment-required'
+                )
+              )
+            : display
+              ? display.blocks.some(
+                  (block) =>
+                    block.bodyIncluded ||
+                    (block.reason === 'native-attachment-required' &&
+                      saved.outputAttachments?.some((entry) => entry.key === block.key))
+                )
+              : Boolean(rawProjection?.bodyIncluded))
+        let attached = false
+        let label: Optional<string>
+        if (eligible) {
+          const record = await this.context.read(ref, { limit: 1 })
+          const data = await this.storage.get(this.sessionId, record.record.objectId)
+          if (isNull(data)) throw new AppError('NOT_FOUND', '结果图像缺失')
+          const image = JSON.parse(data) as ModelImage
+          label = image.label
+          attached = attachImage(image)
+          if (attached) attachedIndexes.add(index)
+        }
+        imageReferences.push({
+          ref,
+          attached,
+          deferred: eligible && !attached,
+          label,
+          resultRef: lease.ref,
+          read: { module: 'velaros:system', export: 'memory', operation: 'read', input: { ref } },
+        })
+      }
       const hasNative =
         display?.blocks.some(
           (block) =>
             block.type === 'image' &&
             block.reason === 'native-attachment-required' &&
-            archived.outputAttachments?.some((entry: { key: string }) => entry.key === block.key)
+            saved.outputAttachments?.some(
+              (entry) => entry.key === block.key && attachedIndexes.has(entry.index)
+            )
         ) && maxChars > 6000
       const projected = display
         ? {
@@ -1336,11 +1452,7 @@ export class ProgramContext implements ProgramContextApi {
               .filter((block) => !block.bodyIncluded)
               .map((block) => block.pointer),
           }
-        : projectMaterial(
-            rawMaterial!,
-            result.record.ref,
-            rawInHistory ? 0 : Math.min(ScriptLeaseLimits.resultChars, allowance)
-          )
+        : rawProjection!
       for (const [index, block] of (output?.blocks ?? []).entries())
         if (block.options.required) {
           const rendered = display?.blocks.find((item) => item.key === block.key)
@@ -1348,7 +1460,9 @@ export class ProgramContext implements ProgramContextApi {
             rendered?.type === 'image' &&
             rendered.reason === 'native-attachment-required' &&
             maxChars > 6000 &&
-            archived.outputAttachments?.some((entry: { key: string }) => entry.key === block.key)
+            saved.outputAttachments?.some(
+              (entry) => entry.key === block.key && attachedIndexes.has(entry.index)
+            )
           if (rendered?.representation !== 'full' && !native)
             leaseMissing.push({
               key: block.key,
@@ -1432,37 +1546,6 @@ export class ProgramContext implements ProgramContextApi {
           ref: lease.ref,
         },
       })
-      // 图像按自己的完整性限制读取，不把截取的 JSON 当完整结果解析。
-      const saved = JSON.parse(full!) as {
-        attachments?: ContextRef[]
-        outputAttachments?: ReadonlyArray<{ key: string; index: number }>
-      }
-      const attached = (index: number) => {
-        const binding = saved.outputAttachments?.find((item) => item.index === index)
-        return (
-          maxChars > 6000 &&
-          (binding
-            ? Boolean(
-                display?.blocks.some(
-                  (block) =>
-                    block.key === binding.key && block.reason === 'native-attachment-required'
-                )
-              )
-            : projected.bodyIncluded)
-        )
-      }
-      for (const [index, ref] of (saved.attachments ?? []).entries())
-        imageReferences.push({
-          ref,
-          attached: attached(index),
-          read: { module: 'velaros:system', export: 'memory', operation: 'read', input: { ref } },
-        })
-      for (const ref of (saved.attachments ?? []).filter((_ref, index) => attached(index))) {
-        const record = await this.context.read(ref, { limit: 1 })
-        const image = await this.storage.get(this.sessionId, record.record.objectId)
-        if (isNull(image)) throw new AppError('NOT_FOUND', '结果图像缺失')
-        images.push(JSON.parse(image) as ModelImage)
-      }
     }
     const source = state.observation
       ? await this.context.read(
@@ -1570,7 +1653,7 @@ export class ProgramContext implements ProgramContextApi {
         to: block.representation,
         reason: 'presentation-policy-or-budget',
       }))
-    const observationAttached = (index: number) => {
+    const observationEligible = (index: number) => {
       const binding = original?.outputAttachments?.find(
         (item: { index: number }) => item.index === index
       )
@@ -1584,7 +1667,10 @@ export class ProgramContext implements ProgramContextApi {
           ))
       )
     }
-    images.push(...observationImages.filter((_image, index) => observationAttached(index)))
+    const observationAttachedIndexes = new Set<number>()
+    for (const [index, image] of observationImages.entries())
+      if (observationEligible(index) && attachImage(image)) observationAttachedIndexes.add(index)
+    const observationAttached = (index: number) => observationAttachedIndexes.has(index)
     const safety = current
       ? (JSON.parse((await this.storage.get(this.sessionId, current.record.objectId))!)
           .observationFeedback ?? [])
@@ -1594,6 +1680,9 @@ export class ProgramContext implements ProgramContextApi {
         imageReferences.push({
           ref,
           attached: observationAttached(index),
+          deferred: observationEligible(index) && !observationAttached(index),
+          label: observationImages[index]?.label,
+          resultRef: observation?.id,
           read: { module: 'velaros:system', export: 'memory', operation: 'read', input: { ref } },
         })
     }
@@ -1808,6 +1897,15 @@ export class ProgramContext implements ProgramContextApi {
         },
         omittedLeaseCount: allVisible.length - visible.length,
         imagesOmitted: imageReferences.some((item) => !item.attached),
+        imageDelivery: {
+          attached: images.length,
+          base64Bytes: imageBytes,
+          limits: ModelImageLimits,
+          deferred: imageReferences.filter((item) => item.deferred).length,
+          advice: imageReferences.some((item) => item.deferred)
+            ? 'deferred 图片本帧没有交付，不能声称已看。先用 memory.release({ref: resultRef}) 释放旧结果（包括本批来源）的租约，再按原路径分批 images.view，每帧合计最多 20 张/20 MiB，单图最多 4 MiB；超大图先缩小。read 仅回读归档 JSON，不展示像素。持续观察的图像需修改 observe 减少数量或 clear 后分批查看；release 不会清除持续观察。用户图片占满时本轮没有剩余图像容量，需在新任务仅附必要图片；仅释放工具结果不能解决。不会自动补送。'
+            : undefined,
+        },
         imageReferences: imageReferences.slice(0, 32),
         omittedImageReferences: Math.max(0, imageReferences.length - 32),
         observationAction: {

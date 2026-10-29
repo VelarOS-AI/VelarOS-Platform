@@ -80,6 +80,8 @@ export interface ContextStorage {
   put(sessionId: string, text: string): Promise<string>
   /** 读取所属会话的原始正文；跨会话或不存在时返回 null，IO 故障不得伪装成缺失。 */
   get(sessionId: string, objectId: string): Promise<Nullable<string>>
+  /** 可选正文存在性查询，不加载正文；与 get 使用相同会话边界，IO 故障不得伪装成不存在。 */
+  has?(sessionId: string, objectId: string): Promise<boolean>
   /** 可选索引：按 sequence 升序、after 排他、title/refId 精确过滤；语义等同于 load，未提供时调用方读取完整状态。 */
   records?(sessionId: string, query: ContextRecordQuery): Promise<ContextRecordPage>
   /** 可选孤立正文回收：事务内核对版本与引用，保留写入宽限期；默认预演，不移除记录引用的正文或共享 store。 */
