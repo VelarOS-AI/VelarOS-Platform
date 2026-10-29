@@ -202,7 +202,7 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
   return [
     `完整响应全部校验后才执行，最多 ${maxBlocks} 个程序或原文操作；实际结果在后续模型请求返回。`,
     allowed.includes('execute')
-      ? `同批顺序执行；省略 async 最多等 ${yieldAfterMs} ms 后返回 executionId/状态，程序继续。async:true 立即返回执行身份，false 优先等结束；新输入、并行程序收束、子任务进展可提前返回执行身份，原程序继续。依赖 await，结果未知不重跑。异步执行仍属于本任务；临时服务器验收后用控制 stop 停止，再 read/wait 确认退出。只有当前能力目录明确提供独立持久后台入口时才能按其合同跨任务保留。`
+      ? `同批顺序执行；async 省略时最多等 ${yieldAfterMs} ms，true 立即返回身份，false 优先等结束。新输入、并行程序收束或子任务进展可提前返回 executionId/状态，原程序继续。依赖 await，结果未知不重跑。异步执行仍属于本任务；临时服务器验收后用控制 stop 停止，再 read/wait 确认退出。只有当前能力目录明确提供独立持久后台入口时才能按其合同跨任务保留。`
       : '',
     allowed.includes('observe')
       ? '会话一份持续只读观察，每响应至多更新一次，下个业务轮采集；可靠依赖版本未变可复用。校验通过才替换，失败保留原版；清除停采集，历史保留。'
@@ -214,7 +214,7 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
       ? '引用仅用当前会话归档；编辑原文需唯一匹配，冲突后按当前版本重改。'
       : '',
     allowed.includes('done')
-      ? '完成申请置末，经 Runtime 验收才完成；活动目标需非空完成依据。完成声明不会停止或分离仍在运行的程序；Runtime 等待本任务执行全部终态后才完成，不能把提交完成声明当作服务已退出。'
+      ? '完成申请置末，经 Runtime 验收才完成；活动目标需非空完成依据。完成声明不会停止或分离仍在运行的程序；Runtime 等待本任务执行全部终态后才完成。'
       : '',
     '每轮须有决策；等后台回执可只写进度，需用户回答则用交互能力。',
   ]
