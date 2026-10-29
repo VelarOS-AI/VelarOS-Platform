@@ -8,6 +8,8 @@ The root and Velaros development manifests pin Electron to 42.11.16. This fixes 
 
 The root override table also fixes the installed dependency graph at body-parser 2.4.0, fast-uri 3.1.9, Hono 4.13.11, ip-address 10.7.5, undici 7.30.1 and Zod 4.6.6. These are fixes within the existing major versions for the advisories reported by the 2026-10-26 audit. The committed lockfile records the exact resolved packages; consumers of separately published packages must check their own graph because root overrides do not automatically propagate to another repository.
 
+The `@hono/node-server` override is 2.1.3 for [GHSA-rmxm-3fg6-px4f](https://github.com/advisories/GHSA-rmxm-3fg6-px4f). The installed 2.0.12 middleware reproduced the double-decode bypass: a malformed encoded path returned a protected fixture with status 200 while the ordinary protected path returned 401. The regression enumerates every reachable copy, verifies the malformed path returns 404, keeps both ordinary and encoded protected paths behind middleware, and checks public space/Unicode filenames remain readable. Version 2.1.3 is within the existing MCP SDK dependency range; the [upstream fix](https://github.com/honojs/node-server/commit/9821792) rejects residual percent signs before file resolution. No audit exception is added.
+
 Run the complete security gate after a frozen install. A clean audit here includes the explicitly reviewed exceptions below; it is not a claim that an unpatched upstream version is safe in other installations.
 
 ## Current exceptions

@@ -42,6 +42,47 @@ test('reachable qs copies safely serialize hostile comma-array elements and pres
   }
 })
 
+test('reachable Hono Node static servers reject a second path decode without bypassing protected middleware', async (t) => {
+  const copies = installedDependencyGraph(manifests).filter(
+    ({ manifest }) => manifest.name === '@hono/node-server'
+  )
+  assert(copies.length > 0)
+  const directory = await mkdtemp(join(tmpdir(), 'velaros-static-path-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await mkdir(join(directory, 'static', 'admin'), { recursive: true })
+  await writeFile(join(directory, 'static', 'admin', 'secret.txt'), 'private-fixture')
+  await writeFile(join(directory, 'static', 'hello world.txt'), 'public-fixture')
+  await writeFile(join(directory, 'static', '中文.txt'), 'unicode-fixture')
+  for (const { root: dependencyRoot, manifest } of copies) {
+    const require = createRequire(join(dependencyRoot, 'package.json'))
+    const { Hono } = require('hono')
+    const { serveStatic } = require('@hono/node-server/serve-static')
+    const app = new Hono()
+    app.use('/static/admin/*', (context) => context.text('denied', 401))
+    app.use('/static/*', serveStatic({ root: directory }))
+    for (const path of ['/static/admin/secret.txt', '/static/%61dmin/secret.txt']) {
+      const response = await app.request(path)
+      assert.equal(response.status, 401)
+      assert.equal(await response.text(), 'denied')
+    }
+    const malformed = await app.request('/static/%%36%31dmin/secret.txt')
+    assert.equal(
+      malformed.status,
+      404,
+      `${manifest.name}@${manifest.version} must not serve a second-decoded path`
+    )
+    assert.notEqual(await malformed.text(), 'private-fixture')
+    for (const [path, text] of [
+      ['/static/hello%20world.txt', 'public-fixture'],
+      ['/static/%E4%B8%AD%E6%96%87.txt', 'unicode-fixture'],
+    ]) {
+      const response = await app.request(path)
+      assert.equal(response.status, 200)
+      assert.equal(await response.text(), text)
+    }
+  }
+})
+
 test('security gate rejects an altered or missing patch', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'velaros-braces-integrity-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
