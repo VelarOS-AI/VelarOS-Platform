@@ -371,25 +371,44 @@ describe('rehearsal sandbox', () => {
   )
 
   test.skipIf(!canConfine)(
-    'diff lists every change and apply writes the full change set; paths that did not change are refused',
+    'diff lists every change and apply writes the full change set',
     async () => {
       const site = await makeSite()
       try {
         const record = await site.host.createSandbox({ source: site.source })
         const count = 2_100
         await mkdir(join(record.root, 'many'))
-        for (let index = 0; index < count; index += 1)
-          await writeFile(join(record.root, 'many', `f${index}.txt`), 'x')
+        // 只并行准备独立夹具文件；真实 diff/apply 仍完整扫描并落回 2100 项。
+        for (let start = 0; start < count; start += 32)
+          await Promise.all(
+            Array.from({ length: Math.min(32, count - start) }, (_, offset) =>
+              writeFile(join(record.root, 'many', `f${start + offset}.txt`), 'x')
+            )
+          )
         // 三列不截断：看多少由程序定。
         const listed = await site.host.diffSandbox({ sandboxId: record.id, textDiffs: false })
         expect(listed.created).toHaveLength(count)
         const space = systemSandboxSpace(site.host, { cwd: site.source, approve: false })
         const applied = await space.call<{ created: string[] }>('apply', { id: record.id })
         expect(applied.created.length).toBe(count)
+        expect(space.asked).toEqual([])
+      } finally {
+        await site.close()
+      }
+    }
+  )
 
+  test.skipIf(!canConfine)(
+    'apply refuses paths that did not change without requesting approval',
+    async () => {
+      const site = await makeSite()
+      try {
+        const record = await site.host.createSandbox({ source: site.source })
+        const space = systemSandboxSpace(site.host, { cwd: site.source, approve: false })
         expect(
           await failureOf(space.call('apply', { id: record.id, paths: ['never-changed.txt'] }))
         ).toMatchObject({ code: 'VALIDATION' })
+        expect(await readFile(join(site.source, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
         expect(space.asked).toEqual([])
       } finally {
         await site.close()
