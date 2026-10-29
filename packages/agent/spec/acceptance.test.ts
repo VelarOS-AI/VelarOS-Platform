@@ -189,6 +189,63 @@ test('a text-only waiting response refreshes a completed result even when no exe
   }
 })
 
+test.each([false, true])(
+  'refreshing an obsolete frame preserves wait failures, during cleanup=%s',
+  async (duringCleanup) => {
+    const f = runFixture()
+    const failure = new AppError('INVARIANT', 'execution persistence failed')
+    f.options.execution.pending = () => true
+    f.options.execution.wait = async (signal) => {
+      if (duringCleanup)
+        await new Promise<void>((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(failure), { once: true })
+        )
+      else throw failure
+    }
+    f.options.frames.needsRefresh = async () => {
+      await Promise.resolve()
+      return true
+    }
+    const service = createActRunService(f.options)
+    const events: Array<{ type: string; status?: string; message?: string }> = []
+    try {
+      for await (const event of service.submit('work')) events.push(event)
+      expect(events.at(-1)?.status).toBe('failed')
+      expect(
+        events.some((event) => event.type === 'error' && event.message?.includes(failure.message))
+      ).toBe(true)
+      expect((await f.view.inspect())?.usage.mainCalls).toBe(1)
+    } finally {
+      await service.close()
+    }
+  }
+)
+
+test('new guidance does not hide a simultaneous execution wait failure', async () => {
+  const f = runFixture()
+  const failure = new AppError('INVARIANT', 'execution persistence failed during guidance')
+  f.options.execution.pending = () => true
+  f.options.execution.wait = async (signal) =>
+    new Promise<void>((_resolve, reject) =>
+      signal.addEventListener('abort', () => reject(failure), { once: true })
+    )
+  const service = createActRunService(f.options)
+  const events: Array<{ type: string; status?: string; message?: string }> = []
+  try {
+    for await (const event of service.submit('work')) {
+      events.push(event)
+      if (event.type === 'state' && event.status === 'waiting') await service.steer('new direction')
+    }
+    expect(events.at(-1)?.status).toBe('failed')
+    expect(
+      events.some((event) => event.type === 'error' && event.message?.includes(failure.message))
+    ).toBe(true)
+    expect((await f.view.inspect())?.usage.mainCalls).toBe(1)
+  } finally {
+    await service.close()
+  }
+})
+
 test('INV-41 a delayed usage receipt settles its original cancelled task without reviving it', async () => {
   const f = runFixture()
   const entered = Promise.withResolvers<void>()

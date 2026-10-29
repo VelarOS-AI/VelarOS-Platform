@@ -736,21 +736,36 @@ export class ActLoop implements ActLoopApi {
           ])
           // 先订阅再核对帧：模型生成期间已经完成的结果不能被其他长任务遮住，
           // 核对期间发生的进展也必须保留。订阅仅属于这次等待，不取消后台任务。
-          const progress = this.options.execution.wait(waitSignal)
-          // 核对帧异步读取期间也可能取消，暂存拒绝，仍由下方 await 传播。
-          void progress.catch(() => {})
+          // 核对帧异步读取期间也可能失败；保存回执，避免未处理的拒绝或吞掉执行错误。
+          const progress = this.options.execution.wait(waitSignal).then(
+            () => ({ failed: false as const }),
+            (error: unknown) => ({
+              failed: true as const,
+              error,
+              cancelled: waitSignal.aborted && error === waitSignal.reason,
+            })
+          )
           try {
-            if (await this.options.frames.needsRefresh(compiled.request)) continue turns
-            yield { type: 'state', runId, status: 'waiting' }
-            await progress
+            if (!(await this.options.frames.needsRefresh(compiled.request))) {
+              yield { type: 'state', runId, status: 'waiting' }
+              const outcome = await progress
+              if (outcome.failed) throw outcome.error
+            }
           } catch (error) {
-            if (!controller.signal.aborted && waitSignal.aborted && this.options.control?.pending())
+            if (
+              !controller.signal.aborted &&
+              waitSignal.aborted &&
+              error === waitSignal.reason &&
+              this.options.control?.pending()
+            )
               continue turns
             throw error
           } finally {
             waiting.abort()
-            await progress.catch(() => {})
+            await progress
           }
+          const settled = await progress
+          if (settled.failed && !settled.cancelled) throw settled.error
           continue
         }
         if (
