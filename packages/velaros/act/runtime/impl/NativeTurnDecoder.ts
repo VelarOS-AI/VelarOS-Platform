@@ -45,7 +45,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public constructor(
     options: ScriptProtocolOptions = {},
     inputs: Readonly<Record<string, unknown>> = {},
-    private readonly requireDecision: () => boolean = () => true
+    private readonly canFinishText: () => boolean = () => true
   ) {
     this.config = protocolConfig(options)
     this.inputs = scriptInputCopy(inputs)
@@ -79,7 +79,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     this.instructions = [
       '需要操作时通过原生工具提交，参数按各自 JSON Schema 填写。已有执行或子任务仍在运行、当前只需等待时，仅返回普通文本进度；运行时挂起模型调用，待执行进展、子任务结果或新输入后恢复。',
       this.config.allowed.includes('done')
-        ? `完成后调用 ${name('done')}，通过 message 返回答复。`
+        ? `普通答复可以直接返回文本，无需工具调用。无后台工作时按正常答复进入完成校验；有活动目标时用 ${name('done')} 的 completion 提交完成依据。`
         : '',
       !isEmpty(Object.keys(this.inputs))
         ? `宿主参数可通过 options.inputRef 引用：${Object.keys(this.inputs)
@@ -180,13 +180,14 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       NativeExecutionSchema
     )
     if (
-      this.requireDecision() &&
+      this.canFinishText() &&
       !this.done &&
+      (!this.text.trim() || !isEmpty(this.calls)) &&
       isUndefined(submission.observe) &&
       isEmpty(submission.executions)
     )
       throw protocolFailure(
-        `缺少本轮控制决策：请调用 ${this.config.allowed
+        `响应为空或仅包含未绑定原文：请给出普通文本答复，或按需调用 ${this.config.allowed
           .filter((kind) => kind !== 'blobs')
           .map((kind) => nativeToolName(kind, this.config))
           .join(' / ')}。${
@@ -197,7 +198,13 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       )
     return {
       message: this.text,
-      done: this.done,
+      // 无工具的普通答复也走既有完成校验；等待中的工作和活动目标不会因此绕过验收。
+      done:
+        this.done ||
+        (isEmpty(this.calls) &&
+          Boolean(this.text.trim()) &&
+          this.canFinishText() &&
+          this.config.allowed.includes('done')),
       completion: this.completion,
       // 每个原生调用都需要持久配对回执，包括只含 blobs/done 的响应。
       submission: optionalWhen(!isEmpty(this.calls), submission),

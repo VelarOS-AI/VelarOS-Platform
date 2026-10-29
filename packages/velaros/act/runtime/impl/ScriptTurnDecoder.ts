@@ -52,7 +52,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
     private readonly marker: string,
     options: ScriptProtocolOptions = {},
     inputs: Readonly<Record<string, unknown>> = {},
-    private readonly requireDecision: () => boolean = () => false
+    private readonly canFinishText: () => boolean = () => false
   ) {
     this.config = protocolConfig(options)
     if (
@@ -137,10 +137,25 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       this.inputs,
       NativeExecutionSchema
     )
-    if (this.requireDecision() && !this.done && isUndefined(observe) && isEmpty(executions))
+    if (
+      this.canFinishText() &&
+      !this.done &&
+      (!this.message.trim() || !isEmpty(this.records)) &&
+      isUndefined(observe) &&
+      isEmpty(executions)
+    )
       throw protocolFailure(protocolDecisionInstructions(this.marker, this.config))
     const submission: ScriptProtocolSubmission = { observe, executions }
-    const result = { message: this.message, done: this.done, events: this.events }
+    const result = {
+      message: this.message,
+      done:
+        this.done ||
+        (isEmpty(this.records) &&
+          Boolean(this.message.trim()) &&
+          this.canFinishText() &&
+          this.config.allowed.includes('done')),
+      events: this.events,
+    }
     if (!isUndefined(this.completion)) Object.assign(result, { completion: this.completion })
     if (!isUndefined(observe) || !isEmpty(executions)) Object.assign(result, { submission })
     return result

@@ -179,7 +179,7 @@ test('done with a completion reason ends the active goal in the same reply', asy
   assert(!events.some((e) => e.type === 'error'), JSON.stringify(events))
 })
 
-test('INV-48 native done without a completion claim preserves an active goal until an explicit goal operation', async (t) => {
+test('INV-48 plain text and native done without a completion claim preserve an active goal until an explicit goal operation', async (t) => {
   for (const reply of [
     '阶段成果已保存，仍有后续工作。',
     'All requested work is complete.',
@@ -208,7 +208,8 @@ test('INV-48 native done without a completion claim preserves an active goal unt
                 },
               },
             }
-          } else
+          } else if (reply === '当前状态说明。') yield { type: 'text', text: reply }
+          else
             yield {
               type: 'tool-call',
               value: { id: `done-${frames.length}`, name: 'done', input: { message: reply } },
@@ -245,10 +246,7 @@ test('native replies finish ordinary tasks and preserve paused goals', async (t)
             JSON.parse(request.compiledPrompt.split('runtime：\n')[1].split('\n')[0]).goalControl,
             undefined
           )
-          yield {
-            type: 'tool-call',
-            value: { id: 'done', name: 'done', input: { message: '已回答当前问题。' } },
-          }
+          yield { type: 'text', text: '已回答当前问题。\n[报告](file:///tmp/report.docx)' }
           yield { type: 'finish', reason: 'stop' }
         },
       }

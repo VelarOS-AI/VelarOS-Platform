@@ -24,7 +24,6 @@ for (const [name, events] of [
   ],
   ['output after finish', (request) => [finish, turn(request, write)]],
   ['no output', () => [finish]],
-  ['narration without control', () => [{ type: 'text', text: 'Continue working.' }, finish]],
   ['no finish', (request) => [turn(request, write)]],
   ['truncated output', (request) => [turn(request, write), { type: 'finish', reason: 'length' }]],
   [
@@ -110,8 +109,7 @@ for (const [name, events] of [
     for await (const event of session.submit('Continue')) received.push(event)
     assert.equal(received.at(-1).status, 'failed', JSON.stringify(received))
     assert.equal(writes, 0)
-    if (name !== 'narration without control')
-      assert.equal(received.filter((x) => x.type === 'text').length, 0)
+    assert.equal(received.filter((x) => x.type === 'text').length, 0)
     const after = await programs.state()
     assert.equal(after.completedTurns, before.completedTurns)
     assert.deepEqual(after.leases, before.leases)

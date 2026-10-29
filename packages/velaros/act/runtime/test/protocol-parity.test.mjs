@@ -53,6 +53,37 @@ const decode = (mode, records, config = {}, inputs = {}) => {
   }
 }
 const raw = '中文 👋\r\n`template ${x}` "double" \'single\' \\path\\x\n\\n\n'
+
+for (const mode of ['tools', 'text']) {
+  for (const idle of [true, false]) {
+    test(`${mode}: ordinary text survives without a control and ${idle ? 'requests validation' : 'waits for background work'}`, () => {
+      const decoder =
+        mode === 'tools'
+          ? new NativeTurnDecoder({}, {}, () => idle)
+          : new ScriptTurnDecoder(marker, {}, {}, () => idle)
+      const text = '[报告](file:///tmp/report.xlsx)\n这是普通回复。'
+      decoder.push(text)
+      const result = decoder.finish()
+      assert.equal(result.message, text)
+      assert.equal(result.done, idle)
+      assert.equal(result.completion, undefined)
+      assert.equal(result.submission, undefined)
+    })
+  }
+  test(`${mode}: an empty idle response is still invalid`, () => {
+    const decoder =
+      mode === 'tools' ? new NativeTurnDecoder() : new ScriptTurnDecoder(marker, {}, {}, () => true)
+    decoder.push('  ')
+    assert.throws(() => decoder.finish(), { code: 'SCRIPT_PROTOCOL' })
+  })
+}
+
+test('native text does not legitimize an orphan blob call', () => {
+  const decoder = new NativeTurnDecoder()
+  decoder.push('Here is the output')
+  decoder.acceptTool({ id: 'orphan', name: 'blobs', input: { name: 'content', text: 'data' } })
+  assert.throws(() => decoder.finish(), { code: 'SCRIPT_PROTOCOL' })
+})
 const source = `import {input,blobs} from 'velaros:program'; console.log(input,blobs);\n// ${raw}`
 const valid = [
   [
@@ -195,10 +226,16 @@ test('transport selection validates explicit values and allowed controls are enf
     ['observe', 'done']
   )
 })
-test('native completion is explicit, tool identities are unique, and reset drops rejected work', () => {
+test('plain replies enter completion validation, tool identities stay unique, and reset drops rejected work', () => {
   const decoder = new NativeTurnDecoder()
   decoder.push('Only progress')
-  assert.throws(() => decoder.finish(), { code: 'SCRIPT_PROTOCOL' })
+  assert.deepEqual(decoder.finish(), {
+    message: 'Only progress',
+    done: true,
+    completion: undefined,
+    submission: undefined,
+    events: [],
+  })
   decoder.reset()
   decoder.acceptTool({ id: 'one', name: 'exec', input: { code: source } })
   assert.throws(() => decoder.acceptTool({ id: 'one', name: 'exec', input: { code: source } }), {

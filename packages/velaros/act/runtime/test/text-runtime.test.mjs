@@ -406,15 +406,15 @@ test('closing marker repair names the same frame and executes the corrected batc
   assert.deepEqual(f.writes, ['one', 'two'])
 })
 
-test('work narration without a decision exhausts bounded repair without claiming completion', async (t) => {
+test('a conversational question is accepted without requiring an interaction tool', async (t) => {
   const f = await fixture(t, async function* () {
     yield { type: 'text', text: 'Please choose a destination.' }
     yield finish
   })
   const events = await collect(f)
-  assert.equal(events.at(-1).status, 'failed')
-  assert.equal(f.calls, 3)
-  assert.notEqual((await f.session.view.inspect()).status, 'completed')
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(f.calls, 1)
+  assert.equal((await f.session.view.inspect()).status, 'completed')
   assert.deepEqual(f.writes, [])
 })
 
@@ -695,35 +695,20 @@ test('raw blob names and nested input keys keep JSON semantics in the isolated r
   assert.match(text, /"polluted":false/)
 })
 
-test('missing work decision is repaired before a single actual write and completion', async (t) => {
-  const f = await fixture(t, async function* (request, f) {
-    if (f.calls === 1) {
-      assert(modelText(request).includes(`\n${marker(request)} execute()\n`))
-      yield { type: 'text', text: 'I will continue the task.' }
-      yield finish
-    } else if (f.calls === 2) {
-      assert.equal(f.writes.length, 0)
-      const repair = modelText(request).split('本帧上次响应未通过校验').at(-1)
-      assert(repair.includes(`第一行直接输出：\n${marker(request)} execute()`))
-      assert(repair.includes(`独立一行写闭合标记：\n${marker(request)}`))
-      yield {
-        type: 'text',
-        text: block(request, 'execute', "import {write} from 'test:ops';await write('recovered');"),
-      }
-      yield finish
-    } else yield* done(request)
+test('ordinary text and file links are accepted once without inventing an execution', async (t) => {
+  const text = '[报告](file:///tmp/report.docx)'
+  const f = await fixture(t, async function* () {
+    yield { type: 'text', text }
+    yield finish
   })
   assertDone(await collect(f))
-  assert.equal(f.calls, 3)
-  assert.deepEqual(f.writes, ['recovered'])
-  const state = await f.storage.load('s')
-  const decisions = await Promise.all(
-    state.records
-      .filter((record) => record.title === 'model-response')
-      .map((record) => f.storage.get('s', record.objectId).then(JSON.parse))
-  )
-  assert.equal(decisions[0].status, 'rejected')
-  assert.equal(decisions[1].status, 'accepted')
+  assert.equal(f.calls, 1)
+  assert.deepEqual(f.writes, [])
+  const trace = await f.runtime.trace('s', { fullContent: true })
+  assert.equal(trace.turns.length, 1)
+  assert.equal(trace.turns[0].executions.length, 0)
+  assert.equal(JSON.parse(trace.turns[0].decision.body).status, 'accepted')
+  assert.equal(trace.turns[0].response.body, text)
 })
 
 test('INV-60 stable protocol rules survive changing frames and retries with scoped names and input snapshots', async (t) => {

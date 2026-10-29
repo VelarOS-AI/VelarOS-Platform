@@ -224,7 +224,7 @@ Node 的模型展示省略空运行时分区与内部统计，完整帧继续用
 
 ## INV-88 原生 exec 工具的完整接纳
 
-主会话默认开放 execute、observe、blobs、done，两种传输按同一 allowed 许可裁剪。`protocol.transport` 可显式选择 tools 或 text；缺省使用公开默认值，不支持工具的驱动回落文本，显式 tools 不受支持时拒绝激活。原生 exec/observe 的 code/options、blobs 的 name/text、done 的 message/completion 由正式 TS 类型生成 JSON schema，文本声明与原生调用共用参数、原文、宿主输入、引用/编辑、快照、租约和异步校验。done 显式收束，两边都经过同一目标与领域验收。
+主会话默认开放 execute、observe、blobs、done，两种传输按同一 allowed 许可裁剪。`protocol.transport` 可显式选择 tools 或 text；缺省使用公开默认值，不支持工具的驱动回落文本，显式 tools 不受支持时拒绝激活。原生 exec/observe 的 code/options、blobs 的 name/text、done 的 message/completion 由正式 TS 类型生成 JSON schema，文本声明与原生调用共用参数、原文、宿主输入、引用/编辑、快照、租约和异步校验。普通文本无需控制调用即可接纳；无后台工作时与 done 一样进入完成校验，但不会凭正文自动生成目标完成依据。两边都经过同一目标与领域验收。
 
 稳定系统说明共享运行语义，调用语法由当前传输独立提供，并遵守许可与自定义名称。原生说明与工具描述使用 JSON 字段路径和原生调用示例；文本说明使用当前帧控制头与裸载荷规则。两种传输明确允许在已有执行或子任务运行且仅需等待时返回普通文本进度，由既有调度器挂起模型调用，执行进展、子任务结果或新输入唤醒。观察的完整源码表示登记或整体替换，编辑、刷新和退订均有对应语法；共享校验失败使用通用参数术语。实际模型请求中的稳定说明、动态帧协议和原生工具定义须与所选传输一致。
 

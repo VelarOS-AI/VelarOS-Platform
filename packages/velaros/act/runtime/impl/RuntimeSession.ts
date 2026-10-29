@@ -505,10 +505,10 @@ export class RuntimeSession implements VelarosSession {
       )
     const nativeTools =
       this.config.transport === 'tools' && Boolean(dependencies.model?.nativeTools)
-    const requireDecision = () =>
+    const canFinishText = () =>
       this.jobs.size === 0 && this.finalizers.size === 0 && !dependencies.agents?.pending(id)
     const nativeDecoder = () =>
-      new NativeTurnDecoder(this.config, dependencies.inputs?.() ?? {}, requireDecision)
+      new NativeTurnDecoder(this.config, dependencies.inputs?.() ?? {}, canFinishText)
     const instructions = `${
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
