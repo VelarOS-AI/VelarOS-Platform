@@ -1142,6 +1142,14 @@ test('native maintenance locally sizes its initial evidence using the standard p
       const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
       const input = facts.inputs.find((item) => item.text.startsWith('Review every batch'))
       firstInputChars = input?.text.length ?? 0
+      t.diagnostic(
+        JSON.stringify({
+          modelCall: calls,
+          firstInputChars,
+          phase: request.contextStatus.phase,
+          estimate: await estimator.estimate(request),
+        })
+      )
       assert.equal(
         input?.text.length,
         original.length,
@@ -1190,6 +1198,26 @@ test('native maintenance locally sizes its initial evidence using the standard p
   const state = await f.storage.load('root')
   const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
   const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  if (outcome.status !== 'applied') {
+    const child = await f.storage.load(outcome.sessionId)
+    t.diagnostic(
+      JSON.stringify({
+        outcome,
+        calls,
+        estimates,
+        child: await Promise.all(
+          child.records
+            .filter((record) =>
+              /act:error|script:.*:result|act:state|model-response/.test(record.title)
+            )
+            .map(async (record) => ({
+              title: record.title,
+              body: (await f.storage.get(outcome.sessionId, record.objectId))?.slice(0, 3000),
+            }))
+        ),
+      })
+    )
+  }
   assert.equal(outcome.status, 'applied', outcome.error)
   assert.equal(calls, 1)
   t.diagnostic(
