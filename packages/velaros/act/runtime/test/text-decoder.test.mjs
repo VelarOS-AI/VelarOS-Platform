@@ -313,13 +313,14 @@ test('response, header, block budgets and decoder reset are bounded', () => {
   assert.equal(d.finish().done, true)
 })
 
-test('work decision requirement is checked at finish and respects configured declaration names', () => {
+test('internal delivery requirement is checked at finish and respects configured declaration names', () => {
   let required = false
   const decoder = new ScriptTurnDecoder(
     marker,
     { names: { execute: 'run', done: 'finish' }, allowed: ['execute', 'done'] },
     {},
-    () => required
+    () => required,
+    false
   )
   decoder.push('Continue processing.')
   required = true

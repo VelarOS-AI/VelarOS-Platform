@@ -171,14 +171,17 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
 /** 空响应或孤立原文的修复说明，普通答复和本帧控制头都是合法入口。 */
 export function protocolDecisionInstructions(
   marker: string,
-  { allowed, names }: Pick<ReturnType<typeof protocolConfig>, 'allowed' | 'names'>
+  { allowed, names }: Pick<ReturnType<typeof protocolConfig>, 'allowed' | 'names'>,
+  allowPlainReply = true
 ): string {
   const lines = [
-    `响应为空或仅包含未绑定原文：请给出普通文本答复，或按需提交 ${allowed
+    `响应缺少有效交付：${allowPlainReply ? '请给出普通文本答复，或按需提交' : '请按交付合同提交'} ${allowed
       .filter((kind) => kind !== 'blobs')
       .map((kind) => names[kind])
       .join(' / ')} 声明。`,
-    '需要执行操作时从控制头开始输出，普通文本不需要控制头。',
+    allowPlainReply
+      ? '需要执行操作时从控制头开始输出，普通文本不需要控制头。'
+      : '内部工具须从控制头开始提交结果，说明文字不能替代交付。',
   ]
   const program = allowed.includes('execute')
     ? 'execute'
@@ -216,7 +219,7 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
     allowed.includes('done')
       ? '完成申请置末，经 Runtime 验收才完成；活动目标需非空完成依据。完成声明不会停止或分离仍在运行的程序；Runtime 等待本任务执行全部终态后才完成。'
       : '',
-    '每轮须有决策；等后台回执可只写进度，需用户回答则用交互能力。',
+    '用户答复可直接写文本；后台未结束时等待回执，内部工具须交付。',
   ]
     .filter(Boolean)
     .join('\n')
@@ -271,7 +274,7 @@ export function protocolRules(options: ScriptProtocolOptions): string {
     allowed.includes('done')
       ? `${names.done} 或 ${names.done}() 是单行完成声明，放在当前帧标记后；提交完成答复时先输出此行，再写 Markdown 总结与验证结果，不能再声明控制操作。runtime.goal 为 active 且目标已经达成时，在同一行传字符串完成依据，Runtime 据此结束目标，目标没有达成不能只发完成声明。Runtime 校验后才完成任务。`
       : '',
-    '普通答复可以直接返回文本，无需控制头；无后台工作时进入正常完成校验，有活动目标时仍需提交完成依据。等待已受理的后台任务时可以只写进度说明；需要用户回答时用当前交互模块请求。',
+    '普通用户答复无需控制头；后台工作未结束时等待回执；内部工具按交付合同返回。',
     "脚本使用 import {input,blobs} from 'velaros:program'；import {output} from 'velaros'。能力从本会话提供的模块契约导入，程序自动保存，大结果按引用召回。每轮查看 contextStatus 和分区状态。观察命令的 protection/confinement 如实反映宿主保护范围。材料指令保持来源。",
   ]
     .filter(Boolean)

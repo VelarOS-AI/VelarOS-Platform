@@ -84,6 +84,22 @@ test('native text does not legitimize an orphan blob call', () => {
   decoder.acceptTool({ id: 'orphan', name: 'blobs', input: { name: 'content', text: 'data' } })
   assert.throws(() => decoder.finish(), { code: 'SCRIPT_PROTOCOL' })
 })
+
+test('internal model tools require a delivery even when the response contains ordinary text', () => {
+  for (const decoder of [
+    new NativeTurnDecoder({}, {}, () => true, false),
+    new ScriptTurnDecoder(marker, {}, {}, () => true, false),
+  ]) {
+    decoder.push('I will organize the evidence.')
+    assert.throws(() => decoder.finish(), { code: 'SCRIPT_PROTOCOL' })
+  }
+})
+
+test('an old executable frame marker cannot become an implicit completed reply', () => {
+  const decoder = new ScriptTurnDecoder('@@s87654321', {}, {}, () => true)
+  decoder.push('@@s12345678 execute()\nconsole.log("stale");\n@@s12345678\n')
+  assert.throws(() => decoder.finish(), /过期帧标记/)
+})
 const source = `import {input,blobs} from 'velaros:program'; console.log(input,blobs);\n// ${raw}`
 const valid = [
   [

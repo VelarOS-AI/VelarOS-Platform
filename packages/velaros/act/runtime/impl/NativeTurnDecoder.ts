@@ -45,7 +45,8 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public constructor(
     options: ScriptProtocolOptions = {},
     inputs: Readonly<Record<string, unknown>> = {},
-    private readonly canFinishText: () => boolean = () => true
+    private readonly canFinishText: () => boolean = () => true,
+    private readonly allowPlainReply = true
   ) {
     this.config = protocolConfig(options)
     this.inputs = scriptInputCopy(inputs)
@@ -79,7 +80,9 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     this.instructions = [
       '需要操作时通过原生工具提交，参数按各自 JSON Schema 填写。已有执行或子任务仍在运行、当前只需等待时，仅返回普通文本进度；运行时挂起模型调用，待执行进展、子任务结果或新输入后恢复。',
       this.config.allowed.includes('done')
-        ? `普通答复可以直接返回文本，无需工具调用。无后台工作时按正常答复进入完成校验；有活动目标时用 ${name('done')} 的 completion 提交完成依据。`
+        ? allowPlainReply
+          ? `普通答复直接写文本；完成目标用 ${name('done')} 提交依据。`
+          : `完成后调用 ${name('done')}，通过 message 返回答复。`
         : '',
       !isEmpty(Object.keys(this.inputs))
         ? `宿主参数可通过 options.inputRef 引用：${Object.keys(this.inputs)
@@ -182,12 +185,15 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     if (
       this.canFinishText() &&
       !this.done &&
-      (!this.text.trim() || !isEmpty(this.calls)) &&
+      (!this.allowPlainReply ||
+        !this.config.allowed.includes('done') ||
+        !this.text.trim() ||
+        !isEmpty(this.calls)) &&
       isUndefined(submission.observe) &&
       isEmpty(submission.executions)
     )
       throw protocolFailure(
-        `响应为空或仅包含未绑定原文：请给出普通文本答复，或按需调用 ${this.config.allowed
+        `响应缺少有效交付：${this.allowPlainReply && this.config.allowed.includes('done') ? '请给出普通文本答复，或按需调用' : '请按交付合同调用'} ${this.config.allowed
           .filter((kind) => kind !== 'blobs')
           .map((kind) => nativeToolName(kind, this.config))
           .join(' / ')}。${
@@ -201,7 +207,8 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       // 无工具的普通答复也走既有完成校验；等待中的工作和活动目标不会因此绕过验收。
       done:
         this.done ||
-        (isEmpty(this.calls) &&
+        (this.allowPlainReply &&
+          isEmpty(this.calls) &&
           Boolean(this.text.trim()) &&
           this.canFinishText() &&
           this.config.allowed.includes('done')),

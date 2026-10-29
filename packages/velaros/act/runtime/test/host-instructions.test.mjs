@@ -485,7 +485,7 @@ test('repair requests retain host instructions without accepting malformed respo
     model: driver(async function* (request) {
       frames.push(request)
       if (frames.length === 1) {
-        yield { type: 'text', text: 'missing frame control' }
+        yield { type: 'text', text: ' ' }
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request)
     }),

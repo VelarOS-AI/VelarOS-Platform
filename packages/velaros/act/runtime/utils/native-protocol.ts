@@ -51,7 +51,7 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
       ? `${name('blobs')} 必须与使用它的 ${allowed.includes('execute') ? name('execute') : name('observe')} 在同一响应同时提交；原文只属于本响应，单独提交会拒绝接纳。程序通过 import {blobs} from "velaros:program" 读取，例如 blobs.content。`
       : '',
     allowed.includes('done')
-      ? `普通答复可以直接返回文本，无需工具调用；无后台工作时进入正常完成校验。有活动目标时，${name('done')} 通过 message 给出用户答复，通过 completion 给出完成依据；参数示例：${JSON.stringify({ message: '基于实际结果的答复', completion: '已经核实的完成依据' })}。`
+      ? `${name('done')} 通过 message 给出用户答复，通过 completion 给出完成依据；参数示例：${JSON.stringify({ message: '基于实际结果的答复', completion: '已经核实的完成依据' })}。`
       : '',
   ]
     .filter(Boolean)

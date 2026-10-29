@@ -52,7 +52,8 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
     private readonly marker: string,
     options: ScriptProtocolOptions = {},
     inputs: Readonly<Record<string, unknown>> = {},
-    private readonly canFinishText: () => boolean = () => false
+    private readonly canFinishText: () => boolean = () => false,
+    private readonly allowPlainReply = true
   ) {
     this.config = protocolConfig(options)
     if (
@@ -137,20 +138,44 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       this.inputs,
       NativeExecutionSchema
     )
+    // 无控制回合可以是普通答复，但真实旧帧的控制头不能据此升级成完成答复。
+    if (this.canFinishText() && isEmpty(this.records) && !this.done)
+      for (const line of this.message.split(/\r?\n/u)) {
+        const header = /^([\w@]+) ([\w]+)(?:\(|\s|$)/u.exec(line)
+        if (
+          header &&
+          header[1].startsWith(this.config.markerPrefix) &&
+          /^[a-f0-9]{8,64}$/u.test(header[1].slice(this.config.markerPrefix.length)) &&
+          Object.values(this.config.names).includes(header[2])
+        )
+          throw protocolFailure(
+            `控制头使用过期帧标记；请使用当前标记 ${this.marker} 重新提交完整响应。`
+          )
+      }
     if (
       this.canFinishText() &&
       !this.done &&
-      (!this.message.trim() || !isEmpty(this.records)) &&
+      (!this.allowPlainReply ||
+        !this.config.allowed.includes('done') ||
+        !this.message.trim() ||
+        !isEmpty(this.records)) &&
       isUndefined(observe) &&
       isEmpty(executions)
     )
-      throw protocolFailure(protocolDecisionInstructions(this.marker, this.config))
+      throw protocolFailure(
+        protocolDecisionInstructions(
+          this.marker,
+          this.config,
+          this.allowPlainReply && this.config.allowed.includes('done')
+        )
+      )
     const submission: ScriptProtocolSubmission = { observe, executions }
     const result = {
       message: this.message,
       done:
         this.done ||
-        (isEmpty(this.records) &&
+        (this.allowPlainReply &&
+          isEmpty(this.records) &&
           Boolean(this.message.trim()) &&
           this.canFinishText() &&
           this.config.allowed.includes('done')),

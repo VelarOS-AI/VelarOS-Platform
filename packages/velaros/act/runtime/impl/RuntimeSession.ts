@@ -508,7 +508,12 @@ export class RuntimeSession implements VelarosSession {
     const canFinishText = () =>
       this.jobs.size === 0 && this.finalizers.size === 0 && !dependencies.agents?.pending(id)
     const nativeDecoder = () =>
-      new NativeTurnDecoder(this.config, dependencies.inputs?.() ?? {}, canFinishText)
+      new NativeTurnDecoder(
+        this.config,
+        dependencies.inputs?.() ?? {},
+        canFinishText,
+        !dependencies.tool
+      )
     const instructions = `${
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
@@ -615,7 +620,8 @@ export class RuntimeSession implements VelarosSession {
               () =>
                 this.jobs.size === 0 &&
                 this.finalizers.size === 0 &&
-                !dependencies.agents?.pending(id)
+                !dependencies.agents?.pending(id),
+              !dependencies.tool
             )
           },
         },
