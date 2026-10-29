@@ -75,6 +75,120 @@ function runFixture() {
   return { store, context, view, options }
 }
 
+for (const phase of ['model', 'refresh'] as const)
+  test(`waiting refreshes unseen results completed during ${phase}, without polling or leaking subscriptions`, async () => {
+    const f = runFixture()
+    let revision = 0
+    let calls = 0
+    let listeners = 0
+    let wake: (() => void) | undefined
+    const waitingAgain = Promise.withResolvers<void>()
+    f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+    f.options.frames.needsRefresh = async (request) => {
+      const observed = JSON.parse(
+        request.materials.find((item) => item.origin === 'runtime-view')!.text
+      ).revision
+      if (phase === 'refresh' && calls === 1) {
+        // 在快照核对已经读到旧值、但核对尚未返回的窗口完成。
+        expect(listeners).toBe(1)
+        revision++
+        wake!()
+        return false
+      }
+      return observed !== revision
+    }
+    f.options.model.stream = async function* (request) {
+      calls++
+      const observed = JSON.parse(
+        request.materials.find((item) => item.origin === 'runtime-view')!.text
+      ).revision
+      expect(observed).toBe(calls === 1 ? 0 : 1)
+      if (phase === 'model' && calls === 1) revision++
+      yield { type: 'text', text: 'Waiting for the remaining service.' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push: () => [],
+      finish: () => ({ message: 'waiting', done: false, events: [] }),
+    })
+    f.options.execution.pending = () => true
+    f.options.execution.wait = async (signal) => {
+      signal.throwIfAborted()
+      listeners++
+      let abort!: () => void
+      try {
+        await new Promise<void>((resolve, reject) => {
+          wake = resolve
+          abort = () => reject(signal.reason)
+          signal.addEventListener('abort', abort, { once: true })
+          if (calls === 2) waitingAgain.resolve()
+        })
+      } finally {
+        signal.removeEventListener('abort', abort)
+        listeners--
+      }
+    }
+    const service = createActRunService(f.options)
+    const events: Array<{ type: string; status?: string }> = []
+    const running = (async () => {
+      for await (const event of service.submit('work')) events.push(event)
+    })()
+    try {
+      await Promise.race([
+        waitingAgain.promise,
+        running.then(() => {
+          throw new Error('run ended before the unseen result was delivered')
+        }),
+      ])
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(calls).toBe(2)
+      expect(listeners).toBe(1)
+    } finally {
+      service.cancel()
+      await running
+      await service.close()
+    }
+    expect(listeners).toBe(0)
+    expect(events.at(-1)?.status).toBe('cancelled')
+  })
+
+test('a text-only waiting response refreshes a completed result even when no execution remains', async () => {
+  const f = runFixture()
+  let revision = 0
+  let calls = 0
+  f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+  f.options.frames.needsRefresh = async (request) =>
+    JSON.parse(request.materials.find((item) => item.origin === 'runtime-view')!.text).revision !==
+    revision
+  f.options.model.stream = async function* (request) {
+    calls++
+    expect(
+      JSON.parse(request.materials.find((item) => item.origin === 'runtime-view')!.text).revision
+    ).toBe(calls - 1)
+    revision = 1
+    yield { type: 'text', text: 'waiting' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push: () => [],
+    finish: () => ({ message: 'waiting', done: false, events: [] }),
+  })
+  const service = createActRunService(f.options)
+  try {
+    for await (const _event of service.submit('work')) {
+      /* exhaust the run */
+    }
+    expect(calls).toBe(2)
+    expect((await service.inspect()).status).toBe('waiting')
+  } finally {
+    await service.close()
+  }
+})
+
 test('INV-41 a delayed usage receipt settles its original cancelled task without reviving it', async () => {
   const f = runFixture()
   const entered = Promise.withResolvers<void>()

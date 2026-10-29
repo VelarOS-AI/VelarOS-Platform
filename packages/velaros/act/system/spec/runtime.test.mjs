@@ -16,6 +16,7 @@ import {
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
+import { memoryModule } from '../../../dist/act/system/impl/MemoryModule.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
@@ -55,6 +56,35 @@ async function submit(session) {
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
 }
 const prelude = "import {output} from 'velaros';import * as system from 'velaros:system';"
+
+for (const organize of [false, true])
+  for (const persistent of [false, true])
+    test(`memory discovery reflects authorized context organization: organize=${organize}, persistent=${persistent}`, async () => {
+      const definition = memoryModule.create({ longTermMemory: {} }, organize, persistent)
+      const kernel = createOperationRuntime({ modules: [definition], journal: {} })
+      try {
+        const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
+        const description = kernel.describe(definition.binding.moduleId)
+        assert.equal(description.summary.includes('上下文整理'), organize)
+        assert.equal(description.summary.includes('长期记忆'), persistent)
+        assert.equal(Object.hasOwn(description.operations, 'organize'), organize)
+        const found = catalog.list('s', { query: '上下文整理' }).items
+        assert.equal(found.length, organize ? 1 : 0)
+        if (organize) {
+          assert.equal(found[0].specifier, 'velaros:system')
+          assert(found[0].operations.includes('memory.organize'))
+          const discovered = catalog.describe('s', {
+            module: found[0].specifier,
+            exports: ['memory'],
+          })
+          assert.match(discovered.declarations, /organize/)
+        }
+        const denied = new SystemCatalog({ kernel: () => kernel, allows: () => false })
+        assert.deepEqual(denied.list('s', { query: '上下文整理' }).items, [])
+      } finally {
+        await kernel.dispose()
+      }
+    })
 
 // 使用真实 Node、Kernel 与 ContextStorage，验证包入口没有另起执行路径。
 test('INV-2 系统命名空间和附属模块共用真实操作身份与输入/blob通道', async (t) => {

@@ -34,6 +34,7 @@ class MemoryModule implements MemoryModuleApi {
         : VelarSystemMemoryLocalModule
     return capabilityModules.create<SystemMemoryOperationsApi>({
       surface,
+      summary: `工作记忆：任务材料、计划与笔记${organize ? '、上下文整理' : ''}${persistent ? '；长期记忆：跨会话保存偏好、反馈与工作决定' : ''}。`,
       implementation: systemMemoryOperations,
       instanceId: `standard:${surface.specifier}`,
       generation: SystemContract.generation,

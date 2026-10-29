@@ -727,31 +727,42 @@ export class ActLoop implements ActLoopApi {
         }
         if (compiled.request.mode === 'maintenance') continue
         if (this.options.execution.pending()) {
-          yield { type: 'state', runId, status: 'waiting' }
           // 新输入只唤醒当前等待；后台执行继续使用运行级信号。
+          const waiting = new AbortController()
           const waitSignal = AbortSignal.any([
             controller.signal,
+            waiting.signal,
             ...(this.options.control ? [this.options.control.turnSignal()] : []),
           ])
+          // 先订阅再核对帧：模型生成期间已经完成的结果不能被其他长任务遮住，
+          // 核对期间发生的进展也必须保留。订阅仅属于这次等待，不取消后台任务。
+          const progress = this.options.execution.wait(waitSignal)
+          // 核对帧异步读取期间也可能取消，暂存拒绝，仍由下方 await 传播。
+          void progress.catch(() => {})
           try {
-            await this.options.execution.wait(waitSignal)
+            if (await this.options.frames.needsRefresh(compiled.request)) continue turns
+            yield { type: 'state', runId, status: 'waiting' }
+            await progress
           } catch (error) {
             if (!controller.signal.aborted && waitSignal.aborted && this.options.control?.pending())
               continue turns
             throw error
+          } finally {
+            waiting.abort()
+            await progress.catch(() => {})
           }
           continue
-        }
-        if (!done) {
-          yielded = true
-          yield { type: 'state', runId, status: 'waiting' }
-          return
         }
         if (
           this.options.control?.pending() ||
           (await this.options.frames.needsRefresh(compiled.request))
         )
           continue
+        if (!done) {
+          yielded = true
+          yield { type: 'state', runId, status: 'waiting' }
+          return
+        }
         const completionSignal = AbortSignal.any([
           controller.signal,
           ...(this.options.control ? [this.options.control.turnSignal()] : []),

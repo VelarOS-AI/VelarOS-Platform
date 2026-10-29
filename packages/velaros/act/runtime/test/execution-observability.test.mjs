@@ -111,6 +111,75 @@ async function fixture(t, transport, onRequest, config = {}, extra = {}) {
 }
 
 for (const transport of ['tools', 'text']) {
+  test(`${transport}: a result completed during model generation wakes text-only waiting beside a live service`, async (t) => {
+    let serviceId
+    let shortId
+    let shortResultRef
+    const signal = new AbortController().signal
+    const f = await fixture(t, transport, async (f) => {
+      if (f.requests.length === 1)
+        return [
+          { code: held, options: { async: true } },
+          {
+            code: `import {existsSync} from 'node:fs';import {writeFile} from 'node:fs/promises';import {setTimeout} from 'node:timers/promises';await writeFile('short-started','yes');while(!existsSync('short-release'))await setTimeout(10);console.log('UNSEEN_UI_RESULT_296');`,
+            options: { async: true },
+          },
+        ]
+      if (f.requests.length === 2) {
+        await waitFile(f.root, 'started')
+        await waitFile(f.root, 'short-started')
+        const jobs = (await f.programs.state()).jobs
+        serviceId = jobs[0].executionId
+        shortId = jobs[1].executionId
+        await writeFile(join(f.root, 'short-release'), 'yes')
+        await until(
+          async () => (await f.session.executions.read({ executionId: shortId }, signal)).complete
+        )
+        shortResultRef = (await f.session.executions.read({ executionId: shortId }, signal))
+          .resultRef
+        assert(shortResultRef)
+        assert.equal(
+          f.frames.at(-1).results.some((item) => item.ref === shortResultRef),
+          false
+        )
+        assert.equal(
+          (await f.session.executions.read({ executionId: serviceId }, signal)).status,
+          'running'
+        )
+        return { type: 'text', text: 'Waiting for UI verification to finish.' }
+      }
+      if (f.requests.length === 3) {
+        const result = f.frames.at(-1).results.find((item) => item.ref === shortResultRef)
+        assert(result, 'next frame must contain the completed execution result')
+        assert.match(result.text, /UNSEEN_UI_RESULT_296/)
+        assert.equal(
+          (await f.session.executions.read({ executionId: serviceId }, signal)).status,
+          'running'
+        )
+        return [{ code: '', options: { control: { kind: 'stop', executionId: serviceId } } }]
+      }
+    })
+    const watchdog = setTimeout(() => f.controller.abort(), 15000)
+    try {
+      await f.collect()
+      assert.equal(
+        f.controller.signal.aborted,
+        false,
+        'completed result was lost while waiting on the service'
+      )
+      // stop 的回执与目标终态可能分别发布，各自最多补送一帧。
+      assert(f.requests.length >= 4 && f.requests.length <= 5)
+      assert.equal(f.events.at(-1).status, 'completed')
+      assert.equal(
+        (await f.session.executions.read({ executionId: serviceId }, signal)).status,
+        'cancelled'
+      )
+    } finally {
+      clearTimeout(watchdog)
+      f.controller.abort()
+    }
+  })
+
   test(`${transport}: async ownership guidance matches completion waiting for a stopped temporary service`, async (t) => {
     const f = await fixture(t, transport, async (f, request) => {
       assert.match(request.instructions, /异步执行仍属于本任务/)

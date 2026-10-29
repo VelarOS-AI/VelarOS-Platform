@@ -32,10 +32,14 @@ export class SystemCatalog implements SystemCatalogApi {
   public list(sessionId: string, query: SystemModuleQuery): SystemModulePage {
     const available = this.available(sessionId)
     const members = systemMembers((id) => available.some((item) => item.binding.moduleId === id))
+    const memory = members.find(([name]) => name === 'memory')
+    const organize =
+      memory &&
+      available.find((item) => item.binding.moduleId === memory[1])!.operations.includes('organize')
     const system: SystemModuleCard = {
       specifier: SystemPackageSpecifier,
       space: 'system',
-      summary: '发现能力，维护记忆、共享状态与材料引用',
+      summary: `发现能力，维护记忆、共享状态与材料引用${organize ? '、上下文整理' : ''}`,
       exports: members.map(([name]) => name),
       contentRevision: this.systemRevision(members),
       operations: members.flatMap(([name, id]) =>

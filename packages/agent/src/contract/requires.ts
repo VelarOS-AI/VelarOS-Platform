@@ -135,7 +135,7 @@ export interface ActContextPort {
     signal: AbortSignal,
     claim?: string
   ): Promise<Optional<ContextCompletionResult>>
-  /** 完成前检查是否有本帧尚未展示的新结果或任务变化。 */
+  /** 等待或完成前检查是否有本帧尚未展示的新结果或任务变化。 */
   needsRefresh(request: ModelTurnRequest): Promise<boolean>
   /** 成功接收完整模型响应后消费一次帧租约。 */
   acknowledge(request: ModelTurnRequest, signal: AbortSignal): Promise<void>
