@@ -10,6 +10,7 @@ import type { ShellResolverApi } from '../impl/local/ShellResolver'
 import { createShellEnvironment } from '../local'
 import type { ResolvedShell } from '../types/local'
 import { parseLoginEnvironment } from '../utils/environment'
+import { isRegularFile } from '../utils/shells'
 
 /** 用显式环境形成固定的已自检描述，供代次与关闭测试。 */
 function resolved(env: NodeJS.ProcessEnv): ResolvedShell {
@@ -44,6 +45,19 @@ test('login output isolates startup noise and preserves multiline and equals-sig
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype)
   expect(() => parseLoginEnvironment('PATH=/tools\0', 'marker')).toThrow('不完整')
   expect(() => parseLoginEnvironment('\0marker\0PATH=/tools', 'marker')).toThrow('不完整')
+})
+
+test('shell candidate probes distinguish files, directories and expected missing paths', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'velaros-shell-probe-'))
+  try {
+    const executable = join(directory, 'candidate')
+    await writeFile(executable, 'test')
+    expect(isRegularFile(executable)).toBe(true)
+    expect(isRegularFile(directory)).toBe(false)
+    expect(isRegularFile(join(directory, 'missing'))).toBe(false)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('concurrent reads share a load, return copies, and refresh isolates listener failures', async () => {
@@ -83,6 +97,37 @@ test('concurrent reads share a load, return copies, and refresh isolates listene
   } finally {
     await environment.dispose()
   }
+})
+
+test('default path uses the ready shell until refresh while explicit environments resolve independently', async () => {
+  let source = 'first'
+  const shells = resolver(async () => ({
+    env: { PATH: source },
+    revision: source,
+    refreshed: true,
+  }))
+  shells.resolveReady = async (options) => ({
+    ...resolved(options?.env ?? {}),
+    shellPath: `ready-${options?.env?.PATH}`,
+  })
+  const resolve = spyOn(shells, 'resolve')
+  const environment = new ShellEnvironment({ platform: 'win32' }, shells)
+  try {
+    await environment.getEnvironment()
+    expect(environment.getShellPath()).toBe('ready-first')
+    expect(environment.getShellPath()).toBe('ready-first')
+    expect(resolve).not.toHaveBeenCalled()
+    expect(environment.getShellPath({ PATH: 'explicit' })).toBe('shell')
+    expect(resolve).toHaveBeenCalledTimes(1)
+    source = 'second'
+    await environment.refresh()
+    expect(environment.getShellPath()).toBe('ready-second')
+    expect(resolve).toHaveBeenCalledTimes(1)
+  } finally {
+    resolve.mockRestore()
+    await environment.dispose()
+  }
+  expect(() => environment.getShellPath()).toThrow()
 })
 
 test('older refreshes cannot overwrite newer environments or publish stale notifications', async () => {

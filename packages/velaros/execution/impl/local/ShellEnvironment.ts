@@ -80,6 +80,8 @@ export class ShellEnvironment implements ShellEnvironmentApi {
 
   public getShellPath(env?: NodeJS.ProcessEnv): string {
     this.controller.signal.throwIfAborted()
+    // 默认环境沿用本代次已自检的 Shell；显式环境仍独立解析，刷新会清空缓存。
+    if (isUndefined(env) && this.cached?.shell) return this.cached.shell.shellPath
     return this.shells.resolve({
       platform: this.platform,
       env: env ?? this.cached?.env ?? this.baseEnvironment(),
