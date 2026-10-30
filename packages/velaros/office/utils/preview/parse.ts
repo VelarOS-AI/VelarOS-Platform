@@ -125,7 +125,13 @@ export async function parseXlsxPreview(
   maxItems: number
 ): Promise<ParsedOfficePreview> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.readFile(inputPath)
+  const zip = await JSZip.loadAsync(await readFile(inputPath))
+  const drawings = zip.file(/^xl\/drawings\/[a-zA-Z0-9]+\.xml$/)
+  // 表格摘录不渲染绘图。只在内存中移除绘图部件，避开 ExcelJS 对合法默认命名空间的误读；原文件不变。
+  for (const drawing of drawings) zip.remove(drawing.name)
+  await workbook.xlsx.load(await zip.generateAsync({ type: 'arraybuffer' }), {
+    ignoreNodes: ['drawing'],
+  })
   const sheets: PreviewSheet[] = []
   const maxSheets = Math.min(workbook.worksheets.length, maxItems)
 
@@ -149,13 +155,19 @@ export async function parseXlsxPreview(
     })
   }
 
-  const htmlBody = sheets.map((sheet) => buildSheetPreviewHtml(sheet)).join('\n')
+  const htmlBody = [
+    ...(drawings.length > 0
+      ? ['<p>表格内容摘录；图表与图片未渲染，公式值使用文件中保存的结果。</p>']
+      : []),
+    ...sheets.map((sheet) => buildSheetPreviewHtml(sheet)),
+  ].join('\n')
   return {
     kind: 'xlsx',
     title: workbook.title || sheets[0]?.name || '工作簿',
     summary: {
       sheets: workbook.worksheets.length,
       previewedSheets: sheets.length,
+      drawings: drawings.length,
     },
     sheets,
     htmlBody,

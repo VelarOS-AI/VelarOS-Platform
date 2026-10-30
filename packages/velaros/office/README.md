@@ -81,6 +81,7 @@ console.log(page.width, page.height, page.pageCount, page.buffer.byteLength)
 - 端口不实现 `locateMarkItDown` 时回落到只按平台约定找资源的缺省定位器，用户的停用开关就到不了本单元；要认开关，照上面用 `createMarkItDownLocator({ resources })` 接上。
 - 截断如实标记：`toMarkdown` 看 `truncated`，`preview` 看 `contentTruncated`，预览的 `summary` 报文档里的真实数量、条目按 `maxItems` 截。
 - 模型模板生成报告或表格后，用 `preview` 解析真实产物，分别交付写入回执与结构计数、摘录范围。结构可解析只证明对应检查范围；布局与具体内容按任务要求核查。
+- Excel 预览只抽取单元格内容，使用文件保存的公式结果，不执行重算。绘图部件只在内存中的读取副本里排除，`summary.drawings` 记录部件数量；含绘图时预览说明图表与图片未渲染，原工作簿不变。
 - `readPdf` 只取文本型 PDF 的可选择文字，不做 OCR；`editPdf` 的文字戳用 PDF 标准字体，只写得了西文，中文当场 `VALIDATION`。
 - 操作是整个进程一份的无状态单例，没有跨调用的状态；转换用的临时目录用完即删。
 - 环境变量只认 `OfficeEnvironmentVariables` 里的两个：MarkItDown 的额外资源根、pdfjs 标准字体目录（打包产物挪了字体位置时用）。
