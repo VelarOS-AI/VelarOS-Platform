@@ -288,7 +288,7 @@ test('trace connects actual compiled requests, edited observer, write receipts, 
   assert.match(nextFrame.observation.text, /after/)
   assert.equal(nextFrame.results[0].remainingTurns, 1)
   const bounded = await f.session.trace(turns[0].turnId, 31)
-  // 请求与调用的摘要和正文共用同一份预算（INV-45/46）：合计正好用满
+  // 执行/观察/子任务摘要也与请求和调用共用正文预算（INV-45/46），优先结果后合计仍正好用满。
   assert.equal(
     [
       bounded.request,
@@ -302,7 +302,14 @@ test('trace connects actual compiled requests, edited observer, write receipts, 
       bounded.invocations.reduce(
         (n, item) => n + item.summary.input.length + item.summary.output.length,
         0
-      ),
+      ) +
+      bounded.executions.reduce(
+        (n, item) => n + item.source.length + (item.processOutput?.length ?? 0),
+        0
+      ) +
+      (bounded.observation.registration?.source.length ?? 0) +
+      (bounded.observation.run?.source.length ?? 0) +
+      bounded.agents.reduce((n, item) => n + item.task.length + item.answer.length, 0),
     31
   )
   assert(bounded.request.truncated)
