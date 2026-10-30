@@ -60,7 +60,7 @@ export function residentContracts(
  * 生成声明在 `declare module` 前的 JSDoc 放模块说明；没有说明时交回 undefined。模块目录的 summary 与运行说明里的模块索引都用它。
  */
 export function moduleLead(declarations: string): Optional<string> {
-  const doc = /^\s*\/\*\*\n((?:[^\n]*\n)*?)\s*\*\/\s*declare module '[^']+'/u.exec(
+  const doc = /^\s*\/\*\*((?:[^*]|\*(?!\/))*)\*\/\s*declare module (['"])[^'"]+\2/u.exec(
     declarations
   )?.[1]
   if (!doc) return undefined

@@ -43,6 +43,44 @@ const inventory = (request) =>
   JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text).partitions
     .runtime.inventory
 
+test('宿主能力目录保留单行、多行与 CRLF 模块说明，缺失说明仍回退模块名', () => {
+  const description = '持久命令台：开发服务器在任务结束后继续运行。'
+  for (const [declarations, expected] of [
+    [`/** ${description} 后续细节。 */\ndeclare module 'fixture:console' {}`, description],
+    [
+      `/**\r\n * ${description}\r\n * 后续细节。\r\n */\r\ndeclare module "fixture:console" {}`,
+      description,
+    ],
+    [
+      `/**\n * 持久命令台：开发服务器\n * 在任务结束后继续运行。\n */\ndeclare module 'fixture:console' {}`,
+      description,
+    ],
+    ["/**\n * 无句号的简介\n * 后续说明\n */\ndeclare module 'fixture:console' {}", '无句号的简介'],
+    ["declare module 'fixture:console' {}", 'fixture:console'],
+    ["/** */\ndeclare module 'fixture:console' {}", 'fixture:console'],
+    [
+      "/** 其他类型说明 */\ninterface Other {}\n/** 模块说明 */\ndeclare module 'fixture:console' {}",
+      'fixture:console',
+    ],
+  ]) {
+    const module = createCapabilityModule({
+      surface: {
+        specifier: 'fixture:console',
+        namespace: 'console',
+        revision: '1',
+        methods: [],
+        operations: {},
+        declarations,
+        template: '',
+      },
+      instanceId: 'summary-regression',
+      implementation: {},
+      context: () => assert.fail('discovery must not invoke capabilities'),
+    })
+    assert.equal(module.summary, expected)
+  }
+})
+
 test('INV-57 子任务首帧按自己的授权展示能力，不继承父任务专属入口', async (t) => {
   const parentFrames = []
   const childFrames = []

@@ -383,6 +383,38 @@ export const cookieCount = cookies.length
     expect(await space.call('browser', 'state')).toEqual({ active: false })
   })
 
+  test('CSS 像素坐标允许小数，非法坐标在触碰宿主前拒绝', async () => {
+    const harness = createHarness()
+    const space = browserSpace(harness)
+    await space.call('browser', 'click', { x: 125.5, y: 200.25 })
+    await space.call('browser', 'mouseMove', { x: 0.25, y: 9999.75 })
+    expect(harness.calls.find((call) => call.method === 'clickCoordinates')?.args[0]).toMatchObject(
+      { x: 125.5, y: 200.25 }
+    )
+    expect(harness.calls.find((call) => call.method === 'moveMouse')?.args[0]).toMatchObject({
+      x: 0.25,
+      y: 9999.75,
+    })
+    const completedCalls = harness.calls.length
+    for (const coordinate of [
+      -0.25,
+      BrowserActionLimits.coordinate + 0.25,
+      NaN,
+      Infinity,
+      -Infinity,
+    ]) {
+      for (const operation of ['click', 'mouseMove']) {
+        expect(
+          (await failureOf(space.call('browser', operation, { x: coordinate, y: 1 }))).code
+        ).toBe('VALIDATION')
+        expect(
+          (await failureOf(space.call('browser', operation, { x: 1, y: coordinate }))).code
+        ).toBe('VALIDATION')
+      }
+    }
+    expect(harness.calls).toHaveLength(completedCalls)
+  })
+
   test('INV-21 入参在做事之前核对，不合法一步都不做', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)

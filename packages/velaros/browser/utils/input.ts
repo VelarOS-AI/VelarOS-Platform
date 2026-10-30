@@ -80,7 +80,7 @@ const ignoreSelectorsSchema = z
   .max(BrowserInspectLimits.ignoreSelectors)
   .optional()
 const urlSchema = z.string().trim().min(1).max(BrowserActionLimits.urlChars)
-const coordinateSchema = z.number().int().min(0).max(BrowserActionLimits.coordinate)
+const coordinateSchema = z.number().min(0).max(BrowserActionLimits.coordinate)
 const workspacePathSchema = z.string().trim().min(1).max(BrowserFetchLimits.pathChars)
 const eventIdSchema = z.string().trim().min(1).optional()
 const mouseButtonSchema = z.enum(['left', 'middle', 'right'])
