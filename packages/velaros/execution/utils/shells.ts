@@ -48,7 +48,7 @@ export function replaceEnvironment(target: NodeJS.ProcessEnv, next: NodeJS.Proce
 /** 判断路径是否是存在的普通文件；读不到时返回 false。 */
 export function isRegularFile(path: string): boolean {
   try {
-    return statSync(path, { throwIfNoEntry: false })?.isFile() ?? false
+    return Boolean(statSync(path, { throwIfNoEntry: false })?.isFile())
   } catch (error) {
     // 缺失候选是正常探测结果；其余读取异常保留诊断并继续检查其他 Shell。
     log.debug('shell candidate unavailable', { path, error })
