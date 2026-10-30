@@ -4,7 +4,7 @@
  */
 
 /** 本单元的版本，写进内置插件；和 `@velaros-ai/velaros` 的 package.json 一致，check:project-arch 核对。 */
-export const ProjectPackageVersion = '0.6.19' as const
+export const ProjectPackageVersion = '0.6.20' as const
 
 /**
  * 项目的两件工具与内核对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
