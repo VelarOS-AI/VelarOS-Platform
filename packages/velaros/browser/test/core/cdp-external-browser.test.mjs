@@ -258,6 +258,7 @@ function createMachine() {
         .slice('--user-data-dir='.length)
       const port = 40_000 + index
       const browser = network.add(new FakeBrowser(port, `spawned-${index}`))
+      if (args.includes('--no-startup-window')) browser.tabs.clear()
       const child = {
         pid: 5_000 + index,
         exitCode: null,
@@ -515,7 +516,9 @@ describe('外部浏览器启动器', () => {
     const [{ args, browser }] = machine.spawned
     assert.ok(args.includes('--remote-debugging-port=0'))
     assert.ok(args.includes(`--user-data-dir=${userDataDir}`))
-    assert.equal(args.at(-1), 'about:blank', '起始页是空白页，会话的页面另开')
+    assert.ok(args.includes('--no-startup-window'))
+    assert.equal(args.includes('about:blank'), false, '不额外生成启动空白页')
+    assert.equal(browser.tabs.size, 2, '只保留两个调用方请求的页面')
     assert.deepEqual(machine.network.opened, ['ws://127.0.0.1:40000/devtools/browser/spawned-0'])
     assert.deepEqual(
       browser

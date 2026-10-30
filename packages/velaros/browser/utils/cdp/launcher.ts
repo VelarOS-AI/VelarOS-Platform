@@ -210,7 +210,8 @@ export function buildLaunchArgs(
   }
   args.push(...(options.args ?? []))
   addLinuxChromeStabilityFlags(args, runtime)
-  args.push('about:blank')
+  // 会话由 Target.createTarget 创建页面；启动时不要再额外生成占位空白页。
+  args.push('--no-startup-window')
 
   return args
 }
