@@ -2,18 +2,24 @@ import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 
 import type { ActChildSession } from '../contract/requires.js'
 
-import type { ActInteraction } from './act.js'
+import type { ActImage, ActInteraction } from './act.js'
+
+/** 已接受出线的快照；图片只在当前投影仍授权展示时复用。 */
+export interface ActRequestTranscript {
+  readonly logical: readonly ModelHistoryMessage[]
+  readonly sent: readonly ModelHistoryMessage[]
+  readonly positions: readonly number[]
+  readonly body: string
+  readonly images: readonly ActImage[]
+}
 import type { AgentJob } from './delegation.js'
 
 /** 打开的会话持有已接受请求的实际前缀，跨次提交仍逐条核对逻辑历史后复用。 */
 export interface ActRequestPrefix {
   /** 容量重建时清除；关闭或重建会话时自然释放，不跨会话共享。 */
-  transcript?: {
-    readonly logical: readonly ModelHistoryMessage[]
-    readonly sent: readonly ModelHistoryMessage[]
-    readonly positions: readonly number[]
-    readonly body: string
-  }
+  transcript?: ActRequestTranscript
+  /** 与纯文本基线分开保存；图片过期后可以退回文本基线，不保留失效图像。 */
+  visualTranscript?: ActRequestTranscript
 }
 
 /** 调度器持有活动权；持久状态不包含这些进程对象。 */

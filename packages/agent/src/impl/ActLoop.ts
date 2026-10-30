@@ -20,10 +20,16 @@ import {
 } from '@velaros-ai/model'
 
 import type { ActLoopOptions, ActRunServiceOptions, ActTurnDecoder } from '../contract/requires.js'
-import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
+import type {
+  ActComposedFrame,
+  ActDecodedTurn,
+  ActImage,
+  ActInput,
+  ActRunEvent,
+} from '../types/act.js'
 import type { ActRequestPrefix } from '../types/runtime.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
-import { framedRequest, requestChars } from '../utils/frame-prompt.js'
+import { framedRequest, remainingFrameImages, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
 import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
 
@@ -514,35 +520,31 @@ export class ActLoop implements ActLoopApi {
               acceptedInputTokens = usage?.inputTokens
               acceptedText = received
               acceptedResponseRef = accepted.ref
-              // 纯文本出线成为下一帧的前缀。视觉帧不追加到历史，但不能因此丢弃已沿用的文本前缀；
-              // 后续逻辑事件仍从同一基线追加，旧截图不累积，预算重建与历史变更仍会使基线失效。
+              // 图片仍在投影授权集合内时沿用整份出线，下一帧仅追加新图片；过期后退回纯文本基线。
+              // 两份基线都受逻辑历史核对与独立历史预算约束，不能通过保留前缀延长附件寿命。
               const sent = modelRequestEncoder.messages(compiled.request)
-              const previous = this.prefix.transcript
-              const positions =
-                frame.retained && previous
-                  ? [
-                      ...previous.positions,
-                      ...frame.logical
-                        .slice(previous.logical.length)
-                        .map((_, index) => previous.sent.length + index),
-                    ]
-                  : frame.logical.map((_, index) => index)
-              if (
-                this.options.frames.delta &&
-                !sent.some(
-                  (message) =>
-                    message.role === 'user' &&
-                    !isString(message.content) &&
-                    message.content.some((part) => part.type === 'image')
-                )
-              )
-                this.prefix.transcript = {
+              if (this.options.frames.delta) {
+                const transcript = {
                   logical: frame.logical,
                   sent,
-                  positions,
+                  positions: frame.positions,
                   body: frame.body,
+                  images: frame.images,
                 }
-              else if (!frame.retained) this.prefix.transcript = undefined
+                if (
+                  sent.some(
+                    (message) =>
+                      message.role === 'user' &&
+                      !isString(message.content) &&
+                      message.content.some((part) => part.type === 'image')
+                  )
+                )
+                  this.prefix.visualTranscript = transcript
+                else {
+                  this.prefix.transcript = transcript
+                  this.prefix.visualTranscript = undefined
+                }
+              }
               yield {
                 type: 'accepted',
                 runId,
@@ -624,6 +626,7 @@ export class ActLoop implements ActLoopApi {
                 // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
                 this.planner.rejected()
                 this.prefix.transcript = undefined
+                this.prefix.visualTranscript = undefined
                 const repaired = await this.frame(controller.signal, decoder, {
                   provider: true,
                   recovery: repair > 0,
@@ -892,6 +895,8 @@ export class ActLoop implements ActLoopApi {
         timers.dispose()
         signal?.removeEventListener('abort', cancel)
         this.controller = undefined
+        // 终止后附件授权由下次投影重新给出，不让空闲会话长期持有视觉缓冲。
+        if (terminal || !yielded || !isEmpty(failures)) this.prefix.visualTranscript = undefined
       }
       // 主错误已通过事件送达；提前 return 也必须向宿主暴露收尾失败。
       if (!isEmpty(failures)) {
@@ -951,11 +956,12 @@ export class ActLoop implements ActLoopApi {
     // 只在本地编译，不发送、不消费租约；固定开销不会被误算成重复状态。
     const historyTokens = async (
       compiled: CompiledModelRequest,
-      logical: readonly ModelHistoryMessage[]
+      logical: readonly ModelHistoryMessage[],
+      images: readonly ActImage[]
     ) => {
       signal.throwIfAborted()
       const plain = await this.compiler.compileModelTurn(
-        { ...compiled.request, history: logical },
+        { ...compiled.request, history: logical, images },
         model,
         limits.safetyTokens,
         this.planner.calibration()
@@ -967,7 +973,7 @@ export class ActLoop implements ActLoopApi {
       const projected = await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
       const logical = projected.history ?? []
-      const retained = retain ? this.retained(logical) : undefined
+      const retained = retain ? this.retained(logical, projected.images) : undefined
       const history = retained ? retained.history : projected.history
       const reconciled = await frames.reconcile?.(
         projected.body,
@@ -980,7 +986,7 @@ export class ActLoop implements ActLoopApi {
         {
           history,
           instructions: this.options.instructions,
-          images: projected.images,
+          images: retained?.images ?? projected.images,
           compiledPrompt:
             reconciled?.prompt ??
             (retained ? frames.delta!(body, retained.body) : projected.prompt),
@@ -1012,8 +1018,10 @@ export class ActLoop implements ActLoopApi {
         compiled,
         logical,
         body,
+        images: projected.images,
+        positions: retained?.positions ?? logical.map((_, index) => index),
         retained: Boolean(retained),
-        historyTokens: retained ? await historyTokens(compiled, logical) : 0,
+        historyTokens: retained ? await historyTokens(compiled, logical, projected.images) : 0,
       }
     }
     const fits = (current: Awaited<ReturnType<typeof compose>>) =>
@@ -1080,6 +1088,7 @@ export class ActLoop implements ActLoopApi {
       if (current.historyTokens > retainedFrameLimit) rebuiltFromTokens = current.historyTokens
       retain = false
       this.prefix.transcript = undefined
+      this.prefix.visualTranscript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
@@ -1091,6 +1100,7 @@ export class ActLoop implements ActLoopApi {
     ) {
       retain = false
       this.prefix.transcript = undefined
+      this.prefix.visualTranscript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
@@ -1221,7 +1231,9 @@ export class ActLoop implements ActLoopApi {
       return compiled
     }
     let compiled = await finalize()
-    let retainedTokens = current.retained ? await historyTokens(compiled, current.logical) : 0
+    let retainedTokens = current.retained
+      ? await historyTokens(compiled, current.logical, current.images)
+      : 0
     // 状态说明也是实际请求的一部分；追加后越界仍先收紧投影，再判断容量受阻。
     if (
       !compiled.okToSend ||
@@ -1231,6 +1243,7 @@ export class ActLoop implements ActLoopApi {
       if (retainedTokens > retainedFrameLimit) rebuiltFromTokens = retainedTokens
       retain = false
       this.prefix.transcript = undefined
+      this.prefix.visualTranscript = undefined
       current = await compose(
         compiled.okToSend && compiled.estimate.tokens <= window
           ? first
@@ -1256,6 +1269,8 @@ export class ActLoop implements ActLoopApi {
       repeatedSteps,
       logical: current.logical,
       body: current.body,
+      images: current.images,
+      positions: current.positions,
       retained: current.retained,
       retention: {
         limitTokens: retainedFrameLimit,
@@ -1272,14 +1287,26 @@ export class ActLoop implements ActLoopApi {
    * 断点跟随逻辑条目的实际位置，另保留上次请求末尾；相同内容和插入帧不共享标记。
    */
   private retained(
-    logical: readonly ModelHistoryMessage[]
-  ): Optional<{ history: readonly ModelHistoryMessage[]; body: string }> {
-    const transcript = this.prefix.transcript
-    if (!transcript || logical.length < transcript.logical.length) return undefined
+    logical: readonly ModelHistoryMessage[],
+    images: readonly ActImage[]
+  ): Optional<{
+    history: readonly ModelHistoryMessage[]
+    body: string
+    images: readonly ActImage[]
+    positions: readonly number[]
+  }> {
     const identity = ({ cacheBreakpoint: _mark, ...message }: ModelHistoryMessage) =>
       JSON.stringify(message)
-    for (const [index, message] of transcript.logical.entries())
-      if (identity(message) !== identity(logical[index]!)) return undefined
+    const transcript = [this.prefix.visualTranscript, this.prefix.transcript].find(
+      (candidate) =>
+        candidate &&
+        logical.length >= candidate.logical.length &&
+        candidate.logical.every(
+          (message, index) => identity(message) === identity(logical[index]!)
+        ) &&
+        remainingFrameImages(images, candidate.images) !== undefined
+    )
+    if (!transcript) return undefined
     // 帧里也有首次交付的事实正文；容量与历史帧预算在完整组帧后核对，重建会重新交付必要正文。
     // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
     const marked = new Set(
@@ -1292,6 +1319,11 @@ export class ActLoop implements ActLoopApi {
     return {
       history: [...sent, ...logical.slice(transcript.logical.length)],
       body: transcript.body,
+      images: remainingFrameImages(images, transcript.images)!,
+      positions: [
+        ...transcript.positions,
+        ...logical.slice(transcript.logical.length).map((_, index) => sent.length + index),
+      ],
     }
   }
 

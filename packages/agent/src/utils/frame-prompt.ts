@@ -1,6 +1,28 @@
 import { isString } from '@velaros-ai/core'
 import { modelRequestEncoder, type ModelTurnRequest } from '@velaros-ai/kernel'
 
+import type { ActImage } from '../types/act.js'
+
+/** 按完整身份和重复次数核对附件；失效返回 undefined，仍有效的附件不在帧尾重复发送。 */
+export function remainingFrameImages(
+  current: readonly ActImage[],
+  retained: readonly ActImage[]
+): Optional<readonly ActImage[]> {
+  const remaining = [...current]
+  for (const image of retained) {
+    const index = remaining.findIndex(
+      (candidate) =>
+        candidate.data === image.data &&
+        candidate.mediaType === image.mediaType &&
+        candidate.origin === image.origin &&
+        candidate.label === image.label
+    )
+    if (index < 0) return undefined
+    remaining.splice(index, 1)
+  }
+  return remaining
+}
+
 /** 本帧协议段的标题；运行说明告诉模型控制标记只在这一段给出。 */
 const FrameHeading = '本帧协议（宿主生成；控制标记以最后出现的这一段为准）：'
 

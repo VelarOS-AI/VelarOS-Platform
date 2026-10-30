@@ -41,15 +41,20 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
           providerId === 'velaros' ? injectVelarThinkingRouting(init, config.reasoningLevel) : init
         ),
     })
+    // 公共型号 ID 不透明，不能由别名猜测上游能力；宿主明确声明的断点能力必须到达发送层。
+    const cacheWire = {
+      sessionKey: false,
+      openaiBreakpoints: config.openaiExplicitCacheBreakpoints,
+    }
     return (modelId) => {
       if (providerId === 'velaros' && isBlank(modelId))
-        return languageModelWrappers.withPromptCache(provider.chat('velaros/auto'))
+        return languageModelWrappers.withPromptCache(provider.chat('velaros/auto'), cacheWire)
       if (isBlank(modelId)) {
         throw new AppError('VALIDATION', 'Velar Dev 模型必须由 Cloud 动态目录显式选择。')
       }
 
       // Cloud 下发的公共模型 ID 是不透明契约，Platform 不加前缀、不拆分也不规范化。
-      return languageModelWrappers.withPromptCache(provider.chat(modelId))
+      return languageModelWrappers.withPromptCache(provider.chat(modelId), cacheWire)
     }
   }
 

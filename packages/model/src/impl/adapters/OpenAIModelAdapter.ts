@@ -63,7 +63,8 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
               optionalWhen(
                 isOfficialOpenAiEndpoint(baseURL) &&
                   (/^gpt-5\.6(?:-(?:sol|terra|luna))?(?:-\d{4}-\d{2}-\d{2})?$/i.test(modelId) ||
-                    /^gpt-6-sol(?:$|-)/i.test(modelId)),
+                    /^gpt-6-sol(?:$|-)/i.test(modelId) ||
+                    /^gpt-6-astra(?:-\d{4}-\d{2}-\d{2})?$/i.test(modelId)),
                 true
               ),
           }

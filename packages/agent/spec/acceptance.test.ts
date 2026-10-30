@@ -14,6 +14,7 @@ import type { ActRunServiceOptions } from '../src/contract/requires.js'
 import { createAgentSupervisor } from '../src/index.js'
 import { createActRunService } from '../src/index.js'
 import { sessionCacheKey } from '../src/utils/cache-key.js'
+import { remainingFrameImages } from '../src/utils/frame-prompt.js'
 import { boundedModelStream } from '../src/utils/model-stream.js'
 
 function runFixture() {
@@ -1137,6 +1138,135 @@ test('INV-48 visual turns preserve an accepted text prefix without accumulating 
   } finally {
     await service.close()
   }
+})
+
+test.each(
+  [false, true].flatMap((textBaseline) =>
+    ['expire', 'rewrite', 'budget'].map((reason) => ({ textBaseline, reason }))
+  )
+)(
+  'INV-48 live image prefixes respect projection, history and budget: %j',
+  async ({ textBaseline, reason }) => {
+    const f = runFixture()
+    f.options.limits = { ...f.options.limits, turns: 8 }
+    const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+    const requests: ModelTurnRequest[] = []
+    const screenshot = (label: string) => ({
+      type: 'image-data' as const,
+      mediaType: 'image/png',
+      data: 'aGVsbG8=',
+      origin: 'capability' as const,
+      label,
+    })
+    const a = screenshot('A')
+    const b = screenshot('B')
+    const remaining = reason === 'expire' ? [b] : [a, b]
+    const frames = [textBaseline ? [] : [a], [a], [a, b], [a, b], remaining, remaining, []]
+    let turn = 0
+    if (reason === 'budget')
+      f.options.model.estimate = async (request) => ({
+        tokens:
+          turn === 4 &&
+          request.history?.some(
+            (message) =>
+              typeof message.content !== 'string' &&
+              message.content.some((part) => part.type === 'image')
+          )
+            ? 10_000
+            : 1,
+        precision: 'exact',
+        basis: 'fixture',
+      })
+    f.options.frames = {
+      ...f.options.frames,
+      project: async () => ({
+        body: JSON.stringify({ turn }),
+        images: structuredClone(frames[turn]!),
+        history: [...logical],
+      }),
+      delta: (body, previous) => `delta ${JSON.parse(previous).turn} -> ${JSON.parse(body).turn}`,
+    }
+    f.options.model.stream = async function* (request) {
+      requests.push(request)
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push: () => [],
+      finish: () => ({
+        message: 'work',
+        done: turn === frames.length - 1,
+        submission: {},
+        events: [],
+      }),
+    })
+    f.options.execution.invoke = async () => {
+      logical.push({ role: 'assistant', content: `accepted ${turn}` })
+      logical.push({ role: 'user', content: `result ${turn++}` })
+      if (reason === 'rewrite' && turn === 4) logical[0] = { role: 'user', content: 'revised task' }
+    }
+    const service = createActRunService(f.options)
+    const unmark = (request: ModelTurnRequest) =>
+      modelRequestEncoder.messages(request).map(({ cacheBreakpoint: _mark, ...message }) => message)
+    try {
+      const events = []
+      for await (const event of service.submit('work')) events.push(event)
+      expect(events.filter((event) => event.type === 'error')).toEqual([])
+      expect(requests).toHaveLength(frames.length)
+      for (const [index, request] of requests.entries()) {
+        const messages = unmark(request)
+        const imageParts = messages
+          .flatMap((message) => (typeof message.content === 'string' ? [] : message.content))
+          .filter((part) => part.type === 'image')
+        expect(imageParts).toHaveLength(frames[index]!.length)
+        const labels = messages
+          .flatMap((message) => (typeof message.content === 'string' ? [] : message.content))
+          .filter(
+            (part) => part.type === 'text' && part.text.startsWith('{"origin":"capability-image"')
+          )
+          .map((part) => (part.type === 'text' ? JSON.parse(part.text).label : ''))
+        expect(labels).toEqual(frames[index]!.map((image) => image.label))
+        if ([1, 2, 3, 5].includes(index)) {
+          const previous = unmark(requests[index - 1]!)
+          expect(messages.slice(0, previous.length)).toEqual(previous)
+          expect(JSON.stringify(messages.at(-1)!.content)).toContain(
+            `delta ${index - 1} -> ${index}`
+          )
+        }
+        if ([4, 6].includes(index)) {
+          const previous = unmark(requests[index - 1]!)
+          expect(messages.slice(0, previous.length)).not.toEqual(previous)
+        }
+      }
+      expect(requests[3]!.images).toHaveLength(0)
+      expect(requests[5]!.images).toHaveLength(0)
+    } finally {
+      await service.close()
+    }
+  }
+)
+
+test('INV-48 image reuse requires the complete attachment identity and multiplicity', () => {
+  const a = {
+    type: 'image-data' as const,
+    data: 'aGVsbG8=',
+    mediaType: 'image/png',
+    origin: 'capability' as const,
+    label: 'A',
+  }
+  expect(remainingFrameImages([a, a], [a])).toEqual([a])
+  expect(remainingFrameImages([a], [a, a])).toBeUndefined()
+  expect(remainingFrameImages([], [a])).toBeUndefined()
+  for (const change of [
+    { data: 'd29ybGQ=' },
+    { mediaType: 'image/jpeg' },
+    { origin: 'user' as const },
+    { label: 'B' },
+  ])
+    expect(remainingFrameImages([{ ...a, ...change }], [a])).toBeUndefined()
+  expect(remainingFrameImages([a], [])).toEqual([a])
 })
 
 test('INV-48 cancellation during local frame accounting cannot dispatch or acknowledge another request', async () => {

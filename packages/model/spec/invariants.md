@@ -34,7 +34,7 @@
 | INV-15 | 会话缓存键只发给认它的线路：OpenAI 官方直连与 OpenRouter 译成 `prompt_cache_key`，其余适配器（OpenAI 兼容、DeepSeek、Anthropic、Google、Velar Cloud、脚本与自定义）只剥掉内部标记、不出线                        | 测试     | `spec/acceptance.test.ts` |
 
 | INV-16 | GPT-6 Sol 经正式 Responses 适配器传递用户选择的 high / max 推理档位，移除不兼容的采样参数 | 测试 | `spec/acceptance.test.ts` |
-| INV-17 | 官方 HTTPS 端点的已知型号默认将内部缓存断点译为 Responses 内容块断点；兼容端点由宿主显式声明支持，配置优先于默认值，会话键独立保留。先保留调用方已有断点，再按剩余槽位选择最近的内部标记，默认隐式模式下不突破三个显式缓存槽 | 测试 | `spec/acceptance.test.ts`、`test/prompt-cache-estimate.test.ts` |
+| INV-17 | 官方 HTTPS 端点的已知型号默认将内部缓存断点译为 Responses 内容块断点；兼容端点与 Velar Cloud 托管线路由宿主显式声明支持，配置优先于默认值，会话键独立保留。先保留调用方已有断点，再按剩余槽位选择最近的内部标记，默认隐式模式下不突破三个显式缓存槽 | 测试 | `spec/acceptance.test.ts`、`test/prompt-cache-estimate.test.ts` |
 | INV-18 | 原生 Responses 完整文本响应的加密推理和消息阶段按原顺序保存；仅同驱动、同供应商型号和完整原文匹配时以 store=false 重放，截断响应不发布状态，密文不按文本字节计费估算且其容量不受文本校准缩小 | 测试 | `spec/continuation.test.ts` |
 
 | INV-19 | Responses 缺少终端的 EOF 保留部分正文、用量未知并标为可恢复中断；失败终端按明确的瞬时机器码或仅含机器码的诊断给出有限重试资格，永久错误码和取消优先，未知错误不猜测；终端已报告用量在后续失败时仍保留，真实失败文案和拒绝原因不被笼统 other 覆盖；原始失败的有界诊断不依赖 SDK 对外围字段的识别，无效或超长字段不截断推断，不接受失败响应的产物 | 测试 | `test/stream-interruption.test.ts`、`test/responses-terminal.test.ts` |

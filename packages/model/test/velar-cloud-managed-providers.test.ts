@@ -65,6 +65,43 @@ const ChatCallOptions = {
 }
 
 describe('Velar Cloud managed providers', () => {
+  test.each([undefined, true, false])(
+    'forwards only explicitly configured cache breakpoints (%s) through the managed SDK',
+    async (enabled) => {
+      const captured: CapturedRequest[] = []
+      const composition = createModelRuntimeComposition({ providerScripts: { configPaths: [] } })
+      composition.velarCloudRuntime.registerProvider('velar-dev', {
+        baseURL: 'https://cloud.test/v1/velar-dev',
+        fetch: createChatCompletionFetch(captured),
+      })
+      const factory = composition.agentModelRuntime.createAgentProvider({
+        provider: 'velar-dev',
+        apiKey: '',
+        baseURL: '',
+        openaiExplicitCacheBreakpoints: enabled,
+      })
+      await factory(VelarDevModelId).doGenerate({
+        prompt: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'stable prefix' }],
+            providerOptions: { velaros: { promptCacheBreakpoint: true } },
+          },
+          { role: 'user', content: [{ type: 'text', text: 'changing tail' }] },
+        ],
+        providerOptions: { velaros: { promptCacheKey: 'private-session' } },
+      })
+      const body = captured[0]!.body
+      expect(body.model).toBe(VelarDevModelId)
+      const messages = body.messages as Array<{ content: unknown }>
+      expect(JSON.stringify(messages[0])).toContain('stable prefix')
+      expect(JSON.stringify(body).includes('prompt_cache_breakpoint')).toBe(enabled === true)
+      expect(JSON.stringify(messages[1])).not.toContain('prompt_cache_breakpoint')
+      expect(JSON.stringify(body)).not.toContain('private-session')
+      expect(JSON.stringify(body)).not.toContain('providerOptions')
+    }
+  )
+
   test('declares Velar Dev as a Cloud-managed provider with a dynamic catalog', () => {
     const manifest = modelCatalog.manifest('velar-dev')
     const catalog = modelCatalog.catalog('velar-dev')

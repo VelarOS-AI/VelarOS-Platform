@@ -4477,6 +4477,93 @@ test('INV-74 retained maintenance material reuses only matching delivered ranges
   )
 })
 
+test('INV-74 unchanged Node result cards are compact but retain ordered membership and every changed field', () => {
+  const original = {
+    ref: 'result-a',
+    text: 'A'.repeat(2000),
+    source: 'read()',
+    bodyIncluded: true,
+    remainingTurns: 2,
+    range: { offset: 0, chars: 2000 },
+    outcome: 'succeeded',
+  }
+  const body = (results) =>
+    frameBody({ presentation: 'node', 'partitions.recent.results': results })
+  const cards = (prompt) =>
+    prompt
+      .split('\n')
+      .filter((line) => line.startsWith('{'))
+      .map((line) => JSON.parse(line))
+      .filter((card) => card.ref)
+  const initial = body([original])
+  const compact = memoryPrompt(initial, initial)
+  assert.deepEqual(cards(compact), [{ ref: original.ref, unchangedInEarlierFrame: true }])
+  assert(compact.length < memoryPrompt(initial).length / 2)
+  for (const change of [
+    { text: 'CHANGED' },
+    { source: 'other()' },
+    { bodyIncluded: false },
+    { remainingTurns: 1 },
+    { range: { offset: 1, chars: 1999 } },
+    { outcome: 'failed' },
+  ]) {
+    const card = cards(memoryPrompt(body([{ ...original, ...change }]), initial))[0]
+    assert.equal(card.unchangedInEarlierFrame, undefined)
+    for (const [key, value] of Object.entries(change))
+      if (!['text', 'source'].includes(key)) assert.deepEqual(card[key], value)
+  }
+  const reference = { ref: 'reference', text: '', source: '', bodyIncluded: false }
+  const mixed = body([original, reference])
+  const reordered = memoryPrompt(body([reference, original, reference]), mixed)
+  assert.deepEqual(
+    cards(reordered).map((card) => card.ref),
+    ['reference', 'result-a', 'reference']
+  )
+  assert.deepEqual(cards(reordered)[0], { ref: 'reference', unchangedInEarlierFrame: true })
+  assert.deepEqual(cards(memoryPrompt(body([]), mixed)), [])
+  assert.equal(cards(memoryPrompt(initial))[0].unchangedInEarlierFrame, undefined)
+})
+
+test('INV-74 Node reuses only complete identical runtime directories and retains changes and failures', () => {
+  const item = {
+    id: 'a',
+    title: 'known directory entry '.repeat(30),
+    future: { values: [0, false, ''] },
+  }
+  const original = frameBody({
+    presentation: 'node',
+    'partitions.runtime.children': [item, item],
+    'partitions.runtime.inventory': { items: [item] },
+    'partitions.runtime.jobs': [item],
+  })
+  const runtime = (prompt) => JSON.parse(prompt.split('runtime：\n')[1].split('\n')[0])
+  const full = runtime(memoryPrompt(original))
+  const delta = runtime(memoryPrompt(original, original))
+  assert.deepEqual(delta.unchangedInEarlierFrame, ['inventory', 'children', 'jobs'])
+  for (const key of delta.unchangedInEarlierFrame) assert.equal(delta[key], undefined)
+  assert.deepEqual(delta.mandatory, full.mandatory)
+  for (const value of [
+    [],
+    [item],
+    [item, { ...item, id: 'b' }],
+    [{ ...item, future: { values: [false, 0, ''] } }, item],
+  ]) {
+    const changed = JSON.parse(original)
+    changed.partitions.runtime.children = value
+    changed.partitions.runtime.mandatory[0].outcome = 'failed'
+    const current = runtime(memoryPrompt(JSON.stringify(changed), original))
+    assert(!current.unchangedInEarlierFrame?.includes('children'))
+    assert.deepEqual(current.children ?? [], value)
+    assert.equal(current.mandatory[0].outcome, 'failed')
+  }
+  const otherPresentation = JSON.parse(original)
+  delete otherPresentation.presentation
+  assert.equal(
+    runtime(memoryPrompt(original, JSON.stringify(otherPresentation))).unchangedInEarlierFrame,
+    undefined
+  )
+})
+
 test('INV-74 reference-only materials never claim delivery and source delivery is distinct from output', () => {
   const frame = frameBody({
     'partitions.workspace.notes': [

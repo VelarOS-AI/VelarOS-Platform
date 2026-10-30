@@ -369,6 +369,7 @@ class ActRunService implements ActRunServiceApi {
       Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支')
     })
     this.prefix.transcript = undefined
+    this.prefix.visualTranscript = undefined
     await this.writes
   }
   private snapshot(): ActRunSnapshot {

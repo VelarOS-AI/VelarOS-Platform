@@ -98,7 +98,7 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 场景的提示词、schema、超时与回退由产品里的场景 owner 组合，本包只负责 transport、请求策略与输出读取，不为新场景加方法。
 
 - GPT-6 Sol 通过 Responses 传递选中的推理档位，支持最高 `max`；SDK 尚未收录型号时仍按推理模型处理。
-- GPT-6 Sol 将上游历史缓存标记传给 Responses 内容块；先保留调用方显式断点，再用默认隐式模式剩余的三个显式槽选择最近的内部标记。缓存读写量与实际费用以供应商 usage 为准。
+- 官方 GPT-6 Sol 与 Astra 将上游历史缓存标记传给 Responses 内容块；先保留调用方显式断点，再用默认隐式模式剩余的三个显式槽选择最近的内部标记。缓存读写量与实际费用以供应商 usage 为准。
 - 原生 Responses 的完整文本输出保留加密推理、原始文本分段及消息阶段，只有同驱动、同供应商型号且正文逐字匹配才以 `store: false` 重放。密文不拼进材料文本，容量按原响应推理用量独立预留（未报告时保守取输出用量或上限），文本密度校准不缩小这部分。
 - 请求编译的会话估算校准支持 `textRatio` 与可选固定开销 `overheadTokens`，结果以原始文本估算为上限；精确计数、图片和不透明状态的预留独立处理。固定开销必须是非负安全整数。驱动已标记 `calibration: 'provider-usage'` 的实测校准估算保持原值，避免再次缩小。
 - 加密推理状态、签名或 `reasoning.context` 被拒时直接保留原错误，不按思考档位不兼容降档重试。
@@ -110,6 +110,7 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 历史正文的 `toolResult` 标记将已展示文本直接绑定到前一条 assistant 的调用。标准驱动将原样正文放入对应工具回包，保留缓存断点并只发送一次；没有绑定正文的调用继续使用归档回执。逻辑历史、原文与容量编译仍由宿主维护。
 - 启用 OpenAI 显式缓存的线路按 SDK 的实际落点传递工具结果断点：Responses 放在 output 内容块，Chat 放在结果 part；文本及 JSON 编码正文保持原字节。调用方在工具输出中的显式断点计入共用额度，禁用显式断点时仍保留已支持的会话缓存键。实际命中由供应商 usage 确认。
 - 显式缓存断点的型号默认值仅适用于官方 HTTPS 端点。自定义 Base URL 默认保留会话缓存键，显式断点由宿主按该端点实际能力配置 `openaiExplicitCacheBreakpoints`；该配置优先于端点与型号默认值。
+- Velar Cloud 托管线路也遵循宿主显式配置的 `openaiExplicitCacheBreakpoints`，不从不透明公共型号推断上游能力；默认不启用，不额外发送会话缓存键。
 - 启用 Responses 显式断点时，文本与 JSON 工具结果统一表示为内容块；断点移到后面的结果时，已有正文表示保持稳定。
 - `ModelInputEstimate.composition` 给出估算编码文本的 UTF-8 字节分项：系统指令、工具、assistant 历史、user 历史、工具回执、当前材料和包装；各项相加等于 total。图片和不透明推理另外预留容量，费用继续使用供应商真实用量。
 - 已知 OpenAI Chat/Responses 型号按公开编码映射延迟加载 `gpt-tokenizer`。同一驱动收到无图请求的真实输入用量后，以 BPE 文本和最近 32 份样本校准后续请求：在已见输入长度范围内，比较覆盖全部样本的线性增长上界与最大固定开销，选择较小值且不低于 BPE 文本计数；范围外或趋势不可用时沿用固定开销，统一保留 10% 余量；主线与借用该驱动的专项会话共用这些数字。冷启动、未知路由或未知型号沿用字节估算；供应商超窗后重置，旧代迟到响应不恢复旧校准。图片请求不参与取样，不透明状态独立预留，估算不充当账单。

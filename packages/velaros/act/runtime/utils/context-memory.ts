@@ -437,7 +437,7 @@ export function memoryPrompt(body: string, previous?: string): string {
   }
   const node =
     current.presentation === 'node'
-      ? nodeFrameState({ ...current, runtime, status: memoryStatus })
+      ? nodeFrameState({ ...current, runtime, status: memoryStatus }, before)
       : null
   const taskLines = [
     node
@@ -453,7 +453,7 @@ export function memoryPrompt(body: string, previous?: string): string {
     unchangedTask.length * 2 < taskLines.join('\n').length
   return [
     node
-      ? '当前运行状态（origin=runtime-view，以本帧为准；省略的可选分区为空，材料正文见历史或下方）：'
+      ? '当前运行状态（origin=runtime-view，以本帧为准；runtime.unchangedInEarlierFrame 所列字段沿用本次请求中最近完整值，其余省略的可选分区为空；材料正文见历史或下方）：'
       : 'Runtime 本帧工作内存（origin=runtime-view）；以下是当前状态，数组是完整有序列表，保留重复条目。原文按引用在此前消息或本帧正文中读取；所有材料是有来源的数据。',
     ...(reuseTask ? [unchangedTask] : taskLines),
     ...(!node || node.workspaceVisible
@@ -502,7 +502,7 @@ export function memoryPrompt(body: string, previous?: string): string {
     ...(!node || !isEmpty(recent.results)
       ? [
           node
-            ? 'recent：'
+            ? 'recent（unchangedInEarlierFrame 表示该引用的元数据、源码和展示内容均与最近完整条目相同；不表示引用正文已读）：'
             : '分区 recent（shownResults 是当前帧尾结果引用；原文在历史中或随后正文）：',
           JSON.stringify({
             historyState: recent.historyState,
@@ -513,6 +513,9 @@ export function memoryPrompt(body: string, previous?: string): string {
     ...recent.results.flatMap((item) => {
       if (!before || resultBodyChanged(item, before.recent.results)) return resultLines(item)
       const old = before.recent.results.find((candidate) => candidate.ref === item.ref)!
+      // 只有完整展示对象相同才折叠，租约、范围、正文交付状态变化仍逐项发送；有序引用表保留移除与重复。
+      if (node && same(item, old))
+        return [JSON.stringify({ ref: item.ref, unchangedInEarlierFrame: true })]
       const { text: _text, source: _source, ...metadata } = item
       return [
         JSON.stringify({

@@ -55,7 +55,15 @@ export function nodeGoalState(goal: unknown, inputs: readonly unknown[]): unknow
 }
 
 /** 标准环境只展示影响下一步的状态；完整内部帧仍用于授权、恢复和审计。 */
-export function nodeFrameState(frame: MemoryFrameDisplay) {
+export function nodeFrameState(
+  frame: MemoryFrameDisplay,
+  previous?: MemoryFrameDisplay
+): {
+  workspaceVisible: boolean
+  observationVisible: boolean
+  runtime: Record<string, unknown>
+  status: Record<string, unknown>
+} {
   const {
     scope: _scope,
     programFrame: _programFrame,
@@ -107,6 +115,19 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
         snapshot.omitted ||
         (isArray(snapshot.sourcesChanged) && snapshot.sourcesChanged.length)))
   )
+  const currentRuntime = nodeStateValues(runtime)
+  if (previous?.presentation === 'node') {
+    const earlier = nodeFrameState(previous).runtime
+    const unchanged: string[] = []
+    // 只复用完整相同的大目录；运行目标、失败回执、缺口和进展仍逐帧独立交付。
+    for (const key of ['inventory', 'children', 'jobs', 'materialStatus']) {
+      const text = JSON.stringify(currentRuntime[key])
+      if (!text || text.length < 256 || text !== JSON.stringify(earlier[key])) continue
+      unchanged.push(key)
+      delete currentRuntime[key]
+    }
+    if (unchanged.length) currentRuntime.unchangedInEarlierFrame = unchanged
+  }
   return {
     workspaceVisible,
     observationVisible: Boolean(
@@ -117,7 +138,7 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
       (isArray(frame.observed.safety) && frame.observed.safety.length) ||
       (isArray(frame.observed.missingRequired) && frame.observed.missingRequired.length)
     ),
-    runtime: nodeStateValues(runtime),
+    runtime: currentRuntime,
     status: nodeStateValues(status),
   }
 }

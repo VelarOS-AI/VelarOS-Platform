@@ -220,6 +220,10 @@ export type ActComposedFrame = {
   readonly logical: readonly ModelHistoryMessage[]
   /** 本帧运行时材料正文，下一帧据此渲染变化。 */
   readonly body: string
+  /** 当前投影授权展示的完整附件集合，含已在保留历史中的附件。 */
+  readonly images: readonly ActImage[]
+  /** 逻辑条目在本次实际出线中的位置。 */
+  readonly positions: readonly number[]
   /** 出线历史是否保留了此前的帧；增长只在同一布局之间比较。 */
   readonly retained: boolean
   /** 本地历史帧计量供请求审计；重建前的超额值另存，账单仍取真实 usage。 */
