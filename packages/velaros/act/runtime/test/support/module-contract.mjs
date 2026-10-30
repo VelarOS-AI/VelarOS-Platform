@@ -16,7 +16,10 @@ export async function verifyModule(factory, templateUrl) {
   const runtime = createOperationRuntime({ modules: [definition], journal: {} })
   try {
     const description = runtime.describe(definition.binding.moduleId)
-    assert.equal(description.template, readFileSync(templateUrl, 'utf8').trim())
+    assert.equal(
+      description.template,
+      readFileSync(templateUrl, 'utf8').replace(/\r\n/g, '\n').trim()
+    )
     const syntax = ts.createSourceFile(
       'template.js',
       description.template,

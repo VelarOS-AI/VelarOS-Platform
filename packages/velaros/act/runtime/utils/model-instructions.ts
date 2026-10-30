@@ -139,7 +139,6 @@ export function runtimeInstructions(options: {
       : '',
     '每帧工作内存列出当前状态与完整有序列表，按最新帧判断当前约束、失败、作业和材料缺口；未变原文按引用在此前消息中读取。最后一条消息末尾的「本帧协议」给出当前控制标记与完成反馈，只使用该段的新标记。继续工作用 execute / observe，需要回答用 interaction，完成用 done；单独的说明文字不会启动下一步。',
     '上下文：task 是当前请求（earlier 是上文）；workspace 是工作笔记与计划；observation / recent 是观察和执行结果；runtime.environment 是当前操作系统、路径、时间与时区；runtime.inventory 是当前能力用途、npm 包版本与 Skill 引子，totals 大于展示数量时从目录补读。memoryStatus 给出占用和整理结果；引用与摘要不代表已读原文。',
-    '文本链接用 Markdown：文件 [报告](file:///workspace/report%20final.pdf)，网页 [文档](https://example.com/docs)。文件 URI 使用当前环境中的绝对路径，空格、#、% 分别编码为 %20、%23、%25。',
     memory
       ? [
           importableNote,
