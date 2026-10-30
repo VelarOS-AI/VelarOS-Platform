@@ -587,8 +587,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
         agentTasks.set(invocation, text)
         remaining -= text.length
       }
-    const requestSummary = summarizeModelRequest(request, remaining, fullContent)
-    remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
       // 正文预算耗尽后只核对存在性；不能为返回空字符串再加载整份历史租约。
       // 身份、状态等解析所需的 raw 仍完整读取，已有缓存也保留其缺失事实。
@@ -615,32 +613,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
         sources: record.sources,
       }
     }
-    const requestTrace = await project(requestRecord)
-    const responseTrace = response ? await project(response) : null
-    const decisionTrace = decision ? await project(decision) : null
-    selected.delete(requestRecord.ref.id)
-    if (response) selected.delete(response.ref.id)
-    if (decision) selected.delete(decision.ref.id)
-    const traceRecords: ActTraceRecord[] = []
-    for (const record of records)
-      if (selected.has(record.ref.id)) traceRecords.push(await project(record))
-    const invocations: Array<ActTurnTrace['invocations'][number]> = []
-    for (const executionId of executions)
-      for (const invocation of journal.get(executionId)!) {
-        const summary = summarizeInvocation(invocation, remaining, fullContent)
-        remaining -= summary.input.length + summary.output.length
-        const rawBody = JSON.stringify(invocation)
-        const body = rawBody.slice(0, remaining)
-        remaining -= body.length
-        invocations.push({
-          id: invocation.prepared.id,
-          executionId: invocation.prepared.executionId,
-          chars: rawBody.length,
-          body,
-          truncated: body.length < rawBody.length,
-          summary,
-        })
-      }
     // 程序记录里的源码，按本页剩下的正文预算截取；记录读不出源码时记一处缺口，不让整页读取失败
     const programSource = async (
       ref: Optional<string>
@@ -658,7 +630,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
           gaps.push(`程序记录读不出源码：${ref}`)
         }
       const full = isString(text) ? text : ''
-      const source = full.slice(0, Math.max(0, remaining))
+      const source = full.slice(0, Math.max(0, fullContent ? remaining : Math.min(6000, remaining)))
       remaining -= source.length
       return {
         source,
@@ -686,7 +658,10 @@ export class RuntimeTrace implements RuntimeTraceApi {
       )
       const ref = item.sourceRef ?? ('draftRef' in item ? item.draftRef : undefined)
       const processText = executionProcessOutput(persisted)
-      const processOutput = processText?.slice(0, Math.max(0, Math.min(6000, remaining)))
+      const processOutput = processText?.slice(
+        0,
+        Math.max(0, fullContent ? remaining : Math.min(6000, remaining))
+      )
       remaining -= processOutput?.length ?? 0
       summaries.push({
         executionId: item.executionId,
@@ -762,6 +737,21 @@ export class RuntimeTrace implements RuntimeTraceApi {
       return phases.get(id)!
     }
     const claimed = new Map<string, number>()
+    const invocations: Array<ActTurnTrace['invocations'][number]> = []
+    for (const executionId of executions)
+      for (const invocation of journal.get(executionId)!) {
+        const summary = summarizeInvocation(invocation, remaining, fullContent)
+        remaining -= summary.input.length + summary.output.length
+        const rawBody = JSON.stringify(invocation)
+        invocations.push({
+          id: invocation.prepared.id,
+          executionId: invocation.prepared.executionId,
+          chars: rawBody.length,
+          body: '',
+          truncated: rawBody.length > 0,
+          summary,
+        })
+      }
     const agents: ActAgentSummary[] = []
     for (const item of dispatched) {
       if (!item.executionId) continue
@@ -812,6 +802,28 @@ export class RuntimeTrace implements RuntimeTraceApi {
         })
       }
     }
+    // 展示摘要先分配预算，原始请求、历史租约和重复 JSON 最后读取。
+    // 截图等大正文不能挤掉已成功执行的 stdout、调用结果与子任务回答。
+    const requestSummary = summarizeModelRequest(request, remaining, fullContent)
+    remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
+    const projectedInvocations = invocations.map((invocation) => {
+      const record = journal
+        .get(invocation.executionId)!
+        .find((item) => item.prepared.id === invocation.id)!
+      const rawBody = JSON.stringify(record)
+      const body = rawBody.slice(0, Math.max(0, remaining))
+      remaining -= body.length
+      return { ...invocation, body, truncated: body.length < rawBody.length }
+    })
+    const requestTrace = await project(requestRecord)
+    const responseTrace = response ? await project(response) : null
+    const decisionTrace = decision ? await project(decision) : null
+    selected.delete(requestRecord.ref.id)
+    if (response) selected.delete(response.ref.id)
+    if (decision) selected.delete(decision.ref.id)
+    const traceRecords: ActTraceRecord[] = []
+    for (const record of records)
+      if (selected.has(record.ref.id)) traceRecords.push(await project(record))
     return {
       sessionId: this.sessionId,
       turnId,
@@ -837,7 +849,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       executions: summaries,
       observation: { registration, run },
       agents,
-      invocations,
+      invocations: projectedInvocations,
       nextTurnId: toNullable(next?.ref.id),
       snapshotVersion: snapshot!.version,
       gaps: [...new Set(gaps)],

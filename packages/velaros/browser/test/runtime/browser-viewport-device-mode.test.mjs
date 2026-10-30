@@ -52,6 +52,45 @@ void test('external CDP viewport switches mobile metrics and touch together', as
   ])
 })
 
+void test('external visible viewport uses the native content size without guessed frame offsets', async () => {
+  const commands = []
+  const driver = new CdpBrowserPageDriver({
+    targets: { targetId: 'page', list: async () => [] },
+    transport: {
+      send: async (method, params) => {
+        commands.push({ method, params })
+        return method === 'Browser.getWindowForTarget' ? { windowId: 7 } : {}
+      },
+    },
+  })
+  await driver.setViewport({ width: 1440, height: 900 })
+  assert.deepEqual(commands.slice(0, 2), [
+    { method: 'Browser.getWindowForTarget', params: { targetId: 'page' } },
+    { method: 'Browser.setContentsSize', params: { windowId: 7, width: 1440, height: 900 } },
+  ])
+  assert.equal(commands[2].method, 'Emulation.setDeviceMetricsOverride')
+})
+
+void test('headless or unsupported native sizing preserves device simulation', async () => {
+  const commands = []
+  const driver = new CdpBrowserPageDriver({
+    targets: { targetId: 'page', list: async () => [] },
+    transport: {
+      send: async (method) => {
+        commands.push(method)
+        if (method === 'Browser.getWindowForTarget') throw new Error('No native window')
+        return {}
+      },
+    },
+  })
+  await driver.setViewport({ width: 390, height: 844, mobile: true })
+  assert.deepEqual(commands, [
+    'Browser.getWindowForTarget',
+    'Emulation.setDeviceMetricsOverride',
+    'Emulation.setTouchEmulationEnabled',
+  ])
+})
+
 void test('embedded Electron viewport preserves the same device semantics', async () => {
   const recorder = createCommandRecorder()
   const webContents = {

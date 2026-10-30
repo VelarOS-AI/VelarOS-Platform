@@ -36,6 +36,7 @@ import {
   isObject,
   isString,
   isTrue,
+  Log,
   optionalWhen,
   toNullable,
 } from '@velaros-ai/core'
@@ -437,6 +438,26 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
     const metrics = buildBrowserViewportDeviceMetrics(options)
+    // 外部窗口按真实内容区设置尺寸，避免设备模拟视口被工具栏和系统边框裁掉。
+    // 无窗口的远端/旧版浏览器仍可进行设备模拟，明确记录窗口适配失败。
+    if (this.options.targets) {
+      try {
+        const window = await this.options.transport.send<{ windowId?: number }>(
+          'Browser.getWindowForTarget',
+          { targetId: this.options.targets.targetId }
+        )
+        if (isFiniteNumber(window.windowId))
+          await this.options.transport.send('Browser.setContentsSize', {
+            windowId: window.windowId,
+            width: metrics.width,
+            height: metrics.height,
+          })
+      } catch (error) {
+        Log.tag('CdpBrowserPageDriver').debug('外部窗口内容区无法适配，保留设备模拟视口', {
+          error: AppError.getMessage(error),
+        })
+      }
+    }
     await this.options.transport.send('Emulation.setDeviceMetricsOverride', {
       ...metrics,
     })

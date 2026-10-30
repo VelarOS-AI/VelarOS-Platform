@@ -13,6 +13,103 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker } from './support/model-turn.mjs'
 
+test('large archived requests cannot consume execution output and call preview budgets', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  const context = createContextRuntime({ sessionId: 'output-budget', storage })
+  const request = await context.append({
+    kind: 'audit',
+    title: 'model-request',
+    body: JSON.stringify({
+      runId: 'run',
+      turn: 0,
+      repair: 0,
+      providerRequest: {
+        schemaVersion: 2,
+        model: 'test',
+        system: 'large archived request '.repeat(100_000),
+        messages: [],
+        outputTokens: 4096,
+        requestFingerprint: { id: 'fp' },
+      },
+    }),
+  })
+  const response = await context.append({ kind: 'assistant', body: 'run', sources: [request.ref] })
+  await context.append({
+    kind: 'audit',
+    title: 'model-response',
+    body: JSON.stringify({ rawRef: response.ref, status: 'accepted', decoded: { submission: {} } }),
+    sources: [request.ref],
+  })
+  const source = await context.append({
+    kind: 'audit',
+    title: 'program',
+    body: JSON.stringify({ source: 'console.log("visible output")', language: 'node' }),
+  })
+  const result = await context.append({
+    kind: 'audit',
+    title: 'script:execution:result',
+    body: JSON.stringify({
+      checked: true,
+      effect: 'none',
+      result: {
+        process: { exitCode: 0, stdout: 'visible output', stderr: '', logPath: '/logs/run.log' },
+      },
+    }),
+  })
+  await context.append({
+    kind: 'audit',
+    title: 'script:dispatch',
+    body: JSON.stringify({ controlId: 'control' }),
+    sources: [request.ref],
+  })
+  await context.append({
+    kind: 'audit',
+    title: 'script:control:control',
+    body: JSON.stringify({
+      receipt: {
+        executions: [
+          { executionId: 'execution', sourceRef: source.ref.id, resultRef: result.ref.id },
+        ],
+      },
+    }),
+  })
+  const journal = {
+    list: async () => [
+      {
+        prepared: {
+          id: 'call',
+          executionId: 'execution',
+          binding: { moduleId: 'velaros:test' },
+          operation: 'read',
+          input: { query: 'value' },
+        },
+        receipt: { outcome: 'succeeded', effect: 'none', value: { result: 'visible call result' } },
+      },
+    ],
+  }
+  const trace = await new RuntimeTrace('output-budget', storage, journal).read(
+    request.ref.id,
+    32_768
+  )
+  assert.equal(trace.executions[0].status, 'succeeded')
+  assert.match(trace.executions[0].processOutput, /visible output/)
+  assert.equal(trace.executions[0].processOutputTruncated, false)
+  assert.match(trace.invocations[0].summary.output, /visible call result/)
+  assert.equal(trace.invocations[0].summary.outputTruncated, false)
+  assert.equal(trace.request.truncated, true)
+  const total =
+    [trace.request, trace.response, trace.decision, ...trace.records, ...trace.invocations].reduce(
+      (n, v) => n + (v?.body?.length ?? 0),
+      0
+    ) +
+    trace.executions.reduce((n, v) => n + v.source.length + (v.processOutput?.length ?? 0), 0) +
+    trace.invocations.reduce((n, v) => n + v.summary.input.length + v.summary.output.length, 0) +
+    trace.requestSummary.system.length +
+    trace.requestSummary.messages.length
+  assert(total <= 32_768, 'presentation priority still obeys the total page budget')
+})
+
 test('exhausted trace budgets check presence without loading historical bodies and preserve the legacy projection', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
@@ -309,12 +406,18 @@ test('observation summaries say what a turn registered and which run fed its req
     assert.match(second.observation.registration.failure.message, /Expression expected/)
     assert.equal(second.observation.registration.source, typo)
     for (const trace of [second, last]) {
-      assert.equal(trace.observation.run.status, 'succeeded')
+      // Windows 的默认宿主无法约束只读进程；追踪应如实保留拒绝，不能把它当成成功。
+      assert.equal(
+        trace.observation.run.status,
+        process.platform === 'win32' ? 'failed' : 'succeeded'
+      )
       assert(
         Number.isFinite(trace.observation.run.durationMs) && trace.observation.run.durationMs >= 0
       )
       assert.equal(trace.observation.run.source, watch)
-      assert.equal(trace.observation.run.failure, null)
+      if (process.platform === 'win32')
+        assert.equal(trace.observation.run.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+      else assert.equal(trace.observation.run.failure, null)
       assert(
         trace.executions.every((item) => item.executionId !== trace.observation.run.executionId)
       )

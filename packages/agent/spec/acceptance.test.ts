@@ -1071,6 +1071,74 @@ test.each([0, 0.125, 1])(
   }
 )
 
+test('INV-48 visual turns preserve an accepted text prefix without accumulating screenshots', async () => {
+  const f = runFixture()
+  const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+  const requests: ModelTurnRequest[] = []
+  let turn = 0
+  f.options.frames = {
+    ...f.options.frames,
+    project: async () => ({
+      body: JSON.stringify({ turn, stable: 'persistent text evidence' }),
+      images: turn
+        ? [
+            {
+              type: 'image-data' as const,
+              mediaType: 'image/png',
+              data: 'aGVsbG8=',
+              origin: 'capability' as const,
+              label: `screenshot ${turn}`,
+            },
+          ]
+        : [],
+      history: [...logical],
+    }),
+    delta: (body) => body,
+  }
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    yield { type: 'text', text: 'accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push: () => [],
+    finish: () =>
+      turn >= 3
+        ? { message: 'done', done: true, events: [] }
+        : { message: 'work', done: false, submission: {}, events: [] },
+  })
+  f.options.execution.invoke = async () => {
+    logical.push({ role: 'assistant', content: `accepted ${turn}` })
+    logical.push({ role: 'user', content: `result ${turn++}` })
+  }
+  const service = createActRunService(f.options)
+  try {
+    const events = []
+    for await (const event of service.submit('work')) events.push(event)
+    expect(events.filter((event) => event.type === 'error')).toEqual([])
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+    expect(requests).toHaveLength(4)
+    const prefix = modelRequestEncoder
+      .messages(requests[0]!)
+      .map(({ role, content }) => ({ role, content }))
+    for (const request of requests.slice(1)) {
+      const messages = modelRequestEncoder.messages(request)
+      expect(
+        messages.slice(0, prefix.length).map(({ role, content }) => ({ role, content }))
+      ).toEqual(prefix)
+      expect(
+        messages
+          .flatMap((message) => (typeof message.content === 'string' ? [] : message.content))
+          .filter((part) => part.type === 'image')
+      ).toHaveLength(1)
+    }
+  } finally {
+    await service.close()
+  }
+})
+
 test('INV-48 cancellation during local frame accounting cannot dispatch or acknowledge another request', async () => {
   const f = runFixture()
   const cancel = new AbortController()

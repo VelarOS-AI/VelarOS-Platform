@@ -514,7 +514,8 @@ export class ActLoop implements ActLoopApi {
               acceptedInputTokens = usage?.inputTokens
               acceptedText = received
               acceptedResponseRef = accepted.ref
-              // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
+              // 纯文本出线成为下一帧的前缀。视觉帧不追加到历史，但不能因此丢弃已沿用的文本前缀；
+              // 后续逻辑事件仍从同一基线追加，旧截图不累积，预算重建与历史变更仍会使基线失效。
               const sent = modelRequestEncoder.messages(compiled.request)
               const previous = this.prefix.transcript
               const positions =
@@ -526,7 +527,7 @@ export class ActLoop implements ActLoopApi {
                         .map((_, index) => previous.sent.length + index),
                     ]
                   : frame.logical.map((_, index) => index)
-              this.prefix.transcript =
+              if (
                 this.options.frames.delta &&
                 !sent.some(
                   (message) =>
@@ -534,8 +535,14 @@ export class ActLoop implements ActLoopApi {
                     !isString(message.content) &&
                     message.content.some((part) => part.type === 'image')
                 )
-                  ? { logical: frame.logical, sent, positions, body: frame.body }
-                  : undefined
+              )
+                this.prefix.transcript = {
+                  logical: frame.logical,
+                  sent,
+                  positions,
+                  body: frame.body,
+                }
+              else if (!frame.retained) this.prefix.transcript = undefined
               yield {
                 type: 'accepted',
                 runId,
