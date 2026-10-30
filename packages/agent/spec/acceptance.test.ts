@@ -862,7 +862,14 @@ test('INV-53 a fitting current projection preserves the history before overflow 
   }
 })
 
-test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel'] as const)(
+test.each([
+  'linear',
+  'stepped',
+  'mandatory-overflow',
+  'status-overflow',
+  'status-floor-overflow',
+  'cancel',
+] as const)(
   'INV-53 bounded local projection keeps usable evidence and enforces the final work window: %s',
   async (mode) => {
     const f = runFixture()
@@ -904,10 +911,11 @@ test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel
         tokens:
           mode === 'mandatory-overflow'
             ? 4000
-            : 400 +
+            : (mode === 'status-floor-overflow' ? 2500 : 400) +
               Math.ceil(chars / 3) +
               (mode === 'stepped' && chars > 5000 ? 3000 : 0) +
-              (mode === 'status-overflow' && request.contextStatus ? 1400 : 0),
+              (mode === 'status-overflow' && request.contextStatus ? 1400 : 0) +
+              (mode === 'status-floor-overflow' && request.contextStatus ? 250 : 0),
         precision: 'exact',
         basis: 'mandatory prefix and bounded optional evidence',
       }
@@ -936,7 +944,8 @@ test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel
         const payload = JSON.parse(sent[0]!.materials[0]!.text)
         expect(payload.required).toBe('Keep all original conditions')
         expect((await f.options.model.estimate(sent[0]!)).tokens).toBeLessThanOrEqual(3000)
-        if (mode !== 'status-overflow') expect(payload.evidence.length).toBeGreaterThan(4000)
+        if (mode === 'status-floor-overflow') expect(payload.evidence.length).toBeLessThan(1000)
+        else if (mode !== 'status-overflow') expect(payload.evidence.length).toBeGreaterThan(4000)
         expect(finalizing).toBe(false)
         expect(maintained).toBe(0)
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })

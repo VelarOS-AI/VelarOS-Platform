@@ -7,6 +7,7 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -497,9 +498,14 @@ test('reused images follow their original references; missing attachment trigger
   assert.equal(f.frames[0].observation.resultRef, f.frames[1].observation.resultRef)
   assert.equal(f.frames[2].observation.freshness.reason, 'attachment-or-result-unavailable')
   assert.notEqual(f.frames[1].observation.resultRef, f.frames[2].observation.resultRef)
-  assert.equal(f.requests[0].images.length, 1)
-  assert.equal(f.requests[1].images.length, 1)
-  assert.deepEqual(f.requests[0].images, f.requests[1].images)
+  const images = (request) =>
+    modelRequestEncoder
+      .messages(request)
+      .flatMap((message) => (typeof message.content === 'string' ? [] : message.content))
+      .filter((part) => part.type === 'image')
+  assert.equal(images(f.requests[0]).length, 1)
+  assert.equal(images(f.requests[1]).length, 1)
+  assert.deepEqual(images(f.requests[0]), images(f.requests[1]))
 })
 
 test('refresh control validates its observation-only boolean contract', () => {

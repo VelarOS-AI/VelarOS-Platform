@@ -31,6 +31,8 @@ export const ContextPlanTuning = Object.freeze({
   densitySamples: 8,
   /** 已找到可发送的恢复投影后，最多本地试算几次较大正文。 */
   projectionAttempts: 4,
+  /** 最终状态说明使恢复投影略超窗时，每次只收紧这一比例的可选正文。 */
+  finalProjectionRatio: 0.9,
   /** 本次运行连续没有进展这么多步，ContextStatus 给出停滞提示。 */
   stallNotice: 3,
   /** 连续没有进展这么多步，本帧尾加反思说明。 */

@@ -1015,6 +1015,7 @@ export class ActLoop implements ActLoopApi {
         segment: projected.segment,
         phase,
         request,
+        maxChars,
         compiled,
         logical,
         body,
@@ -1251,6 +1252,20 @@ export class ActLoop implements ActLoopApi {
       )
       compiled = await finalize()
       retainedTokens = 0
+    }
+    // recoveryChars 是初始恢复投影，不是正文的硬下限。固定状态说明可能刚好把它推过窗口；
+    // 有界缩小可选正文后重新编译完整请求，仍保留投影器的必要事实，不提前进入最后交付轮。
+    for (
+      let attempt = 0;
+      (!compiled.okToSend || compiled.estimate.tokens > window) &&
+      attempt < ContextPlanTuning.projectionAttempts &&
+      current.maxChars > 1;
+      attempt++
+    ) {
+      current = await compose(
+        Math.max(1, Math.floor(current.maxChars * ContextPlanTuning.finalProjectionRatio))
+      )
+      compiled = await finalize()
     }
     if (!compiled.okToSend || compiled.estimate.tokens > window) return null
     // 只从选中的完整请求学习字符密度，本地探测不挤占后续帧的样本。
