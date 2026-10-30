@@ -369,3 +369,66 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
   assert.equal(second.turns[0].turnId, requests[1].ref.id)
   assert.equal(second.nextAfter, null)
 })
+
+for (const invalidAt of [0, 1, 'observe']) {
+  test(`a rejected batch settles every declaration at its original position (${invalidAt})`, async (t) => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'trace-rejected-batch-'))
+    t.after(() => rm(dataDir, { recursive: true, force: true }))
+    const ok = "// 只有修复重试才应运行\nimport {output} from 'velaros'\noutput(73)"
+    const typo = "import {output} from 'velaros'\noutput(1 +)"
+    const sources = [0, 1].map((i) => (i === invalidAt ? typo : `${ok}\n// position ${i}`))
+    let calls = 0
+    const runtime = await createRuntime({
+      dataDir,
+      agents: false,
+      search: false,
+      memory: false,
+      context: { maintenance: false },
+      protocol: { allowed: ['execute', 'observe', 'done'] },
+      model: {
+        id: 'trace-rejected-batch',
+        limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+        async *stream(request) {
+          calls++
+          if (calls > 2) return yield* done(request)
+          const tag = marker(request)
+          const blocks =
+            calls === 1
+              ? [
+                  ...(invalidAt === 'observe' ? [`${tag} observe\n${typo}\n${tag}`] : []),
+                  ...sources.map((source) => `${tag} execute\n${source}\n${tag}`),
+                ]
+              : [`${tag} execute\n${ok}\n${tag}`]
+          yield { type: 'text', text: blocks.join('\n') }
+          yield { type: 'finish', reason: 'stop' }
+        },
+      },
+    })
+    try {
+      const session = await runtime.openSession('s')
+      const turns = []
+      for await (const event of session.submit('检查失败后修复并重试'))
+        if (event.type === 'turn') turns.push(event.turnId)
+      const [rejected, repaired, completed] = await Promise.all(
+        turns.map((id) => session.trace(id))
+      )
+      assert.deepEqual(
+        rejected.executions.map((item) => [item.position, item.status, item.source]),
+        sources.map((source, i) => [i, i === invalidAt ? 'failed' : 'cancelled', source])
+      )
+      for (const item of rejected.executions) {
+        assert.equal(item.failure.code, item.position === invalidAt ? 'SCRIPT_CHECK' : 'CANCELLED')
+        assert.equal(item.durationMs, null, 'rejected peers did not start a process')
+      }
+      assert.equal(new Set(rejected.executions.map((item) => item.executionId)).size, 2)
+      assert.deepEqual(
+        repaired.executions.map((item) => [item.status, item.source]),
+        [['succeeded', ok]]
+      )
+      assert.deepEqual(completed.executions, [])
+    } finally {
+      await runtime.close()
+    }
+  })
+}

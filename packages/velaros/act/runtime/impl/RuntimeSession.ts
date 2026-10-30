@@ -2454,12 +2454,21 @@ export class RuntimeSession implements VelarosSession {
           observe && (isEmpty(rejected) || observe.receipt.status === 'rejected')
             ? observe.receipt
             : undefined,
-        executions: executions
-          .filter((item) => isEmpty(rejected) || item.receipt.status === 'rejected')
-          .map((item) => item.receipt),
+        // 整批预检失败时仍按声明顺序落定每一段，避免遗漏的卡片永远排队或错配失败位置。
+        executions: executions.map((item) =>
+          isEmpty(rejected) || item.receipt.status === 'rejected'
+            ? item.receipt
+            : {
+                ...item.receipt,
+                status: 'rejected',
+                executed: false,
+                code: 'CANCELLED',
+                message: '同批程序未通过检查，本段未执行',
+              }
+        ),
       }
       const published = await this.programs.publish(
-        !isEmpty(rejected) ? rejected : all,
+        all,
         control,
         receipt,
         isEmpty(rejected) && !isUndefined(observe),

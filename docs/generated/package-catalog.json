@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.18",
+      "version": "0.6.19",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",

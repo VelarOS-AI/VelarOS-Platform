@@ -160,7 +160,7 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.18",
+      "version": "0.6.19",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@modelcontextprotocol/sdk": "^1.31.0",
