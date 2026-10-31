@@ -13,3 +13,5 @@ ts-morph/prettier 原先属于按需加载的 JS/TS Skill，现在基础环境�
 安装审计报告 GHSA-g3hv-75wg-m249：minimatch 10.2.6 的优化阶段可能放大输入，见[官方公告](https://github.com/advisories/GHSA-g3hv-75wg-m249)及[上游修复](https://github.com/isaacs/minimatch/commit/77a0f5c)。回移上游模式数量限制和大型集合跳过二次去重的修复到 ESM/CommonJS 两个入口，保持旧 API；ts-morph 的修复依赖闭包随 Script 和 JS/TS Skill 打包。旧的 3.1.5、5.1.9 没有该优化阶段，按实际源码哈希逐份核对。安全门先校验所有可达副本的内容身份及行为，再处理版本范围公告；新增版本、漏补丁或内容变化均使检查失败。没有全局强行升级旧调用方到不同 API。
 
 本轮按用户要求只提交源码、不发布。project 强制使用与按需使用的真实任务对照另行记录，统一 Velar Dev GPT-5.6 Sol，不能把本地库功能测试当成模型效率结论。
+
+Desktop 联调发现新增库说明使常驻指令超过原有 3800 字符预算。保留预算，压缩重复用途和验证说明，继续保留测试发现、真实入口、消费入口及按变更补验的要求；未通过提高长度上限放行。标准 Node 回归与模块所有权检查通过，完整 Desktop 接缝检查另在该仓记录。
