@@ -217,6 +217,11 @@ export interface BrowserPageDriver {
   dragCoordinates?(options: BrowserPageDriverDragCoordinatesOptions): Promise<void>
   /** 改受控页面的视口尺寸与设备像素比。 */
   setViewport?(options: BrowserViewportOptions): Promise<void>
+  /** 仅为截图临时调整 CSS 视口，不改原生窗口；返回的还原操作必须在 finally 调用，保留原有显式仿真。 */
+  temporaryViewport?(
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<() => Promise<void>>
   /** 给 file input 塞文件；找不到目标时返回 false。 */
   setFileInputFiles?(options: BrowserPageDriverFileInputOptions): Promise<boolean>
   /** 把当前页面打印成 PDF 字节。 */

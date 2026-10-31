@@ -31,6 +31,8 @@ const BlockedPageText = Object.freeze([
   /verify (?:that )?you are (?:a )?human/iu,
   /captcha/iu,
 ])
+const RateLimitedPageText =
+  /too many requests|rate limit(?:ed| exceeded)?|请求过于频繁|访问过于频繁/iu
 
 /** 这次按什么顺序试搜索引擎：用户选的在前，另一个兜底（宿主报了别的值按 Google 算）。 */
 export function engineOrder(preferred: WebSearchEngineId): WebSearchEngineId[] {
@@ -167,6 +169,8 @@ export function blockedReason(pageUrl: string, text: string, recognized: number)
   const address = blockedAddress(pageUrl)
   if (address) return address
   if (recognized > 0) return null
+  const rateLimit = RateLimitedPageText.exec(text)?.[0]
+  if (rateLimit) return `搜索来源暂时限流（页面上写着「${rateLimit}」）`
   const marker = BlockedPageText.map((pattern) => pattern.exec(text)?.[0]).find(isNonBlankString)
   return marker ? `被拦成了验证页（页面上写着「${marker}」）` : null
 }

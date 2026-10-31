@@ -18,7 +18,7 @@
       "domain": "core",
       "directory": "packages/core",
       "name": "@velaros-ai/core",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "description": "VelarOS 跨领域共享的底层：断言、错误、结果、类型守卫与无领域语义的通用原语，外加三个底层单元——platform（跨平台约定：路径文本、shell 命令规格、进程与系统信息命令、应用与数据目录、VelarOS 共享资源目录）、text-files（磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读）与 path-rules（glob 匹配、.gitignore 的解析与判定、遍历时的忽略策略）。",
       "exportSubpaths": [
         ".",
@@ -67,7 +67,7 @@
       "domain": "foundations",
       "directory": "packages/script",
       "name": "@velaros-ai/script",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "description": "Native Node.js execution with mature file, source, data and document libraries, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.23",
+      "version": "0.6.24",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -152,7 +152,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",

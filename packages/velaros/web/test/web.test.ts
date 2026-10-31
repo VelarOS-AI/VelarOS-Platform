@@ -188,6 +188,9 @@ describe('认验证页', () => {
       '请进行人机验证',
       'Please verify you are a human',
       'Solve this CAPTCHA to continue',
+      '429 Too Many Requests',
+      'Rate limit exceeded',
+      '请求过于频繁，请稍后再试',
     ]) {
       expect({
         text,
@@ -234,7 +237,7 @@ describe('正文', () => {
     expect(durationText(4_500)).toBe('4.5 秒')
     expect(durationText(90_000)).toBe('90 秒')
     expect(durationText(600_000)).toBe('10 分钟')
-    expect(durationText(WebTuning.search.googleBackoffMs)).toBe('12 小时')
+    expect(durationText(WebTuning.search.googleBackoffMs)).toBe('1 分钟')
   })
 
   test('PDF 按媒体类型认', () => {

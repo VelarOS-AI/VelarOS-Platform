@@ -57,7 +57,7 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
     }
     const timers = new TimerScope({ name: 'ElectronProtocolChannel' })
     try {
-      return await timers.withTimeout(
+      const result = await timers.withTimeout(
         BrowserTuning.protocol.commandTimeoutMs,
         () =>
           this.webContents.debugger.sendCommand(
@@ -70,6 +70,13 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
           timeoutMessage: `${method} 超过 ${BrowserTuning.protocol.commandTimeoutMs} 毫秒没有回话。`,
         }
       )
+      if (!sessionId)
+        electronDebuggerHolds
+          .viewportState(this.webContents)
+          .record(this, method, params, (restoreMethod, restoreParams) =>
+            this.webContents.debugger.sendCommand(restoreMethod, restoreParams, this.rootSessionId)
+          )
+      return result
     } catch (error) {
       if (error instanceof Error && error.name === 'TimeoutError')
         throw new AppError('TIMEOUT', error.message, error)
@@ -144,7 +151,8 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
     this.closed = true
     this.webContents.debugger.off('message', this.handleMessage)
     this.webContents.debugger.off('detach', this.handleDetach)
-    electronDebuggerHolds.deleteProtocol(this.webContents)
+    electronDebuggerHolds.deleteProtocol(this.webContents, this.rootSessionId)
+    electronDebuggerHolds.viewportState(this.webContents).forget(this)
     this.children.clear()
     for (const listener of [...this.closeListeners]) listener()
     this.closeListeners.clear()

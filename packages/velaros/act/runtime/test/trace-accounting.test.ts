@@ -7,8 +7,10 @@ import type {
   ContextStorage,
 } from '@velaros-ai/context'
 import { createContextInvocationJournal, createContextRuntime } from '@velaros-ai/context'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RuntimeTrace } from '../impl/RuntimeTrace.js'
+import { ActRuntimeTuning } from '../utils/tuning.js'
 import {
   modelAccounting,
   summarizeVerificationAttempt,
@@ -206,8 +208,202 @@ function fixture() {
       return []
     },
   } as unknown as ContextInvocationJournalApi
-  return { state, add, storage, journal, lookups }
+  return { state, add, storage, journal, lookups, bodies }
 }
+
+test('trace reuses bounded page facts but observes new responses and missing bodies on the next page', async () => {
+  const f = fixture()
+  const shared = f.add('shared-evidence', { evidence: true })
+  f.bodies.delete(shared.objectId)
+  const requests = Array.from({ length: 3 }, (_, turn) =>
+    f.add('model-request', {
+      runId: 'run',
+      turn,
+      repair: 0,
+      request: {
+        materials: [
+          {
+            origin: 'runtime-view',
+            text: JSON.stringify({
+              goals: [{ record: { ref: shared.ref } }],
+            }),
+          },
+        ],
+      },
+    })
+  )
+  const counts = new Map<string, number>()
+  const port = {
+    ...f.storage,
+    get: async (sessionId: string, id: string) => {
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+      return f.storage.get(sessionId, id)
+    },
+  }
+  const trace = new RuntimeTrace('s', port, f.journal)
+  const first = await trace.page({ limit: 3, fullContent: true })
+  expect(first.turns).toHaveLength(3)
+  for (const request of requests) expect(counts.get(request.objectId)).toBe(1)
+  expect(counts.get(shared.objectId)).toBe(1)
+  expect(first.turns.every((turn) => turn.gaps.includes(`原文缺失：${shared.ref.id}`))).toBe(true)
+  f.bodies.set(shared.objectId, JSON.stringify({ evidence: true }))
+  const response = f.add(
+    'model-response',
+    {
+      status: 'accepted',
+      usage: { inputTokens: 20, outputTokens: 3, cacheReadTokens: 0 },
+    },
+    [requests[0].ref]
+  )
+  f.state.version++
+  const second = await trace.page({ limit: 3, fullContent: true })
+  expect(counts.get(shared.objectId)).toBe(2)
+  expect(second.snapshotVersion).toBe(f.state.version)
+  expect(second.turns[0].decision?.ref).toEqual(response.ref)
+  expect(second.turns[0].modelAccounting.usage.coverage).toBe('known')
+  expect(second.turns.every((turn) => !turn.gaps.includes(`原文缺失：${shared.ref.id}`))).toBe(true)
+})
+
+test('branch trace selects only current root bindings and still rejects unrelated sessions', async () => {
+  const f = fixture()
+  const binding = f.add('model-tool:node:child', {
+    sessionId: 'child',
+    rootSessionId: 's',
+    rootTaskId: 'task',
+    status: 'open',
+  })
+  const child = { ...f.state, records: [] }
+  const loads: string[] = []
+  const selections: unknown[] = []
+  const port = {
+    ...f.storage,
+    load: async (id: string) => {
+      loads.push(id)
+      return id === 's' ? f.state : child
+    },
+    selectSnapshot: async (id: string, selection: unknown) => {
+      expect(id).toBe('s')
+      selections.push(selection)
+      const { records: _records, ...metadata } = f.state
+      return { metadata, records: [binding] }
+    },
+  }
+  const trace = new RuntimeTrace('s', port, f.journal)
+  expect((await trace.page({ sessionId: 'child' })).turns).toEqual([])
+  expect(loads).toEqual(['child'])
+  expect(selections).toEqual([[{ titlePrefix: 'model-tool:node:', latestPerTitle: true }]])
+  await expect(trace.page({ sessionId: 'unrelated' })).rejects.toThrow('支线不属于指定根会话')
+  expect(loads).toEqual(['child'])
+  f.bodies.set(binding.objectId, JSON.stringify({ sessionId: 'other', rootSessionId: 's' }))
+  await expect(trace.page({ sessionId: 'child' })).rejects.toThrow('支线不属于指定根会话')
+})
+
+test('trace preserves oversized shared evidence without retaining it in the page cache', async () => {
+  const f = fixture()
+  const evidence = f.add('large-evidence', 'x'.repeat(ActRuntimeTuning.tracePageCacheChars + 1))
+  for (let turn = 0; turn < 2; turn++)
+    f.add('model-request', {
+      runId: 'run',
+      turn,
+      repair: 0,
+      request: {
+        materials: [
+          {
+            origin: 'runtime-view',
+            text: JSON.stringify({
+              goals: [{ record: { ref: evidence.ref } }],
+            }),
+          },
+        ],
+      },
+    })
+  let reads = 0
+  const port = {
+    ...f.storage,
+    get: async (sessionId: string, id: string) => {
+      if (id === evidence.objectId) reads++
+      return f.storage.get(sessionId, id)
+    },
+  }
+  const page = await new RuntimeTrace('s', port, f.journal).page({ limit: 2, fullContent: true })
+  expect(reads).toBe(2)
+  for (const turn of page.turns) {
+    const record = turn.records.find((item) => item.ref.id === evidence.ref.id)
+    expect(record?.body).toBe(f.bodies.get(evidence.objectId))
+    expect(record?.truncated).toBe(false)
+  }
+})
+
+test('metadata-only trace cursors preserve branches and verification without reading old model bodies', async () => {
+  const f = fixture()
+  const binding = {
+    sessionId: 'child',
+    parentSessionId: 's',
+    rootSessionId: 's',
+    kind: 'agent',
+    depth: 1,
+    activationId: 'active-child',
+    deadline: Number.MAX_SAFE_INTEGER,
+    status: 'active',
+  } as const
+  f.add('model-tool:node:child', binding)
+  const request = f.add('model-request', { runId: 'old', turn: 0, large: 'x'.repeat(100_000) })
+  f.add('task:verification:task:a:started', attempt('started'))
+  f.add('task:verification:task:a:settled', attempt('settled'))
+  const gets: string[] = []
+  const port = {
+    ...f.storage,
+    get: async (sessionId: string, id: string) => {
+      gets.push(id)
+      return f.storage.get(sessionId, id)
+    },
+  }
+  const page = await new RuntimeTrace('s', port, f.journal).page({
+    after: Number.MAX_SAFE_INTEGER,
+    activityAfter: Number.MAX_SAFE_INTEGER,
+    limit: 1,
+    activityLimit: 1,
+    maxChars: 1,
+  })
+  expect(page.branches).toEqual([binding])
+  expect(page.turns).toEqual([])
+  expect(page.sessionActivity.entries).toEqual([])
+  expect(page.accounting.verificationCost.charges).toHaveLength(1)
+  expect(page.accounting.verificationCost.coverage).toBe('complete')
+  expect(gets).not.toContain(request.objectId)
+})
+
+test('trace reading yields to pending IO callbacks between expensive synchronous facts', async () => {
+  const f = fixture()
+  f.add('model-request', { runId: 'run', turn: 0, repair: 0 })
+  f.add('model-request', { runId: 'run', turn: 1, repair: 0 })
+  let timer: Promise<void> | undefined
+  let yielded = false
+  let reads = 0
+  const port = {
+    ...f.storage,
+    get: async (sessionId: string, id: string) => {
+      reads++
+      if (reads === 1) {
+        timer = TimerScope.sleep(0).then(() => {
+          yielded = true
+        })
+        const until = Date.now() + 12
+        while (Date.now() < until) {
+          /* represent a synchronous storage/JSON read */
+        }
+      } else expect(yielded).toBe(true)
+      return f.storage.get(sessionId, id)
+    },
+  }
+  try {
+    await new RuntimeTrace('s', port, f.journal).page({ limit: 2, fullContent: true })
+    expect(reads).toBe(2)
+    expect(yielded).toBe(true)
+  } finally {
+    await timer
+  }
+})
 
 function persistedFixture() {
   const states = new Map<string, ContextState>()

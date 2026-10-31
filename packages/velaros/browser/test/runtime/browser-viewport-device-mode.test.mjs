@@ -17,6 +17,51 @@ const createCommandRecorder = () => {
   }
 }
 
+void test('external screenshots restore the latest explicit protocol owner without resizing the native window', async () => {
+  const commands = []
+  let attached = 0
+  const transport = (owner) => ({
+    send: async (method, params) => {
+      commands.push({ owner, method, params })
+      return method === 'Browser.getWindowForTarget' ? { windowId: 7 } : {}
+    },
+    onClose: () => () => {},
+    onAnyEvent: () => () => {},
+    dispose: () => commands.push({ owner, method: 'dispose' }),
+  })
+  const driver = new CdpBrowserPageDriver({
+    transport: transport('host'),
+    targets: {
+      targetId: 'page',
+      list: async () => [],
+      attach: async () => transport(`channel-${++attached}`),
+    },
+  })
+  await driver.setViewport({ width: 960, height: 720, mobile: false })
+  const model = await driver.openProtocolChannel()
+  const metrics = { width: 720, height: 540, mobile: false, deviceScaleFactor: 2 }
+  await model.send('Emulation.setDeviceMetricsOverride', metrics)
+  commands.length = 0
+  const restore = await driver.temporaryViewport({ width: 820, height: 820 })
+  await restore()
+  assert.equal(
+    commands.some(({ method }) => method.startsWith('Browser.')),
+    false
+  )
+  assert.deepEqual(commands.slice(-2), [
+    { owner: 'channel-1', method: 'Emulation.clearDeviceMetricsOverride', params: {} },
+    { owner: 'channel-1', method: 'Emulation.setDeviceMetricsOverride', params: metrics },
+  ])
+  await driver.setViewport({ width: 900, height: 600, mobile: false })
+  commands.length = 0
+  await (
+    await driver.temporaryViewport({ width: 820, height: 820 })
+  )()
+  assert.equal(commands.at(-1).owner, 'host')
+  assert.equal(commands.at(-1).params.width, 900)
+  await model.close()
+})
+
 void test('external CDP viewport switches mobile metrics and touch together', async () => {
   const recorder = createCommandRecorder()
   const driver = new CdpBrowserPageDriver({ transport: recorder })
@@ -95,6 +140,7 @@ void test('embedded Electron viewport preserves the same device semantics', asyn
   const recorder = createCommandRecorder()
   const webContents = {
     debugger: {
+      once: () => {},
       attach: () => {},
       isAttached: () => true,
       sendCommand: recorder.send,

@@ -15,10 +15,12 @@ import {
 } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ModelToolBinding } from '../types/model-tools.js'
 import type { ProgramLeaseState, ScriptControlReceipt } from '../types/runtime.js'
 import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
+import type { TraceReadState } from '../types/trace-read.js'
 import type {
   ActAgentSummary,
   ActExecutionSummary,
@@ -95,7 +97,16 @@ export class RuntimeTrace implements RuntimeTraceApi {
       maxChars > 8_000_000
     )
       throw new AppError('VALIDATION', '追踪分页或正文预算无效')
-    const root = await this.storage.load(this.sessionId)
+    // 同步存储的 async 方法只产生微任务；每页先让 IO 和取消回调得到运行机会。
+    await TimerScope.sleep(0)
+    let root: Nullable<ContextState>
+    if (sessionId !== this.sessionId && this.storage.selectSnapshot) {
+      // 支线只需要根的当前归属目录，不能为每一页重复解析根的全部历史。
+      const selected = await this.storage.selectSnapshot(this.sessionId, [
+        { titlePrefix: 'model-tool:node:', latestPerTitle: true },
+      ])
+      root = selected ? { ...selected.metadata, records: selected.records } : null
+    } else root = await this.storage.load(this.sessionId)
     const nodes = [
       ...new Map(
         (root?.records ?? [])
@@ -121,12 +132,24 @@ export class RuntimeTrace implements RuntimeTraceApi {
       (record) => record.title === 'model-request' && record.sequence > after
     )
     const trace = new RuntimeTrace(sessionId, this.storage, this.journal)
+    const readState: TraceReadState = {
+      records: new Map((snapshot?.records ?? []).map((record) => [record.ref.id, record])),
+      bodies: new Map(),
+      bodyChars: 0,
+      yieldedAt: Date.now(),
+    }
     const turns: ActTurnTrace[] = []
     let remaining = fullContent ? Number.POSITIVE_INFINITY : maxChars
     let cursor = after
     for (const request of requests.slice(0, limit)) {
       if (remaining < 1) break
-      const value = await trace.readSnapshot(request.ref.id, remaining, snapshot, fullContent)
+      const value = await trace.readSnapshot(
+        request.ref.id,
+        remaining,
+        snapshot,
+        fullContent,
+        readState
+      )
       turns.push(value)
       cursor = request.sequence
       remaining -=
@@ -279,6 +302,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
   ): Promise<ActTurnTrace> {
     if (!turnId || !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > 8_000_000)
       throw new AppError('VALIDATION', '回合身份或追踪正文预算无效')
+    await TimerScope.sleep(0)
     const snapshot = await this.storage.load(this.sessionId)
     return this.readSnapshot(turnId, maxChars, snapshot)
   }
@@ -326,20 +350,38 @@ export class RuntimeTrace implements RuntimeTraceApi {
     turnId: string,
     maxChars: number,
     snapshot: Nullable<ContextState>,
-    fullContent = false
+    fullContent = false,
+    shared?: TraceReadState
   ): Promise<ActTurnTrace> {
     const records = snapshot?.records ?? []
-    const recordById = new Map(records.map((record) => [record.ref.id, record]))
+    const recordById = shared?.records ?? new Map(records.map((record) => [record.ref.id, record]))
     const requestRecord = records.find(
       (record) => record.ref.id === turnId && record.title === 'model-request'
     )
     if (!requestRecord) throw new AppError('NOT_FOUND', '当前会话没有这个模型回合')
     const cache = new Map<string, Nullable<string>>()
     const gaps: string[] = []
+    let yieldedAt = shared?.yieldedAt ?? Date.now()
     const raw = async (record: ContextRecord): Promise<Nullable<string>> => {
+      if (Date.now() - yieldedAt >= ActRuntimeTuning.traceReadSliceMs) {
+        await TimerScope.sleep(0)
+        yieldedAt = Date.now()
+        if (shared) shared.yieldedAt = yieldedAt
+      }
       if (!cache.has(record.ref.id)) {
-        const body = await this.storage.get(this.sessionId, record.objectId)
+        const body = shared?.bodies.has(record.objectId)
+          ? shared.bodies.get(record.objectId)!
+          : await this.storage.get(this.sessionId, record.objectId)
         cache.set(record.ref.id, body)
+        if (
+          shared &&
+          !shared.bodies.has(record.objectId) &&
+          shared.bodies.size < ActRuntimeTuning.tracePageCacheEntries &&
+          shared.bodyChars + (body?.length ?? 0) <= ActRuntimeTuning.tracePageCacheChars
+        ) {
+          shared.bodies.set(record.objectId, body)
+          shared.bodyChars += body?.length ?? 0
+        }
         if (isNull(body)) gaps.push(`原文缺失：${record.ref.id}`)
       }
       return cache.get(record.ref.id)!
@@ -786,6 +828,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         const startedAt = Date.parse(phase?.first.createdAt ?? '')
         const settledAt = Date.parse((resultRecord ?? phase?.last)?.createdAt ?? '')
         agents.push({
+          ...(Number.isFinite(startedAt) ? { startedAt } : {}),
           id: job.id,
           sessionId: job.sessionId,
           executionId: item.executionId,

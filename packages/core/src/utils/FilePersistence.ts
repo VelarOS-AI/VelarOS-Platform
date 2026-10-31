@@ -16,7 +16,10 @@ import { dirname } from 'node:path'
 import { logRuntime } from '../logger'
 import { isUndefined } from '../typeGuards'
 
+import { TimerScope } from './TimerScope'
+
 const DefaultEncoding: BufferEncoding = 'utf-8'
+const WindowsRenameRetryDelaysMs = [20, 40, 80, 160] as const
 const log = logRuntime.tag('FilePersistence')
 
 interface AtomicTextFileWriteOptions {
@@ -42,6 +45,26 @@ function createAtomicTempPath(filePath: string): string {
   return `${filePath}.${process.pid}.${randomUUID()}.tmp`
 }
 
+/** Windows 共享读取或文件扫描可能短暂占用目标；只重试原子替换，不删除正式文件或重写临时正文。 */
+async function publishAtomicFile(tmpPath: string, filePath: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(tmpPath, filePath)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      const delay = WindowsRenameRetryDelaysMs[attempt]
+      if (
+        process.platform !== 'win32' ||
+        isUndefined(delay) ||
+        (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY')
+      )
+        throw error
+      await TimerScope.sleep(delay)
+    }
+  }
+}
+
 /**
  * 原子写文件：先写同目录临时文件，再 rename 覆盖正式文件。
  * 这样进程在写入中途退出时，正式文件不会留下半截内容。
@@ -55,7 +78,7 @@ async function writeFileAtomically(
   const tmpPath = createAtomicTempPath(filePath)
   try {
     await writeFile(tmpPath, content, toWriteFileOptions(options))
-    await rename(tmpPath, filePath)
+    await publishAtomicFile(tmpPath, filePath)
   } catch (error) {
     await rm(tmpPath, { force: true }).catch((cleanupError) => {
       log.warn('原子写入失败后清理临时文件失败', {

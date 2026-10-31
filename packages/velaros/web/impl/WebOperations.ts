@@ -99,6 +99,10 @@ export interface WebOperationsApi {
 export class WebOperations implements WebOperationsApi {
   /** 进程里记着的 Google 退避到什么时候（毫秒时间戳）；从没搜不通过、或者后来又搜通了是 null。 */
   private googleBackoffUntil: Nullable<number> = null
+  /** 并行子任务共用搜索源，只允许一个 Google 探测在途，不把其他 query 的结果混用。 */
+  private googleAttemptRunning = false
+  /** 持久化失败时仍记住同一超长期限的收敛结果，成功探测后也不重启冷却。 */
+  private clampedBackoff: Nullable<{ source: number; until: number }> = null
 
   constructor(private readonly clock: WebOperationsClock) {}
 
@@ -108,15 +112,26 @@ export class WebOperations implements WebOperationsApi {
     const googleUntil = this.googleBackoff(ctx)
     const failures: WebEngineFailure[] = []
     for (const engine of engineOrder(ctx.web.searchEngine())) {
-      if (engine === 'google' && isPresent(googleUntil) && this.clock.now() < googleUntil) {
+      const currentUntil = Math.max(googleUntil ?? 0, this.googleBackoffUntil ?? 0)
+      if (engine === 'google' && this.googleAttemptRunning) {
+        failures.push({ engine, reason: '已有搜索请求正在探测此来源，本次使用另一来源' })
+        continue
+      }
+      if (engine === 'google' && this.clock.now() < currentUntil) {
         failures.push({
           engine,
-          reason: `${durationText(WebTuning.search.googleBackoffMs)}内搜不通过，这次没再试`,
+          reason: `搜索暂缓，约${durationText(currentUntil - this.clock.now())}后可再试`,
         })
         continue
       }
-      const attempt = await this.searchWith(engine, request, ctx)
-      if (engine === 'google') this.noteGoogle(attempt.ok, ctx)
+      if (engine === 'google') this.googleAttemptRunning = true
+      let attempt: WebEngineAttempt
+      try {
+        attempt = await this.searchWith(engine, request, ctx)
+        if (engine === 'google') this.noteGoogle(attempt, ctx)
+      } finally {
+        if (engine === 'google') this.googleAttemptRunning = false
+      }
       if (attempt.ok) return { query: request.query, engine, results: attempt.results }
       failures.push({ engine, reason: attempt.reason })
     }
@@ -171,6 +186,19 @@ export class WebOperations implements WebOperationsApi {
     } catch (error) {
       log.warn('reading the search engine backoff failed', { error: AppError.getMessage(error) })
     }
+    const maximum = this.clock.now() + WebTuning.search.googleBlockedBackoffMs
+    if (this.clampedBackoff && stored === this.clampedBackoff.source) {
+      stored = this.clampedBackoff.until
+    } else if (isPresent(stored) && stored > maximum) {
+      // 旧版本或异常时钟写入的超长冷却只收敛一次，仍保留完整的验证页冷却窗口。
+      this.clampedBackoff = { source: stored, until: maximum }
+      stored = maximum
+      try {
+        ctx.web.engineBackoff?.write('google', maximum)
+      } catch (error) {
+        log.warn('收敛搜索来源退避期限失败', { error: AppError.getMessage(error) })
+      }
+    }
     const known = [this.googleBackoffUntil, stored].filter(isFiniteNumber)
     return isEmpty(known) ? null : Math.max(...known)
   }
@@ -178,12 +206,14 @@ export class WebOperations implements WebOperationsApi {
   /**
    * 记下这次 Google 搜没搜通：搜通了就忘掉进程里的退避；搜不通就退避一段时间，宿主给了退避记忆也写进去（写不进去只记一笔）。
    */
-  private noteGoogle(ok: boolean, ctx: WebOperationContext): void {
-    if (ok) {
+  private noteGoogle(attempt: WebEngineAttempt, ctx: WebOperationContext): void {
+    if (attempt.ok) {
       this.googleBackoffUntil = null
       return
     }
-    const until = this.clock.now() + WebTuning.search.googleBackoffMs
+    const until =
+      this.clock.now() +
+      (attempt.blocked ? WebTuning.search.googleBlockedBackoffMs : WebTuning.search.googleBackoffMs)
     this.googleBackoffUntil = until
     try {
       ctx.web.engineBackoff?.write('google', until)
@@ -261,7 +291,7 @@ export class WebOperations implements WebOperationsApi {
     )
     const results = searchResults(engine, hits, request.limit)
     const blocked = blockedReason(page.url(), scan.text, results.length)
-    if (blocked) return { ok: false, reason: blocked }
+    if (blocked) return { ok: false, reason: blocked, blocked: true }
     if (results.length > 0 || scan.noResults) return { ok: true, results }
     return {
       ok: false,

@@ -7,7 +7,7 @@
 // 跑法（先在 packages/velaros 下 bun run build），在 Platform 根：
 //   perl -e 'alarm 240; exec @ARGV' node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/browser/test/probes/electron-full-page-screenshot.probe.mjs
 // 产品里用的 Electron 版本不同时，换成产品仓 node_modules 里的 Electron 再跑一遍。每一项打一行 ✓ 或 ✗，全过退出码 0。
-// 只验 screenshot.width/height 连续改视口可追加 --viewport-only；全部窗口保持隐藏，不接现有产品页面。
+// 只验 screenshot.width/height 临时视口与恢复可追加 --viewport-only；全部窗口保持隐藏，不接现有产品页面。
 // Windows 从未显示的窗口可能没有合成帧；追加 --offscreen 使用真正离屏合成，仍核对原 PNG/网格断言。
 // --report=<绝对路径> 直接保存核验日志，避免 GUI 子系统吞 stdout；--diagnostic 另记录 CDP 阶段。
 import { appendFileSync, mkdtempSync } from 'node:fs'
@@ -43,6 +43,7 @@ const cellColor = (row, column) => [
 /**
  * 长网格页：rows 行、columns 列，每格 100×100，左上角的白底条码是它的行号（7 位）与列号（5 位），黑块是 0。
  * 顶上一条 30 像素高的 fixed 洋红顶栏；button 给一个按钮（元素标注会给它画框）。
+ * 隐藏原生滚动条，避免 Windows 固定滚动条与 macOS overlay 滚动条改变内容区宽度；仍严格核对 PNG 像素与滚动位置。
  */
 function gridPage({ rows, columns, meta, button }) {
   const viewportMeta = meta
@@ -53,6 +54,7 @@ function gridPage({ rows, columns, meta, button }) {
     : ''
   return `<!doctype html><html><head><title>网格</title>${viewportMeta}<style>
 html,body{margin:0;padding:0}
+html{scrollbar-width:none}::-webkit-scrollbar{display:none}
 .band{height:100px;display:flex}
 .cell{flex:none;width:100px;height:100px;position:relative}
 .code{position:absolute;left:5px;top:5px;width:88px;height:32px;background:#fff}
@@ -364,13 +366,15 @@ async function screenshotViewportScenario(runtime, site, workspaceRoot, kind) {
         report(`CDP 完成 ${method}`)
         return value
       }
+      const capturePage = stage.page.capturePage.bind(stage.page)
+      stage.page.capturePage = async (...args) => {
+        report(`原生 capturePage 开始 ${JSON.stringify(await pageState(stage.page))}`)
+        const image = await capturePage(...args)
+        report(`原生 capturePage 完成 ${JSON.stringify(image.getSize())}`)
+        return image
+      }
     }
-    // Full-page PNG excludes native scrollbars on some platforms. Remove only that platform
-    // difference so PNG width can prove the requested CSS viewport rather than OS decoration.
-    await stage.page.executeJavaScript(
-      `(() => { const style = document.createElement('style'); style.textContent = 'html{scrollbar-width:none}::-webkit-scrollbar{display:none}'; document.head.appendChild(style) })()`,
-      true
-    )
+    const original = await pageState(stage.page)
     for (const dimensions of [
       { width: 390, height: 844 },
       { width: 320, height: 568 },
@@ -389,12 +393,13 @@ async function screenshotViewportScenario(runtime, site, workspaceRoot, kind) {
         12,
         3
       )
+      await new Promise((resolve) => setTimeout(resolve, 100))
       const actual = await pageState(stage.page)
       report(`阶段 ${kind}: 实测 ${JSON.stringify(actual)}，PNG ${artifact.path}`)
       const pixels = nativeImage.createFromPath(artifact.path).getSize()
       check(
-        `screenshot 参数把 CSS 视口设成 ${dimensions.width}×${dimensions.height} 并保留`,
-        actual.innerWidth === dimensions.width && actual.innerHeight === dimensions.height,
+        `screenshot ${dimensions.width}×${dimensions.height} 结束后恢复自然视口`,
+        actual.innerWidth === original.innerWidth && actual.innerHeight === original.innerHeight,
         `实际 ${actual.innerWidth}×${actual.innerHeight}`
       )
       check(
@@ -415,9 +420,133 @@ async function screenshotViewportScenario(runtime, site, workspaceRoot, kind) {
     })
     const retained = await pageState(stage.page)
     check(
-      '随后不带尺寸的截图不会还原视口',
-      retained.innerWidth === 320 && retained.innerHeight === 568 && subsequent.width === 320,
+      '随后不带尺寸的截图使用自然视口',
+      retained.innerWidth === original.innerWidth &&
+        retained.innerHeight === original.innerHeight &&
+        subsequent.width === original.innerWidth,
       `视口 ${retained.innerWidth}×${retained.innerHeight}，PNG 宽 ${subsequent.width}`
+    )
+    if (kind !== 'window') {
+      await stage.window.webContents.executeJavaScript(
+        `document.querySelector('webview').parentElement.style.width='1040px'`
+      )
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const resized = await pageState(stage.page)
+      check(
+        '截图后 webview 继续跟随宿主布局调整',
+        resized.innerWidth === 1040,
+        JSON.stringify(resized)
+      )
+    }
+    await runtime.setViewport(sessionId, context, { width: 960, height: 720, mobile: false })
+    await runtime.captureScreenshot(sessionId, context, {
+      width: 820,
+      height: 820,
+      path: `restore-host-${kind}.png`,
+      includeModelImage: false,
+      waitForNetworkIdle: false,
+      waitForDomStable: false,
+    })
+    const hostViewport = await pageState(stage.page)
+    check(
+      '保留显式宿主视口',
+      hostViewport.innerWidth === 960 && hostViewport.innerHeight === 720,
+      JSON.stringify(hostViewport)
+    )
+    await runtime.sendProtocolCommand(sessionId, context, {
+      method: 'Emulation.setDeviceMetricsOverride',
+      params: {
+        width: 720,
+        height: 540,
+        mobile: false,
+        deviceScaleFactor: 2,
+        screenWidth: 720,
+        screenHeight: 540,
+      },
+    })
+    await runtime.captureScreenshot(sessionId, context, {
+      width: 820,
+      height: 820,
+      path: `restore-model-${kind}.png`,
+      includeModelImage: false,
+      waitForNetworkIdle: false,
+      waitForDomStable: false,
+    })
+    const modelViewport = await pageState(stage.page)
+    const dpr = await stage.page.executeJavaScript('devicePixelRatio')
+    check(
+      '保留模型 CDP 视口与 DPR',
+      modelViewport.innerWidth === 720 && modelViewport.innerHeight === 540 && dpr === 2,
+      `${JSON.stringify(modelViewport)}, DPR ${dpr}`
+    )
+    for (let round = 0; round < 6; round++) {
+      const fullPage = round % 2 === 1
+      const artifact = await runtime.captureScreenshot(sessionId, context, {
+        width: 820,
+        height: 820,
+        path: `compositor-${kind}-${round}.png`,
+        includeModelImage: false,
+        fullPage,
+        waitForNetworkIdle: false,
+        waitForDomStable: false,
+      })
+      const pixels = nativeImage.createFromPath(artifact.path).getSize()
+      check(
+        `快速切换 DPR 后${fullPage ? '整页' : '视口'}截图尺寸准确（${round + 1}/6）`,
+        pixels.width === 820 && pixels.height === (fullPage ? 1200 : 820),
+        `PNG ${pixels.width}×${pixels.height}`
+      )
+      checkGrid(
+        check,
+        readGrid(nativeImage.createFromPath(artifact.path), artifact.capture, 12, 3),
+        0
+      )
+    }
+    let rejected = false
+    try {
+      await runtime.captureScreenshot(sessionId, context, {
+        width: 820,
+        height: 820,
+        path: '../outside.png',
+        includeModelImage: false,
+        waitForNetworkIdle: false,
+        waitForDomStable: false,
+      })
+    } catch {
+      rejected = true
+    }
+    const failedViewport = await pageState(stage.page)
+    check(
+      '截图落盘失败后仍还原显式视口',
+      rejected && failedViewport.innerWidth === 720 && failedViewport.innerHeight === 540,
+      JSON.stringify(failedViewport)
+    )
+    const cancellation = new AbortController()
+    const sendCommand = stage.page.debugger.sendCommand.bind(stage.page.debugger)
+    stage.page.debugger.sendCommand = async (method, ...args) => {
+      const result = await sendCommand(method, ...args)
+      if (method === 'Emulation.setDeviceMetricsOverride' && args[0].width === 820)
+        cancellation.abort(new Error('probe cancellation after resize'))
+      return result
+    }
+    let cancelled = false
+    try {
+      await runtime.captureScreenshot(
+        sessionId,
+        context,
+        { width: 820, height: 820, path: `cancelled-${kind}.png` },
+        cancellation.signal
+      )
+    } catch (error) {
+      cancelled = /probe cancellation/.test(error.message)
+    } finally {
+      stage.page.debugger.sendCommand = sendCommand
+    }
+    const cancelledViewport = await pageState(stage.page)
+    check(
+      '设置视口后取消仍还原',
+      cancelled && cancelledViewport.innerWidth === 720 && cancelledViewport.innerHeight === 540,
+      JSON.stringify(cancelledViewport)
     )
   } finally {
     await runtime.closeSession(sessionId)

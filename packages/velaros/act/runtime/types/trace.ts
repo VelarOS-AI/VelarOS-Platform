@@ -129,6 +129,8 @@ export interface ActObservationSummary {
  * 宿主据此展示子任务，不必解析内部记录。
  */
 export interface ActAgentSummary {
+  /** 本次派发或续跑阶段的原始开始时刻（毫秒）；没有持久事实时省略。 */
+  readonly startedAt?: number
   /** 子任务身份，即 job.id。 */
   readonly id: string
   /** 子任务自己的会话，按它读支线的追踪。 */

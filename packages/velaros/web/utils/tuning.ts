@@ -16,9 +16,11 @@ export const WebTuning = Object.freeze({
   search: Object.freeze({
     /**
      * Google 搜不通之后，多久以内的搜索直接走 Bing，毫秒。
-     * 国内常常打不开 Google，每次都先白等一轮不值；宿主给了退避记忆就跨重启记着，过了这段时间再试一次。
+     * 短暂断网不应让备用搜索源整天失效；到期仅恢复正常的一次尝试，不自动循环重试。
      */
-    googleBackoffMs: 12 * 60 * 60_000,
+    googleBackoffMs: 60_000,
+    /** 明确验证、同意或限流页面的冷却；不因另一个搜索源失败而绕过。 */
+    googleBlockedBackoffMs: 15 * 60_000,
     /**
      * Google 多久还没落下文档（服务器一个字节都没回来）就算打不开、换 Bing，毫秒。
      * 打得开的地方它半秒到一秒就落下；打不开的地方连接一直挂着，只有这一段要掐短。落下之后结果页慢慢出来，照 googleLoadTimeoutMs 等。

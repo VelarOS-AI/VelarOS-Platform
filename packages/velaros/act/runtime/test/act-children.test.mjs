@@ -236,6 +236,12 @@ test('a resumed sub-task is summarised per phase: each start or resume shows onl
   assert.match(second.agents[0].answer, /第二段回答/)
   assert(Number.isFinite(first.agents[0].durationMs))
   assert(Number.isFinite(second.agents[0].durationMs))
+  assert(Number.isFinite(first.agents[0].startedAt))
+  assert(Number.isFinite(second.agents[0].startedAt))
+  assert(first.agents[0].startedAt >= Date.parse(first.request.createdAt))
+  assert(second.agents[0].startedAt >= Date.parse(second.request.createdAt))
+  assert(second.agents[0].startedAt >= first.agents[0].startedAt)
+  assert.equal((await f.session.trace(turns[0])).agents[0].startedAt, first.agents[0].startedAt)
 })
 
 test('INV-31 parent and child run the same ScriptAct loop and charge the shared root budget once per call', async (t) => {

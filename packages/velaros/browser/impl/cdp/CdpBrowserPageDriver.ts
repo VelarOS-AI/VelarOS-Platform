@@ -118,6 +118,7 @@ import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
+import { BrowserViewportState } from './BrowserViewportState'
 import { CdpBrowserPageDownloadItem } from './CdpBrowserPageDownloadItem.js'
 import { CdpFrameSessions } from './CdpFrameSessions'
 import { CdpProtocolChannel } from './CdpProtocolChannel'
@@ -159,6 +160,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   private currentUrl: string
   private currentTitle: string
   private currentZoomFactor = 1
+  private readonly viewportState = new BrowserViewportState()
   private readonly diagnostics: BrowserPageDiagnosticEntry[] = []
   private readonly eventUnsubscribers: Array<() => void> = []
   private readonly downloadListeners = new Set<BrowserPageDriverDownloadListener>()
@@ -339,7 +341,10 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         '这个外部浏览器驱动不知道自己挂在哪个标签页上，开不了单独的 CDP 会话。'
       )
     return new CdpProtocolChannel(
-      await targets.attach(targets.targetId, { timeoutMs: BrowserTuning.protocol.commandTimeoutMs })
+      await targets.attach(targets.targetId, {
+        timeoutMs: BrowserTuning.protocol.commandTimeoutMs,
+      }),
+      this.viewportState
     )
   }
 
@@ -436,6 +441,10 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     options.onPointerEvent?.({ x: endX, y: endY, phase: 'up', button: 'left' })
   }
 
+  public temporaryViewport(options: BrowserViewportOptions): Promise<() => Promise<void>> {
+    return this.viewportState.temporary(options, () => this.openProtocolChannel())
+  }
+
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
     const metrics = buildBrowserViewportDeviceMetrics(options)
     // 外部窗口按真实内容区设置尺寸，避免设备模拟视口被工具栏和系统边框裁掉。
@@ -461,6 +470,12 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     await this.options.transport.send('Emulation.setDeviceMetricsOverride', {
       ...metrics,
     })
+    this.viewportState.record(
+      this,
+      'Emulation.setDeviceMetricsOverride',
+      { ...metrics },
+      (method, params) => this.options.transport.send(method, params)
+    )
     await this.options.transport.send('Emulation.setTouchEmulationEnabled', {
       enabled: metrics.mobile,
     })

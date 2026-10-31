@@ -955,7 +955,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         abortSignal?.throwIfAborted()
         const externalSession = this.getExternalPageSession(sessionId)
         if (externalSession) {
-          await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
+          // 展示已有页不重放旧工作区地址；用户或原始 CDP 可能已经在同一标签页完成导航。
+          await this.refreshExternalPageState(sessionId, externalSession)
           await externalSession.driver.bringToFront()
           externalSession.visible = true
           return buildExternalWindowState(externalSession)
@@ -1475,7 +1476,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  /** 队列内共享视口提交：截图与显式设置沿同一状态/通知链，不递归等待自己。 */
+  /** 队列内提交显式视口与宿主通知；截图临时视口不写入这条持久状态链。 */
   private async applyViewport(
     sessionId: string,
     context: BrowserSiteContext,
@@ -2059,7 +2060,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext
   ): Promise<ExternalBrowserPageSession> {
     const targetUrl = normalizeUrl(context.url)
-    const currentUrl = session.url || session.driver.getURL()
+    // 显式 open 的比较也必须以页面为准，不能拿导航前缓存当成已打开目标。
+    const currentUrl = (await this.refreshExternalPageState(sessionId, session)).url
     if (currentUrl === targetUrl) return session
 
     const previousUrl = session.url

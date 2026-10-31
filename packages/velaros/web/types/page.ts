@@ -62,7 +62,7 @@ export type WebLoadOutcome =
 
 /** 用一个搜索引擎试一次的结局：搜通了交回整理好的结果，搜不通交回一句为什么。 */
 export type WebEngineAttempt =
-  { ok: true; results: WebSearchResult[] } | { ok: false; reason: string }
+  { ok: true; results: WebSearchResult[] } | { ok: false; reason: string; blocked?: boolean }
 
 /** 一个搜索引擎为什么没搜成：两边都失败时拼进报错给模型看。 */
 export interface WebEngineFailure {

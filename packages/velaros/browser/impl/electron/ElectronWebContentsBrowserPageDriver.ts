@@ -3,6 +3,7 @@ import type electron from 'electron'
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
 import type {
@@ -532,6 +533,63 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     if (!this.webContents.debugger.isAttached()) this.webContents.debugger.attach('1.3')
   }
 
+  public async temporaryViewport(
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<() => Promise<void>> {
+    abortSignal?.throwIfAborted()
+    const restore = await electronDebuggerHolds
+      .viewportState(this.webContents)
+      .temporary(options, () => this.openProtocolChannel())
+    try {
+      await this.waitForViewportFrame(abortSignal)
+      return restore
+    } catch (error) {
+      try {
+        await restore()
+      } catch (restoreError) {
+        embeddedDriverLog.warn('截图视口准备失败后的还原未完成', {
+          error: AppError.getMessage(restoreError),
+        })
+      }
+      throw error
+    }
+  }
+
+  /** Emulation 命令回包不代表 Viz 已产生新尺寸的 surface；在两次绘制帧后才允许原生截图。 */
+  private async waitForViewportFrame(abortSignal?: AbortSignal): Promise<void> {
+    const webContents = this.webContents
+    if (webContents.isDestroyed()) throw new AppError('CLOSED', '截图页面已销毁。')
+    const timers = new TimerScope({ name: 'BrowserScreenshotViewportFrame' })
+    const destroyed = new AbortController()
+    const onDestroyed = (): void => destroyed.abort()
+    const throttling = webContents.getBackgroundThrottling()
+    webContents.once('destroyed', onDestroyed)
+    try {
+      if (throttling) webContents.setBackgroundThrottling(false)
+      await timers.withTimeout(
+        BrowserTuning.screenshot.viewportFrameTimeoutMs,
+        () =>
+          webContents.executeJavaScript(
+            'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))))'
+          ),
+        {
+          signal: abortSignal ? AbortSignal.any([abortSignal, destroyed.signal]) : destroyed.signal,
+          label: 'browser.screenshot.viewportFrame',
+          timeoutMessage: `截图视口已调整，但页面未在 ${BrowserTuning.screenshot.viewportFrameTimeoutMs} 毫秒内产生新绘制帧。`,
+        }
+      )
+    } catch (error) {
+      abortSignal?.throwIfAborted()
+      if (webContents.isDestroyed()) throw new AppError('CLOSED', '截图页面在等待绘制帧时已销毁。')
+      throw error
+    } finally {
+      timers.dispose()
+      webContents.off('destroyed', onDestroyed)
+      if (throttling && !webContents.isDestroyed()) webContents.setBackgroundThrottling(throttling)
+    }
+  }
+
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
     // Device metrics override 依赖持续存在的 debugger 连接：登记成 Emulation 占用，
     // 免得之后截图、trace 的临时 driver 收尾时把连接 detach，视口悄悄丢掉。
@@ -542,6 +600,14 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
 
     const metrics = buildBrowserViewportDeviceMetrics(options)
     await this.debuggerSend('Emulation.setDeviceMetricsOverride', { ...metrics })
+    electronDebuggerHolds
+      .viewportState(this.webContents)
+      .record(
+        this.webContents,
+        'Emulation.setDeviceMetricsOverride',
+        { ...metrics },
+        this.debuggerSend
+      )
     await this.debuggerSend('Emulation.setTouchEmulationEnabled', {
       enabled: metrics.mobile,
     })

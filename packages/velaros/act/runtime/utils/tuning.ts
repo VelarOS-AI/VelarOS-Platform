@@ -38,6 +38,12 @@ export const ActRuntimeTuning = Object.freeze({
   observationFailures: 3,
   /** 请求与追踪材料默认字符上限。 */
   frameChars: 1000000,
+  /** 单页追踪复用正文的字符上限；超限正文仍读取，但不额外保留在共享缓存。 */
+  tracePageCacheChars: 4_000_000,
+  /** 单页正文缓存的条目上限，空正文与缺失事实也占一个条目。 */
+  tracePageCacheEntries: 4096,
+  /** 追踪重建在连续计算达到此时长后归还事件循环，让执行环境准备等 IO 继续。 */
+  traceReadSliceMs: 8,
   /** 原始归档单页读取字符上限。 */
   readChars: 60000,
   /** 工作笔记默认分页条目数。 */

@@ -86,6 +86,8 @@ export const BrowserTuning = Object.freeze({
   }),
   /** 截图：给模型的图、整页图、预览流、稳定等待。 */
   screenshot: Object.freeze({
+    /** 临时视口/DPR 改变后等合成帧的上限；没有画出新帧就显式超时，不能截旧画面。 */
+    viewportFrameTimeoutMs: 1_500,
     /** 给模型的图的字节预算；超了就按质量阶梯降质重编。 */
     modelImageByteBudget: 96_000,
     /** 给模型的图的宽度上限，像素。 */

@@ -4,6 +4,7 @@ import { BrowserErrorCodes } from '../../contract/constants.js'
 import type { BrowserProtocolChannel } from '../../contract/requires.js'
 import { protocolFailure } from '../../utils/cdp/protocol.js'
 
+import { BrowserViewportState, type BrowserViewportStateApi } from './BrowserViewportState'
 import type { CdpWebSocketTransportApi } from './CdpWebSocketTransport'
 
 /**
@@ -15,9 +16,13 @@ import type { CdpWebSocketTransportApi } from './CdpWebSocketTransport'
 export class CdpProtocolChannel implements BrowserProtocolChannel {
   private closed = false
 
-  constructor(private readonly transport: CdpWebSocketTransportApi) {
+  constructor(
+    private readonly transport: CdpWebSocketTransportApi,
+    private readonly viewport: BrowserViewportStateApi = new BrowserViewportState()
+  ) {
     transport.onClose(() => {
       this.closed = true
+      this.viewport.forget(this)
     })
   }
 
@@ -32,7 +37,12 @@ export class CdpProtocolChannel implements BrowserProtocolChannel {
         `${method}：CDP 会话已经断开，再发一条会重新连。`
       )
     try {
-      return await this.transport.send(method, params ?? {}, sessionId)
+      const result = await this.transport.send(method, params ?? {}, sessionId)
+      if (!sessionId)
+        this.viewport.record(this, method, params, (restoreMethod, restoreParams) =>
+          this.transport.send(restoreMethod, restoreParams)
+        )
+      return result
     } catch (error) {
       if (AppError.from(error).code === 'TIMEOUT') throw error
       throw protocolFailure(method, error)
@@ -52,6 +62,7 @@ export class CdpProtocolChannel implements BrowserProtocolChannel {
   public close(): Promise<void> {
     if (!this.closed) {
       this.closed = true
+      this.viewport.forget(this)
       this.transport.dispose()
     }
     return Promise.resolve()

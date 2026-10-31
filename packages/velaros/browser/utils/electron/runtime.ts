@@ -29,7 +29,8 @@ export function applyExternalPageState(
   fallbackUrl?: LooseOptional<string>
 ): void {
   const nextUrl = state.url || fallbackUrl || session.url
-  const nextTitle = state.title || session.title
+  // 空标题是 about:blank 等页面的真实状态，不能沿用上一个站点的标题。
+  const nextTitle = state.title
   session.url = toNullable(nextUrl)
   session.title = toNullable(nextTitle)
 }

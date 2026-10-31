@@ -1,7 +1,7 @@
 // 通过 nodeSubprocessCodeRunner 执行模型程序的用例仅适用 POSIX；直接端口测试在所有平台运行。
 /**
  * 网上查资料的验收测试：每一条对应 spec/invariants.md 里的一个编号。只测对外承诺的行为，实现细节的测试在 test/ 目录。
- * 浏览器用 `spec/support.ts` 的假无头浏览器（按地址给写好的结果、记下开关了几页），钟用能快进的假钟，记住 Google 搜不通的十分钟不用真等；
+ * 浏览器用 `spec/support.ts` 的假无头浏览器（按地址给写好的结果、记下开关了几页），钟用能快进的假钟，搜索冷却不用真等；
  * 页面脚本在真浏览器里的那一半由 Electron 探针核对（INV-17）。
  */
 
@@ -436,8 +436,8 @@ describe('搜索', () => {
     expect(fine.record.loads.some((url) => url.includes('bing.com'))).toBe(false)
   })
 
-  test('INV-4 记住 Google 搜不通 12 小时：窗口内直接走 Bing、一个 Google 页面都不开；过了窗口再试，搜通了就忘掉；宿主的退避记忆每次搜索读一次、搜不通才写；用户选 Bing 时 Bing 搜不通才试 Google', async () => {
-    expect(WebTuning.search.googleBackoffMs).toBe(12 * 60 * 60 * 1000)
+  test('INV-4 记住 Google 搜不通 1 分钟：窗口内直接走 Bing、一个 Google 页面都不开；过了窗口再试，搜通了就忘掉；宿主的退避记忆每次搜索读一次、搜不通才写；用户选 Bing 时 Bing 搜不通才试 Google', async () => {
+    expect(WebTuning.search.googleBackoffMs).toBe(60_000)
     let googleUp = false
     const sites = sitesOf({ bing: { scan: BingResults } })
     const clock = fakeClock()
@@ -456,7 +456,7 @@ describe('搜索', () => {
 
     expect((await space.operations.search({ query: '一' }, space.context)).engine).toBe('bing')
     expect(googleLoads()).toBe(1)
-    // 搜不通才写，写的是退避到什么时候：记下失败那一刻起 12 小时
+    // 搜不通才写，写的是退避到什么时候：记下失败那一刻起 1 分钟
     expect(space.record.backoffWrites).toHaveLength(1)
     const written = space.record.backoffWrites[0]!
     expect([written.engine, written.until - written.at]).toEqual([
@@ -536,6 +536,69 @@ describe('搜索', () => {
     )
   })
 
+  test('INV-4 两源失效后到期恢复探测，但验证页保留较长冷却且不因 Bing 失败绕过', async () => {
+    for (const blocked of [false, true]) {
+      const clock = fakeClock()
+      let recovered = false
+      const space = webSpace({
+        clock,
+        backoff: {},
+        sites: (url) =>
+          url.includes('google.com')
+            ? recovered
+              ? { scan: GoogleResults }
+              : blocked
+                ? { scan: scanOf([], { text: 'unusual traffic' }) }
+                : { load: new AppError('NETWORK', 'net::ERR_CONNECTION_RESET') }
+            : { load: new AppError('NETWORK', 'net::ERR_TOO_MANY_REDIRECTS') },
+      })
+      await failureOf(space.operations.search({ query: 'first' }, space.context))
+      const until = space.record.backoffWrites.at(-1)!.until
+      recovered = true
+      await failureOf(space.operations.search({ query: 'immediate' }, space.context))
+      expect(space.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+      if (blocked) {
+        clock.advance(WebTuning.search.googleBackoffMs)
+        await failureOf(space.operations.search({ query: 'still blocked' }, space.context))
+        expect(space.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+      }
+      clock.advance(until - clock.now())
+      expect((await space.operations.search({ query: 'recovered' }, space.context)).engine).toBe(
+        'google'
+      )
+      expect(space.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(2)
+      expect(space.record.opened).toBe(space.record.closed)
+    }
+  })
+
+  test('INV-4 并行搜索只探测 Google 一次，旧冷却即使无法回写也不滑动延长', async () => {
+    const parallel = webSpace({
+      sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
+    })
+    const results = await Promise.all([
+      parallel.operations.search({ query: 'one' }, parallel.context),
+      parallel.operations.search({ query: 'two' }, parallel.context),
+    ])
+    expect(results.map((result) => result.query)).toEqual(['one', 'two'])
+    expect(parallel.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+    const clock = fakeClock()
+    const legacy = webSpace({
+      clock,
+      backoff: { stored: { google: clock.now() + 12 * 60 * 60_000 }, writeFails: true },
+      sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
+    })
+    expect((await legacy.operations.search({ query: 'cooldown' }, legacy.context)).engine).toBe(
+      'bing'
+    )
+    clock.advance(WebTuning.search.googleBlockedBackoffMs + 1)
+    expect((await legacy.operations.search({ query: 'probe' }, legacy.context)).engine).toBe(
+      'google'
+    )
+    expect((await legacy.operations.search({ query: 'probe again' }, legacy.context)).engine).toBe(
+      'google'
+    )
+  })
+
   test('INV-5 两边都搜不了抛 WEB_SEARCH_FAILED，写明两边各自为什么；Bing 明说没有结果交回空的 results', async () => {
     const space = webSpace({
       sites: sitesOf({
@@ -555,7 +618,7 @@ describe('搜索', () => {
     // Google 还在记忆窗口里：这一次写明没再试它
     const again = await failureOf(space.operations.search({ query: '再搜' }, space.context))
     expect(again.code).toBe(WebErrorCodes.searchFailed)
-    expect(again.message).toContain('Google：12 小时内搜不通过，这次没再试')
+    expect(again.message).toContain('Google：搜索暂缓')
 
     const nothing = webSpace({
       engine: 'bing',

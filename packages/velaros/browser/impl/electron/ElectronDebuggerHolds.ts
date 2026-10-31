@@ -2,6 +2,7 @@ import type electron from 'electron'
 
 import type { BrowserPageDiagnosticEntry } from '../../types/browser'
 import type { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
+import { BrowserViewportState, type BrowserViewportStateApi } from '../cdp/BrowserViewportState'
 import type { CdpScreencastRecorder } from '../cdp/CdpScreencastRecorder'
 import type { CdpTraceCollector } from '../cdp/CdpTraceCollector'
 
@@ -70,12 +71,12 @@ export interface ElectronDebuggerHoldsApi {
   hasNetwork(webContents: electron.WebContents): boolean
   /** 登记网络采集。 */
   setNetwork(webContents: electron.WebContents, hold: ElectronDebuggerHoldsNetwork): void
-  /** 读模型 CDP 会话的占用；没有返回 undefined。 */
-  getProtocol(webContents: electron.WebContents): ElectronDebuggerHoldsProtocol | undefined
   /** 登记模型的 CDP 会话。 */
   setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void
   /** 撤销模型 CDP 会话的登记。 */
-  deleteProtocol(webContents: electron.WebContents): void
+  deleteProtocol(webContents: electron.WebContents, sessionId: string): void
+  /** 共享该页面的设备尺寸记录，跨临时 driver 实例。 */
+  viewportState(webContents: electron.WebContents): BrowserViewportStateApi
 }
 
 export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
@@ -86,7 +87,8 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
   >()
   private readonly emulations = new WeakSet<electron.WebContents>()
   private readonly networks = new WeakMap<electron.WebContents, ElectronDebuggerHoldsNetwork>()
-  private readonly protocols = new WeakMap<electron.WebContents, ElectronDebuggerHoldsProtocol>()
+  private readonly protocols = new WeakMap<electron.WebContents, Set<string>>()
+  private readonly viewports = new WeakMap<electron.WebContents, BrowserViewportStateApi>()
 
   public hasPersistentHold(webContents: electron.WebContents): boolean {
     return (
@@ -141,16 +143,26 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
     this.networks.set(webContents, hold)
   }
 
-  public getProtocol(webContents: electron.WebContents): ElectronDebuggerHoldsProtocol | undefined {
-    return this.protocols.get(webContents)
-  }
-
   public setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void {
-    this.protocols.set(webContents, hold)
+    const sessions = this.protocols.get(webContents) ?? new Set<string>()
+    sessions.add(hold.sessionId)
+    this.protocols.set(webContents, sessions)
   }
 
-  public deleteProtocol(webContents: electron.WebContents): void {
-    this.protocols.delete(webContents)
+  public deleteProtocol(webContents: electron.WebContents, sessionId: string): void {
+    const sessions = this.protocols.get(webContents)
+    sessions?.delete(sessionId)
+    if (!sessions?.size) this.protocols.delete(webContents)
+  }
+
+  public viewportState(webContents: electron.WebContents): BrowserViewportStateApi {
+    let state = this.viewports.get(webContents)
+    if (!state) {
+      state = new BrowserViewportState()
+      this.viewports.set(webContents, state)
+      webContents.debugger.once('detach', () => this.viewports.delete(webContents))
+    }
+    return state
   }
 }
 

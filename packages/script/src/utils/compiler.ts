@@ -102,6 +102,14 @@ export function sliceModuleExports(
   specifier: string,
   names: readonly string[]
 ): ScriptModuleExportsSlice {
+  return createModuleExportSlicer(declarations, specifier)(names)
+}
+
+/** 同一批操作文档共用语法树与导出索引；只保留本次生成的局部状态，不缓存授权。 */
+export function createModuleExportSlicer(
+  declarations: string,
+  specifier: string
+): (names: readonly string[]) => ScriptModuleExportsSlice {
   const file = ts.createSourceFile(
     DeclarationFileName,
     declarations,
@@ -121,30 +129,32 @@ export function sliceModuleExports(
   for (const statement of body)
     for (const declared of declaredNamesOf(statement))
       byName.set(declared, [...(byName.get(declared) ?? []), statement])
-  const requested = [...new Set(names)]
-  const missing = requested.filter((name) => !byName.has(name))
-  if (!module || isEmpty(requested) || !isEmpty(missing))
-    return { declarations: null, exports, missing }
+  return (names) => {
+    const requested = [...new Set(names)]
+    const missing = requested.filter((name) => !byName.has(name))
+    if (!module || isEmpty(requested) || !isEmpty(missing))
+      return { declarations: null, exports, missing }
 
-  const moduleDocs = file.text.slice(module.getFullStart(), module.getStart(file)).trim()
+    const moduleDocs = file.text.slice(module.getFullStart(), module.getStart(file)).trim()
 
-  const picked = new Set<ts.Statement>()
-  const pending = [...requested]
-  for (let next = pending.pop(); !isUndefined(next); next = pending.pop())
-    for (const statement of byName.get(next) ?? []) {
-      if (picked.has(statement)) continue
-      picked.add(statement)
-      pending.push(...referencedTypeNames(statement))
+    const picked = new Set<ts.Statement>()
+    const pending = [...requested]
+    for (let next = pending.pop(); !isUndefined(next); next = pending.pop())
+      for (const statement of byName.get(next) ?? []) {
+        if (picked.has(statement)) continue
+        picked.add(statement)
+        pending.push(...referencedTypeNames(statement))
+      }
+    const text = body
+      .filter((statement) => picked.has(statement))
+      .map((statement) => statement.getFullText(file).replace(/^\n+/u, ''))
+      .join('\n')
+    const prefix = moduleDocs ? `${moduleDocs}\n` : ''
+    return {
+      declarations: `${prefix}declare module '${specifier}' {\n${text}\n}`,
+      exports,
+      missing,
     }
-  const text = body
-    .filter((statement) => picked.has(statement))
-    .map((statement) => statement.getFullText(file).replace(/^\n+/u, ''))
-    .join('\n')
-  const prefix = moduleDocs ? `${moduleDocs}\n` : ''
-  return {
-    declarations: `${prefix}declare module '${specifier}' {\n${text}\n}`,
-    exports,
-    missing,
   }
 }
 

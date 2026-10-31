@@ -241,7 +241,7 @@ declare module 'velaros:browser' {
    * 截图：图交给你看，原图落进站点工作区（path 是工作区里的相对路径，最多 180 个字符，不给就按时间命名）。
    * 缺省截当前视口；fullPage 为真截整页（单边最多 32000 像素），region 只截一块（与 fullPage 同时给时以 region 为准）。
    * annotate 为真先给可交互元素画上编号（最多 120 个），legend 里给每个编号的 target，能直接交给 click 这类操作。
-   * width、height 是截图前把视口设成多大（宽 320 到 3840，高 240 到 2160）。截图前缺省会等一小会儿网络空闲与页面不再变（动画、骨架屏）：
+   * width、height 是仅在本次截图期间使用的 CSS 视口（宽 320 到 3840，高 240 到 2160）；成功、失败或取消后均还原，不改变可见窗口大小，已有显式 CDP 仿真保持原值。截图前缺省会等一小会儿网络空闲与页面不再变（动画、骨架屏）：
    * waitForNetworkIdle 给数字是网络空闲多少毫秒（100 到 5000），两个都可以传 false 不等；compareWithPrevious 缺省为真，diff 里说与上一张比变没变。
    */
   interface BrowserScreenshotInput {

@@ -468,8 +468,21 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotArtifact> {
     abortSignal?.throwIfAborted()
-    await this.applyScreenshotViewport(sessionId, context, options, abortSignal)
-    abortSignal?.throwIfAborted()
+    const restoreViewport = await this.applyScreenshotViewport(sessionId, options, abortSignal)
+    try {
+      abortSignal?.throwIfAborted()
+      return await this.captureWithViewport(sessionId, context, options, abortSignal)
+    } finally {
+      await restoreViewport?.()
+    }
+  }
+
+  private async captureWithViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserCaptureScreenshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreenshotArtifact> {
     const externalSession = this.getExternalPageSession(sessionId)
     if (externalSession)
       return this.captureExternalScreenshot(sessionId, context, externalSession, options)
@@ -602,25 +615,35 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     })
   }
 
-  /** width/height 改页面 CSS 视口而非缩放图片；未给的一边沿用实测尺寸，设置在截图后保留。 */
+  /** width/height 临时改 CSS 视口而非缩放图片；未给的一边沿用实测尺寸，结束后还原。 */
   private async applyScreenshotViewport(
     sessionId: string,
-    context: BrowserSiteContext,
     options: BrowserCaptureScreenshotOptions,
     abortSignal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<(() => Promise<void>) | undefined> {
     if (!isPresent(options.width) && !isPresent(options.height)) return
     const page = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
     const current = await page.driver.executeJavaScript<{ width: number; height: number }>(
       '({ width: window.innerWidth, height: window.innerHeight })'
     )
     const viewport = page.externalSession?.viewport ?? page.browserSession?.viewport
-    await this.kernel.applyViewport(
-      sessionId,
-      context,
+    abortSignal?.throwIfAborted()
+    if (!page.driver.temporaryViewport)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持临时截图视口。')
+    return page.driver.temporaryViewport(
       {
-        width: options.width ?? current.width,
-        height: options.height ?? current.height,
+        width: clampInteger(
+          options.width ?? current.width,
+          320,
+          3840,
+          DEFAULT_BROWSER_VIEWPORT.width
+        ),
+        height: clampInteger(
+          options.height ?? current.height,
+          240,
+          2160,
+          DEFAULT_BROWSER_VIEWPORT.height
+        ),
         mobile: !!viewport?.mobile,
       },
       abortSignal
@@ -707,6 +730,31 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         abortSignal
       )
       if (fullPageCapture) return fullPageCapture
+    }
+
+    if (isPresent(options.width) || isPresent(options.height)) {
+      // webview 的 capturePage 截宿主元素表面；临时 CSS 视口较小时会带黑边，不能拿其物理尺寸做坐标映射。
+      return this.withScreenshotDebugger(session.webContents, async () => {
+        const layout = normalizeScreenshotLayout(
+          await session.webContents.debugger.sendCommand('Page.getLayoutMetrics'),
+          metadata
+        )
+        const image = await captureScreenshotArea(
+          session.webContents,
+          {
+            x: metadata.scrollX,
+            y: metadata.scrollY,
+            width: metadata.viewportWidth,
+            height: metadata.viewportHeight,
+          },
+          layout,
+          metadata.deviceScaleFactor,
+          abortSignal
+        )
+        if (!image) throw new AppError('EXECUTION_FAILED', '临时浏览器视口未生成有效截图。')
+        const size = image.getSize()
+        return { image, capture: buildViewportCaptureRegion(metadata, size.width, size.height) }
+      })
     }
 
     const image = await session.webContents.capturePage()

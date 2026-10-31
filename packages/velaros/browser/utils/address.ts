@@ -4,6 +4,7 @@ import { DefaultBrowserSearchEngine } from '../contract/constants.js'
 import type { BrowserSearchEngineId } from '../types/browser.js'
 
 const BrowserExplicitSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i
+const BrowserBlankAddressPattern = /^about:blank(?:[?#].*)?$/i
 const BrowserLocalAddressPattern = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::|\/|$)/i
 const BrowserWhitespacePattern = /\s/
 const BrowserSearchUrlByEngine: Record<BrowserSearchEngineId, string> = {
@@ -31,7 +32,8 @@ export function buildBrowserSearchUrl(
 
 /** 给浏览器地址补齐可解析的默认协议。 */
 export function getBrowserUrlCandidate(value: string): string {
-  if (BrowserExplicitSchemePattern.test(value)) return value
+  if (BrowserExplicitSchemePattern.test(value) || BrowserBlankAddressPattern.test(value))
+    return value
 
   return `${BrowserLocalAddressPattern.test(value) ? 'http' : 'https'}://${value}`
 }
@@ -40,7 +42,8 @@ export function getBrowserUrlCandidate(value: string): string {
 export function isBrowserNavigationLikeInput(value: string): boolean {
   const input = value.trim()
   if (!input) return false
-  if (BrowserExplicitSchemePattern.test(input)) return true
+  if (BrowserExplicitSchemePattern.test(input) || BrowserBlankAddressPattern.test(input))
+    return true
   if (BrowserWhitespacePattern.test(input)) return false
   if (BrowserLocalAddressPattern.test(input)) return true
 
@@ -65,7 +68,8 @@ export function resolveBrowserNavigationInput(
     const supportedProtocol =
       parsedUrl.protocol === 'http:' ||
       parsedUrl.protocol === 'https:' ||
-      parsedUrl.protocol === 'file:'
+      parsedUrl.protocol === 'file:' ||
+      (parsedUrl.protocol === 'about:' && parsedUrl.pathname === 'blank')
 
     return optionalWhen(supportedProtocol, parsedUrl.toString())
   } catch {

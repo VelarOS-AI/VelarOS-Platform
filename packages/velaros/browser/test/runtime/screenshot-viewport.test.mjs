@@ -28,9 +28,17 @@ const createHarness = async (kind, mobile = false) => {
       events.push('read-viewport')
       return { ...dimensions }
     },
-    setViewport: async (viewport) => {
-      events.push({ setViewport: viewport })
+    temporaryViewport: async (viewport) => {
+      events.push({ temporaryViewport: viewport })
+      const previous = dimensions
       dimensions = { width: viewport.width, height: viewport.height }
+      return async () => {
+        events.push('restore-viewport')
+        dimensions = previous
+      }
+    },
+    setViewport: async () => {
+      throw new Error('Screenshot must not publish persistent viewport')
     },
     refreshPageState: async () => ({ url: context.url, title: '' }),
   }
@@ -67,11 +75,15 @@ const createHarness = async (kind, mobile = false) => {
     }
   }
   return {
+    context,
     events,
     session,
     driver,
     runtime,
     readViewport: () => ({ ...dimensions }),
+    writeViewport: (viewport) => {
+      dimensions = { ...viewport }
+    },
     capture: (options = {}, signal) =>
       runtime.captureScreenshot(
         'viewport-test',
@@ -84,7 +96,64 @@ const createHarness = async (kind, mobile = false) => {
 }
 
 for (const kind of ['embedded', 'external']) {
-  test(`${kind} screenshots apply 390 then 320 CSS viewports before capture and persist state`, async () => {
+  test(`${kind} queues newer host and model viewport commands until screenshot restoration completes`, async () => {
+    const harness = await createHarness(kind)
+    let enterCapture
+    let finishCapture
+    const entered = new Promise((resolve) => {
+      enterCapture = resolve
+    })
+    const finished = new Promise((resolve) => {
+      finishCapture = resolve
+    })
+    const method =
+      kind === 'external' ? 'captureExternalScreenshot' : 'captureBrowserScreenshotImage'
+    const capture = harness.runtime.screenshot[method].bind(harness.runtime.screenshot)
+    harness.runtime.screenshot[method] = async (...args) => {
+      enterCapture()
+      await finished
+      return capture(...args)
+    }
+    harness.driver.setViewport = async (viewport) => {
+      harness.events.push('host-viewport')
+      harness.writeViewport({ width: viewport.width, height: viewport.height })
+    }
+    harness.runtime.protocolSessions.send = async (_sessionId, _open, command) => {
+      harness.events.push('model-viewport')
+      harness.writeViewport({ width: command.params.width, height: command.params.height })
+      return {}
+    }
+    try {
+      const screenshot = harness.capture({ width: 820, height: 820 })
+      await entered
+      const host = harness.runtime.setViewport('viewport-test', harness.context, {
+        width: 1000,
+        height: 700,
+      })
+      const model = harness.runtime.sendProtocolCommand('viewport-test', harness.context, {
+        method: 'Emulation.setDeviceMetricsOverride',
+        params: { width: 1024, height: 768, mobile: false, deviceScaleFactor: 1 },
+      })
+      await Promise.resolve()
+      expectNoNewOwner()
+      finishCapture()
+      await Promise.all([screenshot, host, model])
+      assert.ok(
+        harness.events.indexOf('restore-viewport') < harness.events.indexOf('host-viewport')
+      )
+      assert.ok(harness.events.indexOf('host-viewport') < harness.events.indexOf('model-viewport'))
+      assert.deepEqual(harness.readViewport(), { width: 1024, height: 768 })
+    } finally {
+      finishCapture()
+      await harness.dispose()
+    }
+    function expectNoNewOwner() {
+      assert.equal(harness.events.includes('host-viewport'), false)
+      assert.equal(harness.events.includes('model-viewport'), false)
+    }
+  })
+
+  test(`${kind} screenshots apply 390 then 320 CSS viewports before capture and restore the live viewport`, async () => {
     const harness = await createHarness(kind)
     try {
       for (const dimensions of [
@@ -93,21 +162,21 @@ for (const kind of ['embedded', 'external']) {
       ]) {
         harness.events.length = 0
         const artifact = await harness.capture(dimensions)
-        assert.deepEqual(harness.readViewport(), dimensions)
+        assert.deepEqual(harness.readViewport(), { width: 929, height: 900 })
         assert.deepEqual(artifact.metadata.viewport, dimensions)
-        assert.deepEqual(harness.session.viewport, { ...dimensions, mobile: false })
+        assert.deepEqual(harness.session.viewport, { width: 1440, height: 1000, mobile: false })
         assert.deepEqual(harness.events, [
           'read-viewport',
-          { setViewport: { ...dimensions, mobile: false } },
-          { notify: { sessionId: 'viewport-test', viewport: { ...dimensions, mobile: false } } },
+          { temporaryViewport: { ...dimensions, mobile: false } },
           ...(kind === 'embedded' ? ['metadata'] : []),
           'capture',
+          'restore-viewport',
         ])
       }
-      // A subsequent screenshot/evaluation keeps the selected viewport without resetting it.
+      // A subsequent screenshot sees the live host dimensions, not the prior screenshot size.
       harness.events.length = 0
       const subsequent = await harness.capture()
-      assert.deepEqual(subsequent.metadata.viewport, { width: 320, height: 568 })
+      assert.deepEqual(subsequent.metadata.viewport, { width: 929, height: 900 })
       assert.deepEqual(harness.events, [...(kind === 'embedded' ? ['metadata'] : []), 'capture'])
     } finally {
       await harness.dispose()
@@ -117,10 +186,11 @@ for (const kind of ['embedded', 'external']) {
   test(`${kind} partial dimensions preserve the live other dimension and current mobile mode`, async () => {
     const harness = await createHarness(kind, true)
     try {
-      await harness.capture({ width: 390 })
-      assert.deepEqual(harness.session.viewport, { width: 390, height: 900, mobile: true })
-      await harness.capture({ height: 568 })
-      assert.deepEqual(harness.session.viewport, { width: 390, height: 568, mobile: true })
+      const narrow = await harness.capture({ width: 390 })
+      assert.deepEqual(narrow.metadata.viewport, { width: 390, height: 900 })
+      const short = await harness.capture({ height: 568 })
+      assert.deepEqual(short.metadata.viewport, { width: 929, height: 568 })
+      assert.deepEqual(harness.session.viewport, { width: 1440, height: 1000, mobile: true })
     } finally {
       await harness.dispose()
     }
@@ -130,7 +200,7 @@ for (const kind of ['embedded', 'external']) {
     const harness = await createHarness(kind)
     try {
       const failure = new Error('test transport rejected viewport')
-      harness.driver.setViewport = async () => {
+      harness.driver.temporaryViewport = async () => {
         throw failure
       }
       await assert.rejects(harness.capture({ width: 390, height: 844 }), failure)
@@ -152,14 +222,36 @@ for (const kind of ['embedded', 'external']) {
       )
       assert.deepEqual(harness.events, [])
       const resizing = new AbortController()
-      harness.driver.setViewport = async () => {
+      const original = harness.driver.temporaryViewport
+      harness.driver.temporaryViewport = async (viewport) => {
+        const restore = await original(viewport)
         resizing.abort(new Error('test cancellation during resize'))
+        return restore
       }
       await assert.rejects(
         harness.capture({ width: 390, height: 844 }, resizing.signal),
         /test cancellation during resize/
       )
       assert.equal(harness.events.includes('capture'), false)
+      assert.equal(harness.events.at(-1), 'restore-viewport')
+      assert.deepEqual(harness.readViewport(), { width: 929, height: 900 })
+    } finally {
+      await harness.dispose()
+    }
+  })
+
+  test(`${kind} capture failure restores viewport and keeps the original error`, async () => {
+    const harness = await createHarness(kind)
+    try {
+      const failure = new Error('native capture failed')
+      harness.runtime.screenshot[
+        kind === 'external' ? 'captureExternalScreenshot' : 'captureBrowserScreenshotImage'
+      ] = async () => {
+        throw failure
+      }
+      await assert.rejects(harness.capture({ width: 820, height: 820 }), failure)
+      assert.deepEqual(harness.readViewport(), { width: 929, height: 900 })
+      assert.equal(harness.events.at(-1), 'restore-viewport')
     } finally {
       await harness.dispose()
     }

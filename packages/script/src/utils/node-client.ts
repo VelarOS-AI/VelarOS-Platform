@@ -4,7 +4,7 @@ import { isEmpty } from '@velaros-ai/core'
 
 import { NodeEnvironmentVariables, NodeExecutionLimits } from '../contract/constants.js'
 
-import { sliceModuleExports } from './compiler.js'
+import { createModuleExportSlicer } from './compiler.js'
 
 /** 每次执行共享一个标准 ESM 传输模块，短期凭据只从当前子进程环境读取。 */
 export function nodeCapabilityBridge(): string {
@@ -87,13 +87,14 @@ export function nodeOperationDeclarations(
     ts.ScriptKind.TS
   )
   const docs: Record<string, string> = Object.create(null)
+  const slice = createModuleExportSlicer(declarations, namespace)
   for (const name of operations) {
     const methods = file.statements.filter(
       (statement): statement is ts.FunctionDeclaration =>
         ts.isFunctionDeclaration(statement) && statement.name?.text === name
     )
     if (isEmpty(methods)) continue
-    const selected = sliceModuleExports(declarations, namespace, [name]).declarations
+    const selected = slice([name]).declarations
     if (!selected) continue
     const method = methods[0]!
     const required = method.parameters.filter(
