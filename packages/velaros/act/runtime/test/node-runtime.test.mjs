@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node
 import { homedir, tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 
 import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
@@ -29,8 +29,15 @@ import {
   skillComposition,
 } from '../../../dist/skills/index.js'
 
+const fixtureRoots = new Set()
+// 各测试的 Runtime.close 必须先完成；Windows 不能删除仍由 SQLite 持有的目录。
+after(async () => {
+  for (const root of fixtureRoots) await rm(root, { recursive: true, force: true })
+})
+
 async function fixture(t, extra = {}, mode = 'danger-full-access') {
   const root = await mkdtemp(join(tmpdir(), 'velaros-native-'))
+  fixtureRoots.add(root)
   const cwd = join(root, 'workspace')
   await mkdir(cwd)
   const shell = createLocalShellHost({ cwd, processConfinement: { mode, workspaceRoot: cwd } })
@@ -66,7 +73,6 @@ async function fixture(t, extra = {}, mode = 'danger-full-access') {
   t.after(async () => {
     await shell.dispose()
     await lease?.release()
-    await rm(root, { recursive: true, force: true })
   })
   return { root, cwd, shell, node, registry, lease }
 }
@@ -288,7 +294,7 @@ for (const explicit of [true, false])
       first.input.filter((item) => ['system', 'developer'].includes(item.role))
     )
     assert(system.includes('Node.js ESM'))
-    assert(system.includes(`默认时限 ${CodeSurfaceLimits.timeoutMs} ms`))
+    assert(system.includes(`时限默认 ${CodeSurfaceLimits.timeoutMs}ms`))
     assert(system.includes('options.timeoutMs'))
     assert(system.includes('true 立即返回身份'))
     assert(system.includes('异步执行仍属于本任务'))
@@ -1343,7 +1349,17 @@ test('runtime delivers native output to the next model turn with a small standar
   delete ordinaryFrame.presentation
   const compact = memoryPrompt(JSON.stringify(originalFrame))
   const full = memoryPrompt(JSON.stringify(ordinaryFrame))
-  assert.ok(compact.length < full.length * 0.55, `${compact.length}/${full.length}`)
+  // 包目录是两种表示必须保留的相同事实；新增默认库不能稀释结构压缩率。
+  const inventory = JSON.stringify(originalFrame.partitions.runtime.inventory)
+  assert.ok(compact.includes(inventory))
+  assert.ok(full.includes(inventory))
+  for (const name of NodeDefaultPackages) assert.ok(inventory.includes(name), name)
+  const compactStructure = compact.length - inventory.length
+  const fullStructure = full.length - inventory.length
+  assert.ok(compactStructure < fullStructure * 0.55, `${compactStructure}/${fullStructure}`)
+  const repeated = memoryPrompt(JSON.stringify(originalFrame), JSON.stringify(originalFrame))
+  assert.ok(!repeated.includes(inventory), 'unchanged catalog must not be repeated')
+  assert.match(repeated, /unchangedInEarlierFrame/)
   assert.doesNotMatch(compact, /workspace：|observation：|observationAction|workspaceShare/)
   assert.match(requests[0].compiledPrompt, /当前运行状态/)
 
@@ -1676,7 +1692,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
         const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
         assert.match(req.instructions, /Node.js/)
         assert.match(req.instructions, /process.env.VELAROS_HOST_DIR/)
-        assert.match(req.instructions, /每项的 documentation/)
+        assert.match(req.instructions, /documentationPath/)
         yield { type: 'reasoning', text: 'Inspect the task inputs.' }
         yield {
           type: 'text',
@@ -2158,12 +2174,14 @@ test('standard package references expose installed versions, original docs and d
   assert.deepEqual(
     result.value.sort(),
     [
-      ...NodeDefaultPackages,
-      'ts-morph',
-      'prettier',
-      'jsonc-parser',
-      '@ast-grep/napi',
-      '@playwright/test',
+      ...new Set([
+        ...NodeDefaultPackages,
+        'ts-morph',
+        'prettier',
+        'jsonc-parser',
+        '@ast-grep/napi',
+        '@playwright/test',
+      ]),
     ].sort()
   )
 })
@@ -2563,7 +2581,11 @@ test('host project bindings compose independently with selected Skills', async (
       })
       assert.equal(result.result.failed, undefined, JSON.stringify(result))
       assert.deepEqual(result.rawValue.packages.sort(), [...NodeDefaultPackages].sort())
-      assert.equal(result.rawValue.unavailable.length, 5)
+      assert.deepEqual(result.rawValue.unavailable.sort(), [
+        '@ast-grep/napi',
+        '@playwright/test',
+        'jsonc-parser',
+      ])
     }
   }
   const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.browser] })
