@@ -116,6 +116,8 @@ assert(
 )
 for (const [name, bundled] of [
   ['script', 'globby'],
+  ['script', 'ts-morph'],
+  ['skill-jsts', 'ts-morph'],
   ['velaros', 'mammoth'],
 ]) {
   const manifest = JSON.parse(

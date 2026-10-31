@@ -13,6 +13,49 @@ const bracesFiles = {
   'lib/stringify.js': 'f38d08f36d4cb1bd40069f6fd9fbb4b88143df943e633e5ee3b8540afc4beb73',
 }
 
+// GHSA-g3hv-75wg-m249：10.x 回移上游 77a0f5c；旧版没有受影响的预处理优化。
+const minimatchFiles = {
+  'dist/esm/index.js': '6883402b74e5a804293e1626b883d617bfceb4f9219f531bc85112d3d19e8365',
+  'dist/commonjs/index.js': '92049786b577b2f62818f1c2ed2dbcbb7d190862b726cbd36e0e386ff4f9d9be',
+}
+const legacyMinimatchFiles = {
+  '3.1.5': '746849f267c4868a53729225bd85c7dccd387712136fb305fcc0a3eadd4a3d9d',
+  '5.1.9': '1339bca8b70e33847860daa8fc3ccfa62487e143670da01a3b718d40d5fd424f',
+}
+
+/** 核对所有实际可达副本，不能仅凭忽略公告放过新引入的版本或丢失补丁。 */
+export function assertMinimatchProtection(root) {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  assert.equal(manifest.name, 'minimatch')
+  const files =
+    manifest.version === '10.2.6'
+      ? minimatchFiles
+      : { 'minimatch.js': legacyMinimatchFiles[manifest.version] }
+  for (const [path, expected] of Object.entries(files)) {
+    assert(expected, `minimatch ${manifest.version} 尚未核验放大保护`)
+    const source = readFileSync(join(root, path))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      expected,
+      `minimatch 保护内容变化：${root}/${path}`
+    )
+    if (manifest.version !== '10.2.6') assert(!source.includes('firstPhasePreProcess'))
+  }
+  const loaded = createRequire(join(root, 'package.json'))('./')
+  const match = typeof loaded === 'function' ? loaded : loaded.minimatch
+  assert(match('src/a.ts', 'src/**/*.ts'))
+  assert(!match('src/a.js', 'src/**/*.ts'))
+  if (manifest.version === '10.2.6') {
+    const mm = new loaded.Minimatch('a/**/../b/'.repeat(14) + 'file.ts', {
+      optimizationLevel: 2,
+      braceExpandMax: 64,
+    })
+    assert(mm.globParts.length <= 64)
+    const many = Array.from({ length: 1001 }, (_, i) => [String(i), '**', 'x'])
+    assert.equal(mm.secondPhasePreProcess(many), many)
+  }
+}
+
 /** 从消费者的真实解析路径查找，避免读取根目录碰巧存在的另一份依赖。 */
 function dependencyManifest(name, parent) {
   const localRequire = createRequire(parent)
@@ -110,5 +153,7 @@ export function assertInstalledDependencyRepairs(manifests) {
     assertBracesPatch(root)
     assertBracesBehavior(createRequire(join(root, 'package.json'))('./'))
   }
+  for (const { root } of packages.filter(({ manifest }) => manifest.name === 'minimatch'))
+    assertMinimatchProtection(root)
   return braces.length
 }

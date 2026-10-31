@@ -67,8 +67,8 @@
       "domain": "foundations",
       "directory": "packages/script",
       "name": "@velaros-ai/script",
-      "version": "0.3.6",
-      "description": "Native Node.js execution with Execa, ripgrep, globby, diff, YAML, on-demand capabilities and host-owned process permissions.",
+      "version": "0.3.7",
+      "description": "Native Node.js execution with mature file, source, data and document libraries, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
         "./contracts"
@@ -79,7 +79,7 @@
       "domain": "foundations",
       "directory": "packages/skill-jsts",
       "name": "@velaros-ai/skill-jsts",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
       "exportSubpaths": [
         "./SKILL.md",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.22",
+      "version": "0.6.23",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",

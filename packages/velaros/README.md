@@ -23,7 +23,7 @@ try {
 }
 ```
 
-默认执行环境为 Node.js ESM，预装 Execa、@vscode/ripgrep、globby、diff 与 yaml。模型通过 `exec({code})` 运行程序，文件操作使用 Node 标准库。项目工作区按需提供 `velaros:project` 的版本核对、原子提交和冲突撤回；应用能力通过运行目录中的 `index.json` 和操作声明发现。
+默认执行环境为 Node.js ESM，预装命令、文件、源码、网页、CSV、日期、校验与 ZIP 的成熟 npm 库（见 [Script 默认库](../script/README.md)）。模型通过 `exec({code})` 运行程序，文件操作使用 Node 标准库。项目工作区按需提供 `velaros:project` 的版本核对、原子提交和冲突撤回；应用能力通过运行目录中的 `index.json` 和操作声明发现。
 
 
 ## 入口

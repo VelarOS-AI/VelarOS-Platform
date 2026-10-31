@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 import {
   assertBracesPatch,
   assertInstalledDependencyRepairs,
+  assertMinimatchProtection,
   installedDependencyGraph,
 } from './dependency-probes.mjs'
 
@@ -19,6 +20,23 @@ const scriptRequire = createRequire(manifests[0])
 
 test('all reachable copies are patched and standard brace semantics remain compatible', () => {
   assert(assertInstalledDependencyRepairs(manifests) > 0)
+})
+
+test('minimatch guards reject a modified or unreviewed installation', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'velaros-minimatch-integrity-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const copy = installedDependencyGraph(manifests).find(
+    ({ manifest }) => manifest.name === 'minimatch' && manifest.version === '10.2.6'
+  )
+  assert(copy)
+  await cp(copy.root, directory, { recursive: true, dereference: true })
+  await writeFile(join(directory, 'dist/esm/index.js'), '// missing protection')
+  assert.throws(() => assertMinimatchProtection(directory), /保护内容变化/)
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({ name: 'minimatch', version: '10.0.0' })
+  )
+  assert.throws(() => assertMinimatchProtection(directory), /尚未核验/)
 })
 
 test('reachable qs copies safely serialize hostile comma-array elements and preserve normal values', () => {

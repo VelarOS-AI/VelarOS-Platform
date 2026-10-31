@@ -24,7 +24,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '非交互命令用 stdin:"ignore"、timeout；默认等输入。rg 给路径，字面量用 ["-F","-e",pattern,"--","."]，多项重复 -e；正则用 String.raw。退出 1 无匹配，其他查 stderr。',
     '输入用 execa(command,args,{input:text,timeout:10000}) 或写后关闭 child.stdin；与 stdin:"ignore" 互斥。child_process.execFile 无 input；读 stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
-    '普通文件读写用 node:fs/promises，遍历/搜索/差异用已装的 globby、ripgrep、diff 或项目依赖；长文本用 velaros:program 的 blobs，写后核对。',
+    '普通文件读写用 node:fs/promises，便利操作用 fs-extra；结构化改码用 ts-morph，格式化用 prettier；遍历/搜索/差异用 globby、ripgrep、diff 或项目依赖。其余预装库按需 import，版本和 README 查目录，不重复安装。长文本用 velaros:program 的 blobs，写后核对。',
     ...(modules.includes('velaros:system-environment')
       ? [
           'velaros:system 的 environment 是 npm 管理对象：list/search/describe 查询，apply 安装/换版/卸载；跨会话持久，单次固定版本。查该版 README/类型并验证，rollback 回退。',

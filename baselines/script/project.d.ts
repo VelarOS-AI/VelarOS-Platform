@@ -359,7 +359,7 @@ declare module 'velaros:project' {
    * 同一个文件可以接连几步，后一步按前一步改完的内容算。二进制文件和目录不收，用命令处理。
    */
   type ProjectEditStep =
-    | { action: 'write'; path: string; text: string; expectedText?: string | null }
+    | { action: 'write'; path: string; text: string; expectedText?: string | null | undefined }
     | { action: 'replace'; path: string; oldText: string; newText: string }
     | { action: 'move'; path: string; to: string }
     | { action: 'delete'; path: string }

@@ -2019,6 +2019,47 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })
 
+test('mature default libraries process files, source, HTML, CSV and archives without loading a Skill', async (t) => {
+  const f = await fixture(t)
+  const source = `
+    import assert from 'node:assert/strict';
+    import fs from 'fs-extra'; import {Project} from 'ts-morph';
+    import ts from 'typescript'; import {format} from 'prettier';
+    import {load} from 'cheerio'; import {parse} from 'csv-parse/sync';
+    import {stringify} from 'csv-stringify/sync'; import {groupBy} from 'lodash-es';
+    import {addDays,formatISO} from 'date-fns'; import pLimit from 'p-limit';
+    import JSZip from 'jszip'; import {z} from 'zod';
+    import {execa} from 'execa';
+    await fs.outputJson('nested/data.json',{name:'中文'});
+    assert.equal((await fs.readJson('nested/data.json')).name,'中文');
+    const project=new Project({useInMemoryFileSystem:true});
+    const file=project.createSourceFile('source.ts','export const answer = 1;');
+    file.getVariableDeclarationOrThrow('answer').setInitializer('42');
+    const formatted=await format(file.getFullText(),{parser:'typescript'});
+    assert.match(formatted,/answer = 42/);
+    assert.match(ts.transpileModule(formatted,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,/42/);
+    assert.equal(load('<article><h1>中文</h1></article>')('h1').text(),'中文');
+    const rows=[{name:'a,b',value:'quoted " text'},{name:'多行',value:'line\\nbreak'}];
+    assert.deepEqual(parse(stringify(rows,{header:true}),{columns:true}),rows);
+    assert.equal(groupBy(rows,'name')['a,b'].length,1);
+    assert.equal(formatISO(addDays(new Date(2026,0,1),2),{representation:'date'}),'2026-01-03');
+    const limit=pLimit(1); let active=0,peak=0;
+    await Promise.all([1,2,3].map(value=>limit(async()=>{active++;peak=Math.max(peak,active);await Promise.resolve(value);active--;})));
+    assert.equal(peak,1);
+    const zip=new JSZip();zip.file('data.txt','archive 中文');
+    const restored=await JSZip.loadAsync(await zip.generateAsync({type:'nodebuffer'}));
+    assert.equal(await restored.file('data.txt').async('string'),'archive 中文');
+    assert.equal(z.object({count:z.number().int()}).parse({count:42}).count,42);
+    await fs.outputFile('child.mjs',"import {parse} from 'csv-parse/sync';import {format} from 'prettier';console.log(parse('a,b')[0].join(':'),(await format('let x=1',{parser:'babel'})).trim());");
+    console.log((await execa(process.execPath,['child.mjs'],{stdin:'ignore',timeout:10000})).stdout);
+    console.log('mature-default-libraries-passed');
+  `
+  const result = await createNodeCodeRunner(f.node).run(request(source), noCalls, () => {})
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.match(result.process.stdout, /a:b let x = 1/)
+  assert.match(result.process.stdout, /mature-default-libraries-passed/)
+})
+
 test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints and child Node processes', async (t) => {
   const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] })
   const original = {

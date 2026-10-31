@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.88",
+  "version": "0.6.89",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
@@ -81,7 +81,7 @@
     "check:project-arch": "node scripts/velaros/check-project-architecture.mjs",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",
     "check:dependency-licenses": "node scripts/quality/check-dependency-licenses.mjs",
-    "check:dependency-security": "node --test scripts/security/dependency-probes.test.mjs && node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w5hq-g745-h8pq --ignore GHSA-vfj7-8cjw-p6xm",
+    "check:dependency-security": "node --test scripts/security/dependency-probes.test.mjs && node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w5hq-g745-h8pq --ignore GHSA-vfj7-8cjw-p6xm --ignore GHSA-g3hv-75wg-m249",
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:readme-examples": "node scripts/ownership/check-readme-examples.mjs",
     "check:error-construction": "node scripts/quality/check-error-construction.mjs",
@@ -156,6 +156,7 @@
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git"
   },
   "patchedDependencies": {
-    "braces@3.0.3": "patches/braces@3.0.3.patch"
+    "braces@3.0.3": "patches/braces@3.0.3.patch",
+    "minimatch@10.2.6": "patches/minimatch@10.2.6.patch"
   }
 }

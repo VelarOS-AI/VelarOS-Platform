@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/skill-jsts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
   "license": "Apache-2.0",
   "type": "module",
@@ -50,5 +50,8 @@
   "exports": {
     "./package.json": "./package.json",
     "./SKILL.md": "./SKILL.md"
-  }
+  },
+  "bundledDependencies": [
+    "ts-morph"
+  ]
 }

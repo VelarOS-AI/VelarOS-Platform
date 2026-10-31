@@ -20,7 +20,19 @@ const result = await session.run({
 if (result.checked) console.log(result.result.process)
 ```
 
-每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装 `execa`、`@vscode/ripgrep`、`globby`、`diff`、`yaml`，用 `velaros:npm/<包名>` 显式选择宿主安装，例如 `import {execa} from "velaros:npm/execa"`。裸包名按 Node 的工作区规则解析，损坏的项目依赖保留原错误；宿主包子路径沿用该安装的 exports。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
+每个会话执行一次 Node.js ESM 程序，支持顶层 await。预装标准库见下表；无需先加载 Skill 或安装，用 `velaros:npm/<包名>` 显式选择宿主安装，例如 `import {execa} from "velaros:npm/execa"`。裸包名按 Node 的工作区规则解析，损坏的项目依赖保留原错误；宿主包子路径沿用该安装的 exports。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
+
+
+| 用途 | 默认 npm 包 |
+| --- | --- |
+| 命令、搜索、遍历、差异 | `execa`、`@vscode/ripgrep`、`globby`、`diff` |
+| 文件便利操作 | `fs-extra`（普通读写仍可直接用 Node） |
+| TypeScript 结构化修改与格式化 | `ts-morph`、`typescript`、`prettier` |
+| HTML/XML、CSV 与 YAML | `cheerio`、`csv-parse`、`csv-stringify`、`yaml` |
+| 数据整理、日期与校验 | `lodash-es`、`date-fns`、`zod` |
+| 并发限制与 ZIP | `p-limit`、`jszip` |
+
+默认包只在程序 import 时加载，发现目录只读取包元数据，不预加载库代码或把 README 塞进上下文。工作区依赖仍优先，显式宿主导入可选固定版本；高级 JS/TS Skill 继续提供语义工作流、结构搜索与浏览器测试，选择它不是使用 ts-morph 或 prettier 的前置步骤。
 
 `VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 
