@@ -10,6 +10,7 @@ import {
   isString,
   isUndefined,
   Log,
+  optionalWhen,
   toNullable,
   toOptional,
 } from '@velaros-ai/core'
@@ -828,7 +829,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         const startedAt = Date.parse(phase?.first.createdAt ?? '')
         const settledAt = Date.parse((resultRecord ?? phase?.last)?.createdAt ?? '')
         agents.push({
-          ...(Number.isFinite(startedAt) ? { startedAt } : {}),
+          startedAt: optionalWhen(Number.isFinite(startedAt), startedAt),
           id: job.id,
           sessionId: job.sessionId,
           executionId: item.executionId,

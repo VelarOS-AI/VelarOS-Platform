@@ -1,3 +1,5 @@
+import { isTrue } from '@velaros-ai/core'
+
 import type { BrowserProtocolChannel } from '../../contract/requires.js'
 import type { BrowserViewportOptions } from '../../types/browser.js'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport.js'
@@ -90,7 +92,7 @@ export class BrowserViewportState implements BrowserViewportStateApi {
       await channel.send('Emulation.setDeviceMetricsOverride', {
         ...buildBrowserViewportDeviceMetrics({
           ...options,
-          mobile: previous ? previous.params.mobile === true : options.mobile,
+          mobile: previous ? isTrue(previous.params.mobile) : options.mobile,
         }),
       })
       return restore

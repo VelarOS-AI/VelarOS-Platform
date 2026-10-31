@@ -52,7 +52,7 @@ async function publishAtomicFile(tmpPath: string, filePath: string): Promise<voi
       await rename(tmpPath, filePath)
       return
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException | null)?.code
+      const code = (error as Nullable<NodeJS.ErrnoException>)?.code
       const delay = WindowsRenameRetryDelaysMs[attempt]
       if (
         process.platform !== 'win32' ||
