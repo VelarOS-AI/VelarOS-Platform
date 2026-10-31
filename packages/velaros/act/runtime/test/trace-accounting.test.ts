@@ -10,12 +10,12 @@ import { createContextInvocationJournal, createContextRuntime } from '@velaros-a
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RuntimeTrace } from '../impl/RuntimeTrace.js'
-import { ActRuntimeTuning } from '../utils/tuning.js'
 import {
   modelAccounting,
   summarizeVerificationAttempt,
   summarizeVerificationCosts,
 } from '../utils/trace-accounting.js'
+import { ActRuntimeTuning } from '../utils/tuning.js'
 
 const cost = (coverage = 'complete', amount: number | undefined = 2, id = 'charge-1') => ({
   coverage,

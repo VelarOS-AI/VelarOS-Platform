@@ -20,7 +20,6 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { ModelToolBinding } from '../types/model-tools.js'
 import type { ProgramLeaseState, ScriptControlReceipt } from '../types/runtime.js'
 import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
-import type { TraceReadState } from '../types/trace-read.js'
 import type {
   ActAgentSummary,
   ActExecutionSummary,
@@ -36,6 +35,7 @@ import type {
   ActVerificationCostSummary,
   TraceChildPhase,
 } from '../types/trace.js'
+import type { TraceReadState } from '../types/trace-read.js'
 import {
   executionDuration,
   executionOutcome,
