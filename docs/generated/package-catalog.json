@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "9.9.3",
+      "version": "9.9.4",
       "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.20",
+      "version": "0.6.21",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -152,7 +152,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.10.1",
+      "version": "0.10.2",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",

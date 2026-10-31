@@ -126,7 +126,7 @@ export function nodeFrameState(
       unchanged.push(key)
       delete currentRuntime[key]
     }
-    if (unchanged.length) currentRuntime.unchangedInEarlierFrame = unchanged
+    if (!isEmpty(unchanged)) currentRuntime.unchangedInEarlierFrame = unchanged
   }
   return {
     workspaceVisible,

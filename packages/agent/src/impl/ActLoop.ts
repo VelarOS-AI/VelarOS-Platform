@@ -1319,7 +1319,7 @@ export class ActLoop implements ActLoopApi {
         candidate.logical.every(
           (message, index) => identity(message) === identity(logical[index]!)
         ) &&
-        remainingFrameImages(images, candidate.images) !== undefined
+        !isUndefined(remainingFrameImages(images, candidate.images))
     )
     if (!transcript) return undefined
     // 帧里也有首次交付的事实正文；容量与历史帧预算在完整组帧后核对，重建会重新交付必要正文。
