@@ -1338,8 +1338,11 @@ test('runtime delivers native output to the next model turn with a small standar
   const session = await runtime.openSession('node')
   for await (const event of session.submit('Print and check native-output-739.')) void event
   assert.equal(requests.length, 2)
-  // Keep the Node protocol and entry-point/discovery verification guidance within a bounded prompt.
-  assert.ok(requests[0].instructions.length < 3000, requests[0].instructions)
+  const instructionReview = {
+    // 无项目/子任务能力的基准场景；仅作评审预算。必要说明增长时可说明原因并调整，不截断运行时指令。
+    maxChars: 3000,
+  }
+  assert.ok(requests[0].instructions.length <= instructionReview.maxChars, requests[0].instructions)
   const originalFrame = JSON.parse(
     requests[0].materials.find((item) => item.origin === 'runtime-view').text
   )
@@ -2302,7 +2305,7 @@ test('package discovery uses the exact nested entrypoint, package self-reference
   ]) {
     const reference = result.value.catalog.packages.find((pkg) => pkg.name === name)
     assert.equal(reference.version, result.value[name])
-    assert.equal(reference.root, await realpath(root))
+    assert.equal(await realpath(reference.root), await realpath(root))
     assert.equal(reference.source, 'workspace')
   }
 })
@@ -2373,7 +2376,7 @@ test('each execution discovers newly edited self references without a stale host
   assert.equal(edited.ok, true, JSON.stringify(edited))
   assert.equal(edited.value.source, 'workspace')
   assert.equal(edited.value.version, '0.0.2')
-  assert.equal(edited.value.root, await realpath(f.cwd))
+  assert.equal(await realpath(edited.value.root), await realpath(f.cwd))
 })
 
 test('capabilities cannot shadow default npm packages through either registration path', async (t) => {
