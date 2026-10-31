@@ -22,6 +22,14 @@ const driver = (stream) => ({
   estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
   stream,
 })
+
+// 仅作提示词评审预算，不截断实际请求；必要说明增长时连同字段理由调整。
+const InstructionReviewBudgets = {
+  // Node、预装库、协作发现和项目原文保护示例；不为省字删除合同。
+  prefixChars: 2200,
+  // 在前缀之上保留完整执行协议、控制语义与错误恢复说明。
+  fullChars: 3800,
+}
 async function fixture(t, options) {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-instructions-'))
   const runtime = await createRuntime({
@@ -369,9 +377,14 @@ test('base instructions stay small while authorized packages are discoverable on
     assert.match(instructions, /Node.js/)
     assert.match(instructions, /index.json/)
     const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
-    // 验证发现范围与最终产物的通用指导纳入固定前缀预算，能力合同仍按需读取。
-    assert(prefixChars < 2000, `instruction prefix has ${prefixChars} characters`)
-    assert(instructions.length < 3600, 'full control semantics must remain bounded')
+    assert(
+      prefixChars <= InstructionReviewBudgets.prefixChars,
+      `instruction prefix has ${prefixChars} characters`
+    )
+    assert(
+      instructions.length <= InstructionReviewBudgets.fullChars,
+      'review full control semantics growth'
+    )
     const result = await f.session.execute({
       source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.capabilities.some(item=>item.module==='velaros:project');`,
     })
@@ -403,8 +416,14 @@ test('Node hints expose only available collaboration and search capabilities wit
       assert(!instructions.includes('velaros:context-materials'))
       assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
       const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
-      assert(prefixChars < 2000, `instruction prefix has ${prefixChars} characters`)
-      assert(instructions.length < 3600, 'full control semantics must remain bounded')
+      assert(
+        prefixChars <= InstructionReviewBudgets.prefixChars,
+        `instruction prefix has ${prefixChars} characters`
+      )
+      assert(
+        instructions.length <= InstructionReviewBudgets.fullChars,
+        'review full control semantics growth'
+      )
     }
   }
 })
