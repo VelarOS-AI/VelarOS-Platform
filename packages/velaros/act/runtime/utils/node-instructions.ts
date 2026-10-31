@@ -20,34 +20,34 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
   return [
     `Node.js ESM/顶层 await；预装 ${NodeDefaultPackages.join('、')}；宿主：import {execa} from "${NodeRuntimePackagePrefix}execa"。`,
     `cwd:${JSON.stringify(cwd)}；独立进程，跨轮状态存文件或 store。`,
-    `默认时限 ${CodeSurfaceLimits.timeoutMs} ms，I/O/子进程计时，宿主等待停表。options.timeoutMs:1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数ms，受父期限/取消约束；引用不继承，值见回执。子进程 timeout 不延长外层。长程序需核对终态；脱组清理未知。`,
-    '非交互命令用 stdin:"ignore"、timeout；默认等输入。rg 给路径，字面量用 ["-F","-e",pattern,"--","."]，多项重复 -e；正则用 String.raw。退出 1 无匹配，其他查 stderr。',
-    '输入用 execa(command,args,{input:text,timeout:10000}) 或写后关闭 child.stdin；与 stdin:"ignore" 互斥。child_process.execFile 无 input；读 stdin 需 EOF。',
+    `时限默认 ${CodeSurfaceLimits.timeoutMs}ms，options.timeoutMs:1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数ms；I/O/子进程计时，宿主等待停表。父期限/取消优先；引用不继承时限，查回执。子进程 timeout 不延长外层；核终态，脱组清理未知。`,
+    '非交互命令设 stdin:"ignore"、timeout。rg 字面量参数 ["-F","-e",pattern,"--","."]，多项重复 -e；正则 String.raw。退出 1 无匹配，其他查 stderr。',
+    '输入用 execa(cmd,args,{input:text,timeout:10000}) 或写完关闭 child.stdin，勿同时 stdin:"ignore"。execFile 不支持 input；stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
-    '普通读写用 node:fs/promises 或 fs-extra；结构改码 ts-morph，格式化 prettier；其余预装库按需 import，版本/README 查目录，不重复安装。长文本用 velaros:program 的 blobs，写后核对。',
+    '普通读写用 node:fs/promises/fs-extra，其余预装库按需 import，版本/README 查目录，勿重复安装。长文本用 velaros:program 的 blobs，写后核对。',
     ...(modules.includes('velaros:system-environment')
       ? [
-          'velaros:system 的 environment 是 npm 管理对象：list/search/describe 查询，apply 安装/换版/卸载；跨会话持久，单次固定版本。查该版 README/类型并验证，rollback 回退。',
+          'velaros:system.environment 管 npm：list/search/describe 查询，apply 安装/换版/卸载，rollback 回退。跨会话持久，单次固定版本；核该版 README/类型并验证。',
         ]
       : []),
     'execa 9：command/cwd/durationMs（子进程耗时）；reject:false 查 failed/stdout/stderr；exitCode 可缺失，查 timedOut/signal/code。',
-    '后台/委派核身份/进度/错误/退出；等回执报进度，到达续跑。时长不证明有效工作，停滞先诊断。',
-    '把当前有效要求对应到交付物与必要检查，随进度更新待办和证据。编码前从既有实现、合同、测试与调用方确认行为边界；新增实现和自写测试不能自行定义兼容范围。',
-    '验证用户入口；查测试发现规则，用清单或临时必失败断言确认默认命令确实覆盖新增测试，恢复后重跑。退出 0 仅证明实际覆盖范围；生成/打包物须验证改动已传到消费入口。',
-    '检查记录关联产物、命令、结果和覆盖范围；改动后补验受影响部分。通过后仅因新增改动、关联失败、未覆盖要求或明确要求扩大验证。收尾核对要求、最终差异和回执，报告结果及证据缺口。',
+    '后台/委派核身份、进度、错误、退出；等回执续跑。时长不证明有效，停滞先诊断。',
+    '要求对应交付与检查；编码前核旧实现、合同、测试和调用方，不用新实现自定兼容范围。',
+    '验证用户及打包入口；按发现规则核新增测试确实运行，可用清单或临时必失败断言（恢复后重跑）。退出 0 仅证明实际覆盖范围。',
+    '检查记录含产物、命令、结果、覆盖。改动后补验；通过后仅因改动、关联失败、覆盖缺口或明确要求扩大验证。收尾核要求、差异、回执，报告证据缺口。',
     '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
-    `读 process.env.${NodeEnvironmentVariables.directory.name} 下 index.json；capabilities 按 module/member 找项，每项的 documentationPath、operationPaths[操作名] 是可直接读的绝对路径（声明/示例）；旧 documentation/operationDirectory 相对目录根。packages 查包身份，velaros:skills.load({name}) 读技能全文。`,
+    `读 process.env.${NodeEnvironmentVariables.directory.name}/index.json：capabilities 按 module/member 查，documentationPath、operationPaths[操作名] 为声明/示例绝对路径；packages 查包身份；velaros:skills.load({name}) 读全文。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes(AgentsModuleId)
       ? ['velaros:agents 调度/通信；velaros:system 的 store 共享状态/事件；用前查声明。']
       : []),
     ...(modules.includes('velaros:project')
       ? [
-          '仅需事务、冲突保护或撤回时用 velaros:project.edit({steps:[...]})，相关改动一次提交；无需先 read/select。片段替换用 replace 的 oldText/newText；全文 write 传 expectedText:已读原文，null 只允许新建。回执 changeRef 可直接 undo；select/patch 仅用于结构定位或减少大块传输。',
-          '批量修改先核匹配片段；非原子编辑失败可能部分写入，重试先核差异再改剩余部分。',
+          '事务/冲突保护/撤回用 velaros:project.edit({steps:[...]}) 一次提交，无需先 read/select。replace 用 oldText/newText；write.expectedText 传已读原文，null 只新建。changeRef 可 undo；select/patch 用于结构定位或减少传输。',
+          '批改先核匹配；非原子失败可能部分写入，重试核差异，只改剩余部分。',
           ...(SystemMembers.memory.some((module) => modules.includes(module))
             ? [
-                '精确复制/变换输入：用 import {memory} from "velaros:system" 的 memory.read({ref}) 读取输入快照 record.ref，按 text/offset/totalChars 分页读全。同一程序从原 text 生成输出/校验预期并比对落盘结果；重抄为 blobs/字面量不能证明保真。',
+                '保真变换：import {memory} from "velaros:system"；memory.read({ref:record.ref}) 按 text/offset/totalChars 读全快照。用原 text 生成输出/预期并核落盘；重抄不能证明保真。',
               ]
             : []),
         ]
