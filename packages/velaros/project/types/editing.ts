@@ -195,8 +195,8 @@ export interface ProjectRecodeAction {
 
 /** 规划器内部的文件动作：模型的步骤按 op 改写，sourceRef 跟随文件身份穿过此前的步骤，path 只指本计划新建的文件。 */
 export type ProjectPlanFileAction =
-  | { op: 'create'; path: string; text: string }
-  | ({ op: 'overwrite'; text: string } & ProjectStepSource)
+  | { op: 'create'; path: string; text: string; expectedText?: LooseOptional<string> }
+  | ({ op: 'overwrite'; text: string; expectedText?: LooseOptional<string> } & ProjectStepSource)
   | ({ op: 'move'; to: string } & ProjectStepSource)
   | ({ op: 'delete' } & ProjectStepSource)
   | ProjectRecodeAction

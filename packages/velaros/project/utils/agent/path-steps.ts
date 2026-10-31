@@ -119,9 +119,14 @@ export async function planPathSteps(
       const path = await projectRelativePath(ctx, step.path)
       if (step.action === 'write') {
         if (created.has(path) || isString(await lookup(path)))
-          plan.push({ action: 'overwrite', text: step.text, ...(await source(path)) })
+          plan.push({
+            action: 'overwrite',
+            text: step.text,
+            expectedText: step.expectedText,
+            ...(await source(path)),
+          })
         else {
-          plan.push({ action: 'create', path, text: step.text })
+          plan.push({ action: 'create', path, text: step.text, expectedText: step.expectedText })
           created.add(path)
           vacated.delete(path)
         }

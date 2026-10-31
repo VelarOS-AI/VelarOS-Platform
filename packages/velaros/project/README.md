@@ -1,10 +1,12 @@
 # @velaros-ai/velaros/project
 
-项目的两件能力：`velaros:project`（受项目治理的读、列、搜、改、看改动、撤销，改动走带版本防护的事务）与 `velaros:code`（问定义、引用、调用、依赖、影响面、诊断），连同底下的项目内核与语言服务。给项目空间的宿主用；项目里的命令、沙箱、看图用这里的 `projectCapabilityPorts` 装端口，装成项目空间是产品的事。
+普通文件读写使用 Node，遍历、搜索、差异使用 globby、ripgrep、diff 等现有库。`velaros:project` 按需提供一次提交的事务、原文冲突保护和撤回；`velaros:code` 提供定义、引用、调用、依赖、影响面与诊断。项目内核、语言服务与宿主端口也在本单元。
 
 ## 用法
 
 ```ts
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createCapabilityModule, createProjectCapabilityModule } from '@velaros-ai/velaros'
 import {
   createFileProjectChangeFeed,
@@ -34,18 +36,14 @@ const project: ProjectSpacePort = {
   queryCode: createProjectCodeQuery(codeIndex),
 }
 
-// 宿主自己调用：精确定位、直接复用目标，只提供新片段，凭 changeRef 撤销
+// 宿主自己调用：直接复用 Node 已读的原文，一次事务，不额外 read/select 或申请编辑引用
 const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project, sessionId: 'session-1' }
-const found = await projectFileOperations.select({ targets: [{ path: 'src/index.ts', match: '// index' }] }, context)
-if (!found.issues?.length && found.targets[0]) {
-  const change = await projectFileOperations.patch(
-    { edits: [{ target: found.targets[0].target, text: '// 入口' }] },
-    context
-  )
-  if (change.status === 'applied' && change.changeRef) {
-    await projectFileOperations.undo({ changeRef: change.changeRef }, context)
-  }
-}
+const before = await readFile(join(root, 'src/index.ts'), 'utf8')
+const change = await projectFileOperations.edit({ steps: [
+  { action: 'write', path: 'src/index.ts', expectedText: before, text: before.replace('// index', '// 入口') },
+] }, context)
+// 只有需要撤回才调用；inspect 也不是提交后的必经步骤。
+if (change.changeRef) await projectFileOperations.undo({ changeRef: change.changeRef }, context)
 
 // 挂成模型程序里可以 import 的 velaros:project 与 velaros:code
 export const projectModule = createProjectCapabilityModule({ instanceId: root, project })
@@ -81,10 +79,11 @@ export function closeProject() {
 - `patch` 缺省摘要，`receipt: 'full'` 返回完整差量与变更窗口；原始差量、事务验证和撤销证据始终保留，`inspect(changeRef)` 可取回。`blocked` 明确整批未写入，保留结构化问题与 `planRef`；用原下标 `amendments` 只修正错误项，再次验证完整批次。取消与未知写入状态继续抛错。
 - `createProjectCapabilityModule` 将领域确认的实际写入效果交给 Kernel：blocked 和无变化记录为 none，真实变化记录为 committed。自行装配项目操作时，调用上下文的 `recordWriteOutcome` 应连接宿主 `recordEffect`；SDK 直接调用不要求效果日志。
 - `edit` 按路径指文件：`write` 整份写入（没有就新建），`replace` 把唯一的一段原文换掉；同文件接连几步按前一步结果计算。读取凭据由系统在规划时获取。
-- 编辑作用在提交那一刻的内容上：`replace` 要换的原文被外部改没了抛 `TARGET_NOT_FOUND`，`write` 整份换掉、不核对读过的版本，被换掉的内容靠这次改动的 `undo` 找回。
+- `write.expectedText` 可直接接收 Node 已读的完整原文，`null` 表示仅允许新建，空串表示现有空文件；省略时才按提交时内容覆盖。核对忽略输入开头的编码 BOM，换行与其他正文逐字比较，不匹配报 `BASE_REVISION_MISMATCH` 且整批未写入。同文件多步核对前一步结果；规划至提交期间继续使用内核版本保护。编码和原换行仍保留，撤回仍检查外部修改。
+- `replace` 直接按唯一原文定位，外部对其他位置的修改保留，目标消失或歧义时拒绝整批。无需先 `select`；全文变换优先复用已有原文和 `write.expectedText`。只有结构定位、特殊编码读取或减少大块传输时才选择 `read/select + patch`。
 - `changeRef`、选区与失败计划分别为 `change:`、`target:`、`plan:` 加 8 位十六进制。按会话与项目核对，内部保留完整 SHA256；碰撞重新签发，已签发身份和已消费计划保留轻量占用记录。正文受条数和字符预算约束；过期后重新读取定位，提交成功的计划不能重放。源码和编辑视图内部使用 `source:` / `view:`，历史完整引用在所属会话内精确解析。
 - `edit` 的步骤合成一个事务，全成或全不成；失败时一个文件都没写，按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。
-- 模型模板的批量变换先处理 `read.issues` 与缺少目标的窗口，全部读到后在程序内计算新正文，一次 `patch` 提交，交回改动路径和 `changeRef`。大量精确片段可用一次 `select` 和一次 `patch`；一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
+- 模型模板优先展示精确替换、复用已读原文的一次多文件 `edit` 和 `undo`。普通读取失败就停止依赖的提交，不把成功子集当整批；冲突后重新读取、合并，不移除保护重试。高级结构编辑才使用 `select/patch`：一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
 - `undo` 遇到外部改动抛 `CONFLICT_WITH_EXTERNAL_EDIT`、不覆盖，撤过的再撤是幂等成功；可撤销历史按条数和字节预算淘汰，被挤出去的撤销报 `NOT_SUPPORTED`。
 - 读、列、搜不折叠，`ProjectFileLimits` 只为守内存：超了整个失败，批量读里装不下的文件进 `issues`；一个事务缺省最多改 `ProjectPolicyDefaults.maxChangedFilesPerTransaction` 个文件，建内核时用 `corePolicy` 调。
 - `search.contextLines` 接受非负安全整数，缺省 1；命中窗口止于文件边界，相交或相邻的段合并。合并后的连续正文一次最多 20000000 个 Unicode 字符，超限明确失败，减小 contextLines、收窄范围或用 read 的 range 分段读取。

@@ -1,6 +1,6 @@
 // 域：`velaros:project` 的 edit 编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
 // fileRef / sourceRef 绑定到的身份，以及排好的事务操作。只生成计划，不读写磁盘，读取都经过 resolver。
-import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
+import { isEmpty, isString, isUndefined, toOptional } from '@velaros-ai/core'
 import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
@@ -295,6 +295,23 @@ async function planSource(
   return binding
 }
 
+/** 原文可直接来自 Node；核对同一事务视图，后续提交仍核对内核捕获的字节版本。 */
+function checkExpectedText(
+  path: string,
+  expected: LooseOptional<string>,
+  actual: Nullable<string>
+): void {
+  if (isUndefined(expected)) return
+  const comparable = isString(expected) ? expected.replace(/^\uFEFF/u, '') : expected
+  if (comparable === actual) return
+  throw new ProjectError(
+    'BASE_REVISION_MISMATCH',
+    `${path} 与 expectedText 不一致，整批未写入。`,
+    { path },
+    '重新读取当前文件并合并改动，再用新的原文提交；不要移除 expectedText 盲重试。'
+  )
+}
+
 /** 执行一个文件动作（create、overwrite、move、delete、recode），推进计划里的文件视图。 */
 async function planFileAction(
   plan: ProjectFilePlanState,
@@ -305,6 +322,7 @@ async function planFileAction(
     return
   }
   if (action.op === 'create') {
+    checkExpectedText(action.path, action.expectedText, null)
     const text = normalizeProjectInputText(action.text)
     const path = await planDestination(plan, action.path)
     const view = {
@@ -327,6 +345,7 @@ async function planFileAction(
   const { identity, view } = await planSource(plan, action)
   switch (action.op) {
     case 'overwrite': {
+      checkExpectedText(view.path, action.expectedText, view.content)
       // 整份替换会把没看过的行一起丢掉，所以要求 fileRef 覆盖全文；move、delete 不动正文，只核对版本。
       if (!coversWholeProjectFile(view))
         throw new ProjectError(

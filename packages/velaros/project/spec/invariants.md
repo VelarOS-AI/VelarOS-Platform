@@ -24,9 +24,9 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | `velaros:project` 有七个操作（read、list、search、edit、inspect、undo、snapshot）、`velaros:code` 有两个（query、analyze），声明从源码生成、只放出这些，调用上下文与空间端口不进模型面；两件工具随包发布的声明（`VelarProjectModule`、`VelarCodeModule`）与生成物是同一份，放出的方法就是能调的那些 | 测试 | `spec/acceptance.test.ts` |
-| INV-2 | 编辑按路径写：write 把正文整份写进一个文件（不存在就新建，上级目录自动建），replace 把文件里唯一的一段原文换成新文；同一次 edit 里对同一个文件接连几步时，后一步按前一步改完的内容算，move 之后按新路径接着改 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 编辑作用在提交那一刻的内容上：读取之后外部改了文件的别处，replace 照样成立、外部改动保住；要换的那段原文被外部改没了就整批拒绝（TARGET_NOT_FOUND），一个字节都不写 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | `velaros:project` 有九个操作（read、list、search、select、patch、edit、inspect、undo、snapshot）、`velaros:code` 有两个（query、analyze），声明从源码生成、只放出这些，调用上下文与空间端口不进模型面；两件工具随包发布的声明（`VelarProjectModule`、`VelarCodeModule`）与生成物是同一份，放出的方法就是能调的那些 | 测试 | `spec/acceptance.test.ts` |
+| INV-2 | 编辑按路径写：write 把正文整份写进一个文件（不存在就新建，上级目录自动建），replace 把文件里唯一的一段原文换成新文；同一次 edit 里对同一个文件接连几步时，后一步按前一步改完的内容算，move 之后按新路径接着改；write 可用 expectedText 核对完整原文，null 只允许新建，省略仍按现有覆盖语义 | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | 编辑作用在提交那一刻的内容上：读取之后外部改了文件的别处，replace 照样成立、外部改动保住；要换的那段原文被外部改没了就整批拒绝（TARGET_NOT_FOUND），一个字节都不写；write 提供 expectedText 时原文不匹配也整批拒绝（BASE_REVISION_MISMATCH），提交阶段仍检查磁盘版本 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 一次 edit 是一个事务：几个文件、几步全成或全不成；定不下来的那一步在 message 里点名第几步（`steps[i]`） | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 撤销只撤本事务写下的内容：遇到之后的外部修改拒绝覆盖（CONFLICT_WITH_EXTERNAL_EDIT）；已经撤销过的再撤一次是幂等成功，不报错也不改坏东西 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 读、列、搜、改都只在项目根之内：越出项目的路径（包括经符号链接指到项目外）一律拒绝（PERMISSION_DENIED） | 测试 | `spec/acceptance.test.ts` |
@@ -59,7 +59,7 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-39 | `./project/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
 | INV-40 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |
 | INV-41 | 同一份内容搜两遍，交回的一样：命中同分按路径、再按行列排，不跟 ripgrep 多线程交回的次序走（结果进模型上下文，次序抖动既让模型看着乱，也坏了前缀缓存） | 测试 | `spec/acceptance.test.ts` |
-| INV-42 | 批量替换模板先保留完整请求范围，读取有 issues 或没有可编辑目标时交付缺口且不写入子集；成功组合只用一次批量 read 与一次事务 patch，交回真实 changeRef 与改动范围 | 测试 | `spec/acceptance.test.ts` |
+| INV-42 | 批量事务模板直接接收 Node 已读原文与计算结果，只调用一次 edit，不另行 read/select/patch；逐文件核对 expectedText，真实 changeRef 可整次撤回。读取失败须停止依赖提交，任何原文冲突整批不写入 | 测试 | `spec/acceptance.test.ts` |
 | INV-43 | select 由明确解析后端绑定完整声明，保留连续源码、缩进、注释和装饰器；同名、嵌套与重载提供候选，不自动选中；坐标不由模型计算 | 测试 | `spec/selection-acceptance.test.ts` |
 | INV-44 | 文本与坏语法通过明确文本目标修复；目标只授权实际返回的连续区间，断开的窗口不能跨过隐藏间隙；相似度不会授予写入位置 | 测试 | `spec/selection-acceptance.test.ts` |
 | INV-45 | 目标绑定会话、项目和原始正文版本；误抄、跨域与陈旧目标拒绝，目标之外的正文变化同样冲突；客户端说明字段不能篡改位置 | 测试 | `spec/selection-acceptance.test.ts` |

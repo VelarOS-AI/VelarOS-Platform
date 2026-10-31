@@ -346,49 +346,39 @@ export const cycles = await dependencyCycles()
     expect(values.cycles).toBe('没有代码图谱后端')
   }, 180_000)
 
-  test('velaros:project：看文件与函数、批量读、目录与找文件、汇总用处、改几处、失败看原因、新建并引用、改名、全项目改名、看差量与撤销', async () => {
+  test('velaros:project：复用 Node 原文一次事务、精确替换、保护新建、改名、差量与撤回', async () => {
+    const files = await Promise.all(
+      ['src/service.ts', 'src/app.ts'].map(async (path) => {
+        const before = await readFile(join(root, path), 'utf8')
+        return {
+          path,
+          before,
+          after: before
+            .replaceAll('oldCall(', 'newCall(')
+            .replaceAll('loadSettings', 'readSettings'),
+        }
+      })
+    )
     const { values } = await runProgram(
       space,
       'project',
       `${template('project/template.js')}
-export const file = await showFile('src/user.ts')
-export const fn = await showFunction('loadSettings', 'src')
-export const configs = await readConfigs(['package.json', 'tsconfig.json', 'missing.json'])
-export const layout = await tree('.', 2)
-export const tests = await findFiles('src', '*.test.ts')
-export const usage = await whereUsed('useSettings')
-export const edited = await renameInFile('src/service.ts', 'oldCall(', 'newCall(')
+export const edited = await commitFiles(${JSON.stringify(files)})
 export const retried = await replaceOnce('src/config.ts', 'const retries = 3', 'const retries = 5')
-export const missed = await replaceOnce('src/config.ts', 'const retries = 3', 'const retries = 7')
-export const written = await writeFile('src/extra.ts', 'export const extra = 1\\n')
+let failure
+try { await replaceOnce('src/config.ts', 'const retries = 3', 'const retries = 7') }
+catch (error) { failure = { code: error.code, message: error.message } }
+export const missed = failure
+export const written = await safelyWriteFile('src/extra.ts', null, 'export const extra = 1\\n')
 export const added = await addModule('src/index.ts', 'src/cache.ts', "import { UserService } from './user.js'")
 export const moved = await renameFile('src/old-name.ts', 'src/new-name.ts', 'OldName', 'NewName')
-export const renamed = await renameEverywhere('loadSettings', 'readSettings')
-export const reviewed = typeof renamed === 'string' ? renamed : await review(renamed.changeRef)
-export const reverted = typeof renamed === 'string' ? renamed : await revert(renamed.changeRef)
+export const reviewed = await review(edited.changeRef)
+export const reverted = await revert(edited.changeRef)
 `
     )
-    expect(values.file).toStartWith('export class UserService {\n  find(id: string) {')
-    expect(values.fn).toMatchObject({ path: 'src/index.ts', startLine: 3 })
-    expect(values.fn.text).toStartWith('export function loadSettings() {')
-    expect(values.configs.files.map((file: { path: string }) => file.path)).toEqual([
-      'package.json',
-      'tsconfig.json',
-    ])
-    expect(values.configs.issues).toEqual([
-      expect.objectContaining({ path: 'missing.json', code: 'TARGET_NOT_FOUND' }),
-    ])
-    expect(values.layout.split('\n')).toEqual(
-      expect.arrayContaining(['src/', 'src/user.ts', 'package.json'])
-    )
-    // 版本库内部不是项目文件：看目录结构时不该冒出来。
-    expect(values.layout).not.toContain('.git')
-    expect(values.tests).toEqual(['src/feature.test.ts'])
-    expect(values.usage).toEqual({ total: 4, perFile: { 'src/app.ts': 2, 'src/view.tsx': 2 } })
-    expect(values.edited).toMatchObject({ changed: true, changedFiles: ['src/service.ts'] })
-    expect(await readFile(join(root, 'src/service.ts'), 'utf8')).toBe(
-      'export function run() {\n  return newCall(1)\n}\n\nfunction newCall(n: number) {\n  return n\n}\n'
-    )
+    expect(values.edited.changed).toBe(true)
+    expect([...values.edited.changedFiles].sort()).toEqual(['src/app.ts', 'src/service.ts'])
+    expect(await readFile(join(root, 'src/service.ts'), 'utf8')).toBe(files[0].before)
     expect(values.retried).toMatchObject({ changed: true })
     expect(await readFile(join(root, 'src/config.ts'), 'utf8')).toBe('export const retries = 5\n')
     // 同一处已经改过了：再改就找不到原文，程序拿到的是原因码和说明，不是一个崩掉的程序。
@@ -402,10 +392,10 @@ export const reverted = typeof renamed === 'string' ? renamed : await revert(ren
     )
     expect(existsSync(join(root, 'src/old-name.ts'))).toBe(false)
     expect(await readFile(join(root, 'src/new-name.ts'), 'utf8')).toBe('export class NewName {}\n')
-    expect([...values.renamed.changedFiles].sort()).toEqual(['src/app.ts', 'src/index.ts'])
     expect(values.reviewed.status).toBe('applied')
-    expect(values.reviewed.diff).toContain('+export function readSettings() {')
-    // 撤销之后改名整次回去了。
+    expect(values.reviewed.diff).toContain('newCall(1)')
+    expect(values.reviewed.diff).toContain('readSettings()')
+    // 撤销最初两文件变换，其他独立事务保留。
     expect(values.reverted.changedFiles).toHaveLength(2)
     expect(await readFile(join(root, 'src/app.ts'), 'utf8')).toContain('return loadSettings()')
   }, 180_000)

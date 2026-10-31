@@ -43,9 +43,9 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
 
 /**
  * @AgentView
- * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
+ * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
  * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
- * 读出来的是连续正文；read 的 target 或 select 确认的结构/片段直接传给 patch，只给新正文、不数行、不抄旧块。路径 edit 也可用。
+ * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
@@ -81,7 +81,7 @@ export interface ProjectFileOperationsApi {
    * @OperationModes execute
    */
   patch(input: ProjectPatchInput, ctx: ProjectOperationContext): Promise<ProjectPatchResult>
-  /** @AgentView 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。相关改动优先放进一次 edit；拆成多次调用时每次各自提交，不能承诺跨调用全成或全不成。
+  /** @AgentView 一次提交可撤回的文件事务，无需先 read/select：replace 用唯一 oldText 定位，write 可用 Node 已读的完整 expectedText 防止覆盖外部改动，expectedText:null 只允许新建。相关 steps 一起提交；省略 expectedText 的 write 按提交时内容覆盖。拆成多次调用时不能承诺跨调用原子性。
    * @OperationEffect write
    */
   edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>

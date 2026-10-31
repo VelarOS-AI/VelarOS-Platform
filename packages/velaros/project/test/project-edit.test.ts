@@ -595,3 +595,124 @@ describe('编码与换行', () => {
     expect(await readFile(join(root, 'source.ts'))).toEqual(bytes)
   })
 })
+
+describe('Node 原文直接提交保护事务', () => {
+  test('一次提交两份 Node 已读原文，无项目 read/select，编码换行保留并可整批撤回', async () => {
+    const original = '\ufeffconst value = 1\r\n'
+    await writeFile(join(root, 'a.txt'), original)
+    await writeFile(join(root, 'b.txt'), '')
+    const before = await disk('a.txt')
+    const { call } = await projectToolFixture({ root })
+    const result = await edit(call, [
+      { action: 'write', path: 'a.txt', expectedText: before, text: before.replace('1', '2') },
+      { action: 'write', path: 'b.txt', expectedText: '', text: 'filled\n' },
+    ])
+    expect(await disk('a.txt')).toBe(original.replace('1', '2'))
+    expect(await disk('b.txt')).toBe('filled\n')
+    await call('project', 'undo', { changeRef: result.changeRef })
+    expect(await disk('a.txt')).toBe(original)
+    expect(await disk('b.txt')).toBe('')
+  })
+
+  test('Node 读取后发生外部修改时整批拒绝；不得写入其他成功项', async () => {
+    await writeFile(join(root, 'a.txt'), 'before\n')
+    const before = await disk('a.txt')
+    await writeFile(join(root, 'a.txt'), 'external\n')
+    const { call } = await projectToolFixture({ root })
+    const failure = await failureOf(
+      edit(call, [
+        { action: 'write', path: 'new.txt', expectedText: null, text: 'new\n' },
+        { action: 'write', path: 'a.txt', expectedText: before, text: 'changed\n' },
+      ])
+    )
+    expect(failure.code).toBe('BASE_REVISION_MISMATCH')
+    expect(failure.message).toContain('steps[1]')
+    expect(await disk('a.txt')).toBe('external\n')
+    await expect(disk('new.txt')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('null 只允许新建，空串只允许现有空文件，文件删除也算冲突', async () => {
+    const { call } = await projectToolFixture({ root })
+    await edit(call, [{ action: 'write', path: 'new.txt', expectedText: null, text: '' }])
+    expect(
+      (
+        await failureOf(
+          edit(call, [{ action: 'write', path: 'new.txt', expectedText: null, text: 'clobber' }])
+        )
+      ).code
+    ).toBe('BASE_REVISION_MISMATCH')
+    expect(
+      (
+        await failureOf(
+          edit(call, [{ action: 'write', path: 'absent.txt', expectedText: '', text: 'wrong' }])
+        )
+      ).code
+    ).toBe('BASE_REVISION_MISMATCH')
+    await writeFile(join(root, 'gone.txt'), 'before')
+    const before = await disk('gone.txt')
+    await rm(join(root, 'gone.txt'))
+    expect(
+      (
+        await failureOf(
+          edit(call, [{ action: 'write', path: 'gone.txt', expectedText: before, text: 'wrong' }])
+        )
+      ).code
+    ).toBe('BASE_REVISION_MISMATCH')
+    expect(await disk('new.txt')).toBe('')
+  })
+
+  test('同文件步骤核对前一步的结果，失败撤回整批规划', async () => {
+    await writeFile(join(root, 'a.txt'), 'one')
+    const { call } = await projectToolFixture({ root })
+    const steps = [
+      { action: 'replace', path: 'a.txt', oldText: 'one', newText: 'two' },
+      { action: 'write', path: 'a.txt', expectedText: 'one', text: 'three' },
+    ]
+    expect((await failureOf(edit(call, steps))).code).toBe('BASE_REVISION_MISMATCH')
+    expect(await disk('a.txt')).toBe('one')
+    steps[1].expectedText = 'two'
+    await edit(call, steps)
+    expect(await disk('a.txt')).toBe('three')
+  })
+
+  test('只改变换行也拒绝陈旧原文；提交后的外部修改阻止撤回', async () => {
+    await writeFile(join(root, 'a.txt'), 'before\r\n')
+    const before = await disk('a.txt')
+    await writeFile(join(root, 'a.txt'), 'before\n')
+    const { call } = await projectToolFixture({ root })
+    expect(
+      (
+        await failureOf(
+          edit(call, [{ action: 'write', path: 'a.txt', expectedText: before, text: 'wrong' }])
+        )
+      ).code
+    ).toBe('BASE_REVISION_MISMATCH')
+    const result = await edit(call, [
+      { action: 'write', path: 'a.txt', expectedText: await disk('a.txt'), text: 'after\n' },
+    ])
+    await writeFile(join(root, 'a.txt'), 'external\n')
+    expect((await failureOf(call('project', 'undo', { changeRef: result.changeRef }))).code).toBe(
+      'CONFLICT_WITH_EXTERNAL_EDIT'
+    )
+    expect(await disk('a.txt')).toBe('external\n')
+  })
+
+  test('错误核对值和不支持的步骤不能静默忽略保护', async () => {
+    await writeFile(join(root, 'a.txt'), 'before')
+    const { call } = await projectToolFixture({ root })
+    for (const expectedText of [false, 1, {}, []]) {
+      expect(
+        (
+          await failureOf(
+            edit(call, [{ action: 'write', path: 'a.txt', expectedText, text: 'wrong' }])
+          )
+        ).code
+      ).toBe('INVALID_INPUT')
+    }
+    expect(
+      (await failureOf(edit(call, [{ action: 'delete', path: 'a.txt', expectedText: 'before' }])))
+        .code
+    ).toBe('INVALID_INPUT')
+    expect(await disk('a.txt')).toBe('before')
+  })
+})

@@ -1,7 +1,7 @@
 /**
- * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
+ * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
  * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
- * 读出来的是连续正文；read 的 target 或 select 确认的结构/片段直接传给 patch，只给新正文、不数行、不抄旧块。路径 edit 也可用。
+ * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
@@ -33,7 +33,7 @@ declare module 'velaros:project' {
    */
   export function patch(input: ProjectPatchInput): Promise<ProjectPatchResult>
 
-  /** 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。相关改动优先放进一次 edit；拆成多次调用时每次各自提交，不能承诺跨调用全成或全不成。
+  /** 一次提交可撤回的文件事务，无需先 read/select：replace 用唯一 oldText 定位，write 可用 Node 已读的完整 expectedText 防止覆盖外部改动，expectedText:null 只允许新建。相关 steps 一起提交；省略 expectedText 的 write 按提交时内容覆盖。拆成多次调用时不能承诺跨调用原子性。
    */
   export function edit(input: ProjectEditInput): Promise<ProjectEditResult>
 
@@ -161,6 +161,7 @@ declare module 'velaros:project' {
 
   /**
    * steps 按顺序执行、合成一个事务：全成或全不成，成了给一个 changeRef。一次最多 1000 步，一个事务缺省最多改 100 个文件。
+   * expectedText 核对该步骤之前的完整正文；同文件多步时以前一步结果为准。不匹配报 BASE_REVISION_MISMATCH，先重新读取和合并，不能去掉核对后盲重试。
    * 失败时一个文件都没写，error.code 说明原因：TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
    * AMBIGUOUS_TARGET 是 oldText 出现了好几处，VALIDATION_FAILED 是改完的内容没过校验（message 里有诊断），
    * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
@@ -350,14 +351,15 @@ declare module 'velaros:project' {
   /**
    * edit 里的一步，都按路径指文件：
    * write 把 text 整份写进去（文件不存在就新建，缺的上级目录自动建）；
+   * write 可带 expectedText：传已读的完整原文时逐字核对（仅忽略开头的编码 BOM，换行不折叠），null 表示只允许新建；不匹配整批拒绝。省略表示按提交时的内容写。
    * replace 把文件里的 oldText 换成 newText（newText 是空串就是删掉）：oldText 照读到的原文写（空白、引号、换行都要一样），在文件里要唯一——
-   * 出现好几处就带上前后几行让它唯一；要全换就先 read，在程序里 replaceAll，再用 write 整份写回；
+   * 出现好几处就带上前后几行让它唯一；全文变换可直接使用 Node 已读的原文，在程序里计算后用 write + expectedText 提交，不必再 read/select；
    * move 移动或改名（只动文件本身，不改引用它的代码；目标已存在就拒绝）；delete 删掉这个文件；
    * recode 转换磁盘编码（正文不变只重写字节，已经是目标格式的跳过；paths 收路径或 glob，glob 按 list 的规则展开、一个都没匹配上算找不到，展开后一次最多 1000 个；缺省 utf-8、不带 BOM、保留原换行）。
    * 同一个文件可以接连几步，后一步按前一步改完的内容算。二进制文件和目录不收，用命令处理。
    */
   type ProjectEditStep =
-    | { action: 'write'; path: string; text: string }
+    | { action: 'write'; path: string; text: string; expectedText?: string | null }
     | { action: 'replace'; path: string; oldText: string; newText: string }
     | { action: 'move'; path: string; to: string }
     | { action: 'delete'; path: string }

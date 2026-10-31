@@ -85,31 +85,26 @@ afterEach(async () => {
 })
 
 describe('模型面', () => {
-  it('INV-42 批量替换模板一次读取一次事务，读取缺口保留请求范围且不提交子集', async () => {
+  it('INV-42 Node 已读的多文件变换只用一次 edit，无须目标引用，撤回整批改动', async () => {
     await writeFile(join(root, 'a.txt'), 'oldName\n')
     await writeFile(join(root, 'b.txt'), 'oldName twice oldName\n')
     const harness = await createProjectHarness(root)
-    const blocked = await runTemplate(
-      harness,
-      "replaceInFiles(['a.txt', 'missing.txt'], 'oldName', 'newName')"
+    const files = await Promise.all(
+      ['a.txt', 'b.txt'].map(async (path) => {
+        const before = await readFile(join(root, path), 'utf8')
+        return { path, before, after: before.replaceAll('oldName', 'newName') }
+      })
     )
-    expect(blocked.calls).toEqual(['read'])
-    expect(blocked.value).toMatchObject({
-      status: 'blocked',
-      requestedFiles: ['a.txt', 'missing.txt'],
-    })
-    expect(blocked.value.issues).toHaveLength(1)
-    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('oldName\n')
-
-    const changed = await runTemplate(
-      harness,
-      "replaceInFiles(['a.txt', 'b.txt', 'a.txt'], 'oldName', 'newName')"
-    )
-    expect(changed.calls).toEqual(['read', 'patch'])
-    expect(changed.value).toMatchObject({ status: 'committed', changedFiles: ['a.txt', 'b.txt'] })
+    const changed = await runTemplate(harness, `commitFiles(${JSON.stringify(files)})`)
+    expect(changed.calls).toEqual(['edit'])
+    expect(changed.value).toMatchObject({ changed: true, changedFiles: ['a.txt', 'b.txt'] })
     expect(changed.value.changeRef).toBeTruthy()
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('newName twice newName\n')
+    const undone = await runTemplate(harness, `revert(${JSON.stringify(changed.value.changeRef)})`)
+    expect(undone.calls).toEqual(['undo'])
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(files[0].before)
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe(files[1].before)
   }, 60_000)
 
   it('INV-43 结构改写模板精确绑定 Python 方法，INV-48 增量模板只修正问题项', async () => {

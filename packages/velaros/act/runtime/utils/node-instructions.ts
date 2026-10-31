@@ -24,7 +24,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '非交互命令用 stdin:"ignore"、timeout；默认等输入。rg 给路径，字面量用 ["-F","-e",pattern,"--","."]，多项重复 -e；正则用 String.raw。退出 1 无匹配，其他查 stderr。',
     '输入用 execa(command,args,{input:text,timeout:10000}) 或写后关闭 child.stdin；与 stdin:"ignore" 互斥。child_process.execFile 无 input；读 stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
-    '编辑用 node:fs/promises；长文本用 velaros:program 的 blobs，写后读回核对；事务查声明。',
+    '普通文件读写用 node:fs/promises，遍历/搜索/差异用已装的 globby、ripgrep、diff 或项目依赖；长文本用 velaros:program 的 blobs，写后核对。',
     ...(modules.includes('velaros:system-environment')
       ? [
           'velaros:system 的 environment 是 npm 管理对象：list/search/describe 查询，apply 安装/换版/卸载；跨会话持久，单次固定版本。查该版 README/类型并验证，rollback 回退。',
@@ -43,7 +43,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     ...(modules.includes('velaros:project')
       ? [
-          'velaros:project 提供项目内修改前核对、编码保留、事务、差异及冲突撤回；普通文件遵循 Node 语义。',
+          '仅需事务、冲突保护或撤回时用 velaros:project.edit({steps:[...]})，相关改动一次提交；无需先 read/select。片段替换用 replace 的 oldText/newText；全文 write 传 expectedText:已读原文，null 只允许新建。回执 changeRef 可直接 undo；select/patch 仅用于结构定位或减少大块传输。',
           '批量修改先核匹配片段；非原子编辑失败可能部分写入，重试先核差异再改剩余部分。',
           ...(SystemMembers.memory.some((module) => modules.includes(module))
             ? [

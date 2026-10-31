@@ -7,6 +7,7 @@ import {
   isArray,
   isBoolean,
   isEmpty,
+  isNull,
   isNumber,
   isPlainObject,
   isString,
@@ -146,10 +147,18 @@ export function searchInput(input: unknown): ProjectSearchInput {
 function step(value: unknown, index: number): ProjectEditStep {
   const where = `steps[${index}]`
   const item = objectOf(value, where)
+  if (item.action !== 'write' && !isUndefined(item.expectedText))
+    throw invalid(`${where}.expectedText 只用于 write；片段替换使用 replace 的 oldText 核对`)
   switch (item.action) {
     case 'write':
       text(item.path, `${where}.path`)
       if (!isString(item.text)) throw invalid(`${where}.text 要文件的完整正文（字符串）`)
+      if (
+        !isUndefined(item.expectedText) &&
+        !isNull(item.expectedText) &&
+        !isString(item.expectedText)
+      )
+        throw invalid(`${where}.expectedText 要已读的完整原文，或用 null 表示文件必须不存在`)
       break
     case 'replace':
       text(item.path, `${where}.path`)
