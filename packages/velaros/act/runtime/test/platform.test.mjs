@@ -797,16 +797,20 @@ for (const scenario of [
         const auditRecord = audits[1]
         const raw = await f.storage.get('s', auditRecord.objectId)
         assert(raw.length < 8000000)
-        assert.equal(
-          auditRecord.sources.length,
-          1,
-          'identical pixels are archived once despite different labels'
-        )
         const pixels = new Map()
+        const manifests = []
         for (const ref of auditRecord.sources) {
           const record = await session.context.read(ref, { limit: 1 })
-          pixels.set(ref.id, await f.storage.get('s', record.record.objectId))
+          const body = await f.storage.get('s', record.record.objectId)
+          if (record.record.title === 'model-request:image-data') pixels.set(ref.id, body)
+          else {
+            assert.equal(record.record.title, 'runtime:instruction-manifest')
+            manifests.push(JSON.parse(body))
+          }
         }
+        assert.equal(pixels.size, 1, 'identical pixels are archived once despite different labels')
+        assert.equal(manifests.length, 1)
+        assert.equal(manifests[0].text, actualRequests[1].instructions)
         const restored = JSON.parse(raw, (_key, value) => {
           if (value?.$velarosType !== 'context-image') return value
           const body = pixels.get(value.ref.id)
