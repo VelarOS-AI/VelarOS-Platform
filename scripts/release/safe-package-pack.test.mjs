@@ -91,6 +91,17 @@ function setTestEnvironment(t, name, value) {
   })
 }
 
+function processDiagnostic(pid) {
+  try {
+    return execFileSync('ps', ['-o', 'pid,ppid,pgid,stat,args', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 2000,
+    }).trim()
+  } catch (error) {
+    return String(error.stdout ?? error.message)
+  }
+}
+
 function isProcessAlive(pid) {
   try {
     process.kill(pid, 0)
@@ -403,11 +414,15 @@ test(
     assert.match(error?.message ?? '', /timed out after 2000 ms.*SIGTERM followed by SIGKILL/u)
 
     const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
-    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(child)),
+      true,
+      `child ${child} remained alive: ${processDiagnostic(child)}`
+    )
     assert.equal(
       await waitFor(() => !isProcessAlive(grandchild)),
       true,
-      `grandchild ${grandchild} remained alive`
+      `grandchild ${grandchild} remained alive: ${processDiagnostic(grandchild)}`
     )
   }
 )
@@ -463,11 +478,15 @@ test(
     const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
 
     assert.deepEqual(status, { code: null, signal: 'SIGHUP' })
-    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(child)),
+      true,
+      `child ${child} remained alive: ${processDiagnostic(child)}`
+    )
     assert.equal(
       await waitFor(() => !isProcessAlive(grandchild)),
       true,
-      `grandchild ${grandchild} remained alive`
+      `grandchild ${grandchild} remained alive: ${processDiagnostic(grandchild)}`
     )
   }
 )
@@ -493,11 +512,15 @@ test(
     const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
 
     assert.deepEqual(status, { code: 23, signal: null })
-    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(child)),
+      true,
+      `child ${child} remained alive: ${processDiagnostic(child)}`
+    )
     assert.equal(
       await waitFor(() => !isProcessAlive(grandchild)),
       true,
-      `grandchild ${grandchild} remained alive`
+      `grandchild ${grandchild} remained alive: ${processDiagnostic(grandchild)}`
     )
   }
 )
