@@ -1,5 +1,6 @@
 import { isAbsolute } from 'node:path'
 
+import { isString, isUndefined } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
@@ -13,8 +14,8 @@ export async function resolveProjectContext(
 ): Promise<ProjectOperationContext> {
   ctx.abortSignal.throwIfAborted()
   const root = input?.projectRoot
-  if (root === undefined) return ctx
-  if (typeof root !== 'string' || !isAbsolute(root))
+  if (isUndefined(root)) return ctx
+  if (!isString(root) || !isAbsolute(root))
     throw new ProjectError('INVALID_INPUT', 'projectRoot 必须是项目绝对路径')
   if (!ctx.resolveProject) throw new ProjectError('PERMISSION_DENIED', '宿主未提供跨项目授权入口')
   const project = await ctx.resolveProject(root, { write, signal: ctx.abortSignal })

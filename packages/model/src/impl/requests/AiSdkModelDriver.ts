@@ -280,7 +280,7 @@ class AiSdkModelDriver implements ModelDriver {
           )
             throw new AppError(
               'PROTOCOL',
-              `供应商响应未成功结束：${safeFinishDiagnostic(part.finishReason)} [finish=${safeFinishDiagnostic(part.finishReason)}; raw=${safeFinishDiagnostic(part.rawFinishReason)}; terminal=${responseTerminal ?? 'missing'}; protocol=${usesResponseContinuation(this.options.model) ? 'responses' : 'other'}; text=${received.length > 0}; tools=${calls.length > 0}; usage=${Boolean(reportedUsage)}]`
+              `供应商响应未成功结束：${safeFinishDiagnostic(part.finishReason)} [finish=${safeFinishDiagnostic(part.finishReason)}; raw=${safeFinishDiagnostic(part.rawFinishReason)}; terminal=${responseTerminal ?? 'missing'}; protocol=${usesResponseContinuation(this.options.model) ? 'responses' : 'other'}; text=${!isEmpty(received)}; tools=${!isEmpty(calls)}; usage=${Boolean(reportedUsage)}]`
             )
           finish = { type: 'finish', reason: part.finishReason === 'length' ? 'length' : 'stop' }
         }

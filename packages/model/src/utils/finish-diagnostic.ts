@@ -1,10 +1,10 @@
-import { isUndefined } from '@velaros-ai/core'
+import { isNull, isString, isUndefined } from '@velaros-ai/core'
 
 /** 只输出固定枚举；未知值不回显，避免泄露或改变重试分类。 */
 export function safeFinishDiagnostic(value: unknown): string {
   if (isUndefined(value)) return 'missing'
-  if (value === null) return 'null'
-  return typeof value === 'string' &&
+  if (isNull(value)) return 'null'
+  return isString(value) &&
     [
       'stop',
       'length',
