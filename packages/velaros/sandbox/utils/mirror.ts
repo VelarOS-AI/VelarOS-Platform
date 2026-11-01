@@ -145,7 +145,10 @@ export function stampOfEntry(stats: Stats, link?: string): SandboxFileStamp {
 /** 普通文件补充流式内容版本，避免时间戳精度碰撞漏掉等长改写。 */
 async function contentStamp(path: string, stats: Stats, link?: string): Promise<SandboxFileStamp> {
   const stamp = stampOfEntry(stats, link)
-  if (stats.isFile()) stamp.contentVersion = (await sandboxEntryVersion(path)) ?? undefined
+  if (stats.isFile()) {
+    const version = await sandboxEntryVersion(path)
+    if (!isNull(version)) stamp.contentVersion = version
+  }
   return stamp
 }
 
