@@ -39,16 +39,18 @@ async function setup(t, stream, extra = {}) {
   return { runtime, session, path, config }
 }
 
-test('steering archives user input and preempts an unaccepted response without executing its code', async (t) => {
+test('steering archives user input and discards an unaccepted response after natural completion without executing its code', async (t) => {
   let calls = 0
+  let finishResponse
+  const guided = new Promise((resolve) => {
+    finishResponse = resolve
+  })
   const f = await setup(t, async function* (request, signal) {
     calls++
     if (calls === 1) {
       yield { type: 'text', text: '正在处理旧方向。' }
-      await new Promise((resolve) => {
-        signal.addEventListener('abort', resolve, { once: true })
-        if (signal.aborted) resolve()
-      })
+      await guided
+      assert.equal(signal.aborted, false)
       yield { type: 'text', text: block(request, "throw Error('stale response executed')") }
       yield finish
     } else {
@@ -63,6 +65,7 @@ test('steering archives user input and preempts an unaccepted response without e
     if (event.type === 'text' && !sent) {
       sent = true
       await f.session.steer('改为只调查，不修改')
+      finishResponse()
     }
   }
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))

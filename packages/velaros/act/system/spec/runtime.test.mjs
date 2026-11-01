@@ -502,7 +502,7 @@ test('INV-22 真实 Project 合同批量交付减少重复模板与依赖，查�
     `${current.declarations.length} < ${previousChars}`
   )
   assert.equal(current.template, '')
-  assert.equal(current.declarations.split('路径一律相对项目根').length, 2)
+  assert.equal(current.declarations.split('路径相对当前项目根').length, 2)
   for (const name of names)
     assert.match(current.declarations, new RegExp(`export function ${name}\\(`, 'u'))
   assert.equal(current.declarations.split('interface ProjectReadInput').length, 2)

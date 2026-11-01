@@ -30,27 +30,53 @@ const task = (request, source) => turn(request, { execute: { source } })
 
 test('immediate child guidance reaches the same real runtime run before completion', async (t) => {
   const requests = []
+  let finishResponse
+  const guided = new Promise((resolve) => {
+    finishResponse = resolve
+  })
   let main = 0
   const child = model(async function* (request, signal) {
     const text = modelText(request)
     requests.push(text)
     if (!text.includes('additional-child-constraint')) {
-      await new Promise((resolve) => {
-        signal.addEventListener('abort', resolve, { once: true })
-        if (signal.aborted) resolve()
-      })
+      await guided
+      assert.equal(signal.aborted, false)
+      yield* done(request, 'initial response discarded')
       return
     }
     yield* done(request, 'child followed additional constraint')
   })
   const f = await setup(t, {
+    modules: [
+      {
+        binding: {
+          moduleId: 'probe:guidance',
+          instanceId: 'gate',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'Test guidance admission barrier',
+        operations: {
+          release: {
+            summary: 'Finish the current response after guidance admission',
+            input: { type: 'null' },
+            output: { type: 'null' },
+            effects: 'read',
+            run: () => {
+              finishResponse()
+              return null
+            },
+          },
+        },
+      },
+    ],
     context: { maintenance: false },
     agents: { concurrency: 1, maxChildren: 1, profiles: { read: { model: child, modules: [] } } },
     model: model(async function* (request) {
       if (++main === 1) {
         yield task(
           request,
-          "import {start,send,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'initial child work',profile:'read'});await send({id:job.id,input:'additional-child-constraint'});output(await wait({id:job.id}));"
+          "import {release} from 'probe:guidance';import {start,send,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'initial child work',profile:'read'});await send({id:job.id,input:'additional-child-constraint'});await release();output(await wait({id:job.id}));"
         )
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request, 'parent complete')
