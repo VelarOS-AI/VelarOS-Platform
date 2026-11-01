@@ -530,9 +530,11 @@ test('INV-80 cancellation returns promptly with unknown cost, then late physical
     }
   }
   const timers = new TimerScope({ name: 'snapshot-cancellation-proof' })
+  let phase = 'waiting-for-third-read'
   try {
     const pending = collect(f, controller.signal)
     await timers.withTimeout(2000, () => entered.promise)
+    phase = 'waiting-for-cancellation'
     const started = performance.now()
     controller.abort(new AppError('CANCELLED', 'stop current capture'))
     const events = await timers.withTimeout(1000, () => pending)
@@ -586,6 +588,7 @@ test('INV-80 cancellation returns promptly with unknown cost, then late physical
       ),
       'an unsent capture is an independent session activity'
     )
+    phase = 'waiting-for-late-settlement'
     gate.resolve()
     const settled = await timers.withTimeout(2000, async (signal) => {
       for (;;) {
@@ -635,6 +638,17 @@ test('INV-80 cancellation returns promptly with unknown cost, then late physical
       undefined,
       'original unknown-cost decision is immutable'
     )
+  } catch (error) {
+    t.diagnostic(
+      JSON.stringify({
+        phase,
+        calls: f.calls,
+        reads: f.reads,
+        readCompletions: f.readCompletions,
+        runs: f.runs,
+      })
+    )
+    throw error
   } finally {
     gate.resolve()
     timers.dispose()
