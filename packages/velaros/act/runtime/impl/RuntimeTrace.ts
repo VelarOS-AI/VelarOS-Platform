@@ -598,6 +598,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
       verification.push(summary)
       for (const { record } of events) select(record)
     }
+    // 请求显式关联准备快照；旧请求没有来源时不猜测最近清单。
+    for (const ref of requestRecord.sources)
+      if (ref.sessionId === this.sessionId) select(byRef(ref.id))
     // 结果的来源链包含真实源码、图片和版本；仅在当前会话内解析。
     for (const id of selected)
       for (const ref of recordById.get(id)!.sources)

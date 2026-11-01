@@ -63,7 +63,12 @@ export interface ProjectCapabilityModuleOptions {
   /** 可选跨项目授权口；每次调用核对宿主授权真实根及读写模式，未配置时拒绝 projectRoot。 */
   readonly resolveProject?: (
     root: string,
-    options: { write: boolean; signal: AbortSignal }
+    options: {
+      write: boolean
+      signal: AbortSignal
+      /** 当前运行时共享端口；同根仍需授权，授权后复用它或受限包装。不可由回调销毁。 */
+      currentProject: ProjectSpacePort
+    }
   ) => Promise<ProjectSpacePort>
 }
 
@@ -329,7 +334,7 @@ export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptio
 
 /** 工作区项目上另挂的能力：都用运行时自己的那个项目内核，钳在项目根里。 */
 export interface VelarosProjectOptions {
-  /** 可选跨项目授权解析器；每次操作核对权限，返回目标真实根的独立内核；不改变进程 confinement。 */
+  /** 可选跨项目授权解析器；每次操作核对权限，返回目标真实根端口；同根复用 currentProject，异根按真实根缓存内核，不改变进程 confinement。 */
   readonly resolveProject?: ProjectCapabilityModuleOptions['resolveProject']
   /**
    * 挂 velaros:code：内置的 JS/TS、Python 语言服务答大纲、定义、引用、诊断与波及面；

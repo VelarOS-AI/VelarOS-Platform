@@ -18,7 +18,11 @@ export async function resolveProjectContext(
   if (!isString(root) || !isAbsolute(root))
     throw new ProjectError('INVALID_INPUT', 'projectRoot 必须是项目绝对路径')
   if (!ctx.resolveProject) throw new ProjectError('PERMISSION_DENIED', '宿主未提供跨项目授权入口')
-  const project = await ctx.resolveProject(root, { write, signal: ctx.abortSignal })
+  const project = await ctx.resolveProject(root, {
+    write,
+    signal: ctx.abortSignal,
+    currentProject: ctx.project,
+  })
   ctx.abortSignal.throwIfAborted()
   const requested = await resolveRealPath(root)
   const actual = await resolveRealPath(project.getRootPath())

@@ -1,6 +1,7 @@
 import type {
   ContextCompletionPort,
   ContextCompletionResult,
+  ContextRef,
   ContextRuntime,
   ContextStorage,
   ContextViewApi,
@@ -96,7 +97,7 @@ export interface ActContextPort {
   /** 运行结束后的租约生命周期。 */
   end?(status: Optional<string>): Promise<void>
   /** 每个新业务回合运行稳定观察。 */
-  prepare(signal: AbortSignal): Promise<void>
+  prepare(signal: AbortSignal): Promise<void | { readonly sources: readonly ContextRef[] }>
   /** 本轮仍有可见租约的执行身份。 */
   visibleExecutions(): Promise<readonly string[]>
   /** 根据观察输出、租约和必要事实装配下一轮上下文。 */

@@ -767,16 +767,6 @@ export class RuntimeSession implements VelarosSession {
               await this.programs.endTask()
           },
           prepare: async (signal) => {
-            await this.context.append(
-              {
-                kind: 'audit',
-                title: 'runtime:instruction-manifest',
-                body: JSON.stringify({
-                  blocks: this.instructionAssembly.blocks.map(({ text: _text, ...block }) => block),
-                }),
-              },
-              signal
-            )
             await this.restoreFrameMarkers(signal)
             this.preparedFrameMarker = this.createFrameMarker()
             await this.context.append(
@@ -788,6 +778,16 @@ export class RuntimeSession implements VelarosSession {
               signal
             )
             await this.prepareObservation(signal)
+            // 仅成功准备产生可关联快照；修复请求复用本次返回值，不查询最新记录。
+            const manifest = await this.context.append(
+              {
+                kind: 'audit',
+                title: 'runtime:instruction-manifest',
+                body: JSON.stringify(this.instructionAssembly),
+              },
+              signal
+            )
+            return { sources: [manifest.ref] }
           },
           visibleExecutions: async () => {
             const state = await this.programs.state()

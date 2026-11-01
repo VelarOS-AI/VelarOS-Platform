@@ -300,3 +300,80 @@ test('Node child reads original parent inputs and attachments from ordinary file
   )
   assert(!(await readdir(join(root, 'runs'))).some((name) => name.startsWith('parent-task-')))
 })
+
+test('parent and worker reuse the authorized default project port and kernel', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-shared-project-'))
+  const workspace = join(root, 'workspace')
+  await mkdir(workspace)
+  const shell = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'workspace-write', workspaceRoot: workspace },
+  })
+  const node = createNodeExecutionEnvironment({
+    cwd: workspace,
+    directory: join(root, 'runs'),
+    host: shell,
+  })
+  const ports = []
+  const kernels = []
+  let childCalls = 0
+  let parentCalls = 0
+  const read = `import {read} from 'velaros:project'; console.log(await read({projectRoot:${JSON.stringify(workspace)},files:[{path:'shared.txt'}]}));`
+  const child = model(async function* () {
+    if (++childCalls === 1) yield call(read)
+    else
+      yield {
+        type: 'tool-call',
+        value: { id: 'child-done', name: 'done', input: { message: 'read complete' } },
+      }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  const runtime = await createRuntime({
+    node,
+    workspace,
+    dataDir: join(root, 'data'),
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    project: {
+      resolveProject: async (requested, { currentProject, signal }) => {
+        signal.throwIfAborted()
+        assert.equal(requested, workspace)
+        assert.equal(currentProject.getRootPath(), workspace)
+        ports.push(currentProject)
+        kernels.push(await currentProject.kernel())
+        return currentProject
+      },
+    },
+    agents: {
+      concurrency: 2,
+      maxChildren: 2,
+      profiles: { worker: { model: child, modules: ['velaros:project'], node: true } },
+    },
+    model: model(async function* () {
+      if (++parentCalls === 1)
+        yield call(
+          `import {edit,read,undo} from 'velaros:project'; import {start,wait} from 'velaros:agents'; const projectRoot=${JSON.stringify(workspace)}; const change=await edit({steps:[{action:'write',path:'shared.txt',text:'shared',expectedText:null}]}); await Promise.all([read({projectRoot,files:[{path:'shared.txt'}]}),read({projectRoot,files:[{path:'shared.txt'}]})]); const child=await start({task:'Read shared.txt through the explicit default root',profile:'worker'}); console.log(await wait({id:child.id})); await undo({projectRoot,changeRef:change.changeRef});`
+        )
+      else
+        yield {
+          type: 'tool-call',
+          value: { id: 'parent-done', name: 'done', input: { message: 'complete' } },
+        }
+      yield { type: 'finish', reason: 'stop' }
+    }),
+  })
+  t.after(async () => {
+    await runtime.close()
+    await shell.dispose()
+    await rm(root, { recursive: true, force: true })
+  })
+  const session = await runtime.openSession('parent')
+  for await (const event of session.submit('Verify default project sharing with a worker'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  assert.equal(childCalls, 2)
+  assert.equal(ports.length, 4)
+  assert.equal(new Set(ports).size, 1)
+  assert.equal(new Set(kernels).size, 1)
+  await assert.rejects(readFile(join(workspace, 'shared.txt')), { code: 'ENOENT' })
+})

@@ -420,7 +420,12 @@ export interface ProjectOperationContext {
   /** 每次跨项目操作重新授权真实根和读写权限；宿主拒绝未授权根并遵守取消，返回该根受限内核端口。 */
   resolveProject?(
     root: string,
-    options: { write: boolean; signal: AbortSignal }
+    options: {
+      write: boolean
+      signal: AbortSignal
+      /** 当前运行时拥有的端口，仅借用；同真实根授权后复用它或受限包装，不创建第二内核、不销毁。 */
+      currentProject: ProjectSpacePort
+    }
   ): Promise<ProjectSpacePort>
 
   /** 领域确认写操作的实际效果；正常返回的 blocked 或无变化也必须记成未写入，不能由客户端结果字段决定。 */

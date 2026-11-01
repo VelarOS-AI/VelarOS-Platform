@@ -84,3 +84,59 @@ test('authorized project cannot escape through a link and cancellation prevents 
     await rm(a, { recursive: true, force: true })
   }
 })
+
+test('explicit current root borrows its kernel while preserving authorization and restricted ports', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'route-current-'))
+  try {
+    await writeFile(join(root, 'file.txt'), 'before')
+    const f = await projectToolFixture({ root })
+    const ports: unknown[] = []
+    const kernels: unknown[] = []
+    let revoked = false
+    f.context.resolveProject = async (requested, options) => {
+      expect(requested).toBe(root)
+      expect(options.currentProject).toBe(f.context.project)
+      ports.push(options.currentProject)
+      kernels.push(await options.currentProject.kernel())
+      if (revoked) throw new Error('revoked current root')
+      return options.currentProject
+    }
+    await Promise.all(
+      Array.from({ length: 4 }, () =>
+        f.call('project', 'read', {
+          projectRoot: root,
+          files: [{ path: 'file.txt' }],
+        })
+      )
+    )
+    const change = await f.call('project', 'edit', {
+      projectRoot: root,
+      steps: [{ action: 'write', path: 'file.txt', text: 'after', expectedText: 'before' }],
+    })
+    await f.call('project', 'undo', { changeRef: change.changeRef })
+    expect(await readFile(join(root, 'file.txt'), 'utf8')).toBe('before')
+    expect(ports.length).toBe(5)
+    expect(new Set(kernels).size).toBe(1)
+    revoked = true
+    await expect(
+      f.call('project', 'read', {
+        projectRoot: root,
+        files: [{ path: 'file.txt' }],
+      })
+    ).rejects.toThrow('revoked current root')
+    f.context.resolveProject = async (_root, { currentProject }) => ({
+      ...currentProject,
+      kernel: async () => {
+        throw new Error('restricted wrapper')
+      },
+    })
+    await expect(
+      f.call('project', 'read', {
+        projectRoot: root,
+        files: [{ path: 'file.txt' }],
+      })
+    ).rejects.toThrow('restricted wrapper')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

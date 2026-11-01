@@ -222,7 +222,7 @@ export class ActLoop implements ActLoopApi {
         sinceRenewal++
         await this.options.control?.beforeTurn(controller.signal)
         const preparationStarted = performance.now()
-        await this.options.frames.prepare(controller.signal)
+        const prepared = await this.options.frames.prepare(controller.signal)
         const observationMs = performance.now() - preparationStarted
         const projectionStarted = performance.now()
         const decoder = this.options.protocol.open()
@@ -343,7 +343,7 @@ export class ActLoop implements ActLoopApi {
                 kind: 'audit',
                 title: 'model-request',
                 body: auditBody,
-                sources: [...imageRefs.values()],
+                sources: [...(prepared?.sources ?? []), ...imageRefs.values()],
               },
               controller.signal
             )

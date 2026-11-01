@@ -975,3 +975,59 @@ test('instruction manifest exports the actual request prefix without mutable ali
   assert(!frames[0].instructions.includes('tampered'))
   assert(!frames[0].instructions.includes('user material remains separate'))
 })
+
+test('trace binds instruction manifests to requests across preparation failure and retries', async (t) => {
+  const requests = []
+  let invalid = true
+  const f = await fixture(t, {
+    instructions: 'historical instruction snapshot',
+    model: driver(async function* (request) {
+      requests.push(request)
+      if (invalid) {
+        invalid = false
+        yield { type: 'text', text: ' ' }
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  const append = f.session.context.append.bind(f.session.context)
+  let fail = true
+  f.session.context.append = async (input, signal) => {
+    if (fail && input.title === 'runtime:instruction-manifest') {
+      fail = false
+      throw new Error('injected preparation failure')
+    }
+    return append(input, signal)
+  }
+  for await (const event of f.session.submit('failed preparation')) void event
+  assert.equal(requests.length, 0)
+  const turns = []
+  const events = []
+  for await (const event of f.session.submit('retry preparation')) {
+    events.push(event)
+    if (event.type === 'turn') turns.push(event.turnId)
+  }
+  assert.equal(events.at(-1).status, 'completed')
+  assert(events.some((event) => event.type === 'rejected'))
+  assert(turns.length >= 2, 'protocol recovery must issue a real retry')
+  // A later unrelated snapshot must never be used for an earlier request.
+  const decoy = await append({
+    kind: 'audit',
+    title: 'runtime:instruction-manifest',
+    body: JSON.stringify({ text: 'wrong-current-manifest', blocks: [] }),
+  })
+  const refs = []
+  for (const [index, id] of turns.entries()) {
+    const trace = await f.session.trace(id, 100000)
+    const manifests = trace.records.filter(
+      (record) => record.title === 'runtime:instruction-manifest'
+    )
+    assert.equal(manifests.length, 1)
+    const manifest = manifests[0]
+    assert.notEqual(manifest.ref.id, decoy.ref.id)
+    assert(trace.request.sources.some((ref) => ref.id === manifest.ref.id))
+    assert.equal(JSON.parse(manifest.body).text, requests[index].instructions)
+    refs.push(manifest.ref.id)
+  }
+  assert.equal(new Set(refs).size, 1, 'repair reuses the successful preparation snapshot')
+})
