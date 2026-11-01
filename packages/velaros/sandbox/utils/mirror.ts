@@ -805,13 +805,21 @@ export async function applyMirrorChanges(
       }
     }
     for (const path of kinds.keys()) await verifySource(path, true)
-    for (const entry of staged) {
-      const expected = mirrorVersions.get(entry.path)
-      if (
-        (await sandboxEntryVersion(entry.staged)) !== expected ||
-        (await sandboxEntryVersion(join(root, entry.path))) !== expected
+    // 只读复核互相独立；整批结束之后才允许清理或进入提交阶段。
+    for (let start = 0; start < staged.length; start += 16) {
+      const results = await Promise.allSettled(
+        staged.slice(start, start + 16).map(async (entry) => {
+          const expected = mirrorVersions.get(entry.path)
+          if (
+            (await sandboxEntryVersion(entry.staged)) !== expected ||
+            (await sandboxEntryVersion(join(root, entry.path))) !== expected
+          )
+            throw sandboxChangedSinceDiff()
+        })
       )
-        throw sandboxChangedSinceDiff()
+      for (const result of results) {
+        if (result.status === 'rejected') throw result.reason
+      }
     }
     if (fingerprint) {
       const current = await diffMirror(manifest, await scanTree(root), { textDiffs: false })
