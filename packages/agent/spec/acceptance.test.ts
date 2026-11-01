@@ -1944,11 +1944,12 @@ test('INV-37 steering invalidates a stale response before slow input persistence
     }
     return ingest(input, signal)
   }
-  f.options.model.stream = async function* () {
+  f.options.model.stream = async function* (_request, signal) {
     calls++
     if (calls === 1) {
       yield { type: 'text', text: 'old' }
       await arrived
+      expect(signal.aborted).toBe(false)
       yield { type: 'text', text: 'stale code' }
       yield { type: 'finish', reason: 'stop' }
     } else {
@@ -2945,6 +2946,8 @@ test('overlapping guidance receipts preserve identities and bind to their prepar
   const f = runFixture()
   let started!: () => void
   let calls = 0
+  let finishFirst!: () => void
+  const firstFinished = new Promise<void>((resolve) => (finishFirst = resolve))
   let release!: () => void
   let preparing!: () => void
   let preparations = 0
@@ -2960,10 +2963,8 @@ test('overlapping guidance receipts preserve identities and bind to their prepar
   f.options.model.stream = async function* (_request, signal) {
     if (++calls === 1) {
       started()
-      await new Promise<void>((resolve) => {
-        signal.addEventListener('abort', () => resolve(), { once: true })
-        if (signal.aborted) resolve()
-      })
+      await firstFinished
+      expect(signal.aborted).toBe(false)
       signal.throwIfAborted()
     }
     yield { type: 'text', text: 'done' }
@@ -2976,6 +2977,7 @@ test('overlapping guidance receipts preserve identities and bind to their prepar
   })()
   await ready
   await service.steer({ text: 'guide one', inputId: 'one' })
+  finishFirst()
   await arrived
   await service.steer({ text: 'guide two', inputId: 'two' })
   release()
@@ -3448,3 +3450,36 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
     }
   }
 )
+
+test('INV-37 steering during acknowledge never dispatches stale tools', async () => {
+  const f = runFixture()
+  let calls = 0
+  let executed = 0
+  const service = createActRunService(f.options)
+  f.options.model.stream = async function* () {
+    calls++
+    yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push: () => [],
+    finish: () =>
+      calls === 1
+        ? { message: 'stale', done: false, submission: { code: 'stale' }, events: [] }
+        : { message: 'done', done: true, events: [] },
+  })
+  f.options.frames.acknowledge = async () => {
+    if (calls === 1) await service.steer('new direction')
+  }
+  f.options.execution.invoke = async () => {
+    executed++
+  }
+  const events = []
+  for await (const event of service.submit('original')) events.push(event)
+  expect(calls).toBe(2)
+  expect(executed).toBe(0)
+  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  await service.close()
+})

@@ -40,7 +40,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "9.9.4",
+      "version": "9.10.0",
       "dependencies": {
         "@velaros-ai/context": "workspace:*",
         "@velaros-ai/core": "workspace:*",
@@ -112,7 +112,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.10.3",
+      "version": "0.10.4",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",
@@ -170,7 +170,7 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.24",
+      "version": "0.6.25",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@modelcontextprotocol/sdk": "^1.31.0",

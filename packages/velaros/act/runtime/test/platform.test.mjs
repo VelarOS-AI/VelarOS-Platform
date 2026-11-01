@@ -841,3 +841,47 @@ test('Node data codecs preserve UTF-8 and binary roundtrips without host objects
     })
   )
 })
+
+test('runtime project resolver authorizes cross-root transactions through the generated Node bridge', async (t) => {
+  const f = await storageFixture(t)
+  const workspace = join(f.root, 'workspace')
+  const target = join(f.root, 'target')
+  await mkdir(workspace)
+  await mkdir(target)
+  await writeFile(join(target, 'a.txt'), 'before')
+  const kernel = await createProjectKernel({ root: target })
+  const modes = []
+  const runtime = await createRuntime({
+    storage: f.storage,
+    workspace,
+    agents: false,
+    search: false,
+    memory: false,
+    project: {
+      resolveProject: async (root, options) => {
+        assert.equal(root, target)
+        modes.push(options.write)
+        return {
+          getRootPath: () => target,
+          kernel: async () => kernel,
+          queryCode: async () => ({}),
+        }
+      },
+    },
+  })
+  f.cleanup.push(() => runtime.close())
+  const session = await open(runtime)
+  ok(
+    await session.execute({
+      source: `import {read,edit,undo} from 'velaros:project';
+const projectRoot=${JSON.stringify(target)};
+const current=await read({projectRoot,files:[{path:'a.txt'}]});
+if(current.files[0].text!=='before')throw Error('wrong project');
+const change=await edit({projectRoot,steps:[{action:'write',path:'a.txt',text:'after',expectedText:'before'}]});
+await undo({projectRoot,changeRef:change.changeRef});`,
+    })
+  )
+  assert.deepEqual(modes, [false, true, true])
+  assert.equal(await readFile(join(target, 'a.txt'), 'utf8'), 'before')
+  await assert.rejects(readFile(join(workspace, 'a.txt')), { code: 'ENOENT' })
+})

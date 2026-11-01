@@ -49,7 +49,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test spec/acceptance.test.ts spec/model-continuation.test.ts spec/operation-diagnostics.test.ts spec/operation-lifecycle.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/kernel",
-    "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
+    "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs",
+    "test:built": "bun test test spec/acceptance.test.ts spec/model-continuation.test.ts spec/operation-diagnostics.test.ts spec/operation-lifecycle.test.ts"
   },
   "dependencies": {
     "@types/ws": "^8.18.1",

@@ -81,6 +81,7 @@ import type {
   VelarosContextOptions,
   VelarosRuntimeOptions,
 } from '../contract/requires.js'
+import type { InstructionAudience, RuntimeInstructionManifest } from '../types/instructions.js'
 import type { RuntimeInventory } from '../types/inventory.js'
 import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
@@ -114,6 +115,7 @@ import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
 import { readExecutionOutput } from '../utils/execution-output.js'
+import { assembleInstructionManifest } from '../utils/instruction-manifest.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
@@ -195,6 +197,8 @@ export interface RuntimeSessionModelTool {
 
 /** 会话由运行时注入的共享实例。 */
 export interface RuntimeSessionDependencies {
+  /** 指令接收方身份；子任务显式指定，专项模型默认 auxiliary。 */
+  readonly audience?: InstructionAudience
   /** 显式授权的标准业务执行环境。 */
   readonly node?: VelarosRuntimeOptions['node']
   /** 主会话的可信宿主产品指令；与运行协议一起编译和归档。 */
@@ -255,6 +259,8 @@ export interface RuntimeSessionDependencies {
 
 /** 一个会话共享上下文，模型回合有序，执行任务按并发预算运行。 */
 export interface VelarosSession {
+  /** 与实际请求共用装配结果；返回独立快照。 */
+  instructionManifest(): RuntimeInstructionManifest
   /** 当前任务获权的执行读取与停止，和模型能力使用相同端口。 */
   readonly executions: ExecutionsPort
   /** 读取目标生命周期；与执行状态独立。 */
@@ -329,6 +335,11 @@ export interface VelarosSession {
 }
 
 export class RuntimeSession implements VelarosSession {
+  private readonly instructionAssembly: RuntimeInstructionManifest
+  public instructionManifest(): RuntimeInstructionManifest {
+    return structuredClone(this.instructionAssembly)
+  }
+
   public readonly executions: ExecutionsPort
   private readonly executionProgress: ExecutionProgressApi
   private controlSlots = 0
@@ -514,33 +525,102 @@ export class RuntimeSession implements VelarosSession {
         canFinishText,
         !dependencies.tool
       )
-    const instructions = `${
-      this.executionRunner.environment === 'node'
-        ? nodeRuntimeInstructions(
-            this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd(),
-            modules
-          )
-        : runtimeInstructions({
-            modules,
-            resident: residentContracts(modules, dependencies.residentModules, (module) =>
-              dependencies.kernel.describe(module)
-            ),
-            summary: (module) => dependencies.kernel.describe(module).summary,
-            index: (module) => {
-              const description = dependencies.kernel.describe(module)
-              return scriptPackageCompiler.index(
-                description.declarations,
-                module,
-                description.template
+    const audience = dependencies.audience ?? (dependencies.tool ? 'auxiliary' : 'main')
+    const instructions = (this.instructionAssembly = assembleInstructionManifest([
+      {
+        id: 'platform.runtime.environment',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/environment',
+        enabled: true,
+        condition: `environment=${this.executionRunner.environment}; modules=${modules.join(',')}`,
+        text: `${
+          this.executionRunner.environment === 'node'
+            ? nodeRuntimeInstructions(
+                this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd(),
+                modules
               )
-            },
-            storeMode: dependencies.stores?.mode,
-            maintain: Boolean(dependencies.maintain),
-            observe: this.config.allowed.includes('observe'),
-          })
-    }\n\n${protocolProgramRules(this.config)}\n${nativeTools ? nativeProtocolRules(this.config) : protocolRules(this.config)}\n${this.executionRunner.environment === 'node' ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
-      dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
-    }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
+            : runtimeInstructions({
+                modules,
+                resident: residentContracts(modules, dependencies.residentModules, (module) =>
+                  dependencies.kernel.describe(module)
+                ),
+                summary: (module) => dependencies.kernel.describe(module).summary,
+                index: (module) => {
+                  const description = dependencies.kernel.describe(module)
+                  return scriptPackageCompiler.index(
+                    description.declarations,
+                    module,
+                    description.template
+                  )
+                },
+                storeMode: dependencies.stores?.mode,
+                maintain: Boolean(dependencies.maintain),
+                observe: this.config.allowed.includes('observe'),
+              })
+        }`,
+      },
+      {
+        id: 'platform.runtime.program-protocol',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/script-protocol',
+        enabled: true,
+        condition: 'program-protocol: resolved session configuration',
+        text: `\n\n${protocolProgramRules(this.config)}`,
+      },
+      {
+        id: 'platform.runtime.transport-protocol',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/transport-protocol',
+        enabled: true,
+        condition: `nativeTools=${nativeTools}`,
+        text: `\n${nativeTools ? nativeProtocolRules(this.config) : protocolRules(this.config)}`,
+      },
+      {
+        id: 'platform.runtime.snapshot-plans',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/snapshot-plans',
+        enabled: true,
+        condition: 'snapshot-plans: resolved session configuration',
+        text: `\n${
+          this.executionRunner.environment === 'node'
+            ? ''
+            : JSON.stringify({
+                snapshotPlans: (dependencies.contextOptions?.snapshots ?? [])
+                  .filter((provider) => modules.includes(provider.moduleId))
+                  .map((provider) => ({
+                    provider: provider.id,
+                    plans: provider.plans,
+                    module: provider.moduleId,
+                    operation: provider.operation,
+                  })),
+              })
+        }`,
+      },
+      {
+        id: 'platform.runtime.specialized',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/model-tool',
+        enabled: Boolean(dependencies.tool?.instructions),
+        condition: 'Boolean(dependencies.tool?.instructions)',
+        text: `${dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''}`,
+      },
+      {
+        id: 'platform.runtime.host',
+        owner: 'host',
+        audience,
+        source: 'host/instructions',
+        enabled: Boolean(dependencies.instructions?.trim()),
+        condition: 'Boolean(dependencies.instructions?.trim())',
+        text: `${
+          dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''
+        }`,
+      },
+    ])).text
     dependencies.register({
       recoveryChars: dependencies.limits.recoveryChars,
       validateCandidate: async (frame, signal) => {
@@ -687,6 +767,16 @@ export class RuntimeSession implements VelarosSession {
               await this.programs.endTask()
           },
           prepare: async (signal) => {
+            await this.context.append(
+              {
+                kind: 'audit',
+                title: 'runtime:instruction-manifest',
+                body: JSON.stringify({
+                  blocks: this.instructionAssembly.blocks.map(({ text: _text, ...block }) => block),
+                }),
+              },
+              signal
+            )
             await this.restoreFrameMarkers(signal)
             this.preparedFrameMarker = this.createFrameMarker()
             await this.context.append(

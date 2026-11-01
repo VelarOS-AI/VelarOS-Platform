@@ -23,6 +23,9 @@ export interface ProjectSnapshotEntry {
  * 每个业务轮仍真实读盘，前后两次捕获一致才完整；同值只允许省掉纯派生和程序运行，不证明期间没有变化。
  */
 export interface ProjectSnapshotInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   readonly files: readonly ProjectSnapshotEntry[]
 }
 

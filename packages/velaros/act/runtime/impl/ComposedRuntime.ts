@@ -524,6 +524,7 @@ class ComposedRuntime implements VelarosRuntime {
     try {
       parentTask = await materials?.open(job, activity.signal)
       session = new RuntimeSession(job.sessionId, {
+        audience: 'worker',
         node: profile.node ? this.options.node : undefined,
         environment: this.options.environment,
         parentTask: parentTask?.path,

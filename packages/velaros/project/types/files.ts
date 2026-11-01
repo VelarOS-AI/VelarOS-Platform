@@ -24,6 +24,9 @@ export interface ProjectReadItem {
  * 一次交回的正文总共不超过 20000000 字符（只为守住内存），装不下的文件在 issues 里：单独读，或者用 range 读一段。
  */
 export interface ProjectReadInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   files: ProjectReadItem[]
 }
 
@@ -72,6 +75,9 @@ export interface ProjectReadResult {
  * 条目超过 100000 条时整个调用失败（只为守住内存），收窄 path、include 或 depth 再列。
  */
 export interface ProjectListInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   path?: string
   include?: string[]
   exclude?: string[]
@@ -98,6 +104,9 @@ export interface ProjectListResult {
  * 交回全部命中；超过 5000 处时整个调用失败（只为守住内存），收窄 query、path 或 include 再搜。
  */
 export interface ProjectSearchInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   query: string
   path?: string
   include?: string[]
@@ -175,6 +184,9 @@ export type ProjectEditStep =
  * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
  */
 export interface ProjectEditInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   steps: ProjectEditStep[]
 }
 
@@ -260,6 +272,9 @@ export interface ProjectEditResult {
 
 /** @AgentView 要看或要撤销的那次改动：edit 回执里的 changeRef，原样传。 */
 export interface ProjectChangeInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   changeRef: string
 }
 

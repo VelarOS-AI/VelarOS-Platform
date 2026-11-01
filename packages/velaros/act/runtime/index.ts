@@ -77,6 +77,11 @@ export type {
   CompletionValidationReceipt,
 } from './types/completion-validation.js'
 export type {
+  InstructionAudience,
+  RuntimeInstructionBlock,
+  RuntimeInstructionManifest,
+} from './types/instructions.js'
+export type {
   McpRawCallResult,
   McpResourceContent,
   McpResourceDescriptor,

@@ -60,6 +60,11 @@ export interface ProjectCapabilityModuleOptions {
   readonly generation?: number
   /** 宿主已限制范围的项目端口。 */
   readonly project: ProjectSpacePort
+  /** 可选跨项目授权口；每次调用核对宿主授权真实根及读写模式，未配置时拒绝 projectRoot。 */
+  readonly resolveProject?: (
+    root: string,
+    options: { write: boolean; signal: AbortSignal }
+  ) => Promise<ProjectSpacePort>
 }
 
 /** 将已有领域操作接到统一 Kernel；模型合同由同一份领域接口生成。 */
@@ -324,6 +329,8 @@ export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptio
 
 /** 工作区项目上另挂的能力：都用运行时自己的那个项目内核，钳在项目根里。 */
 export interface VelarosProjectOptions {
+  /** 可选跨项目授权解析器；每次操作核对权限，返回目标真实根的独立内核；不改变进程 confinement。 */
+  readonly resolveProject?: ProjectCapabilityModuleOptions['resolveProject']
   /**
    * 挂 velaros:code：内置的 JS/TS、Python 语言服务答大纲、定义、引用、诊断与波及面；
    * 给了代码图谱后端时调用关系与四类分析也能答，不给时它们报 UNAVAILABLE。

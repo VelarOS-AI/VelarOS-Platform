@@ -240,7 +240,13 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         },
       }
       if (projectEnabled) {
-        modules.push(createProjectCapabilityModule({ instanceId: root, project }))
+        modules.push(
+          createProjectCapabilityModule({
+            instanceId: root,
+            project,
+            resolveProject: extras.resolveProject,
+          })
+        )
         if (codeIndex) modules.push(createProjectCodeModule({ instanceId: root, project }))
         sources.push(createProjectContextSource({ id: 'project', kernel }))
         snapshots.push(createProjectObservationProvider())

@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.90",
+  "version": "0.6.91",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
@@ -91,7 +91,7 @@
     "//release": "正式发布由 GitHub Actions 执行 release:github；核验源码身份、冻结安装、完整检查与 tarball。",
     "release:verify": "node scripts/release/verify-release-ref.mjs --local-tag",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
-    "check": "bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run check:format && bun run test && bun run test:suites && bun run check:gates",
+    "check": "bun run check:environment && bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run check:format && bun run test:built && bun run test:suites && bun run check:gates",
     "test:suites": "bun run test:capabilities",
     "release:local": "node scripts/release/publish-packages.mjs --local-tag",
     "release:github": "node scripts/release/publish-packages.mjs --github-release --local-tag",
@@ -100,7 +100,9 @@
     "generate:script": "node scripts/script/generate-declarations.mjs --write",
     "check:script": "node --test scripts/script/operation-contracts.test.mjs scripts/script/generate-declarations.test.mjs && node scripts/script/generate-declarations.mjs",
     "generate:act-catalog": "node scripts/script/act-catalog.mjs --write",
-    "check:act-catalog": "node scripts/script/act-catalog.mjs"
+    "check:act-catalog": "node scripts/script/act-catalog.mjs",
+    "test:built": "node scripts/run-workspace-script.mjs test:built && bun run test:act-eval",
+    "check:environment": "node scripts/check-environment.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

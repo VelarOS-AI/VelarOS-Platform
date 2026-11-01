@@ -14,6 +14,7 @@ import type {
   ModelTurnRequest,
 } from '../../types/driver.js'
 import type { ModelInputSample } from '../../types/requests.js'
+import { safeFinishDiagnostic } from '../../utils/finish-diagnostic.js'
 import { planProviderRetry, providerErrorMessage } from '../../utils/retry.js'
 import { ModelTuning } from '../../utils/tuning.js'
 import {
@@ -277,7 +278,10 @@ class AiSdkModelDriver implements ModelDriver {
               part.finishReason
             )
           )
-            throw new AppError('PROTOCOL', `供应商响应未成功结束：${part.finishReason}`)
+            throw new AppError(
+              'PROTOCOL',
+              `供应商响应未成功结束：${safeFinishDiagnostic(part.finishReason)} [finish=${safeFinishDiagnostic(part.finishReason)}; raw=${safeFinishDiagnostic(part.rawFinishReason)}; terminal=${responseTerminal ?? 'missing'}; protocol=${usesResponseContinuation(this.options.model) ? 'responses' : 'other'}; text=${received.length > 0}; tools=${calls.length > 0}; usage=${Boolean(reportedUsage)}]`
+            )
           finish = { type: 'finish', reason: part.finishReason === 'length' ? 'length' : 'stop' }
         }
       }

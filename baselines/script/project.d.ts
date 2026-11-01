@@ -1,6 +1,7 @@
 /**
  * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
- * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
+ * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
+ * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
  * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
@@ -50,6 +51,9 @@ declare module 'velaros:project' {
    * 一次交回的正文总共不超过 20000000 字符（只为守住内存），装不下的文件在 issues 里：单独读，或者用 range 读一段。
    */
   interface ProjectReadInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     files: ProjectReadItem[]
   }
 
@@ -66,6 +70,9 @@ declare module 'velaros:project' {
    * 每个业务轮仍真实读盘，前后两次捕获一致才完整；同值只允许省掉纯派生和程序运行，不证明期间没有变化。
    */
   interface ProjectSnapshotInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     readonly files: readonly ProjectSnapshotEntry[]
   }
 
@@ -90,6 +97,9 @@ declare module 'velaros:project' {
    * 条目超过 100000 条时整个调用失败（只为守住内存），收窄 path、include 或 depth 再列。
    */
   interface ProjectListInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     path?: string
     include?: string[]
     exclude?: string[]
@@ -109,6 +119,9 @@ declare module 'velaros:project' {
    * 交回全部命中；超过 5000 处时整个调用失败（只为守住内存），收窄 query、path 或 include 再搜。
    */
   interface ProjectSearchInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     query: string
     path?: string
     include?: string[]
@@ -130,6 +143,9 @@ declare module 'velaros:project' {
 
   /** 最多 1000 个目标、100 个源码文件；完整源码与返回正文各最多 20000000 字符，一项歧义最多 20 个完整候选，超限明确报错。没有可靠结构解析时用 match 或 read 的文本目标。 */
   interface ProjectSelectInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     targets: ProjectSelectTarget[]
   }
 
@@ -141,8 +157,9 @@ declare module 'velaros:project' {
 
   /** 一次最多 1000 项，同文件各项基于同一原文一次拼接，整个批次一个事务，缺省最多 100 个文件。receipt 缺省 summary；full 获取完整差量和变更窗口。blocked 的 planRef 可用 amendments 修正，无需重新发送正确项；版本冲突必须重新定位，不自动模糊应用。 */
   type ProjectPatchInput =
-    | { edits: ProjectPatchEdit[]; receipt?: 'summary' | 'full' }
+    | { projectRoot?: string; edits: ProjectPatchEdit[]; receipt?: 'summary' | 'full' }
     | {
+        projectRoot?: string
         planRef: string
         amendments: ProjectPatchAmendment[]
         receipt?: 'summary' | 'full'
@@ -167,6 +184,9 @@ declare module 'velaros:project' {
    * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
    */
   interface ProjectEditInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     steps: ProjectEditStep[]
   }
 
@@ -193,6 +213,9 @@ declare module 'velaros:project' {
 
   /** 要看或要撤销的那次改动：edit 回执里的 changeRef，原样传。 */
   interface ProjectChangeInput {
+    /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+    projectRoot?: string
+
     changeRef: string
   }
 

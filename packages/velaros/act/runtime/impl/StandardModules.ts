@@ -119,6 +119,7 @@ export function createProjectCapabilityModule(
     generation: options.generation,
     context: (call) => ({
       project: options.project,
+      resolveProject: options.resolveProject,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
       recordWriteOutcome: (outcome) =>
@@ -145,6 +146,7 @@ export function createProjectCodeModule(
     generation: options.generation,
     context: (call) => ({
       project: options.project,
+      resolveProject: options.resolveProject,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
     }),

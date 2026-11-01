@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/model",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "velaros": {
     "platform": "0.6"
   },
@@ -45,8 +45,9 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/model/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
-    "test": "bun run build && bun test test test/prompt-cache-estimate.test.ts test/native-tools.test.ts test/input-estimator.test.ts test/stream-interruption.test.ts test/responses-terminal.test.ts spec/acceptance.test.ts spec/continuation.test.ts",
-    "prepack": "bun run build"
+    "test": "bun run build && bun run test:built",
+    "prepack": "bun run build",
+    "test:built": "bun test test test/prompt-cache-estimate.test.ts test/native-tools.test.ts test/input-estimator.test.ts test/stream-interruption.test.ts test/responses-terminal.test.ts spec/acceptance.test.ts spec/continuation.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

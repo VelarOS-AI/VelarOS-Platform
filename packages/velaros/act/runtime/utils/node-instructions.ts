@@ -34,7 +34,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '后台/委派核身份、进度、错误、退出；等回执续跑。时长不证明有效，停滞先诊断。',
     '要求对应交付与检查；编码前核旧实现、合同、测试和调用方，不用新实现自定兼容范围，不删减旧测试来过门禁。',
     '验证用户及打包入口；按发现规则核新增测试确实运行，可用清单或临时必失败断言（恢复后重跑）。退出 0 仅证明实际覆盖范围。',
-    '先做相关测试和改动文件规范检查，再跑完整门禁。记录产物、命令、结果、覆盖；改动后补验，通过后仅因改动、关联失败、覆盖缺口或明确要求扩大验证。收尾核要求、差异、回执，报告证据缺口。',
+    '按项目要求、改动及受影响调用方的风险确定验收范围，先做相关测试和改动文件规范检查；完整门禁在项目要求、发布或风险需要时运行，不因执行环境指令无条件扩大验证。记录产物、命令、结果、覆盖；改动后补验，通过后仅因改动、关联失败、覆盖缺口或明确要求扩大验证。收尾核要求、差异、回执，报告证据缺口。',
     '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
     `读 process.env.${NodeEnvironmentVariables.directory.name}/index.json：capabilities 按 module/member 查，documentationPath、operationPaths[操作名] 为声明/示例绝对路径；packages 查包身份；velaros:skills.load({name}) 读全文。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),

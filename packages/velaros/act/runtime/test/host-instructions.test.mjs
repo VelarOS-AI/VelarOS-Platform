@@ -940,3 +940,38 @@ test('large capability indexes keep complete export names and expose omitted dir
   assert(note.includes(`另有 ${80 - entries.length} 个模块`))
   assert(note.includes('modules.list() 分页读取完整目录'))
 })
+
+test('instruction manifest exports the actual request prefix without mutable aliases', async (t) => {
+  const frames = []
+  const f = await fixture(t, {
+    instructions: 'manifest-host-setting',
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+  })
+  const manifest = f.session.instructionManifest()
+  assert.equal(new Set(manifest.blocks.map((block) => block.id)).size, manifest.blocks.length)
+  assert(
+    manifest.blocks.every(
+      (block) =>
+        block.audience === 'main' &&
+        block.source &&
+        block.condition &&
+        /^[a-f0-9]{64}$/.test(block.revision)
+    )
+  )
+  assert.equal(
+    manifest.text,
+    manifest.blocks
+      .filter((block) => block.enabled)
+      .map((block) => block.text)
+      .join('')
+  )
+  manifest.blocks[0].text = 'tampered'
+  for await (const event of f.session.submit('user material remains separate'))
+    assert.notEqual(event.type, 'error')
+  assert.equal(frames[0].instructions, f.session.instructionManifest().text)
+  assert(!frames[0].instructions.includes('tampered'))
+  assert(!frames[0].instructions.includes('user material remains separate'))
+})

@@ -17,6 +17,9 @@ export type ProjectSelectTarget =
 
 /** @AgentView 最多 1000 个目标、100 个源码文件；完整源码与返回正文各最多 20000000 字符，一项歧义最多 20 个完整候选，超限明确报错。没有可靠结构解析时用 match 或 read 的文本目标。 */
 export interface ProjectSelectInput {
+  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  projectRoot?: string
+
   targets: ProjectSelectTarget[]
 }
 
@@ -60,8 +63,9 @@ export interface ProjectPatchAmendment {
 
 /** @AgentView 一次最多 1000 项，同文件各项基于同一原文一次拼接，整个批次一个事务，缺省最多 100 个文件。receipt 缺省 summary；full 获取完整差量和变更窗口。blocked 的 planRef 可用 amendments 修正，无需重新发送正确项；版本冲突必须重新定位，不自动模糊应用。 */
 export type ProjectPatchInput =
-  | { edits: ProjectPatchEdit[]; receipt?: 'summary' | 'full' }
+  | { projectRoot?: string; edits: ProjectPatchEdit[]; receipt?: 'summary' | 'full' }
   | {
+      projectRoot?: string
       planRef: string
       amendments: ProjectPatchAmendment[]
       receipt?: 'summary' | 'full'

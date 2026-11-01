@@ -171,7 +171,7 @@ export interface ActLoopOptions {
   readonly limits: ActRunLimits
 }
 
-/** 运行服务在轮边界递交已归档输入，暂停在途模型但不重放脚本。 */
+/** 运行服务在轮边界递交已归档输入，主模型自然结束后接纳且不重放脚本。 */
 export interface ActLoopControl {
   /** 当前运行身份。 */
   readonly runId: string
@@ -179,7 +179,7 @@ export interface ActLoopControl {
   beforeTurn(signal: AbortSignal): Promise<void>
   /** 请求已持久化时确认本次准备包含的输入，回执绑定该请求身份。 */
   applied?(turnId: string, signal: AbortSignal): Promise<void>
-  /** 当前轮模型流的抢占信号。 */
+  /** 当前轮等待、维护与完成验收的失效信号；不取消在途主模型请求。 */
   turnSignal(): AbortSignal
   /** 检查是否有尚未进入本轮的新用户输入。 */
   pending(): boolean

@@ -374,7 +374,7 @@ export class ActLoop implements ActLoopApi {
             const attemptSignal = AbortSignal.any([
               controller.signal,
               attemptController.signal,
-              ...(this.options.control ? [this.options.control.turnSignal()] : []),
+              // 引导在响应结束后的安全边界接纳，不取消在途主模型请求。
               ...(deadline ? [AbortSignal.timeout(Math.max(1, deadline - Date.now()))] : []),
             ])
             const modelStarted = performance.now()
@@ -677,6 +677,8 @@ export class ActLoop implements ActLoopApi {
         if (this.options.control?.pending()) continue
         if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
+        // acknowledge 期间到达的引导也不能派发旧响应中的工具。
+        if (this.options.control?.pending()) continue
         this.planner.accept(
           compiled.estimate.tokens,
           frame.segment,
@@ -686,6 +688,8 @@ export class ActLoop implements ActLoopApi {
         let done = decoded.done
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
+          // 状态事件的持久化交付也会让出控制权，实际调用前再次确认。
+          if (this.options.control?.pending()) continue turns
           const success = await this.options.execution.invoke(
             decoded.submission,
             controller.signal,

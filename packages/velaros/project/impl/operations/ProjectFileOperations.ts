@@ -3,7 +3,6 @@
  * 读操作在项目资源门的读门里跑（彼此并行、与写互斥）；改动在写门里跑：规划 → 内核准备、校验、提交，撤销同样。不问用户。
  * 校验与撤销账本都在项目内核里，这里只负责把模型的步骤编成事务、把结果写成模型面的样子。
  */
-
 import { optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
@@ -33,6 +32,7 @@ import { changeInput, editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
 import { planPathSteps } from '../../utils/agent/path-steps.js'
 import { projectFailure } from '../../utils/agent/ports.js'
+import { resolveProjectContext } from '../../utils/agent/project-routing.js'
 import { patchSelections } from '../../utils/agent/selection-patch.js'
 import { selectSources } from '../../utils/agent/selection-reads.js'
 import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
@@ -44,7 +44,8 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
 /**
  * @AgentView
  * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
- * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
+ * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
+ * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
  * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
@@ -99,32 +100,48 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   private readonly snapshots = new ProjectSnapshotCollector()
   constructor(private readonly gate: ProjectExecutionGateApi) {}
 
-  public read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult> {
+  public async read(
+    input: ProjectReadInput,
+    context: ProjectOperationContext
+  ): Promise<ProjectReadResult> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     return this.guarded(ctx, false, () => readFiles(input, ctx))
   }
 
-  public snapshot(
+  public async snapshot(
     input: ProjectSnapshotInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectSnapshotCapture> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     return this.guarded(ctx, false, () => this.snapshots.capture(input, ctx))
   }
 
-  public list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult> {
+  public async list(
+    input: ProjectListInput,
+    context: ProjectOperationContext
+  ): Promise<ProjectListResult> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     return this.guarded(ctx, false, () => listEntries(input, ctx))
   }
 
-  public search(
+  public async search(
     input: ProjectSearchInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectSearchResult> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     return this.guarded(ctx, false, () => searchFiles(input, ctx))
   }
 
   public async edit(
     input: ProjectEditInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectEditResult> {
+    const ctx = await beforeWrite(() => resolveProjectContext(input, context, true))
+
     try {
       ctx.abortSignal.throwIfAborted()
       // 按路径取读取凭据也排在写门里：同一个项目里别的改动落盘之后才取，取到的就是提交时的内容。
@@ -137,17 +154,21 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
     }
   }
 
-  public select(
+  public async select(
     input: ProjectSelectInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectSelectResult> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     return this.guarded(ctx, false, () => selectSources(input, ctx))
   }
 
-  public patch(
+  public async patch(
     input: ProjectPatchInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectPatchResult> {
+    const ctx = await beforeWrite(() => resolveProjectContext(input, context, true))
+
     return this.guarded(ctx, true, async () => {
       const result = await patchSelections(input, ctx)
       ctx.recordWriteOutcome?.(
@@ -159,8 +180,10 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
 
   public async inspect(
     input: ProjectChangeInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectChangeInspection> {
+    const ctx = await resolveProjectContext(input, context, false)
+
     try {
       ctx.abortSignal.throwIfAborted()
       const { changeRef } = changeInput(input)
@@ -183,8 +206,10 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
 
   public async undo(
     input: ProjectChangeInput,
-    ctx: ProjectOperationContext
+    context: ProjectOperationContext
   ): Promise<ProjectUndoResult> {
+    const ctx = await beforeWrite(() => resolveProjectContext(input, context, true))
+
     try {
       ctx.abortSignal.throwIfAborted()
       const { changeRef, transactionId, transaction, kernel } = await beforeWrite(async () => {

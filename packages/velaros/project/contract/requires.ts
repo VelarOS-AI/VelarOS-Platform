@@ -417,6 +417,12 @@ export interface ProjectSpacePort {
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** 每次跨项目操作重新授权真实根和读写权限；宿主拒绝未授权根并遵守取消，返回该根受限内核端口。 */
+  resolveProject?(
+    root: string,
+    options: { write: boolean; signal: AbortSignal }
+  ): Promise<ProjectSpacePort>
+
   /** 领域确认写操作的实际效果；正常返回的 blocked 或无变化也必须记成未写入，不能由客户端结果字段决定。 */
   recordWriteOutcome?(outcome: 'applied' | 'not-applied'): void
   /** 领域确认固定只读捕获已经完整收束，保存观察保护事实。 */
