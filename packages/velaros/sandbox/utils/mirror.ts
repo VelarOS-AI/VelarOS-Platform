@@ -788,11 +788,21 @@ export async function applyMirrorChanges(
     const writes = [...created, ...modified]
     const staged: Array<{ path: string; staged: string }> = []
     if (!isEmpty(writes)) stage = await mkdtemp(join(source, '.velaros-sandbox-'))
-    for (const [index, path] of writes.entries()) {
+    // 暂存目标互相独立；每批全部收束后才传播失败，避免清理时仍有写入。
+    for (let start = 0; start < writes.length; start += 16) {
       signal?.throwIfAborted()
-      const stagedPath = join(stage!, String(index))
-      await stageEntry(join(root, path), stagedPath)
-      staged.push({ path, staged: stagedPath })
+      const batch = writes.slice(start, start + 16)
+      const results = await Promise.allSettled(
+        batch.map(async (path, offset) => {
+          const stagedPath = join(stage!, String(start + offset))
+          await stageEntry(join(root, path), stagedPath)
+          return { path, staged: stagedPath }
+        })
+      )
+      for (const result of results) {
+        if (result.status === 'rejected') throw result.reason
+        staged.push(result.value)
+      }
     }
     for (const path of kinds.keys()) await verifySource(path, true)
     for (const entry of staged) {
