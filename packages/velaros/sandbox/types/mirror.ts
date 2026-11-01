@@ -10,6 +10,8 @@ import type { SandboxRecord } from './rehearsal-sandbox.js'
 export interface SandboxFileStamp {
   size: number
   mtimeMs: number
+  /** 普通文件内容版本；旧清单缺省时沿用元数据比较。 */
+  contentVersion?: string
   mode: number
   link?: string
 }

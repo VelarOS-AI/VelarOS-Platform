@@ -142,9 +142,24 @@ export function stampOfEntry(stats: Stats, link?: string): SandboxFileStamp {
   return stamp
 }
 
-/** 两个印记是否相同：大小、修改时间、权限位、链接目标都一样。 */
+/** 普通文件补充流式内容版本，避免时间戳精度碰撞漏掉等长改写。 */
+async function contentStamp(path: string, stats: Stats, link?: string): Promise<SandboxFileStamp> {
+  const stamp = stampOfEntry(stats, link)
+  if (stats.isFile()) stamp.contentVersion = (await sandboxEntryVersion(path)) ?? undefined
+  return stamp
+}
+
+/** 两个印记是否相同：元数据及可用的内容版本都一样。 */
 export function sameStamp(a: SandboxFileStamp, b: SandboxFileStamp): boolean {
-  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.mode === b.mode && a.link === b.link
+  return (
+    a.size === b.size &&
+    a.mtimeMs === b.mtimeMs &&
+    a.mode === b.mode &&
+    a.link === b.link &&
+    (isUndefined(a.contentVersion) ||
+      isUndefined(b.contentVersion) ||
+      a.contentVersion === b.contentVersion)
+  )
 }
 
 /** 一个相对路径是不是某个仓库的配置文件：任意一层 `.git` 目录里（含子模块的 `.git/modules/…`）名叫 config 或 config.worktree 的文件。 */
@@ -259,8 +274,8 @@ export async function mirrorTree(
         )
       await copyFile(sourcePath, mirrorPath, constants.COPYFILE_FICLONE)
       await chmod(mirrorPath, stats.mode & 0o777)
-      files[relativePath] = stampOfEntry(stats)
-      mirror[relativePath] = stampOfEntry(await lstat(mirrorPath))
+      files[relativePath] = await contentStamp(sourcePath, stats)
+      mirror[relativePath] = await contentStamp(mirrorPath, await lstat(mirrorPath))
       if (isGitConfigPath(relativePath)) gitConfigs.push(relativePath)
     }
   }
@@ -306,7 +321,7 @@ export async function scanTree(root: string): Promise<SandboxStampTable> {
       } else if (entry.isDirectory()) {
         pending.push(relativePath)
       } else if (entry.isFile()) {
-        files[relativePath] = stampOfEntry(stats)
+        files[relativePath] = await contentStamp(absolutePath, stats)
       }
     }
   }
@@ -412,7 +427,7 @@ export async function diffMirror(
       if (
         sourceStats?.isFile() &&
         sourceBefore &&
-        sameStamp(stampOfEntry(sourceStats), sourceBefore)
+        sameStamp(await contentStamp(join(source, path), sourceStats), sourceBefore)
       ) {
         const [mirrorBuffer, sourceBuffer] = await Promise.all([
           readFile(join(root, path)),
@@ -471,7 +486,7 @@ export async function diffMirror(
       if (
         !sourceStats?.isFile() ||
         !sourceBefore ||
-        !sameStamp(stampOfEntry(sourceStats), sourceBefore)
+        !sameStamp(await contentStamp(join(source, path), sourceStats), sourceBefore)
       ) {
         omittedDiffs += 1
         continue
@@ -551,7 +566,7 @@ async function conflictOf(
   const before = manifest.files[path]
   if (!stats) return { path, reason: 'missing', message: '源文件在建沙箱之后被删了' }
   const link = stats.isSymbolicLink() ? await readlink(join(source, path)) : undefined
-  if (!before || !sameStamp(stampOfEntry(stats, link), before))
+  if (!before || !sameStamp(await contentStamp(join(source, path), stats, link), before))
     return { path, reason: 'changed', message: '源文件在建沙箱之后被改过；看过再决定要不要落回' }
   return null
 }
