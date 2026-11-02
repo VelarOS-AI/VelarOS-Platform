@@ -112,7 +112,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.10.4",
+      "version": "0.10.5",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",

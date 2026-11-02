@@ -153,7 +153,6 @@ class AiSdkModelDriver implements ModelDriver {
       const calls: ModelToolCall[] = []
       let continuationTokens = request.outputTokens
       let chars = 0
-      let textSegments = 0
       let separator = false
       let endedWithNewline = true
       // 思考摘要只作展示：同一条响应只认先到的那一路来源，分段之间空一行，超出上限就不再转发。
@@ -213,10 +212,6 @@ class AiSdkModelDriver implements ModelDriver {
         if (part.type === 'text-start' && format.type !== 'json') {
           // Responses 可把说明和正式答复放在不同消息里；消息边界不能把两行粘成一行。
           separator = chars > 0 && !endedWithNewline
-          Log.tag('AiSdkModelDriver').debug('接收模型文本分段', {
-            segment: ++textSegments,
-            id: part.id,
-          })
         }
         if (part.type === 'text-delta') {
           const text =
