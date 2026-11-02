@@ -392,10 +392,20 @@ describe('rehearsal sandbox', () => {
         const applied = await space.call<{ created: string[] }>('apply', { id: record.id })
         expect(applied.created.length).toBe(count)
         expect(space.asked).toEqual([])
+        for (let start = 0; start < count; start += 32) {
+          const contents = await Promise.all(
+            Array.from({ length: Math.min(32, count - start) }, (_, offset) =>
+              readFile(join(site.source, 'many', `f${start + offset}.txt`), 'utf8')
+            )
+          )
+          expect(contents.every((content) => content === 'x')).toBe(true)
+        }
       } finally {
         await site.close()
       }
-    }
+    },
+    // 2100 项真实 I/O 含多次内容与冲突复核，不是 5 秒性能基准。
+    60_000
   )
 
   test.skipIf(!canConfine)(
