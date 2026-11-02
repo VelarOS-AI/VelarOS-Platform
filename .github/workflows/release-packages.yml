@@ -34,6 +34,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
+      - run: bun install --frozen-lockfile
       - name: Build, smoke-check, pack and publish GitHub release
         env:
           RELEASE_TAG: ${{ inputs.tag }}
