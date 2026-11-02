@@ -10,6 +10,7 @@ import { createCapabilityModule, createRuntime } from '../../../dist/act/runtime
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
 import { boundedInventory } from '../../../dist/act/runtime/utils/inventory.js'
 import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instructions.js'
+import { nodeRuntimeInstructions } from '../../../dist/act/runtime/utils/node-instructions.js'
 import { VelarBrowserModule } from '../../../dist/browser/contract/surface.js'
 import { VelarComputerModule } from '../../../dist/computer/contract/surface.js'
 import { VelarOfficeModule } from '../../../dist/office/contract/surface.js'
@@ -1030,4 +1031,13 @@ test('trace binds instruction manifests to requests across preparation failure a
     refs.push(manifest.ref.id)
   }
   assert.equal(new Set(refs).size, 1, 'repair reuses the successful preparation snapshot')
+})
+
+test('Node 验收说明按实际改动选择检查，不强制扩大验证', () => {
+  const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
+  assert.match(text, /按实际改动和项目要求选择必要检查/)
+  assert.match(text, /新增测试从运行清单确认被执行/)
+  assert.match(text, /仅改动影响打包时验证打包入口/)
+  assert.doesNotMatch(text, /临时必失败断言|验证用户及打包入口|收尾核要求、差异、回执/)
+  assert.match(text, /reject:false 查 failed\/stdout\/stderr/)
 })

@@ -159,7 +159,7 @@
     },
     "packages/skill-jsts": {
       "name": "@velaros-ai/skill-jsts",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@ast-grep/napi": "0.45.3",
         "@playwright/test": "1.63.0",
@@ -170,7 +170,7 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.26",
+      "version": "0.6.27",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@modelcontextprotocol/sdk": "^1.31.0",

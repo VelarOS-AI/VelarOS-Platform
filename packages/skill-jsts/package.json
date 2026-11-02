@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/skill-jsts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
   "license": "Apache-2.0",
   "type": "module",
