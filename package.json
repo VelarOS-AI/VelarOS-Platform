@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.99",
+  "version": "0.6.100",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
@@ -104,7 +104,8 @@
     "test:built": "node scripts/run-workspace-script.mjs test:built && bun run test:act-eval",
     "check:environment": "node scripts/check-environment.mjs",
     "release:preflight": "bun run check:lockfile-consistency && bun run check:project-arch && bun run check:platform-generation && bun run check:package-catalog && bun run check:format",
-    "check:gates:remaining": "bun run check:host-contract-consumer && bun run check:release-source && bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-public-api && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-arch && bun run check:module-ownership && bun run check:readme-examples && bun run check:model-arch && bun run check:code-style && bun run check:error-construction && bun run check:agent-lab-package && bun run check:dependency-licenses && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:script && bun run check:act-catalog"
+    "check:gates:remaining": "bun run check:host-contract-consumer && bun run check:release-source && bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-public-api && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-arch && bun run check:module-ownership && bun run check:readme-examples && bun run check:model-arch && bun run check:code-style && bun run check:error-construction && bun run check:agent-lab-package && bun run check:dependency-licenses && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:script && bun run check:act-catalog",
+    "release:check": "bun run check:lockfile-consistency && bun run check:project-arch && bun run build && bun run check:release-source"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

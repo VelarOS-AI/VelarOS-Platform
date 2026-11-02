@@ -124,7 +124,7 @@ export function assertLocalReleaseIdentity({
   return { sourceSha, tag, repository: repositoryIdentity }
 }
 
-/** Local publication owns the repository's complete maintained quality command. */
+/** Local publication owns the repository's focused release command; full audits remain in CI. */
 export function runLocalReleaseChecks({ root, packageManager, assertIdentity, run, runForOutput }) {
   const expectedBunVersion = /^bun@(.+)$/u.exec(packageManager ?? '')?.[1]
   if (!expectedBunVersion || runForOutput('bun', ['--version'], root) !== expectedBunVersion) {
@@ -133,6 +133,6 @@ export function runLocalReleaseChecks({ root, packageManager, assertIdentity, ru
   assertIdentity()
   run('bun', ['install', '--frozen-lockfile'], root)
   assertIdentity()
-  run('bun', ['run', 'check'], root)
+  run('bun', ['run', 'release:check'], root)
   assertIdentity()
 }

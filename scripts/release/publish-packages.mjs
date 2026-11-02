@@ -178,7 +178,9 @@ if (!dryRun && skipBuild) {
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
 if (!dryRun)
-  console.info('release mode: explicit verified tag; full quality gates run before publication')
+  console.info(
+    'release mode: explicit verified tag; focused release checks run before publication; full audits run in CI'
+  )
 console.info(`registry: ${ReleaseRegistry}`)
 console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
@@ -215,7 +217,7 @@ if (!dryRun) {
 // —— ② 打包并验明 ——
 // 先整仓构建再逐包 pack:包间是拓扑依赖,单包构建拿不到上游 dist。build:package 是给将来
 // 「只构建发布面」留的钩子,现在仓根没有它,回落到 build(scripts/build/buildPackageTopology.mjs)。
-if (!skipBuild) {
+if (dryRun && !skipBuild) {
   run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
 }
 if (!dryRun) assertLocalIdentity()

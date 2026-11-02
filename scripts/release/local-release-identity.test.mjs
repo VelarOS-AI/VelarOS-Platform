@@ -183,7 +183,7 @@ for (const [name, changes] of [
   test(`rejects ${name}`, () => assert.throws(() => identityFixture(changes).verify()))
 }
 
-test('local quality sequence uses frozen install and the complete check with fresh identity checks', () => {
+test('local quality sequence uses frozen install and focused release checks with fresh identity checks', () => {
   const calls = []
   runLocalReleaseChecks({
     root: '/source',
@@ -196,7 +196,7 @@ test('local quality sequence uses frozen install and the complete check with fre
     'identity',
     'bun install --frozen-lockfile',
     'identity',
-    'bun run check',
+    'bun run release:check',
     'identity',
   ])
 })
