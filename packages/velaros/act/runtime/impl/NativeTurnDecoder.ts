@@ -41,6 +41,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   private completion?: string
   private chars = 0
   private ended = false
+  private previewIndex = 0
 
   public constructor(
     options: ScriptProtocolOptions = {},
@@ -102,6 +103,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     this.completion = undefined
     this.chars = 0
     this.ended = false
+    this.previewIndex = 0
   }
 
   public push(text: string): readonly ActPreview[] {
@@ -154,7 +156,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       }
       return []
     }
-    const index = this.records.length
+    const previews: ActPreview[] = []
     let record: ScriptProtocolRecord
     if (kind === 'blobs') {
       const { name, text } = input as NativeBlobInput
@@ -164,9 +166,20 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       if (JSON.stringify(options).length > this.config.maxHeaderChars)
         throw protocolFailure('JSON 程序选项超过协议字符预算')
       record = { kind, args: [options], body: code }
+      // 内嵌原文只补展示事件，不新增声明或改变程序绑定作用域。
+      for (const text of Object.values(options.blobs ?? {})) {
+        const index = this.previewIndex++
+        previews.push(
+          { type: 'program', index, kind: 'blobs', phase: 'start', text: '' },
+          { type: 'program', index, kind: 'blobs', phase: 'delta', text },
+          { type: 'program', index, kind: 'blobs', phase: 'end', text: '' }
+        )
+      }
     }
     this.records.push(record)
+    const index = this.previewIndex++
     return [
+      ...previews,
       { type: 'program', index, kind, phase: 'start', text: '' },
       { type: 'program', index, kind, phase: 'delta', text: record.body },
       { type: 'program', index, kind, phase: 'end', text: '' },
