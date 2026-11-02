@@ -613,15 +613,33 @@ test('native inline blobs emit distinct cards without changing execution scope o
   const decoder = new NativeTurnDecoder()
   const events = []
   for (const [id, name] of ['exec', 'observe', 'exec'].entries()) {
-    events.push(...decoder.acceptTool({ id: String(id), name, input: {
-      code: source, options: { blobs: { literal: raw, empty: '' } },
-    } }))
+    events.push(
+      ...decoder.acceptTool({
+        id: String(id),
+        name,
+        input: {
+          code: source,
+          options: { blobs: { literal: raw, empty: '' } },
+        },
+      })
+    )
   }
-  const starts = events.filter(event => event.phase === 'start')
-  assert.deepEqual(starts.map(event => event.kind), ['blobs', 'blobs', 'execute', 'blobs', 'blobs', 'observe', 'blobs', 'blobs', 'execute'])
-  assert.equal(new Set(starts.map(event => event.index)).size, 9)
-  assert.deepEqual(events.filter(event => event.kind === 'blobs' && event.phase === 'delta').map(event => event.text), [raw, '', raw, '', raw, ''])
+  const starts = events.filter((event) => event.phase === 'start')
+  assert.deepEqual(
+    starts.map((event) => event.kind),
+    ['blobs', 'blobs', 'execute', 'blobs', 'blobs', 'observe', 'blobs', 'blobs', 'execute']
+  )
+  assert.equal(new Set(starts.map((event) => event.index)).size, 9)
+  assert.deepEqual(
+    events
+      .filter((event) => event.kind === 'blobs' && event.phase === 'delta')
+      .map((event) => event.text),
+    [raw, '', raw, '', raw, '']
+  )
   assert.equal(decoder.finish().submission.executions.length, 2)
   decoder.reset()
-  assert.equal(decoder.acceptTool({ id: 'reset', name: 'exec', input: { code: source } })[0].index, 0)
+  assert.equal(
+    decoder.acceptTool({ id: 'reset', name: 'exec', input: { code: source } })[0].index,
+    0
+  )
 })
