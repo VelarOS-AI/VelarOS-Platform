@@ -52,7 +52,12 @@ async function copyPackage(source, destination, manifest) {
 }
 
 /** Bun 1.3 的 workspace pack 不收集链接依赖；在独立目录打包同一份真实字节。 */
-export async function stageBundledPackage(directory, manifest) {
+export async function stageBundledPackage(
+  directory,
+  manifest,
+  dependencyDirectory = directory,
+  dependencyDirectories = {}
+) {
   const configured = manifest.bundledDependencies ?? manifest.bundleDependencies
   const names = configured === true ? Object.keys(manifest.dependencies ?? {}) : configured
   if (!names?.length) return
@@ -82,7 +87,12 @@ export async function stageBundledPackage(directory, manifest) {
     for (const name of names) {
       if (!manifest.dependencies?.[name] && !manifest.optionalDependencies?.[name])
         throw new Error(`Bundled dependency ${name} must be declared in ${manifest.name}`)
-      await copy(name, directory, packageDirectory, new Map())
+      await copy(
+        name,
+        dependencyDirectories[name] ?? dependencyDirectory,
+        packageDirectory,
+        new Map()
+      )
     }
     return { packageDirectory, cleanup: () => rm(stagingRoot, { recursive: true, force: true }) }
   } catch (error) {

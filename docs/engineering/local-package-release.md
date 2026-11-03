@@ -10,7 +10,7 @@
 
 ## 检查与产物
 
-工作流调用 `bun run release:github <tag>`。发布器执行冻结安装、完整 `bun run check` 和新构建；安装后、检查后、构建后、逐包上传前及正式公布前重新确认源码身份。真实发布不接受跳过构建、dry-run 或手动缩减整列包集合。
+工作流调用 `bun run release:github <tag>`。发布器执行冻结安装、`release:preflight`、`release:check` 与新构建；完整 `bun run check` 由 CI 独立执行；安装后、检查后、构建后、逐包上传前及正式公布前重新确认源码身份。真实发布不接受跳过构建或 dry-run。整列 tag 默认交付整体 `@velaros-ai/velaros`，内部源码模块不再作为该次发布的独立安装资产；工具包仍可按显式单包 tag 独立发布。
 
 每个包使用 `safePackPackage` 在独占临时目录打包，保留路径边界、超时和进程组回收。发布前核对 tarball 内包名、版本、可安装依赖及 dist，并重新确认 SHA-256。GitHub Release 上传的是已核验的同一份 tarball。
 

@@ -12,12 +12,12 @@ import type {
 } from '@velaros-ai/agent'
 import { createActRunService } from '@velaros-ai/agent'
 import type {
-  ContextContent,
-  ContextRecord,
   ContextCompletionPort,
   ContextCompletionResult,
+  ContextContent,
   ContextFeedback,
   ContextInvocationJournalApi,
+  ContextRecord,
   ContextRef,
   ContextRuntime,
   ContextStorage,
@@ -78,9 +78,9 @@ import type {
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
 import {
-  TaskMaterialLimits,
   ExecutionObservabilityLimits,
   ObservationReuseLimits,
+  TaskMaterialLimits,
 } from '../contract/constants.js'
 import type {
   SnapshotObservationProvider,
@@ -126,9 +126,9 @@ import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
 import { readExecutionOutput } from '../utils/execution-output.js'
+import { executionPolicy } from '../utils/execution-policy.js'
 import { assembleInstructionManifest } from '../utils/instruction-manifest.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
-import { executionPolicy } from '../utils/execution-policy.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'

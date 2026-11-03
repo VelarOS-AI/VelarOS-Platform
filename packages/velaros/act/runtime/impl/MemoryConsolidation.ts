@@ -1,6 +1,7 @@
 // 后台整理的有限时限与资源收尾。
-import { VelarContextMaterialsModule } from '../../system/contract/surface.js'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
+import { VelarContextMaterialsModule } from '../../system/contract/surface.js'
 import { MemoryConsolidationLimits } from '../contract/constants.js'
 import type { MemoryConsolidationOptions } from '../contract/requires.js'
 import type { MemoryConsolidationResult } from '../types/memory.js'

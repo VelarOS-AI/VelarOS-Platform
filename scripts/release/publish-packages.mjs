@@ -104,6 +104,18 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
       if (!workspaceVersion) {
         throw new Error(`${item.manifest.name} references unknown workspace package ${dependency}`)
       }
+      if (item.manifest.name === '@velaros-ai/velaros') {
+        if (packedManifest[field]?.[dependency])
+          throw new Error(`Unified Platform still depends on ${dependency}`)
+        const moduleName = dependency.replace('@velaros-ai/', '')
+        if (
+          !Object.keys(packedManifest.exports ?? {}).some(
+            (key) => key === `./${moduleName}` || key.startsWith(`./${moduleName}/`)
+          )
+        )
+          throw new Error(`Unified Platform missing ${moduleName} exports`)
+        continue
+      }
       const expected = expectedPackedWorkspaceSpecification(specification, workspaceVersion)
       if (packedManifest[field]?.[dependency] !== expected) {
         throw new Error(
@@ -138,7 +150,7 @@ const selected = selectReleasedPackages(
   ordered,
   // dry-run 沿用当前根版本的完整火车作为模拟身份；真实发布必须显式给出 --local-tag。
   requestedTag,
-  onlySelectors
+  onlySelectors.length === 0 && tagSelection.kind === 'train' ? ['velaros'] : onlySelectors
 ).packages
 const releaseTag = tagSelection.tag
 

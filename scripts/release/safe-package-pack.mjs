@@ -5,6 +5,7 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import { stageBundledPackage } from './bundled-dependencies.mjs'
+import { stageUnifiedPlatformPackage } from './unified-platform-package.mjs'
 
 const terminationGraceMs = 2_000
 const killConfirmationMs = 1_000
@@ -547,8 +548,15 @@ export async function safePackPackage({
     packageDirectory: resolvedPackageDirectory,
   })
 
-  const staged = await stageBundledPackage(resolvedPackageDirectory, manifest)
+  const unified = await stageUnifiedPlatformPackage(resolvedPackageDirectory, manifest)
+  let staged
   try {
+    staged = await stageBundledPackage(
+      unified?.packageDirectory ?? resolvedPackageDirectory,
+      unified?.manifest ?? manifest,
+      resolvedPackageDirectory,
+      unified?.dependencyDirectories
+    )
     return await runGuardedCommand({
       args: [
         ...bunArguments,
@@ -560,12 +568,13 @@ export async function safePackPackage({
         '--quiet',
       ],
       command: bunCommand,
-      cwd: staged?.packageDirectory ?? resolvedPackageDirectory,
+      cwd: staged?.packageDirectory ?? unified?.packageDirectory ?? resolvedPackageDirectory,
       operation: `Bun package pack for ${resolvedPackageDirectory}`,
       stdio,
       timeoutMs,
     })
   } finally {
     await staged?.cleanup()
+    await unified?.cleanup()
   }
 }

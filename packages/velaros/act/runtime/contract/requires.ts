@@ -31,6 +31,7 @@ import type { SkillCapabilityModuleOptions } from '@velaros-ai/velaros/skills'
 import type { CompletionEvidenceApi } from '../impl/CompletionEvidence.js'
 import type { CompletionValidationApi } from '../impl/CompletionValidation.js'
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
+import type { VelarosSession } from '../impl/RuntimeSession.js'
 import type { CompletionExecutionEntry } from '../types/completion-evidence.js'
 import type {
   CompletionValidationInput,
@@ -38,7 +39,6 @@ import type {
 } from '../types/completion-validation.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
 import type { ContextMemoryPolicy, RuntimeCompletedTask } from '../types/memory.js'
-import type { VelarosSession } from '../impl/RuntimeSession.js'
 import type { ModelToolPolicy } from '../types/model-tools.js'
 import type { ContextMaintenanceProfile } from '../types/model-tools.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'

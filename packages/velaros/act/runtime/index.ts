@@ -10,6 +10,7 @@ export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type { NodeExecutionEnvironmentApi } from './contract/provides.js'
 export type { CompletionEvidenceApi } from './contract/provides.js'
+export type { MemoryConsolidationApi } from './contract/provides.js'
 export type {
   ObservationReuseOptions,
   ObservationReusePort,
@@ -47,6 +48,7 @@ export type { EventDeliveryOptions } from './contract/requires.js'
 export type { NodeExecutionEnvironmentOptions, RuntimeNodeOptions } from './contract/requires.js'
 export type { NodeExecutionOutput } from './contract/requires.js'
 export type { NodeCompletionValidationOptions } from './contract/requires.js'
+export type { MemoryConsolidationOptions } from './contract/requires.js'
 export { createCapabilityModule } from './impl/CapabilityModules.js'
 export type { CompletionValidationApi } from './impl/CompletionValidation.js'
 export type { VelarosRuntime } from './impl/ComposedRuntime.js'
@@ -54,6 +56,7 @@ export { createRuntime } from './impl/ComposedRuntime.js'
 export { createEventDelivery } from './impl/EventDelivery.js'
 export type { McpClientConnectionApi } from './impl/McpClientConnection.js'
 export { createMcpClientConnection } from './impl/McpClientConnection.js'
+export { createMemoryConsolidation } from './impl/MemoryConsolidation.js'
 export type { NodeCompletionValidationHostApi } from './impl/NodeCompletionValidationHost.js'
 export { createNodeCompletionValidationHost } from './impl/NodeCompletionValidationHost.js'
 export { createNodeExecutionEnvironment } from './impl/NodeExecutionEnvironment.js'
@@ -91,6 +94,8 @@ export type {
 } from './types/mcp.js'
 export type { ContextMemoryPolicy } from './types/memory.js'
 export type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from './types/memory.js'
+export type { RuntimeCompletedTask } from './types/memory.js'
+export type { MemoryConsolidationResult } from './types/memory.js'
 export type {
   ContextMaintenanceProfile,
   ModelToolBinding,
@@ -148,11 +153,3 @@ export type {
   SearchRequest,
   SearchResult,
 } from '@velaros-ai/velaros/act/search'
-
-export type { RuntimeCompletedTask } from './types/memory.js'
-
-export type { MemoryConsolidationOptions } from './contract/requires.js'
-export type { MemoryConsolidationResult } from './types/memory.js'
-
-export { createMemoryConsolidation } from './impl/MemoryConsolidation.js'
-export type { MemoryConsolidationApi } from './contract/provides.js'

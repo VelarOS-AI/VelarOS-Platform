@@ -286,7 +286,18 @@ test('packs the actual linked bundle closure and resolves workspace ranges witho
   await safePackPackage({ packageDirectory, filename })
   const extraction = await mkdtemp(path.join(tmpdir(), 'velaros-packed-consumer-'))
   t.after(() => rm(extraction, { recursive: true, force: true }))
-  execFileSync('tar', ['-xzf', filename, '-C', extraction])
+  execFileSync(
+    'tar',
+    [
+      '-xzf',
+      path.basename(filename),
+      '-C',
+      path.relative(path.dirname(filename), extraction).split(path.sep).join('/'),
+    ],
+    {
+      cwd: path.dirname(filename),
+    }
+  )
   const packed = path.join(extraction, 'package')
   const packedManifest = JSON.parse(await readFile(path.join(packed, 'package.json'), 'utf8'))
   assert.equal(packedManifest.dependencies.unbundled, '^3.2.1')
@@ -296,7 +307,10 @@ test('packs the actual linked bundle closure and resolves workspace ranges witho
     }).trim(),
     'patched bytes'
   )
-  const entries = execFileSync('tar', ['-tzf', filename], { encoding: 'utf8' })
+  const entries = execFileSync('tar', ['-tzf', path.basename(filename)], {
+    encoding: 'utf8',
+    cwd: path.dirname(filename),
+  })
   assert.match(entries, /node_modules\/string_decoder\/index.cjs/u)
   assert.doesNotMatch(entries, /node_modules\/unbundled\//u)
   assert.deepEqual(
