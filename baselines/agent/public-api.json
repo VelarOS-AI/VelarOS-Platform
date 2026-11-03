@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "9.11.0",
+  "acceptedPackageVersion": "9.11.1",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,9 +21,9 @@
         "ActInteraction\ttype\tf14783be2ff760eb296bd955de41d3ebc434758052475e38a042c5bfd9a685a6",
         "ActLoopControl\ttype\t391e6218edb168b9252f51b4ee59c8997b5556bbd53005206121adc6c29c217d",
         "ActLoopOptions\ttype\t8676d7e3cf1859f3aa09a1258ef130e67cdf999df31b8756492cfe5e7f664e40",
-        "ActPreview\ttype\tddf475660c3cb83113ea5b120b210d0aeeff61c1ff73737982994ba6abf0162d",
+        "ActPreview\ttype\ted9e9a2584957a5b292ccd1e1f0f8525975edf75b58cceb4ff265c7a84fcdda5",
         "ActProtocolPort\ttype\te92a6ff36edca8c43edf7f9aa85da9a2d35fc979a9744ae9f4f7a352cb7b1b5c",
-        "ActRunEvent\ttype\t92f03d9d2b1f4028f367f6d3b1cf52834aec0e595b5a69a575cc2f719b5b0e1c",
+        "ActRunEvent\ttype\t836731ee094f3db7b482f533748a3a9337e1ab2be2921791707e7503ad6731f7",
         "ActRunLimits\ttype\t21c764fcfd3a4e720d3a590307714b2d944065e1aa853a1c80d1b2c12fc3751b",
         "ActRunServiceApi\ttype\tc10f032bd699956a3537ce2f559b3df20672da27da2103df6500e530799a04ce",
         "ActRunServiceOptions\ttype\te64a01d79a68a086c2d61b9e329c62e529ee3929b7c770f9535d11abce2d1453",
@@ -53,8 +53,8 @@
         "ActInput\ttype\t0df87bfe8387be69a1fcb2564770929dcf74af688d1c64e662b3b38af52ff8de",
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",
         "ActInteraction\ttype\tf14783be2ff760eb296bd955de41d3ebc434758052475e38a042c5bfd9a685a6",
-        "ActPreview\ttype\tddf475660c3cb83113ea5b120b210d0aeeff61c1ff73737982994ba6abf0162d",
-        "ActRunEvent\ttype\t92f03d9d2b1f4028f367f6d3b1cf52834aec0e595b5a69a575cc2f719b5b0e1c",
+        "ActPreview\ttype\ted9e9a2584957a5b292ccd1e1f0f8525975edf75b58cceb4ff265c7a84fcdda5",
+        "ActRunEvent\ttype\t836731ee094f3db7b482f533748a3a9337e1ab2be2921791707e7503ad6731f7",
         "ActRunLimits\ttype\t21c764fcfd3a4e720d3a590307714b2d944065e1aa853a1c80d1b2c12fc3751b",
         "ActRunSnapshot\ttype\tf14f420c2249c43b9cf30a64d08bc9122925ed0c67fbc416041e9ce4b792c20d",
         "ActRunStatus\ttype\tc9e086734acdd1d3305c2390bf95acf67c92fe0b1c51bdf750fe34f30babb87c",

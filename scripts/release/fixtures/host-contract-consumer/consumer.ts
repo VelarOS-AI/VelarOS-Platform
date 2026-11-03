@@ -74,3 +74,21 @@ const events:AsyncIterable<ActRunEvent>=service.submit('检查发布后的正式
 const runtime=createRuntime(runtimeOptions)
 const point:ComputerPoint={x:10,y:20,coordinateSpace:'global'}
 void [events,runtime,createModelRequestClient,point,ComputerInputLimits.clickCount]
+
+// blobName 是兼容增量：旧事件仍能构造，两个公开入口都能读取新身份。
+type RootPreview = import('@velaros-ai/velaros/agent').ActPreview
+type ContractPreview = import('@velaros-ai/velaros/agent/contracts').ActPreview
+type ContractEvent = import('@velaros-ai/velaros/agent/contracts').ActRunEvent
+const legacyProgram: Extract<RootPreview, { type: 'program' }> = {
+  type: 'program', index: 0, kind: 'blobs', phase: 'start', text: '',
+}
+const namedProgram: ContractPreview = { ...legacyProgram, blobName: 'document' }
+const legacyEvent: ActRunEvent = { ...legacyProgram, runId: 'run' }
+const namedEvent: ContractEvent = { ...legacyEvent, blobName: 'document' }
+const previewName: string | undefined = namedProgram.blobName
+const eventName: string | undefined = namedEvent.blobName
+// @ts-expect-error 原文身份必须是字符串，不能放宽为任意类型。
+const invalidProgram: RootPreview = { ...legacyProgram, blobName: 1 }
+// @ts-expect-error 运行事件保留同样的身份类型约束。
+const invalidEvent: ContractEvent = { ...legacyEvent, blobName: 1 }
+void [previewName, eventName, invalidProgram, invalidEvent]

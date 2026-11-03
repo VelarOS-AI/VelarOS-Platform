@@ -1,5 +1,6 @@
 // 后台整理复用模型驱动、请求编译与生成合同，材料来自已完成任务。
 import type { ContextRef } from '@velaros-ai/context'
+import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   type ModelHistoryMessage,
@@ -104,14 +105,17 @@ export async function collectMemory(
         if (!memories.has(candidate.id) && memories.size >= MemoryConsolidationLimits.memories)
           throw new AppError('LIMIT', '记忆主题数量超限')
         const previous = existing.find((entry) => entry.id === candidate.id)
-        memories.set(candidate.id, { ...candidate, expectedRevision: previous?.revision ?? null })
+        memories.set(candidate.id, {
+          ...candidate,
+          expectedRevision: toNullable(previous?.revision),
+        })
         output = { staged: true, id: candidate.id }
       } else {
         if (final) throw new AppError('LIMIT', '记忆整理已进入收尾')
         if (name === 'list') {
           const query = input as { after?: number }
           const items = await options.source.taskMaterials(options.task, query.after)
-          output = { items, nextAfter: items.at(-1)?.sequence ?? null }
+          output = { items, nextAfter: toNullable(items.at(-1)?.sequence) }
         } else {
           const query = input as { ref: ContextRef; offset?: number; limit?: number }
           output = await options.source.readTaskMaterial(

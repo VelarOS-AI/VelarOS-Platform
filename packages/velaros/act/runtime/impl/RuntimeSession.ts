@@ -29,7 +29,7 @@ import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { isFalse, isTrue } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
-import { isEmpty, isString } from '@velaros-ai/core'
+import { isEmpty, isNumber, isString } from '@velaros-ai/core'
 import { AppError, createTimeoutError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
@@ -274,7 +274,7 @@ export interface RuntimeSessionDependencies {
 /** 一个会话共享上下文，模型回合有序，执行任务按并发预算运行。 */
 export interface VelarosSession {
   /** 读取已完成逻辑任务的固定材料范围，不启动或恢复模型。 */
-  completedTask(): Promise<RuntimeCompletedTask | null>
+  completedTask(): Promise<Nullable<RuntimeCompletedTask>>
   /** 分页列举已固定任务范围内的原始材料。 */
   taskMaterials(task: RuntimeCompletedTask, after?: number): Promise<readonly ContextRecord[]>
   /** 按引用读取任务范围内的原文，不恢复任务。 */
@@ -360,7 +360,7 @@ export interface VelarosSession {
 }
 
 export class RuntimeSession implements VelarosSession {
-  public async completedTask(): Promise<RuntimeCompletedTask | null> {
+  public async completedTask(): Promise<Nullable<RuntimeCompletedTask>> {
     const state = await this.dependencies.storage.load(this.id)
     const task = state?.task
     if (!state || task?.status !== 'completed' || !task.id) return null
@@ -370,11 +370,7 @@ export class RuntimeSession implements VelarosSession {
     )
     const body = lease ? await this.dependencies.storage.get(this.id, lease.objectId) : null
     const completedTurns: unknown = body ? JSON.parse(body).completedTurns : 0
-    if (
-      typeof completedTurns !== 'number' ||
-      !Number.isSafeInteger(completedTurns) ||
-      completedTurns < 0
-    )
+    if (!isNumber(completedTurns) || !Number.isSafeInteger(completedTurns) || completedTurns < 0)
       throw new AppError('VALIDATION', '任务轮次记录无效')
     return {
       sessionId: this.id,

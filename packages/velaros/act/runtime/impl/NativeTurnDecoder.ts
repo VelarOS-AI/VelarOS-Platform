@@ -178,13 +178,15 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     }
     this.records.push(record)
     const index = this.previewIndex++
+    const identity: { blobName?: string } = {}
+    if (kind === 'blobs') identity.blobName = (input as NativeBlobInput).name
     return [
       ...previews,
       {
         type: 'program',
         index,
         kind,
-        ...(kind === 'blobs' ? { blobName: (input as NativeBlobInput).name } : {}),
+        ...identity,
         phase: 'start',
         text: '',
       },

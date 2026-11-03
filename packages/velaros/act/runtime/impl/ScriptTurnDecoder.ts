@@ -234,13 +234,13 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       throw protocolFailure('控制段数量超过预算', this.line)
     this.active = { kind, args: declaration.args, body: '', line: this.line }
     this.tail = ''
+    const identity: { blobName?: string } = {}
+    if (kind === 'blobs' && isString(declaration.args[0])) identity.blobName = declaration.args[0]
     this.emit({
       type: 'program',
       index: this.records.length,
       kind,
-      ...(kind === 'blobs' && isString(declaration.args[0])
-        ? { blobName: declaration.args[0] }
-        : {}),
+      ...identity,
       phase: 'start',
       text: '',
     })

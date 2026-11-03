@@ -663,3 +663,14 @@ test('blob previews retain field names for native standalone, inline and text de
   const events = text.push(encode([{ kind: 'blobs', name: 'document', text: raw }]))
   assert.equal(events.find((e) => e.phase === 'start').blobName, 'document')
 })
+
+test('non-blob previews keep blobName absent in both transports', () => {
+  const native = new NativeTurnDecoder()
+  const nativeEvents = native.acceptTool({ id: 'exec', name: 'exec', input: { code: source } })
+  const text = new ScriptTurnDecoder(marker, {}, {}, () => true)
+  const textEvents = text.push(encode([{ kind: 'execute', code: source }]))
+  for (const events of [nativeEvents, textEvents]) {
+    assert(events.some((event) => event.phase === 'start'))
+    for (const event of events) assert.equal(Object.hasOwn(event, 'blobName'), false)
+  }
+})
