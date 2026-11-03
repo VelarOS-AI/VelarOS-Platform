@@ -460,3 +460,36 @@ test('invalid provider usage cannot settle an ancestor before the main protocol 
     assert.equal(usage.inputTokens, 0)
   }
 })
+
+test('finalization boundary forbids exploration before any model dispatch and refunds the hold', async (t) => {
+  const f = await fixture(t)
+  await f.nested.budget.reserveModel('context', 70, 'deadline-hold')
+  let calls = 0
+  const activation = new ModelToolActivation({
+    parent: f.nested.budget,
+    model: driver(async function* () {
+      calls++
+      yield { type: 'finish', reason: 'stop' }
+    }),
+    profile: {
+      modelCalls: 3,
+      modelTokens: 200,
+      finalizationTokens: 70,
+      callTimeoutMs: 1000,
+      finalizationMs: 90000,
+    },
+    finalizationRequestId: 'deadline-hold',
+    // 不依赖等待或慢机器：父期限已明确位于收尾预留内。
+    deadline: Date.now() + 89000,
+  })
+  assert.equal(activation.canExplore(), false)
+  assert.equal(activation.finalizing(), true)
+  assert.equal(activation.usage().calls, 0)
+  await activation.close()
+  assert.equal(calls, 0)
+  for (const view of f.views.values()) {
+    const { usage } = await view.inspect()
+    assert.equal(usage.budgetTokens, 0)
+    assert.equal(usage.contextCalls, 0)
+  }
+})

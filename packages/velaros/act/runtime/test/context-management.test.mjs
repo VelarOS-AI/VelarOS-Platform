@@ -896,7 +896,8 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
         safetyTokens: 1024,
         projectionChars: 1000000,
         recoveryChars: 6000,
-        timeoutMs: 120000,
+        // 44 次真实 Node 执行必须留在维护的 90 秒收尾预留之前；截止期另有确定性测试。
+        timeoutMs: 300000,
       },
       context: { sources: [], maintenance: { model: maintenance } },
       // Keep real output until the segment seals: expiring it after two turns can avoid

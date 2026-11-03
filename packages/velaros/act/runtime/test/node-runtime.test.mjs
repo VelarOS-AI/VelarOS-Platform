@@ -21,6 +21,7 @@ import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDeco
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
 import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
+import { executionPolicy } from '../../../dist/act/runtime/utils/execution-policy.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
   builtinSkillDirectories,
@@ -1342,7 +1343,12 @@ test('runtime delivers native output to the next model turn with a small standar
     // 无项目/子任务能力的基准场景；仅作评审预算。必要说明增长时可说明原因并调整，不截断运行时指令。
     maxChars: 3000,
   }
-  assert.ok(requests[0].instructions.length <= instructionReview.maxChars, requests[0].instructions)
+  // 执行策略是独立角色层；保留原 Node/协议预算，另设策略上界并防止重复注入。
+  const policy = executionPolicy(undefined, 'main')
+  assert.ok(policy.length <= 800, `execution policy: ${policy.length}`)
+  assert.equal(requests[0].instructions.split(policy).length, 2)
+  const baseInstructions = requests[0].instructions.replace(policy, '')
+  assert.ok(baseInstructions.length <= instructionReview.maxChars, baseInstructions)
   const originalFrame = JSON.parse(
     requests[0].materials.find((item) => item.origin === 'runtime-view').text
   )
