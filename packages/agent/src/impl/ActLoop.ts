@@ -469,6 +469,8 @@ export class ActLoop implements ActLoopApi {
               modelMs = performance.now() - modelStarted
               if (!finish || finish.reason !== 'stop' || (!received && isEmpty(calls)))
                 throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
+              if (this.options.control?.pending())
+                throw new AppError('CANCELLED', '新的用户输入在响应接受前到达')
               decoded = decoder.finish()
               for (const preview of decoded.events) yield { ...preview, runId }
               // 先保存完整状态，再让已接受响应引用它；中断或协议拒绝都不能使状态进入历史。
@@ -674,11 +676,10 @@ export class ActLoop implements ActLoopApi {
               await this.options.view.releaseModel('main', reservedTokens, budgetRequest, true)
           }
         }
-        if (this.options.control?.pending()) continue
+        // 已接受响应的程序必须派发；追加引导只影响下一次决策。
         if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
-        // acknowledge 期间到达的引导也不能派发旧响应中的工具。
-        if (this.options.control?.pending()) continue
+        controller.signal.throwIfAborted()
         this.planner.accept(
           compiled.estimate.tokens,
           frame.segment,
@@ -688,8 +689,8 @@ export class ActLoop implements ActLoopApi {
         let done = decoded.done
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
-          // 状态事件的持久化交付也会让出控制权，实际调用前再次确认。
-          if (this.options.control?.pending()) continue turns
+          // 暂停仍取消执行；引导信号仅用于提前结束等待。
+          controller.signal.throwIfAborted()
           const success = await this.options.execution.invoke(
             decoded.submission,
             controller.signal,

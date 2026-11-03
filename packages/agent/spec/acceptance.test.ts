@@ -3451,7 +3451,7 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
   }
 )
 
-test('INV-37 steering during acknowledge never dispatches stale tools', async () => {
+test('INV-37 steering during acknowledge preserves accepted tools', async () => {
   const f = runFixture()
   let calls = 0
   let executed = 0
@@ -3479,7 +3479,7 @@ test('INV-37 steering during acknowledge never dispatches stale tools', async ()
   const events = []
   for await (const event of service.submit('original')) events.push(event)
   expect(calls).toBe(2)
-  expect(executed).toBe(0)
+  expect(executed).toBe(1)
   expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
   await service.close()
 })

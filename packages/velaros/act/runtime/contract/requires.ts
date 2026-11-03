@@ -37,7 +37,8 @@ import type {
   CompletionValidationOutcome,
 } from '../types/completion-validation.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
-import type { ContextMemoryPolicy } from '../types/memory.js'
+import type { ContextMemoryPolicy, RuntimeCompletedTask } from '../types/memory.js'
+import type { VelarosSession } from '../impl/RuntimeSession.js'
 import type { ModelToolPolicy } from '../types/model-tools.js'
 import type { ContextMaintenanceProfile } from '../types/model-tools.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
@@ -347,6 +348,8 @@ export interface VelarosProjectOptions {
 
 /** 正式 Runtime 的单一装配入口。 */
 export interface VelarosRuntimeOptions {
+  /** 用户选择的执行深度；省略为 medium，独立于供应商推理参数回退，业务子任务继承。 */
+  readonly executionDepth?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
   readonly instructions?: string
   /**
@@ -582,3 +585,17 @@ export interface EventDeliveryOptions<Value, Receipt> {
 }
 import type { EnvironmentRegistryApi } from '@velaros-ai/velaros/act/system'
 import type { NpmClientApi } from '@velaros-ai/velaros/execution'
+
+/** 完成任务的后台记忆整理；材料与记忆作用域沿用宿主现有端口。 */
+export interface MemoryConsolidationOptions {
+  /** 复用宿主解析的模型驱动。 */
+  readonly model: ModelDriver
+  /** 已完成任务的固定归档范围。 */
+  readonly task: RuntimeCompletedTask
+  /** 原会话的只读材料端口。 */
+  readonly source: Pick<VelarosSession, 'taskMaterials' | 'readTaskMaterial'>
+  /** 当前作用域已有记忆。 */
+  readonly memory: MemoryScopePort
+  /** 宿主退出或取消信号。 */
+  readonly signal: AbortSignal
+}

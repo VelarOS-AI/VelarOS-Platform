@@ -188,3 +188,27 @@ export const ExecutionObservabilityLimits = Object.freeze({
   /** 过程输出合并唤醒的毫秒间隔。 */
   wakeMs: 60000,
 })
+
+/** 已完成任务的宿主材料分页默认值。 */
+export const TaskMaterialLimits = Object.freeze({
+  /** 一页最多返回的任务材料索引条数。 */
+  pageItems: 32,
+  /** 单次读取默认返回的正文字符数。 */
+  pageChars: 8000,
+})
+
+/** 后台记忆整理使用独立、有限的运行预算。 */
+export const MemoryConsolidationLimits = Object.freeze({
+  /** 包含最终交付的模型轮数。 */
+  modelCalls: 6,
+  /** 一次整理总毫秒数。 */
+  timeoutMs: 90_000,
+  /** 累计材料字符数。 */
+  readChars: 40_000,
+  /** 每轮最多材料操作数。 */
+  calls: 8,
+  /** 每次最多更新主题数。 */
+  memories: 8,
+  /** 单轮输出 token 上限。 */
+  outputTokens: 8192,
+})

@@ -44,6 +44,7 @@ export type ActPreview =
       readonly type: 'program'
       readonly index: number
       readonly kind: string
+      readonly blobName?: string
       readonly phase: 'start' | 'delta' | 'end'
       readonly text: string
     }
@@ -105,6 +106,7 @@ export type ActRunEvent =
       readonly runId: string
       readonly index: number
       readonly kind: string
+      readonly blobName?: string
       readonly phase: 'start' | 'delta' | 'end'
       readonly text: string
     }

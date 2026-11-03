@@ -1,4 +1,5 @@
 import type { ContextReadStamp, ContextRef } from '@velaros-ai/context'
+import type { MemorySaveInput } from '@velaros-ai/velaros/memory'
 
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
 
@@ -109,4 +110,20 @@ export interface MemoryFrameDisplay {
   /** 按条件附加的说明：诊断正文位置与已完成作业的映射。 */
   readonly notices: { readonly detail: readonly string[]; readonly jobs: readonly string[] }
   readonly status: Record<string, unknown>
+}
+
+/** 已结束任务的宿主索引；正文保留在原会话归档，后台整理不重新启动原任务。 */
+export interface RuntimeCompletedTask {
+  readonly sessionId: string
+  readonly taskId: string
+  readonly after: number
+  readonly through: number
+  readonly completedTurns: number
+  readonly inputs: readonly ContextRef[]
+}
+
+/** 后台整理返回主题更新，由宿主持久化队列统一提交。 */
+export interface MemoryConsolidationResult {
+  readonly memories: readonly MemorySaveInput[]
+  readonly summary: string
 }

@@ -117,6 +117,11 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       )
     )
       throw new AppError('VALIDATION', '纯快照提供者需要固定目录、派生源码和领域输入检查口')
+    if (
+      !isUndefined(options.executionDepth) &&
+      !['low', 'medium', 'high', 'xhigh', 'max'].includes(options.executionDepth)
+    )
+      throw new AppError('VALIDATION', 'executionDepth 必须为 low、medium、high、xhigh 或 max')
     if (!isUndefined(options.instructions) && !isString(options.instructions))
       throw new AppError('VALIDATION', 'instructions 必须是宿主提供的文本')
     if (

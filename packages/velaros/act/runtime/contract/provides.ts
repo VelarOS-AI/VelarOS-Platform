@@ -10,3 +10,5 @@ export type { VelarosSession } from '../impl/RuntimeSession.js'
 /** 完成复核的有界隔离验证接收门。 */
 export type { CompletionValidationApi } from '../impl/CompletionValidation.js'
 export type { NodeCompletionValidationHostApi } from '../impl/NodeCompletionValidationHost.js'
+
+export type { MemoryConsolidationApi } from '../impl/MemoryConsolidation.js'

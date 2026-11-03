@@ -30,6 +30,8 @@ const InstructionReviewBudgets = {
   prefixChars: 2200,
   // 在前缀之上保留完整执行协议、控制语义与错误恢复说明。
   fullChars: 3800,
+  // 从宿主迁入的分档执行策略单独预算；基础协议预算不放宽。
+  policyChars: 1100,
 }
 async function fixture(t, options) {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-instructions-'))
@@ -104,6 +106,7 @@ test('INV-57 子任务首帧按自己的授权展示能力，不继承父任务�
   })
   const f = await fixture(t, {
     modules: [office],
+    executionDepth: 'high',
     agents: {
       concurrency: 1,
       maxChildren: 1,
@@ -137,6 +140,11 @@ test('INV-57 子任务首帧按自己的授权展示能力，不继承父任务�
     inventory(parentFrames[0]).capabilities.some((item) => item.module === 'velaros:office')
   )
   assert.ok(childFrames.length > 0)
+  for (const frame of [parentFrames[0], childFrames[0]]) {
+    assert.match(frame.instructions, /执行策略（high）/)
+    assert.equal(frame.instructions.split('执行策略（').length - 1, 1)
+  }
+  assert.match(childFrames[0].instructions, /子任务只在本次分配范围内理解全貌/)
   assert.ok(
     !inventory(childFrames[0]).capabilities.some((item) =>
       ['velaros:office', 'velaros:agents'].includes(item.module)
@@ -379,11 +387,12 @@ test('base instructions stay small while authorized packages are discoverable on
     assert.match(instructions, /index.json/)
     const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
     assert(
-      prefixChars <= InstructionReviewBudgets.prefixChars,
+      prefixChars <= InstructionReviewBudgets.prefixChars + InstructionReviewBudgets.policyChars,
       `instruction prefix has ${prefixChars} characters`
     )
     assert(
-      instructions.length <= InstructionReviewBudgets.fullChars,
+      instructions.length <=
+        InstructionReviewBudgets.fullChars + InstructionReviewBudgets.policyChars,
       'review full control semantics growth'
     )
     const result = await f.session.execute({
@@ -418,11 +427,12 @@ test('Node hints expose only available collaboration and search capabilities wit
       assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
       const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
       assert(
-        prefixChars <= InstructionReviewBudgets.prefixChars,
+        prefixChars <= InstructionReviewBudgets.prefixChars + InstructionReviewBudgets.policyChars,
         `instruction prefix has ${prefixChars} characters`
       )
       assert(
-        instructions.length <= InstructionReviewBudgets.fullChars,
+        instructions.length <=
+          InstructionReviewBudgets.fullChars + InstructionReviewBudgets.policyChars,
         'review full control semantics growth'
       )
     }
@@ -1040,4 +1050,43 @@ test('Node 验收说明按实际改动选择检查，不强制扩大验证', () 
   assert.match(text, /仅改动影响打包时验证打包入口/)
   assert.doesNotMatch(text, /临时必失败断言|验证用户及打包入口|收尾核要求、差异、回执/)
   assert.match(text, /reject:false 查 failed\/stdout\/stderr/)
+})
+
+// 真实请求验证策略归属与档位；驱动无供应商推理字段，策略仍按宿主选择生效。
+for (const executionDepth of [undefined, 'low', 'medium', 'high', 'xhigh', 'max']) {
+  test(`Platform 执行策略 ${executionDepth ?? '默认 medium'} 进入真实请求`, async (t) => {
+    const frames = []
+    const f = await fixture(t, {
+      executionDepth,
+      model: driver(async function* (request) {
+        frames.push(request)
+        yield* done(request)
+      }),
+    })
+    for await (const event of f.session.submit('核实任务')) assert.notEqual(event.type, 'error')
+    assert(frames.length > 0)
+    const text = frames[0].instructions
+    const policy = f.session
+      .instructionManifest()
+      .blocks.find((block) => block.id === 'platform.runtime.execution-policy')
+    assert(policy)
+    assert(policy.text.length <= InstructionReviewBudgets.policyChars)
+    assert.equal(text.split('执行策略（').length - 1, 1)
+    assert(text.includes(`执行策略（${executionDepth ?? 'medium'}）`))
+    assert.match(text, /所有档位均守住授权、安全/)
+    assert.match(text, /剩余未知不会实质改变方案或安全性时，停止调查/)
+    assert.match(text, /不猜测成功，不隐藏失败/)
+    assert.match(text, /简单明确任务不扩大调查/)
+    if (['high', 'xhigh', 'max'].includes(executionDepth)) {
+      assert.match(text, /先理解任务相关全貌再动手/)
+      assert.match(text, /允许主动委派/)
+    } else assert.match(text, /默认自己完成，不主动派子 agent/)
+    if (executionDepth === 'low') assert.match(text, /最短可靠路径/)
+    if (executionDepth === 'max') assert.match(text, /寻找反例和高代价失败情形/)
+  })
+}
+
+test('无效 executionDepth 在运行前拒绝', async () => {
+  for (const executionDepth of [null, '', 'deep', 1, {}, []])
+    await assert.rejects(createRuntime({ executionDepth }), /executionDepth/)
 })

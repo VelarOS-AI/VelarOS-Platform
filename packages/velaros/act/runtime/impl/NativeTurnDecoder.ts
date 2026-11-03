@@ -167,10 +167,10 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
         throw protocolFailure('JSON 程序选项超过协议字符预算')
       record = { kind, args: [options], body: code }
       // 内嵌原文只补展示事件，不新增声明或改变程序绑定作用域。
-      for (const text of Object.values(options.blobs ?? {})) {
+      for (const [blobName, text] of Object.entries(options.blobs ?? {})) {
         const index = this.previewIndex++
         previews.push(
-          { type: 'program', index, kind: 'blobs', phase: 'start', text: '' },
+          { type: 'program', index, kind: 'blobs', blobName, phase: 'start', text: '' },
           { type: 'program', index, kind: 'blobs', phase: 'delta', text },
           { type: 'program', index, kind: 'blobs', phase: 'end', text: '' }
         )
@@ -180,7 +180,14 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     const index = this.previewIndex++
     return [
       ...previews,
-      { type: 'program', index, kind, phase: 'start', text: '' },
+      {
+        type: 'program',
+        index,
+        kind,
+        ...(kind === 'blobs' ? { blobName: (input as NativeBlobInput).name } : {}),
+        phase: 'start',
+        text: '',
+      },
       { type: 'program', index, kind, phase: 'delta', text: record.body },
       { type: 'program', index, kind, phase: 'end', text: '' },
     ]

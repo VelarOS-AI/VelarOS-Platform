@@ -99,6 +99,7 @@ export const GovernedModules = [
         'BudgetedModelDriver.ts',
         'ModelToolRuntime.ts',
         'ModelToolActivation.ts',
+        'MemoryConsolidation.ts',
         'ContextMaintenance.ts',
         'CompletionReview.ts',
         'CompletionEvidence.ts',

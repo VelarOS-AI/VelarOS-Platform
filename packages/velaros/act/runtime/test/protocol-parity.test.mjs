@@ -643,3 +643,23 @@ test('native inline blobs emit distinct cards without changing execution scope o
     0
   )
 })
+
+test('blob previews retain field names for native standalone, inline and text declarations', () => {
+  const native = new NativeTurnDecoder({}, {})
+  const standalone = native.acceptTool({
+    id: 'blob',
+    name: 'blobs',
+    input: { name: 'document', text: raw },
+  })
+  assert.equal(standalone.find((e) => e.phase === 'start').blobName, 'document')
+  const inline = native.acceptTool({
+    id: 'exec',
+    name: 'exec',
+    input: { code: '', options: { blobs: { patch: raw } } },
+  })
+  assert.equal(inline.find((e) => e.kind === 'blobs' && e.phase === 'start').blobName, 'patch')
+  assert.equal(inline.find((e) => e.kind === 'blobs' && e.phase === 'delta').text, raw)
+  const text = new ScriptTurnDecoder(marker, {}, {}, () => true)
+  const events = text.push(encode([{ kind: 'blobs', name: 'document', text: raw }]))
+  assert.equal(events.find((e) => e.phase === 'start').blobName, 'document')
+})

@@ -12,6 +12,8 @@ import type {
 } from '@velaros-ai/agent'
 import { createActRunService } from '@velaros-ai/agent'
 import type {
+  ContextContent,
+  ContextRecord,
   ContextCompletionPort,
   ContextCompletionResult,
   ContextFeedback,
@@ -75,7 +77,11 @@ import type {
 } from '../../system/types/executions.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import { ExecutionObservabilityLimits, ObservationReuseLimits } from '../contract/constants.js'
+import {
+  TaskMaterialLimits,
+  ExecutionObservabilityLimits,
+  ObservationReuseLimits,
+} from '../contract/constants.js'
 import type {
   SnapshotObservationProvider,
   VelarosContextOptions,
@@ -83,7 +89,12 @@ import type {
 } from '../contract/requires.js'
 import type { InstructionAudience, RuntimeInstructionManifest } from '../types/instructions.js'
 import type { RuntimeInventory } from '../types/inventory.js'
-import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
+import type {
+  RuntimeCompletedTask,
+  RuntimeNoteContent,
+  RuntimeNoteRead,
+  RuntimeNoteRetention,
+} from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
 import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
@@ -117,6 +128,7 @@ import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-
 import { readExecutionOutput } from '../utils/execution-output.js'
 import { assembleInstructionManifest } from '../utils/instruction-manifest.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
+import { executionPolicy } from '../utils/execution-policy.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
@@ -197,6 +209,8 @@ export interface RuntimeSessionModelTool {
 
 /** 会话由运行时注入的共享实例。 */
 export interface RuntimeSessionDependencies {
+  /** 业务执行深度；专项模型不注入通用任务策略。 */
+  readonly executionDepth?: VelarosRuntimeOptions['executionDepth']
   /** 指令接收方身份；子任务显式指定，专项模型默认 auxiliary。 */
   readonly audience?: InstructionAudience
   /** 显式授权的标准业务执行环境。 */
@@ -259,6 +273,17 @@ export interface RuntimeSessionDependencies {
 
 /** 一个会话共享上下文，模型回合有序，执行任务按并发预算运行。 */
 export interface VelarosSession {
+  /** 读取已完成逻辑任务的固定材料范围，不启动或恢复模型。 */
+  completedTask(): Promise<RuntimeCompletedTask | null>
+  /** 分页列举已固定任务范围内的原始材料。 */
+  taskMaterials(task: RuntimeCompletedTask, after?: number): Promise<readonly ContextRecord[]>
+  /** 按引用读取任务范围内的原文，不恢复任务。 */
+  readTaskMaterial(
+    task: RuntimeCompletedTask,
+    ref: ContextRef,
+    offset?: number,
+    limit?: number
+  ): Promise<ContextContent>
   /** 与实际请求共用装配结果；返回独立快照。 */
   instructionManifest(): RuntimeInstructionManifest
   /** 当前任务获权的执行读取与停止，和模型能力使用相同端口。 */
@@ -335,6 +360,65 @@ export interface VelarosSession {
 }
 
 export class RuntimeSession implements VelarosSession {
+  public async completedTask(): Promise<RuntimeCompletedTask | null> {
+    const state = await this.dependencies.storage.load(this.id)
+    const task = state?.task
+    if (!state || task?.status !== 'completed' || !task.id) return null
+    const after = task.startedSequence ?? 0
+    const lease = state.records.findLast(
+      (record) => record.title === 'script:lease-state' && record.sequence > after
+    )
+    const body = lease ? await this.dependencies.storage.get(this.id, lease.objectId) : null
+    const completedTurns: unknown = body ? JSON.parse(body).completedTurns : 0
+    if (
+      typeof completedTurns !== 'number' ||
+      !Number.isSafeInteger(completedTurns) ||
+      completedTurns < 0
+    )
+      throw new AppError('VALIDATION', '任务轮次记录无效')
+    return {
+      sessionId: this.id,
+      taskId: task.id,
+      after,
+      through: state.records.at(-1)?.sequence ?? after,
+      completedTurns,
+      inputs: task.goals,
+    }
+  }
+
+  public async taskMaterials(
+    task: RuntimeCompletedTask,
+    after = task.after
+  ): Promise<readonly ContextRecord[]> {
+    if (task.sessionId !== this.id) throw new AppError('VALIDATION', '任务不属于当前会话')
+    const storage = this.dependencies.storage
+    const cursor = Math.max(after, task.after)
+    const records = storage.records
+      ? (await storage.records(this.id, { after: cursor, limit: TaskMaterialLimits.pageItems }))
+          .items
+      : ((await storage.load(this.id))?.records
+          .filter((record) => record.sequence > cursor)
+          .slice(0, TaskMaterialLimits.pageItems) ?? [])
+    return records.filter((record) => record.sequence <= task.through)
+  }
+
+  public async readTaskMaterial(
+    task: RuntimeCompletedTask,
+    ref: ContextRef,
+    offset = 0,
+    limit = TaskMaterialLimits.pageChars
+  ): Promise<ContextContent> {
+    if (task.sessionId !== this.id || ref.sessionId !== this.id)
+      throw new AppError('VALIDATION', '材料不属于当前会话')
+    const page = await this.context.read(ref, { offset, limit })
+    if (
+      page.record.sequence > task.through ||
+      (page.record.sequence <= task.after && !task.inputs.some((input) => input.id === ref.id))
+    )
+      throw new AppError('VALIDATION', '材料不属于指定任务范围')
+    return page.record.kind === 'user' ? this.context.readInput(ref, { offset, limit }) : page
+  }
+
   private readonly instructionAssembly: RuntimeInstructionManifest
   public instructionManifest(): RuntimeInstructionManifest {
     return structuredClone(this.instructionAssembly)
@@ -559,6 +643,15 @@ export class RuntimeSession implements VelarosSession {
                 observe: this.config.allowed.includes('observe'),
               })
         }`,
+      },
+      {
+        id: 'platform.runtime.execution-policy',
+        owner: '@velaros-ai/velaros',
+        audience,
+        source: 'runtime/execution-policy',
+        enabled: audience !== 'auxiliary',
+        condition: `executionDepth=${dependencies.executionDepth ?? 'medium'}; audience=${audience}`,
+        text: `\n${executionPolicy(dependencies.executionDepth, audience)}`,
       },
       {
         id: 'platform.runtime.program-protocol',

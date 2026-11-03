@@ -5,7 +5,7 @@ export { modulesModule } from '../system/index.js'
 export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
 export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
-export { DefaultScriptProtocolTransport } from './contract/constants.js'
+export { DefaultScriptProtocolTransport, TaskMaterialLimits } from './contract/constants.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type { NodeExecutionEnvironmentApi } from './contract/provides.js'
@@ -148,3 +148,11 @@ export type {
   SearchRequest,
   SearchResult,
 } from '@velaros-ai/velaros/act/search'
+
+export type { RuntimeCompletedTask } from './types/memory.js'
+
+export type { MemoryConsolidationOptions } from './contract/requires.js'
+export type { MemoryConsolidationResult } from './types/memory.js'
+
+export { createMemoryConsolidation } from './impl/MemoryConsolidation.js'
+export type { MemoryConsolidationApi } from './contract/provides.js'
