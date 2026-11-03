@@ -1221,139 +1221,139 @@ for (const transport of ['tools', 'text']) {
       }
     })
   }
+}
 
-  test('completion wait validates scope and duration, times out normally, and cancellation preserves the target', async (t) => {
-    const f = await fixture(t, 'tools', async (f) => {
-      if (f.requests.length === 1) return [{ code: held, options: { async: true } }]
-      await waitFile(f.root, 'started')
-      const target = f.frames.at(-1).jobs[0].executionId
-      const wait = (input, signal = f.controller.signal) =>
-        f.session.executions.wait({ executionId: target, ...input }, 'host', signal)
-      for (const waitMs of [0, -1, 60001, 1.5, NaN, '100'])
-        await assert.rejects(wait({ waitMs }), { code: 'VALIDATION' })
-      await assert.rejects(
-        f.session.executions.wait({ executionId: target }, target, f.controller.signal),
-        { code: 'VALIDATION' }
-      )
-      const other = await f.runtime.openSession('other-wait')
-      await assert.rejects(
-        other.executions.wait({ executionId: target }, 'host', f.controller.signal),
-        { code: 'NOT_FOUND' }
-      )
-      const before = Date.now()
-      const timed = await wait({ waitMs: 40, limit: 2 })
-      assert(Date.now() - before >= 35)
-      assert.equal(timed.status, 'running')
-      assert.equal(timed.complete, false)
-      assert(timed.output.reduce((sum, part) => sum + part.text.length, 0) <= 2)
-      const cancellation = new AbortController()
-      const reason = new Error('cancel only the waiter')
-      const pending = wait({ waitMs: 60000 }, cancellation.signal)
-      cancellation.abort(reason)
-      await assert.rejects(pending, (error) => error === reason)
-      assert.equal(
-        (await f.session.executions.read({ executionId: target }, f.controller.signal)).status,
-        'running'
-      )
-      const completing = wait({ waitMs: 2000, cursor: timed.nextCursor })
-      await writeFile(join(f.root, 'release'), 'go')
-      const completed = await completing
-      assert.equal(completed.status, 'succeeded')
-      assert.equal(completed.complete, true)
-      assert(completed.nextCursor > timed.nextCursor)
-      const finalStarted = Date.now()
-      assert.deepEqual(
-        await wait({ cursor: completed.nextCursor }),
-        await f.session.executions.read(
-          { executionId: target, cursor: completed.nextCursor },
-          f.controller.signal
-        )
-      )
-      assert(Date.now() - finalStarted < 1000, 'terminal target must return immediately')
-      const job = (await f.programs.state()).jobs[0]
-      await f.programs.job({
-        executionId: 'unknown-old-process',
-        sourceRef: job.sourceRef,
-        batchId: job.batchId,
-        status: 'running',
-      })
-      const unknown = await f.session.executions.wait(
-        { executionId: 'unknown-old-process' },
-        'host',
+test('completion wait validates scope and duration, times out normally, and cancellation preserves the target', async (t) => {
+  const f = await fixture(t, 'tools', async (f) => {
+    if (f.requests.length === 1) return [{ code: held, options: { async: true } }]
+    await waitFile(f.root, 'started')
+    const target = f.frames.at(-1).jobs[0].executionId
+    const wait = (input, signal = f.controller.signal) =>
+      f.session.executions.wait({ executionId: target, ...input }, 'host', signal)
+    for (const waitMs of [0, -1, 60001, 1.5, NaN, '100'])
+      await assert.rejects(wait({ waitMs }), { code: 'VALIDATION' })
+    await assert.rejects(
+      f.session.executions.wait({ executionId: target }, target, f.controller.signal),
+      { code: 'VALIDATION' }
+    )
+    const other = await f.runtime.openSession('other-wait')
+    await assert.rejects(
+      other.executions.wait({ executionId: target }, 'host', f.controller.signal),
+      { code: 'NOT_FOUND' }
+    )
+    const before = Date.now()
+    const timed = await wait({ waitMs: 40, limit: 2 })
+    assert(Date.now() - before >= 35)
+    assert.equal(timed.status, 'running')
+    assert.equal(timed.complete, false)
+    assert(timed.output.reduce((sum, part) => sum + part.text.length, 0) <= 2)
+    const cancellation = new AbortController()
+    const reason = new Error('cancel only the waiter')
+    const pending = wait({ waitMs: 60000 }, cancellation.signal)
+    cancellation.abort(reason)
+    await assert.rejects(pending, (error) => error === reason)
+    assert.equal(
+      (await f.session.executions.read({ executionId: target }, f.controller.signal)).status,
+      'running'
+    )
+    const completing = wait({ waitMs: 2000, cursor: timed.nextCursor })
+    await writeFile(join(f.root, 'release'), 'go')
+    const completed = await completing
+    assert.equal(completed.status, 'succeeded')
+    assert.equal(completed.complete, true)
+    assert(completed.nextCursor > timed.nextCursor)
+    const finalStarted = Date.now()
+    assert.deepEqual(
+      await wait({ cursor: completed.nextCursor }),
+      await f.session.executions.read(
+        { executionId: target, cursor: completed.nextCursor },
         f.controller.signal
       )
-      assert.equal(unknown.status, 'unknown')
-      assert.equal(unknown.complete, false)
-      // Unknown liveness cannot establish goal completion; end this fixture through cancellation.
-      f.controller.abort()
-    })
-    await f.collect()
-    assert.equal(await readFile(join(f.root, 'first'), 'utf8'), 'yes')
-  })
-
-  test('a second wait is bounded and stopping the wait program leaves its target alive', async (t) => {
-    let target
-    let entered = false
-    let waiter
-    const f = await fixture(
-      t,
-      'tools',
-      async (f) => {
-        if (f.requests.length === 1) return [{ code: held, options: { async: true } }]
-        if (f.requests.length === 2) {
-          await waitFile(f.root, 'started')
-          target = f.frames.at(-1).jobs[0].executionId
-          const wait = f.session.executions.wait
-          f.session.executions.wait = (...args) => {
-            entered = true
-            return wait(...args)
-          }
-          return [{ code: '', options: { control: { kind: 'wait', executionId: target } } }]
-        }
-        if (f.requests.length === 3) {
-          waiter = f.frames.at(-1).jobs.find((job) => job.executionId !== target).executionId
-          return [{ code: '', options: { control: { kind: 'wait', executionId: target } } }]
-        }
-        if (f.requests.length === 4) {
-          assert(JSON.stringify(f.requests.at(-1)).includes('SCRIPT_QUEUE_LIMIT'))
-          assert.equal((await f.programs.state()).jobs.length, 2)
-          return [{ code: '', options: { control: { kind: 'stop', executionId: waiter } } }]
-        }
-        if (f.requests.length === 5) {
-          assert.equal(
-            (await f.session.executions.read({ executionId: waiter }, f.controller.signal)).status,
-            'cancelled'
-          )
-          assert.equal(
-            (await f.session.executions.read({ executionId: target }, f.controller.signal)).status,
-            'running'
-          )
-          return [{ code: '', options: { control: { kind: 'stop', executionId: target } } }]
-        }
-      },
-      { concurrency: 1, maxBlocks: 1 }
     )
-    const running = f.collect()
-    const watchdog = setTimeout(() => f.controller.abort(), 8000)
-    try {
-      await until(() => entered)
-      await f.session.steer('Check another wait and then stop only the waiter.')
-      await running
-      assert.equal(
-        f.controller.signal.aborted,
-        false,
-        JSON.stringify({
-          requests: f.requests.length,
-          jobs: (await f.programs.state()).jobs,
-          frames: f.frames.map((frame) => frame.jobs),
-          events: f.events.filter((event) => event.type === 'error'),
-        })
-      )
-      assert.equal(f.requests.length, 6)
-    } finally {
-      clearTimeout(watchdog)
-      f.controller.abort()
-      await running
-    }
+    assert(Date.now() - finalStarted < 1000, 'terminal target must return immediately')
+    const job = (await f.programs.state()).jobs[0]
+    await f.programs.job({
+      executionId: 'unknown-old-process',
+      sourceRef: job.sourceRef,
+      batchId: job.batchId,
+      status: 'running',
+    })
+    const unknown = await f.session.executions.wait(
+      { executionId: 'unknown-old-process' },
+      'host',
+      f.controller.signal
+    )
+    assert.equal(unknown.status, 'unknown')
+    assert.equal(unknown.complete, false)
+    // Unknown liveness cannot establish goal completion; end this fixture through cancellation.
+    f.controller.abort()
   })
-}
+  await f.collect()
+  assert.equal(await readFile(join(f.root, 'first'), 'utf8'), 'yes')
+})
+
+test('a second wait is bounded and stopping the wait program leaves its target alive', async (t) => {
+  let target
+  let entered = false
+  let waiter
+  const f = await fixture(
+    t,
+    'tools',
+    async (f) => {
+      if (f.requests.length === 1) return [{ code: held, options: { async: true } }]
+      if (f.requests.length === 2) {
+        await waitFile(f.root, 'started')
+        target = f.frames.at(-1).jobs[0].executionId
+        const wait = f.session.executions.wait
+        f.session.executions.wait = (...args) => {
+          entered = true
+          return wait(...args)
+        }
+        return [{ code: '', options: { control: { kind: 'wait', executionId: target } } }]
+      }
+      if (f.requests.length === 3) {
+        waiter = f.frames.at(-1).jobs.find((job) => job.executionId !== target).executionId
+        return [{ code: '', options: { control: { kind: 'wait', executionId: target } } }]
+      }
+      if (f.requests.length === 4) {
+        assert(JSON.stringify(f.requests.at(-1)).includes('SCRIPT_QUEUE_LIMIT'))
+        assert.equal((await f.programs.state()).jobs.length, 2)
+        return [{ code: '', options: { control: { kind: 'stop', executionId: waiter } } }]
+      }
+      if (f.requests.length === 5) {
+        assert.equal(
+          (await f.session.executions.read({ executionId: waiter }, f.controller.signal)).status,
+          'cancelled'
+        )
+        assert.equal(
+          (await f.session.executions.read({ executionId: target }, f.controller.signal)).status,
+          'running'
+        )
+        return [{ code: '', options: { control: { kind: 'stop', executionId: target } } }]
+      }
+    },
+    { concurrency: 1, maxBlocks: 1 }
+  )
+  const running = f.collect()
+  const watchdog = setTimeout(() => f.controller.abort(), 8000)
+  try {
+    await until(() => entered)
+    await f.session.steer('Check another wait and then stop only the waiter.')
+    await running
+    assert.equal(
+      f.controller.signal.aborted,
+      false,
+      JSON.stringify({
+        requests: f.requests.length,
+        jobs: (await f.programs.state()).jobs,
+        frames: f.frames.map((frame) => frame.jobs),
+        events: f.events.filter((event) => event.type === 'error'),
+      })
+    )
+    assert.equal(f.requests.length, 6)
+  } finally {
+    clearTimeout(watchdog)
+    f.controller.abort()
+    await running
+  }
+})
