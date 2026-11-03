@@ -469,8 +469,7 @@ export class ActLoop implements ActLoopApi {
               modelMs = performance.now() - modelStarted
               if (!finish || finish.reason !== 'stop' || (!received && isEmpty(calls)))
                 throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
-              if (this.options.control?.pending())
-                throw new AppError('CANCELLED', '新的用户输入在响应接受前到达')
+              // 引导仅排入下一轮；完整响应仍接纳，显式取消由运行信号处理。
               decoded = decoder.finish()
               for (const preview of decoded.events) yield { ...preview, runId }
               // 先保存完整状态，再让已接受响应引用它；中断或协议拒绝都不能使状态进入历史。

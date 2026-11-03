@@ -1928,12 +1928,13 @@ test('INV-36 a fault persisting a child result reaches wait even after the live 
   await expect(supervisor.close()).rejects.toThrow('child result disk failure')
 })
 
-test('INV-37 steering invalidates a stale response before slow input persistence completes', async () => {
+test('INV-37 steering preserves the current response while slow input persistence queues the next turn', async () => {
   const f = runFixture()
   let release!: () => void
   let received!: () => void
   let calls = 0
   let executed = 0
+  let rejected = 0
   const gate = new Promise<void>((r) => (release = r))
   const arrived = new Promise<void>((r) => (received = r))
   const ingest = f.context.ingest.bind(f.context)
@@ -1977,6 +1978,7 @@ test('INV-37 steering invalidates a stale response before slow input persistence
   const service = createActRunService(f.options)
   let steering: Promise<void> | undefined
   for await (const event of service.submit('original')) {
+    if (event.type === 'rejected') rejected++
     if (event.type === 'text' && !steering) {
       steering = service.steer('new direction')
       await arrived
@@ -1984,8 +1986,9 @@ test('INV-37 steering invalidates a stale response before slow input persistence
     }
   }
   await steering
+  expect(rejected).toBe(0)
   expect(calls).toBe(2)
-  expect(executed).toBe(0)
+  expect(executed).toBe(1)
   expect((await f.view.inspect())?.goals.length).toBe(2)
   await service.close()
 })

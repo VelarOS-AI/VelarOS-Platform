@@ -26,7 +26,7 @@ export interface ActRunServiceApi {
   submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent>
   /** 以活动运行的容量策略验收候选上下文，不推进回合或调用模型。 */
   validateContext(request: ModelTurnRequest, signal: AbortSignal): Promise<void>
-  /** 归档并在下一轮递交运行中补充，抢占尚未派发的模型响应。 */
+  /** 归档并在下一轮递交运行中补充，保留当前模型响应与工具派发。 */
   steer(input: string | ActInput): Promise<void>
   /** 创建可由宿主回答的交互，取消会拒绝等待。 */
   request(
