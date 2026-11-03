@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // 用真实 tarball 验证宿主窄端口与浏览器契约；消费目录不继承仓库类型环境。
 
-import { existsSync } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -10,9 +9,8 @@ import { runGuardedCommand, safePackPackage } from './safe-package-pack.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const fixtureDirectory = path.join(import.meta.dirname, 'fixtures', 'host-contract-consumer')
-// 宿主直接用的包；打包时再沿它们的运行、可选、peer 依赖把第一方包递归补齐，新增的公共件不用回来改这张表。
-const hostPackageDirectories = ['agent', 'model', 'velaros', 'core', 'kernel']
-const packageDirectories = await firstPartyClosure(hostPackageDirectories)
+// 宿主只消费整体 Platform；不得再同时安装旧内部包。
+const packageDirectories = ['velaros']
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
 const nodeTypesVersion = manifest.devDependencies?.['@types/node']
 if (!nodeTypesVersion)
@@ -47,7 +45,13 @@ try {
     const tarballPath = path.join(tarballDirectory, `${directoryName}.tgz`)
     await safePackPackage({ packageDirectory, filename: tarballPath })
     dependencies[packageManifest.name] = `file:${tarballPath}`
-    packedManifests.push(packageManifest)
+    const packed = await runGuardedCommand({
+      command: 'tar',
+      args: ['-xOf', path.basename(tarballPath), 'package/package.json'],
+      cwd: tarballDirectory,
+      operation: 'Read unified archive manifest',
+    })
+    packedManifests.push(JSON.parse(packed.stdout))
     console.info(
       `✓ packed host contract dependency ${packageManifest.name}@${packageManifest.version}`
     )
@@ -72,7 +76,6 @@ try {
         private: true,
         type: 'module',
         dependencies: { ...dependencies, '@types/node': nodeTypesVersion },
-        overrides: dependencies,
       },
       null,
       2
@@ -128,28 +131,4 @@ try {
   )
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true })
-}
-
-/** 从给定的包目录出发，沿 dependencies、optionalDependencies、peerDependencies 里的 @velaros-ai/* 递归补齐，返回全部要打包的目录名。 */
-async function firstPartyClosure(startDirectories) {
-  const directoryByName = new Map()
-  for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: true })) {
-    const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
-    if (entry.isDirectory() && existsSync(manifestPath))
-      directoryByName.set(JSON.parse(await readFile(manifestPath, 'utf8')).name, entry.name)
-  }
-  const closure = [...startDirectories]
-  for (let index = 0; index < closure.length; index += 1) {
-    const packageManifest = JSON.parse(
-      await readFile(path.join(root, 'packages', closure[index], 'package.json'), 'utf8')
-    )
-    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
-      for (const name of Object.keys(packageManifest[field] ?? {})) {
-        const directory = directoryByName.get(name)
-        if (name.startsWith('@velaros-ai/') && directory && !closure.includes(directory))
-          closure.push(directory)
-      }
-    }
-  }
-  return closure
 }

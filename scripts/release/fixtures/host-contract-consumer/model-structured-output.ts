@@ -1,4 +1,4 @@
-import type { ModelRequestClientApi, ModelRequestObjectInput } from '@velaros-ai/model'
+import type { ModelRequestClientApi, ModelRequestObjectInput } from '@velaros-ai/velaros/model'
 
 interface Account {
   id: string
