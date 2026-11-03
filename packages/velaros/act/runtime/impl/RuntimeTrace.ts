@@ -531,6 +531,25 @@ export class RuntimeTrace implements RuntimeTraceApi {
         select(byRef(result.sourceRef))
       }
     }
+    // 首请求前已接受的引导属于本次运行的前序事实，不能因请求窗口下界丢失。
+    const previousRequest = records.some(
+      (record) => record.title === 'model-request' && record.sequence < requestRecord.sequence
+    )
+    if (!previousRequest)
+      for (const record of records)
+        if (record.title === 'act:event' && record.sequence < requestRecord.sequence) {
+          const body = await raw(record)
+          if (isNull(body)) continue
+          const event = JSON.parse(body)
+          if (
+            event.runId === request.runId &&
+            ['input', 'input-applied', 'input-retained'].includes(event.type) &&
+            event.ref?.sessionId === this.sessionId
+          ) {
+            select(record)
+            select(byRef(event.ref.id))
+          }
+        }
     // 记录发送前的租约与本次接收到下一请求之间的变化，不把当前最新状态冒充历史帧。
     select(
       records.findLast(

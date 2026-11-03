@@ -780,3 +780,43 @@ test('equal guidance texts retain distinct refs and apply once after cold trace 
     await restored.close()
   }
 })
+
+test('guidance accepted before the first request keeps its provenance in cold trace', async (t) => {
+  const f = await setup(t, async function* (request) {
+    yield* done(request)
+  })
+  const events = []
+  for await (const event of f.session.submit('initial')) {
+    events.push(event)
+    if (event.type === 'input' && event.source === 'submit')
+      await f.session.steer({
+        text: 'early guidance',
+        origin: { kind: 'parent', sessionId: 'parent' },
+      })
+  }
+  const accepted = events.find((event) => event.type === 'input' && event.source === 'steer')
+  assert(accepted)
+  const page = await f.runtime.trace('main', { fullContent: true })
+  const records = page.turns.flatMap((turn) => turn.records)
+  assert(
+    records.some(
+      (record) =>
+        record.title === 'act:event' &&
+        JSON.parse(record.body).type === 'input' &&
+        JSON.parse(record.body).ref.id === accepted.ref.id
+    )
+  )
+  assert(
+    records.some((record) => record.ref.id === accepted.ref.id && record.body === 'early guidance')
+  )
+  await f.runtime.close()
+  const restored = await createRuntime({
+    ...f.config,
+    storage: localContextStorage({ path: f.path }),
+  })
+  try {
+    assert.deepEqual(await restored.trace('main', { fullContent: true }), page)
+  } finally {
+    await restored.close()
+  }
+})
