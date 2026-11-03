@@ -1,6 +1,6 @@
 import { createContextReference } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
-import { isEmpty, isString } from '@velaros-ai/core'
+import { isEmpty, isNull, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnRequest } from '@velaros-ai/kernel'
 
@@ -247,12 +247,16 @@ class ActRunService implements ActRunServiceApi {
         )
       // 输入在持久化接受之前使旧验收失效；与完成 CAS 竞争失败时明确拒绝本次引导。
       if (this.status !== 'idle') await this.options.view.appendGoal(record.ref, signal)
+      const text = await this.options.storage.get(record.ref.sessionId, record.objectId)
+      if (isNull(text)) throw new AppError('NOT_FOUND', '已接受的引导原文不存在')
       const receipt: Extract<ActRunEvent, { type: 'input' }> = {
         type: 'input',
         runId: this.runId,
         ref: record.ref,
         inputId: value.inputId,
         source: 'steer',
+        text,
+        origin: value.origin,
       }
       await this.emit(receipt)
       this.inputs.push(receipt)

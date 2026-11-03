@@ -2707,16 +2707,21 @@ test('child guidance waits for an admitted run and reaches that same child exact
       new AbortController().signal
     )
     let settled = false
-    const sending = supervisor.send('p', started.id, 'additional constraint').then(
-      () => {
-        settled = true
-        return null
-      },
-      (error) => {
-        settled = true
-        return error
-      }
-    )
+    const sending = supervisor
+      .send('p', started.id, {
+        text: 'additional constraint',
+        origin: { kind: 'parent', sessionId: 'forged' },
+      })
+      .then(
+        () => {
+          settled = true
+          return null
+        },
+        (error) => {
+          settled = true
+          return error
+        }
+      )
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(settled).toBe(false)
     opening.resolve()
@@ -2724,7 +2729,9 @@ test('child guidance waits for an admitted run and reaches that same child exact
     expect((await supervisor.wait('p', started.id, new AbortController().signal)).status).toBe(
       'completed'
     )
-    expect(received).toEqual(['additional constraint'])
+    expect(received).toEqual([
+      { text: 'additional constraint', origin: { kind: 'parent', sessionId: 'p' } },
+    ])
     expect(opened).toBe(1)
   } finally {
     opening.resolve()
@@ -2899,7 +2906,11 @@ test('guidance cancellation reports exactly the accepted input left outside a mo
     for await (const event of service.submit('original')) events.push(event)
   })()
   await ready
-  await service.steer({ text: 'queued direction', inputId: 'host-guide' })
+  await service.steer({
+    text: 'queued direction',
+    inputId: 'host-guide',
+    origin: { kind: 'parent', sessionId: 'parent-session' },
+  })
   service.cancel()
   await running
   expect(
@@ -2913,6 +2924,12 @@ test('guidance cancellation reports exactly the accepted input left outside a mo
   )
   expect(applied.length + retained.length).toBe(1)
   const durable = (await service.events()).map((item) => item.event)
+  const accepted = events.find((event) => event.type === 'input' && event.inputId === 'host-guide')!
+  expect(accepted).toMatchObject({
+    text: 'queued direction',
+    origin: { kind: 'parent', sessionId: 'parent-session' },
+  })
+  expect(durable).toContainEqual(accepted)
   expect(durable).toContainEqual((applied[0] ?? retained[0])!)
   await service.close()
 })

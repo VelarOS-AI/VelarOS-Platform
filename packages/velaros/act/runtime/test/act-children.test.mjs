@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
@@ -29,6 +32,9 @@ const setup = async (t, options) => {
 const task = (request, source) => turn(request, { execute: { source } })
 
 test('immediate child guidance reaches the same real runtime run before completion', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'child-guidance-'))
+  const path = join(root, 'state.sqlite')
+  t.after(() => rm(root, { recursive: true, force: true }))
   const requests = []
   let finishResponse
   const guided = new Promise((resolve) => {
@@ -47,6 +53,7 @@ test('immediate child guidance reaches the same real runtime run before completi
     yield* done(request, 'child followed additional constraint')
   })
   const f = await setup(t, {
+    storage: localContextStorage({ path }),
     modules: [
       {
         binding: {
@@ -92,6 +99,43 @@ test('immediate child guidance reaches the same real runtime run before completi
   assert.equal(branches[0].status, 'closed')
   const first = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
   assert.equal(first.agents[0].status, 'completed')
+  const childSession = await f.runtime.openSession(branches[0].sessionId)
+  const durable = await childSession.events()
+  const accepted = durable
+    .map((item) => item.event)
+    .filter((event) => event.type === 'input' && event.source === 'steer')
+  assert.equal(accepted.length, 1)
+  assert.equal(accepted[0].text, 'additional-child-constraint')
+  assert.deepEqual(accepted[0].origin, { kind: 'parent', sessionId: 'root' })
+  const applied = durable
+    .map((item) => item.event)
+    .filter((event) => event.type === 'input-applied' && event.ref.id === accepted[0].ref.id)
+  assert.equal(applied.length, 1)
+  assert.equal(requests.filter((text) => text.includes('additional-child-constraint')).length, 1)
+  const turns = durable.map((item) => item.event).filter((event) => event.type === 'turn')
+  assert.equal(applied[0].turnId, turns[1].turnId)
+  const traces = await Promise.all(turns.map((event) => childSession.trace(event.turnId)))
+  for (const trace of traces) {
+    const originals = trace.records.filter((record) => record.ref.id === accepted[0].ref.id)
+    assert.equal(originals.length, 1)
+    assert.equal(originals[0].body, accepted[0].text)
+  }
+  await f.runtime.close()
+  const restored = await createRuntime({
+    storage: localContextStorage({ path }),
+    runner: nodeSubprocessCodeRunner,
+    modules: [],
+    model: child,
+  })
+  try {
+    const session = await restored.openSession(branches[0].sessionId)
+    assert.deepEqual(await session.events(), durable)
+    for (const [index, event] of turns.entries()) {
+      assert.deepEqual(await session.trace(event.turnId), traces[index])
+    }
+  } finally {
+    await restored.close()
+  }
 })
 
 test('unknown child effects do not block the parent: it keeps writing, completes and can switch tasks', async (t) => {

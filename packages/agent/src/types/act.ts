@@ -23,6 +23,8 @@ export interface ActImage {
 }
 /** 用户输入，文字、文件引用与真实多模态图片至少提供一项。 */
 export interface ActInput {
+  /** 父监督器填充的引导来源；持久身份仍以输入 ref 为准。 */
+  readonly origin?: { readonly kind: 'parent'; readonly sessionId: string }
   /** 宿主输入身份，回执原样带回；不代表重复提交去重键。 */
   readonly inputId?: string
   /** continue（默认）沿用任务状态与总预算；new 显式开始新任务并保留旧任务归档。 */
@@ -80,6 +82,9 @@ export type ActRunEvent =
       readonly ref: { readonly sessionId: string; readonly id: string }
       readonly inputId?: string
       readonly source?: 'submit' | 'steer'
+      /** 已接受输入的正文快照；不作为去重身份。 */
+      readonly text?: string
+      readonly origin?: ActInput['origin']
     }
   /** 已归入具体模型请求；turnId 指向落盘的请求事实。 */
   | {

@@ -1,7 +1,7 @@
 import { createContextReference, createContextRuntime } from '@velaros-ai/context'
 import { isUndefined } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentSupervisorOptions } from '../contract/requires.js'
@@ -192,7 +192,10 @@ class AgentSupervisor implements AgentSupervisorApi {
     waiting.throwIfAborted()
     if (!live.accepting || !live.session || this.active.get(id) !== live)
       throw guidanceUnavailable(await this.status(parent, id))
-    await live.session.steer(input)
+    await live.session.steer({
+      ...(isString(input) ? { text: input } : input),
+      origin: { kind: 'parent', sessionId: parent },
+    })
   }
   public async cancel(parent: string, id: string): Promise<AgentJob> {
     await this.status(parent, id)

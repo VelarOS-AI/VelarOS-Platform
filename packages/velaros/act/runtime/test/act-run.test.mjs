@@ -715,3 +715,68 @@ test('INV-51 a run without progress reflects, then pauses for the user, and the 
   // 新的输入重新起算：先有模型调用，而不是一进来就暂停
   assert(calls > before + 1)
 })
+
+test('equal guidance texts retain distinct refs and apply once after cold trace recovery', async (t) => {
+  let calls = 0
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const f = await setup(t, async function* (request) {
+    calls++
+    if (calls === 1) {
+      yield { type: 'text', text: 'working' }
+      await gate
+    } else assert.match(modelText(request), /same-guidance/)
+    yield* done(request)
+  })
+  const events = []
+  let sent = false
+  for await (const event of f.session.submit('initial')) {
+    events.push(event)
+    if (event.type === 'text' && !sent) {
+      sent = true
+      for (let index = 0; index < 2; index++)
+        await f.session.steer({
+          text: 'same-guidance',
+          origin: { kind: 'parent', sessionId: 'parent' },
+        })
+      release()
+    }
+  }
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(calls, 2)
+  const accepted = events.filter((event) => event.type === 'input' && event.source === 'steer')
+  assert.equal(accepted.length, 2)
+  assert.notDeepEqual(accepted[0].ref, accepted[1].ref)
+  const turns = events.filter((event) => event.type === 'turn')
+  for (const input of accepted) {
+    assert.equal(input.text, 'same-guidance')
+    const applied = events.filter(
+      (event) => event.type === 'input-applied' && event.ref.id === input.ref.id
+    )
+    assert.equal(applied.length, 1)
+    assert.equal(applied[0].turnId, turns[1].turnId)
+  }
+  const durable = await f.session.events()
+  const traces = await Promise.all(turns.map((event) => f.session.trace(event.turnId)))
+  for (const trace of traces)
+    for (const input of accepted) {
+      const records = trace.records.filter((record) => record.ref.id === input.ref.id)
+      assert.equal(records.length, 1)
+      assert.equal(records[0].body, input.text)
+    }
+  await f.runtime.close()
+  const restored = await createRuntime({
+    ...f.config,
+    storage: localContextStorage({ path: f.path }),
+  })
+  try {
+    const session = await restored.openSession('main')
+    assert.deepEqual(await session.events(), durable)
+    for (const [index, event] of turns.entries())
+      assert.deepEqual(await session.trace(event.turnId), traces[index])
+  } finally {
+    await restored.close()
+  }
+})

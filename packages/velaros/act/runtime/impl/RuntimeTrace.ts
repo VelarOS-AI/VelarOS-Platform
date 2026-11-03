@@ -551,6 +551,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
           if ((event.runId ?? event.id) !== request.runId) continue
           select(record)
           if (
+            ['input', 'input-applied', 'input-retained'].includes(event.type) &&
+            event.ref?.sessionId === this.sessionId
+          )
+            select(byRef(event.ref.id))
+          if (
             event.type === 'state' &&
             ['completed', 'cancelled', 'failed', 'context_blocked'].includes(event.status)
           )
