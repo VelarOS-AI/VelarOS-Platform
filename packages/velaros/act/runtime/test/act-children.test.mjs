@@ -99,27 +99,34 @@ test('immediate child guidance reaches the same real runtime run before completi
   assert.equal(branches[0].status, 'closed')
   const first = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
   assert.equal(first.agents[0].status, 'completed')
-  const childSession = await f.runtime.openSession(branches[0].sessionId)
-  const durable = await childSession.events()
-  const accepted = durable
-    .map((item) => item.event)
-    .filter((event) => event.type === 'input' && event.source === 'steer')
+  const query = { sessionId: branches[0].sessionId, fullContent: true }
+  const childPage = await f.runtime.trace('root', query)
+  const traces = childPage.turns
+  assert.equal(traces.length, 2)
+  const records = [
+    ...new Map(
+      traces.flatMap((trace) => trace.records).map((record) => [record.ref.id, record])
+    ).values(),
+  ]
+  const durable = records
+    .filter((record) => record.title === 'act:event')
+    .map((record) => JSON.parse(record.body))
+  const accepted = durable.filter((event) => event.type === 'input' && event.source === 'steer')
   assert.equal(accepted.length, 1)
   assert.equal(accepted[0].text, 'additional-child-constraint')
   assert.deepEqual(accepted[0].origin, { kind: 'parent', sessionId: 'root' })
-  const applied = durable
-    .map((item) => item.event)
-    .filter((event) => event.type === 'input-applied' && event.ref.id === accepted[0].ref.id)
+  const applied = durable.filter(
+    (event) => event.type === 'input-applied' && event.ref.id === accepted[0].ref.id
+  )
   assert.equal(applied.length, 1)
   assert.equal(requests.filter((text) => text.includes('additional-child-constraint')).length, 1)
-  const turns = durable.map((item) => item.event).filter((event) => event.type === 'turn')
-  assert.equal(applied[0].turnId, turns[1].turnId)
-  const traces = await Promise.all(turns.map((event) => childSession.trace(event.turnId)))
+  assert.equal(applied[0].turnId, traces[1].turnId)
   for (const trace of traces) {
     const originals = trace.records.filter((record) => record.ref.id === accepted[0].ref.id)
     assert.equal(originals.length, 1)
     assert.equal(originals[0].body, accepted[0].text)
   }
+  await assert.rejects(f.runtime.trace('other', query), /支线不属于/)
   await f.runtime.close()
   const restored = await createRuntime({
     storage: localContextStorage({ path }),
@@ -128,11 +135,8 @@ test('immediate child guidance reaches the same real runtime run before completi
     model: child,
   })
   try {
-    const session = await restored.openSession(branches[0].sessionId)
-    assert.deepEqual(await session.events(), durable)
-    for (const [index, event] of turns.entries()) {
-      assert.deepEqual(await session.trace(event.turnId), traces[index])
-    }
+    assert.deepEqual(await restored.trace('root', query), childPage)
+    await assert.rejects(restored.trace('other', query), /支线不属于/)
   } finally {
     await restored.close()
   }
