@@ -53,6 +53,7 @@ async function renameFile(path = 'src/old-name.ts', to = 'src/new-name.ts', oldN
 
 // 行范围从 1 起、含末行；replace 替换，空 text 删除，before/after 插入。
 // text 可传 blobs 中的新正文；已读 target 可直接 patch，不必重复读取。
+/** @param {'replace' | 'before' | 'after'} [op] */
 async function editLines(path, startLine, endLine, text, op = 'replace') {
   const found = await read({ files: [{ path, range: [startLine, endLine] }] })
   if (found.issues?.length) return found

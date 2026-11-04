@@ -61,16 +61,23 @@ test('并发的两个 apply 各留各的恢复计划，重启后逐个恢复', a
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
+  let markSlowWriteReached = (): void => {}
+  const slowWriteReached = new Promise<void>((resolve) => {
+    markSlowWriteReached = resolve
+  })
   const hook = spyOn(TransactionRecovery.prototype, 'writePatch').mockImplementation(
     async function (this: TransactionRecovery, ...args: Parameters<typeof original>) {
-      if (args[0].transactionId === slow && args[1].path === 'a2.txt') await gate
+      if (args[0].transactionId === slow && args[1].path === 'a2.txt') {
+        markSlowWriteReached()
+        await gate
+      }
       return original.apply(this, args)
     }
   )
 
   try {
     const slowApply = kernel.applyEdit({ transactionId: slow })
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await slowWriteReached
     expect((await readState(statePath)).pendings?.map((plan) => plan.transactionId)).toEqual([slow])
 
     // 另一个事务整段跑完（含它自己的恢复计划落盘与清除）之后，慢事务的恢复计划必须还在。
