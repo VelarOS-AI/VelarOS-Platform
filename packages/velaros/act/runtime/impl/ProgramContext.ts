@@ -1155,25 +1155,25 @@ export class ProgramContext implements ProgramContextApi {
     )
     const latestTaskImage = taskImages.at(-1)?.ref
     for (const record of taskImages) {
-        const data = await this.storage.get(this.sessionId, record.objectId)
-        if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
-        const image = JSON.parse(data) as ModelImage
-        // 最新任务图跨文本追问保持可见；旧图保留引用，不挤占视觉上下文。
-        const eligible = record.ref.id === latestTaskImage?.id
-        const attached = eligible && attachImage(image)
-        imageReferences.push({
-          ref: record.ref,
-          attached,
-          deferred: eligible && !attached,
-          label: image.label,
-          read: {
-            module: 'velaros:system',
-            export: 'memory',
-            operation: 'read',
-            input: { ref: record.ref },
-          },
-        })
-      }
+      const data = await this.storage.get(this.sessionId, record.objectId)
+      if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
+      const image = JSON.parse(data) as ModelImage
+      // 最新任务图跨文本追问保持可见；旧图保留引用，不挤占视觉上下文。
+      const eligible = record.ref.id === latestTaskImage?.id
+      const attached = eligible && attachImage(image)
+      imageReferences.push({
+        ref: record.ref,
+        attached,
+        deferred: eligible && !attached,
+        label: image.label,
+        read: {
+          module: 'velaros:system',
+          export: 'memory',
+          operation: 'read',
+          input: { ref: record.ref },
+        },
+      })
+    }
     const leaseMissing: Array<{
       key: string
       ref: string
