@@ -62,9 +62,14 @@ export function validateOutputOptions(value: unknown, config = false): void {
   keys(view, ['mode', 'maxChars', 'lines', 'maxItems', 'edge', 'paths'])
   if (
     !isUndefined(view.mode) &&
-    !['auto', 'full', 'reference', 'summary'].includes(String(view.mode))
+    !['auto', 'full', 'reference', 'summary', 'process'].includes(String(view.mode))
   )
     throw new Error('view.mode 无效')
+  if (
+    view.mode === 'process' &&
+    ['paths', 'lines', 'maxItems', 'edge'].some((key) => !isUndefined(view[key]))
+  )
+    throw new Error('process 视图不能与字段、行或列表选择组合')
   if (!isUndefined(view.maxChars) && !integer(view.maxChars, 200000))
     throw new Error('view.maxChars 无效')
   if (!isUndefined(view.maxItems) && !integer(view.maxItems, 1000000))

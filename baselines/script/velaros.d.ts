@@ -48,10 +48,11 @@ declare module 'velaros' {
   /**
    * 怎么展示（只影响你下一轮看到多少；原值在采集上限内完整保存，可以按引用召回）：
    * mode 默认 auto，按展示预算挑内容；full 要求整个值放得下，放不下就只给引用；reference 只给引用；summary 只展示整理服务已生成、版本匹配的摘要，没有就给引用。
+   * process 仅展示显式提供的进程事实与日志引用，不读取日志推断成败；businessStatus 始终 unknown。传普通 JSON 对象（Error 须显式提取字段），缺失或畸形状态保持 unknown；不能与 paths/lines/maxItems/edge 组合。
    * maxChars 本块最多展示多少字符（最多 200000）；未 configure 整体预算时，显式正数也申请本块所需的有限展示份额，实际仍受宿主总预算限制，不保证全文。reference/summary 不扩大整体申请；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
    */
   interface ScriptOutputView {
-    readonly mode?: 'auto' | 'full' | 'reference' | 'summary'
+    readonly mode?: 'auto' | 'full' | 'reference' | 'summary' | 'process'
     readonly maxChars?: number
     readonly lines?: readonly [number, number]
     readonly maxItems?: number

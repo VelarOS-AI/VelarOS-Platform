@@ -1156,11 +1156,16 @@ export class ProgramContext implements ProgramContextApi {
         const data = await this.storage.get(this.sessionId, record.objectId)
         if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
         const image = JSON.parse(data) as ModelImage
-        const attached = attachImage(image)
+        // 历史用户图保留引用；只有最新输入的附件自动进入视觉上下文。
+        const latest = view.goals.at(-1)?.record.ref
+        const eligible = record.sources.some(
+          (ref) => ref.id === latest?.id && ref.sessionId === latest.sessionId
+        )
+        const attached = eligible && attachImage(image)
         imageReferences.push({
           ref: record.ref,
           attached,
-          deferred: !attached,
+          deferred: eligible && !attached,
           label: image.label,
           read: {
             module: 'velaros:system',

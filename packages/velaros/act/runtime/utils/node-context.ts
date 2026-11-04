@@ -90,7 +90,11 @@ export function nodeFrameState(
     } = materialStatus
     runtime.materialStatus = visibility
   }
-  if (isArray(runtime.children)) runtime.children = runtime.children.map(nodeChildState)
+  if (isArray(runtime.children))
+    runtime.children = nodeChildrenState(
+      runtime.children,
+      previous?.presentation === 'node' ? previous.runtime.children : undefined
+    )
   const {
     footprint: _footprint,
     policy: _policy,
@@ -115,12 +119,22 @@ export function nodeFrameState(
         snapshot.omitted ||
         (isArray(snapshot.sourcesChanged) && snapshot.sourcesChanged.length)))
   )
+  const changes = nodeJobChanges(
+    runtime.jobs,
+    previous?.presentation === 'node' ? previous.runtime.jobs : undefined
+  )
+  if (!isEmpty(changes))
+    runtime.jobChanges = {
+      items: changes,
+      meaning:
+        '以本帧 jobs 为准；terminal:true 表示该执行已结束，无需继续等待该执行。unknown 不证明终态；succeeded 仅表示执行成功，不等于业务验证通过，须核对 resultRef 原始结果。',
+    }
   const currentRuntime = nodeStateValues(runtime)
   if (previous?.presentation === 'node') {
     const earlier = nodeFrameState(previous).runtime
     const unchanged: string[] = []
     // 只复用完整相同的大目录；运行目标、失败回执、缺口和进展仍逐帧独立交付。
-    for (const key of ['inventory', 'children', 'jobs', 'materialStatus']) {
+    for (const key of ['inventory', 'jobs', 'materialStatus']) {
       const text = JSON.stringify(currentRuntime[key])
       if (!text || text.length < 256 || text !== JSON.stringify(earlier[key])) continue
       unchanged.push(key)
@@ -141,6 +155,48 @@ export function nodeFrameState(
     runtime: currentRuntime,
     status: nodeStateValues(status),
   }
+}
+
+/** 只比较权威状态与结果引用，不从输出文本推断检查成功，也不重复日志。 */
+function nodeJobChanges(jobs: unknown, previous: unknown): Array<Record<string, unknown>> {
+  const earlier = new Map<string, Record<string, unknown> | null>()
+  for (const job of nodeJobs(previous))
+    earlier.set(job.executionId, earlier.has(job.executionId) ? null : job)
+  return nodeJobs(jobs).flatMap((job) => {
+    const before = earlier.get(job.executionId)
+    if (before && before.status === job.status && before.resultRef === job.resultRef) return []
+    return [
+      {
+        ...job,
+        ...(before ? { previousStatus: before.status } : {}),
+        terminal: ['succeeded', 'failed', 'cancelled'].includes(job.status),
+      },
+    ]
+  })
+}
+
+/** 展开已完成分组仅用于比较；原始作业、失败详情和未知形状仍在 jobs 中保留。 */
+function nodeJobs(jobs: unknown): Array<{
+  executionId: string
+  status: string
+  resultRef?: unknown
+}> {
+  if (!isArray(jobs)) return []
+  return jobs.flatMap((job) => {
+    if (!isPlainObject(job)) return []
+    if (
+      job.representation === 'completed-jobs' &&
+      job.status === 'succeeded' &&
+      isPlainObject(job.results)
+    )
+      return Object.entries(job.results).map(([executionId, resultRef]) => ({
+        executionId,
+        status: 'succeeded',
+        resultRef,
+      }))
+    if (!isString(job.executionId) || !job.executionId || !isString(job.status)) return []
+    return [{ executionId: job.executionId, status: job.status, resultRef: job.resultRef }]
+  })
 }
 
 /** 同帧待办共享当前项的完整正文；JSON Pointer 随当前次序重算，重复项与未匹配正文保持。 */
@@ -169,6 +225,41 @@ function nodeMaintenanceState(maintenance: unknown, items: unknown): unknown {
     return JSON.stringify(reference).length < JSON.stringify(text).length ? reference : text
   })
   return { ...maintenance, unresolved }
+}
+
+/** 仅复用逐字不变的成功交付；失败、待处理请求、身份歧义及首帧保持完整。 */
+function nodeChildrenState(children: unknown[], previous: unknown): unknown[] {
+  const old = isArray(previous) ? previous : []
+  return children.map((child) => {
+    const projected = nodeChildState(child)
+    if (
+      !isPlainObject(child) ||
+      !isString(child.id) ||
+      !child.id ||
+      child.status !== 'completed' ||
+      child.error ||
+      (isPlainObject(child.delivery) && child.delivery.status !== 'completed') ||
+      (isArray(child.pending) && child.pending.length) ||
+      !isPlainObject(child.result) ||
+      !isString(child.result.sessionId) ||
+      !child.result.sessionId ||
+      !isString(child.result.id) ||
+      !child.result.id ||
+      children.filter((item) => isPlainObject(item) && item.id === child.id).length !== 1
+    )
+      return projected
+    const matches = old.filter((item) => isPlainObject(item) && item.id === child.id)
+    if (matches.length !== 1 || JSON.stringify(matches[0]) !== JSON.stringify(child))
+      return projected
+    const compact = {
+      id: child.id,
+      sessionId: child.sessionId,
+      status: child.status,
+      result: child.result,
+      unchangedInEarlierFrame: true,
+    }
+    return JSON.stringify(compact).length < JSON.stringify(projected).length ? compact : projected
+  })
 }
 
 /** 子任务的状态与交付入口保持当前值；不可变产物目录按清单引用读取，避免每轮重复脚本身份。 */

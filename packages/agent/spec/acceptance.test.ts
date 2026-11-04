@@ -14,8 +14,247 @@ import type { ActRunServiceOptions } from '../src/contract/requires.js'
 import { createAgentSupervisor } from '../src/index.js'
 import { createActRunService } from '../src/index.js'
 import { sessionCacheKey } from '../src/utils/cache-key.js'
+import { agentCollaboration, agentCollaborationConflicts } from '../src/utils/delegation.js'
 import { remainingFrameImages } from '../src/utils/frame-prompt.js'
 import { boundedModelStream } from '../src/utils/model-stream.js'
+
+test('collaboration normalizes lexical roots and rejects ambiguous write paths', () => {
+  const input = { root: 'C:\\Work\\temp\\..\\Repo\\', plannedWrites: ['SRC\\a', './SRC/a', '.'] }
+  expect(agentCollaboration(input)).toEqual({ root: 'c:/work/repo', plannedWrites: ['src/a', '.'] })
+  expect(agentCollaboration({ root: '//Server/Share/app/../', plannedWrites: ['SRC'] })).toEqual({
+    root: '//server/share',
+    plannedWrites: ['src'],
+  })
+  expect(agentCollaboration({ root: '/work/../repo', plannedWrites: ['SRC'] })).toEqual({
+    root: '/repo',
+    plannedWrites: ['SRC'],
+  })
+  expect(agentCollaboration(undefined)).toBeUndefined()
+  for (const path of ['../a', 'a/../b', '/a', 'C:/a', '\\a', '**', 'a?b', ''])
+    expect(() => agentCollaboration({ root: '/repo', plannedWrites: [path] })).toThrow()
+  for (const root of ['relative', 'C:repo', '//server', '/../../repo'])
+    expect(() => agentCollaboration({ root, plannedWrites: ['a'] })).toThrow()
+  expect(() => agentCollaboration({ root: '/repo', plannedWrites: Array(33).fill('a') })).toThrow()
+  expect(() => agentCollaboration({ root: '/repo', plannedWrites: ['a'.repeat(1025)] })).toThrow()
+})
+
+test('collaboration reports bounded verifiable overlaps without confusing prefix or task', () => {
+  const base = {
+    id: 'a',
+    sessionId: 'a',
+    parentSessionId: 'p',
+    parentTaskId: 'task',
+    profile: 'read',
+    status: 'running' as const,
+  }
+  const job = {
+    ...base,
+    collaboration: agentCollaboration({ root: 'C:/Repo', plannedWrites: ['src'] }),
+  }
+  const peer = {
+    ...base,
+    id: 'b',
+    sessionId: 'b',
+    collaboration: agentCollaboration({ root: 'c:/repo/src', plannedWrites: ['file.ts'] }),
+  }
+  expect(agentCollaborationConflicts(job, [peer]).conflicts).toEqual([
+    {
+      jobId: 'b',
+      sessionId: 'b',
+      path: 'c:/repo/src',
+      otherPath: 'c:/repo/src/file.ts',
+      reason: 'path-overlap',
+    },
+  ])
+  for (const other of [
+    { ...peer, status: 'completed' as const },
+    { ...peer, parentTaskId: 'old' },
+    { ...peer, parentSessionId: 'other' },
+    {
+      ...peer,
+      collaboration: agentCollaboration({ root: 'c:/repo', plannedWrites: ['src-other'] }),
+    },
+  ])
+    expect(agentCollaborationConflicts(job, [other]).conflicts).toEqual([])
+  const peers = Array.from({ length: 70 }, (_, i) => ({ ...peer, id: `b${i}` }))
+  expect(agentCollaborationConflicts(job, peers).conflicts).toHaveLength(64)
+  expect(agentCollaborationConflicts(job, peers).omittedConflicts).toBe(6)
+})
+
+test('collaboration is advisory, durable, copied and refreshed on resume', async () => {
+  const store = storage()
+  const options = {
+    storage: store,
+    concurrency: 4,
+    maxChildren: 10,
+    async open() {
+      return child(true)
+    },
+  }
+  const supervisor = createAgentSupervisor(options)
+  const signal = new AbortController().signal
+  try {
+    const declaration = { root: 'C:/Repo', plannedWrites: ['src'] }
+    const a = await supervisor.start(
+      'p',
+      { task: 'a', profile: 'read', collaboration: declaration },
+      signal
+    )
+    declaration.plannedWrites[0] = 'elsewhere'
+    const b = await supervisor.start(
+      'p',
+      {
+        task: 'b',
+        profile: 'read',
+        collaboration: { root: 'c:/repo', plannedWrites: ['src/a.ts'] },
+      },
+      signal
+    )
+    expect(a.collaboration?.plannedWrites).toEqual(['src'])
+    expect(b.status).toBe('running')
+    expect(b.conflicts?.[0]?.jobId).toBe(a.id)
+    const old = await supervisor.start('p', { task: 'old client', profile: 'read' }, signal)
+    expect(old.collaboration).toBeUndefined()
+    expect(old.conflicts).toBeUndefined()
+    await supervisor.cancel('p', b.id)
+    const cleared = await supervisor.resume(
+      'p',
+      b.id,
+      { input: 'clear', collaboration: { root: 'c:/repo', plannedWrites: [] } },
+      signal
+    )
+    expect(cleared.conflicts).toEqual([])
+    await supervisor.cancel('p', b.id)
+    const replaced = await supervisor.resume(
+      'p',
+      b.id,
+      { input: 'replace', collaboration: { root: 'c:/repo', plannedWrites: ['src'] } },
+      signal
+    )
+    expect(replaced.conflicts?.[0]?.jobId).toBe(a.id)
+    await supervisor.cancel('p', a.id)
+    await supervisor.cancel('p', b.id)
+    const resumed = await supervisor.resume('p', b.id, { input: 'retain' }, signal)
+    expect(resumed.collaboration?.plannedWrites).toEqual(['src'])
+    expect(resumed.conflicts).toEqual([])
+    await supervisor.cancel('p', b.id)
+    const reopened = createAgentSupervisor(options)
+    expect((await reopened.status('p', b.id)).collaboration).toEqual(resumed.collaboration)
+    await reopened.close()
+  } finally {
+    await supervisor.close()
+  }
+})
+
+test('submit messages preserve durable text and parent origin through ordinary input receipts', async () => {
+  for (const origin of [undefined, { kind: 'parent' as const, sessionId: 'parent' }]) {
+    const f = runFixture()
+    const readInput = f.options.context.readInput.bind(f.options.context)
+    f.options.context.readInput = (ref, range) => readInput(ref, { ...range, limit: 3 })
+    const service = createActRunService(f.options)
+    try {
+      for (let run = 0; run < 2; run++) {
+        const events = []
+        for await (const event of service.submit({
+          text: 'same message',
+          inputId: `input-${run}`,
+          origin,
+        }))
+          events.push(event)
+        const inputs = events.filter((event) => event.type === 'input')
+        const applied = events.filter((event) => event.type === 'input-applied')
+        expect(inputs).toHaveLength(1)
+        expect(applied).toHaveLength(1)
+        expect(inputs[0]).toMatchObject({
+          text: 'same message',
+          source: 'submit',
+          inputId: `input-${run}`,
+        })
+        expect(inputs[0]!.origin).toEqual(origin)
+        expect(applied[0]!.ref).toEqual(inputs[0]!.ref)
+        const state = await f.store.load('fault')
+        const record = state!.records.find((item) => item.ref.id === inputs[0]!.ref.id)!
+        expect(await f.store.get('fault', record.objectId)).toBe(inputs[0]!.text)
+        const persisted = (await service.events()).map((item) => item.event)
+        expect(
+          persisted.filter((event) => event.type === 'input' && event.ref.id === inputs[0]!.ref.id)
+        ).toHaveLength(1)
+      }
+    } finally {
+      await service.close()
+    }
+  }
+})
+
+test('resume uses ordinary ActInput with trusted parent origin while start stays a single task input', async () => {
+  const received: Array<
+    string | { text?: string; origin?: { kind: 'parent'; sessionId: string } }
+  > = []
+  const supervisor = createAgentSupervisor({
+    storage: storage(),
+    concurrency: 1,
+    maxChildren: 1,
+    async open() {
+      return {
+        ...child(),
+        async *submit(input) {
+          received.push(input)
+          yield { type: 'state' as const, runId: 'child', status: 'completed' as const }
+        },
+      }
+    },
+  })
+  const signal = new AbortController().signal
+  try {
+    const job = await supervisor.start('parent', { task: 'initial task', profile: 'read' }, signal)
+    await supervisor.wait('parent', job.id, signal)
+    await expect(
+      supervisor.resume('other', job.id, { input: 'rejected' }, signal)
+    ).rejects.toThrow()
+    expect(received).toEqual(['initial task'])
+    await supervisor.resume('parent', job.id, { input: 'next message' }, signal)
+    await supervisor.wait('parent', job.id, signal)
+    expect(received).toEqual([
+      'initial task',
+      { text: 'next message', origin: { kind: 'parent', sessionId: 'parent' } },
+    ])
+  } finally {
+    await supervisor.close()
+  }
+})
+
+test('parent submit receipt persistence failure never displays or applies a resume message', async () => {
+  const f = runFixture()
+  const put = f.store.put
+  let calls = 0
+  f.store.put = async (id, body) => {
+    if (body.startsWith('{"type":"input"')) throw Error('parent receipt disk failure')
+    return put(id, body)
+  }
+  f.options.model.stream = async function* () {
+    calls++
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  try {
+    await expect(
+      (async () => {
+        for await (const event of service.submit({
+          text: 'resume',
+          origin: { kind: 'parent', sessionId: 'parent' },
+        }))
+          events.push(event)
+      })()
+    ).rejects.toThrow('parent receipt disk failure')
+    expect(events.some((event) => event.type === 'input' || event.type === 'input-applied')).toBe(
+      false
+    )
+    expect(calls).toBe(0)
+  } finally {
+    await service.close()
+  }
+})
 
 function runFixture() {
   const store = storage()
@@ -3502,4 +3741,64 @@ test('INV-37 steering during acknowledge preserves accepted tools', async () => 
   expect(executed).toBe(1)
   expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
   await service.close()
+})
+
+test('child handoff keeps the latest nonempty answer and terminal state without replaying progress', async () => {
+  const store = storage()
+  const signal = new AbortController().signal
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 1,
+    maxChildren: 1,
+    async open() {
+      return {
+        ...child(),
+        async *submit() {
+          for (let index = 0; index < 100; index++) {
+            yield { type: 'state' as const, runId: 'child', status: 'thinking' as const }
+            yield {
+              type: 'accepted' as const,
+              runId: 'child',
+              turnId: String(index),
+              text: '',
+              ref: { sessionId: 'child', id: String(index) },
+            }
+          }
+          yield {
+            type: 'accepted' as const,
+            runId: 'child',
+            turnId: 'progress',
+            text: 'still checking',
+            ref: { sessionId: 'child', id: 'progress' },
+          }
+          yield {
+            type: 'accepted' as const,
+            runId: 'child',
+            turnId: 'final',
+            text: 'Checks failed; changes need review.',
+            ref: { sessionId: 'child', id: 'final' },
+          }
+          yield { type: 'state' as const, runId: 'child', status: 'completed' as const }
+        },
+      }
+    },
+  })
+  try {
+    const started = await supervisor.start('p', { task: 'handoff', profile: 'read' }, signal)
+    const job = await supervisor.wait('p', started.id, signal)
+    const context = createContextRuntime({ sessionId: 'p', storage: store })
+    const record = await context.read(job.result!, { limit: 1 })
+    const raw = (await store.get('p', record.record.objectId))!
+    const result = JSON.parse(raw)
+    expect(result.events.map((event: ActRunEvent) => event.type)).toEqual(['accepted', 'state'])
+    expect(result.events[0].text).toBe('Checks failed; changes need review.')
+    expect(result.events[0].ref.id).toBe('final')
+    expect(result.events[1].status).toBe('completed')
+    expect(result.omittedEvents).toBe(201)
+    expect(raw).not.toContain('still checking')
+    expect(raw.length).toBeLessThan(1500)
+    expect(result.eventSource.sessionId).toBe(job.sessionId)
+  } finally {
+    await supervisor.close()
+  }
 })

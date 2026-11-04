@@ -23,7 +23,7 @@ export interface ActImage {
 }
 /** 用户输入，文字、文件引用与真实多模态图片至少提供一项。 */
 export interface ActInput {
-  /** 父监督器填充的引导来源；持久身份仍以输入 ref 为准。 */
+  /** 父监督器填充的消息来源（引导或续跑）；仅标识来源，不授予权限，持久身份仍以输入 ref 为准。 */
   readonly origin?: { readonly kind: 'parent'; readonly sessionId: string }
   /** 宿主输入身份，回执原样带回；不代表重复提交去重键。 */
   readonly inputId?: string

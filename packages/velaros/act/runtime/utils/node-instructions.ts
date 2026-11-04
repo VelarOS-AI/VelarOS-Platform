@@ -36,7 +36,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
           'velaros:system.environment 管 npm：list/search/describe 查询，apply 安装/换版/卸载，rollback 回退。跨会话持久，单次固定版本；核该版 README/类型并验证。',
         ]
       : []),
-    'execa 9：command/cwd/durationMs（子进程耗时）；reject:false 查 failed/stdout/stderr；exitCode 可缺失，查 timedOut/signal/code。',
+    'execa 9：command/cwd/durationMs（子进程耗时）；reject:false 查 failed/stdout/stderr；exitCode 可缺失，查 timedOut/signal/code。长命令结果可用 import {output} from "velaros"；output(显式提取的普通JSON进程字段,{view:{mode:"process"}}) 展示状态与日志引用；Error 非枚举字段须显式提取。进程退出0不代表业务检查通过，测试统计和失败诊断仍须核实。',
     '后台/委派核身份、进度、错误、退出；等回执续跑。时长不证明有效，停滞先诊断。',
     '按实际改动和项目要求选择必要检查：文案/展示先局部检查，逻辑改动测行为和失败路径，共享接口/格式测消费方与兼容性；不按行数判断风险。新增测试从运行清单确认被执行，零测试/跳过不算通过；仅改动影响打包时验证打包入口，必需门禁不省略。验证留简记：命令/范围、结果回执、代码状态和未覆盖项；复用前确认源码、依赖、配置及环境未变，无法确认就重跑受影响检查，不以退出 0 代替结果判定。',
     '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
@@ -47,7 +47,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     ...(modules.includes('velaros:project')
       ? [
-          '局部编辑默认 edit.replace：import {edit} from "velaros:project"；await edit({steps:[{action:"replace",path,oldText,newText}]})。oldText 须唯一，删除用 newText:""，歧义补上下文；相关修改一次提交。结构编辑用 select + patch；计算生成整份正文才用 JS + write，expectedText 用 Node 原文，null 只新建。read.text 统一 LF，不可作逐字 expectedText；changeRef 可 undo。',
+          '编辑方式按任务选，文本替换、行号和结构定位并列，不强制单一路径。文本用 edit 的 {action:"replace",path,oldText,newText}，oldText 须唯一，删除用空 newText；行号用 read({files:[{path,range:[startLine,endLine]}]}) 返回的 target 交给 patch({edits:[{target,text,op}]})，行号从 1 起且含末行，op 为 replace/before/after，空 text 配 replace 删除；结构定位用 select + patch。已读 target 可直接复用，版本冲突重新定位，不按陈旧行号盲写。整份生成或重写可用 write，expectedText 用 Node 已读完整原文，null 只新建；read.text 统一 LF，不可作逐字 expectedText。大段或多行 oldText/newText 及 patch.text 放 options.blobs，code 引用 blobs.oldText/blobs.newText 等；旧文可直接用从文件读取并截取的原文值，短定位文本可内联，不内嵌大块字符串。相关修改尽量批量提交，changeRef 可 undo。',
           '提交后核回执 diff/changedFiles，再做必要测试，不重复写后全文校验。事务已提交后外层程序失败不能重放；回执丢失先查执行状态/差量。非原子批改失败先核差异，只改剩余部分。',
           ...(SystemMembers.memory.some((module) => modules.includes(module))
             ? [

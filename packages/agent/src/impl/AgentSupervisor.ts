@@ -8,7 +8,12 @@ import type { AgentSupervisorOptions } from '../contract/requires.js'
 import type { ActInput, ActRunEvent } from '../types/act.js'
 import type { AgentJob, AgentResume, AgentStart } from '../types/delegation.js'
 import type { ActiveAgentJob } from '../types/runtime.js'
-import { appendChildEvent, guidanceUnavailable } from '../utils/delegation.js'
+import {
+  agentCollaboration,
+  agentCollaborationConflicts,
+  appendChildEvent,
+  guidanceUnavailable,
+} from '../utils/delegation.js'
 import { boundedModelOperation } from '../utils/model-stream.js'
 
 /** 并发子运行的唯一调度面，父身份必须由宿主提供。 */
@@ -94,6 +99,15 @@ class AgentSupervisor implements AgentSupervisorApi {
         status: 'running',
       }
       if (snapshot?.task) Object.assign(job, { parentTaskId: snapshot.task.id })
+      if (input.collaboration !== undefined)
+        Object.assign(job, { collaboration: agentCollaboration(input.collaboration) })
+      Object.assign(
+        job,
+        agentCollaborationConflicts(
+          job,
+          [...this.active.values()].map((live) => live.job)
+        )
+      )
       this.assertAvailable(job)
       await this.save(job)
       this.launch(job, input.task, input, signal)
@@ -117,15 +131,26 @@ class AgentSupervisor implements AgentSupervisorApi {
         result: _result,
         delivery: _delivery,
         pending: _pending,
+        conflicts: _conflicts,
+        omittedConflicts: _omittedConflicts,
         ...rest
       } = prior
       const job: AgentJob = { ...rest, status: 'running', profile: input.profile ?? prior.profile }
+      if (input.collaboration !== undefined)
+        Object.assign(job, { collaboration: agentCollaboration(input.collaboration) })
+      Object.assign(
+        job,
+        agentCollaborationConflicts(
+          job,
+          [...this.active.values()].map((live) => live.job)
+        )
+      )
       this.assertAvailable(job)
       await this.save(job)
       this.failures.delete(id)
       this.launch(
         job,
-        input.input,
+        { text: input.input, origin: { kind: 'parent', sessionId: parent } },
         { task: input.input, profile: job.profile, materials: input.materials },
         signal
       )
@@ -235,7 +260,7 @@ class AgentSupervisor implements AgentSupervisorApi {
   }
   private launch(
     job: AgentJob,
-    input: string,
+    input: string | ActInput,
     request: Optional<AgentStart>,
     signal: AbortSignal
   ): void {

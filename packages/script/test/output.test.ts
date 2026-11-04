@@ -1611,3 +1611,155 @@ test('INV-35 a longer reference card cannot evict an unmatched body that already
   expect(preserved.prompt).toBe(original.prompt)
   expect(preserved.blocks).toEqual(original.blocks)
 })
+
+test('process view keeps explicit failures separate from business status and ignores log claims', () => {
+  for (const [value, status] of [
+    [{ exitCode: 0, failed: false }, 'exited-zero'],
+    [{ exitCode: 0 }, 'unknown'],
+    [{ stdout: 'all tests passed' }, 'unknown'],
+    [{ exitCode: '0', failed: false }, 'unknown'],
+    [{ exitCode: 0, failed: false, timedOut: 'false' }, 'unknown'],
+    [{ exitCode: 0, failed: true }, 'failed'],
+    [{ exitCode: 0, failed: false, signal: 'SIGTERM' }, 'failed'],
+    [{ exitCode: 2, failed: false }, 'failed'],
+    [{ timedOut: true }, 'failed'],
+    [{ isCanceled: true }, 'failed'],
+    [{ isMaxBuffer: true }, 'failed'],
+    [{ cleanupIncomplete: true }, 'failed'],
+    [{ exitCode: 0, failed: false, code: 'ENOENT' }, 'unknown'],
+    [{ exitCode: 0, failed: false, signal: 9 }, 'unknown'],
+    [{ code: 'ENOENT' }, 'unknown'],
+    [{ exitCode: null, signal: null }, 'unknown'],
+  ] as const) {
+    const raw = capture(value, { view: { mode: 'process' } })
+    const projected = scriptOutputs.project(raw, 'receipt', 4000)
+    const body = JSON.parse(projected.blocks[0]!.text)
+    expect(body.processStatus).toBe(status)
+    expect(body.businessStatus).toBe('unknown')
+    expect(projected.blocks[0]!.representation).toBe('excerpt')
+  }
+})
+
+test('process view is opt-in, bounded, and retains complete stream pointers', () => {
+  const value = {
+    exitCode: 7,
+    failed: true,
+    stdout: 'noise\r\n'.repeat(20000),
+    stderr: 'important failure\n',
+    shortMessage: 'x'.repeat(2000),
+  }
+  const raw = capture(value, { key: 'process', view: { mode: 'process' } })
+  const before = JSON.stringify(raw)
+  for (const format of ['json', 'text'] as const) {
+    const projection = scriptOutputs.project(
+      raw,
+      'archive',
+      3000,
+      undefined,
+      undefined,
+      undefined,
+      format
+    )
+    expect(projection.prompt.length).toBeLessThanOrEqual(3000)
+    const body = JSON.parse(projection.blocks[0]!.text)
+    expect(body.processStatus).toBe('failed')
+    expect(body.streams.stdout).toMatchObject({
+      rawRef: 'archive',
+      pointer: '/output/blocks/0/value/stdout',
+      totalChars: value.stdout.length,
+    })
+    expect(body.facts.shortMessage.representation).toBe('reference')
+    expect(projection.prompt).not.toContain('noise')
+  }
+  expect(JSON.stringify(raw)).toBe(before)
+  expect(scriptOutputs.project(raw, 'archive', 500).blocks.every((b) => !b.bodyIncluded)).toBe(true)
+  expect(scriptOutputs.project(capture(value), 'archive', 3000).prompt).not.toContain(
+    'businessStatus'
+  )
+  for (const mode of ['auto', 'full', 'reference', 'summary'])
+    expect(() => validateOutputOptions({ view: { mode } })).not.toThrow()
+  for (const extra of [{ paths: [] }, { lines: [1, 2] }, { maxItems: 1 }, { edge: 'tail' }])
+    expect(() => validateOutputOptions({ view: { mode: 'process', ...extra } })).toThrow()
+  expect(
+    scriptOutputs.project(capture('success', { view: { mode: 'process' } }), 'archive', 3000)
+      .blocks[0]!.reason
+  ).toBe('process-object-required')
+  const program = {
+    source: "import {output} from 'velaros';output({exitCode:1},{key:'p',view:{mode:'process'}})",
+  }
+  expect(scriptOutputs.describe(program).outputs[0]!.view!.mode).toBe('process')
+  expect(VelarosStandardDeclarations).toContain("'summary' | 'process'")
+})
+
+test('native output module archives explicitly extracted execa errors with lossless log recall', async () => {
+  const { nodeProgramSource } = await import('../src/utils/node-program.js')
+  const { execa } = await import('execa')
+  const { createRequire } = await import('node:module')
+  const { pathToFileURL } = await import('node:url')
+  const { readFile } = await import('node:fs/promises')
+  const directory = mkdtempSync(join(tmpdir(), 'process-view-'))
+  try {
+    await nodeProgramSource(
+      { source: '', modules: {}, blobs: {}, input: null, operations: {}, timeoutMs: 10000 },
+      directory,
+      directory,
+      {}
+    )
+    const archive = join(directory, 'output.jsonl')
+    const execaUrl = pathToFileURL(createRequire(import.meta.url).resolve('execa')).href
+    const code = `import {output} from ${JSON.stringify(pathToFileURL(join(directory, 'standard.mjs')).href)};
+import {execa} from ${JSON.stringify(execaUrl)};
+const r = await execa(process.execPath, ['-e', 'process.stdout.write("noise\\\\r\\\\n".repeat(20000));process.stderr.write("KEY_FAILURE");process.exitCode=7'], {reject:false});
+if (!(r instanceof Error) || Object.getOwnPropertyDescriptor(r, 'message').enumerable) throw Error('expected non-enumerable Error message');
+output({exitCode:r.exitCode,failed:r.failed,timedOut:r.timedOut,signal:r.signal,code:r.code,shortMessage:r.shortMessage,message:r.message,stdout:r.stdout,stderr:r.stderr},{key:'child',view:{mode:'process'}});
+const timeout = await execa(process.execPath, ['-e', 'setTimeout(()=>{},10000)'], {reject:false,timeout:100});
+output({exitCode:timeout.exitCode,failed:timeout.failed,timedOut:timeout.timedOut,signal:timeout.signal,stdout:timeout.stdout,stderr:timeout.stderr},{key:'timeout',view:{mode:'process'}});
+const missing = await execa(process.execPath + '.missing.exe', [], {reject:false});
+output({exitCode:missing.exitCode,failed:missing.failed,code:missing.code,message:missing.message,stdout:missing.stdout,stderr:missing.stderr},{key:'missing',view:{mode:'process'}});`
+    const result = await execa('node', ['--input-type=module', '-e', code], {
+      env: { VELAROS_OUTPUT_FILE: archive },
+      stdin: 'ignore',
+      timeout: 15000,
+    })
+    expect(result.exitCode).toBe(0)
+    const events = (await readFile(archive, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    const raw = {
+      config: {},
+      blocks: events.filter((e) => e.block).map((e) => e.block),
+      issues: [],
+    }
+    expect(raw.blocks).toHaveLength(3)
+    expect(raw.blocks[1].value.timedOut).toBe(true)
+    // Windows execa 可由命令解释器交回 exitCode 1，而不是 ENOENT。
+    expect(raw.blocks[2].value.failed).toBe(true)
+    expect(raw.blocks[2].value.code === 'ENOENT' || raw.blocks[2].value.exitCode > 0).toBe(true)
+    for (const block of raw.blocks.slice(1)) {
+      const projected = scriptOutputs.project({ ...raw, blocks: [block] }, 'failure-archive', 3000)
+      expect(JSON.parse(projected.blocks[0]!.text).processStatus).toBe('failed')
+      expect(JSON.parse(projected.blocks[0]!.text).businessStatus).toBe('unknown')
+    }
+    const stored = raw.blocks[0].value
+    expect(stored.exitCode).toBe(7)
+    expect(stored.message).toContain('7')
+    expect(stored.stderr).toBe('KEY_FAILURE')
+    expect(stored.stdout.length).toBeGreaterThan(100000)
+    const view = scriptOutputs.project(raw, 'native-archive', 3000)
+    const body = JSON.parse(view.blocks[0]!.text)
+    expect(body.processStatus).toBe('failed')
+    expect(body.businessStatus).toBe('unknown')
+    for (const stream of ['stdout', 'stderr']) {
+      const source = body.streams[stream]
+      const recalled = source.pointer
+        .slice(1)
+        .split('/')
+        .reduce((v: any, k: string) => v[k], { output: raw })
+      expect(recalled).toBe(stored[stream])
+      expect(source.totalChars).toBe(recalled.length)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}, 20000)

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   mkdirSync,
@@ -16,6 +16,163 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+
+test('module selection preserves shared artifacts and rereads transitive source dependencies', () => {
+  const root = mkdtempSync(join(tmpdir(), 'declaration-modules-'))
+  const put = (path, text) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true })
+    writeFileSync(join(root, path), text)
+  }
+  const read = (path) => readFileSync(join(root, path), 'utf8')
+  const run = (args, status = 0) => {
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/script/generate-declarations.mjs', ...args],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 30000,
+      }
+    )
+    assert.ifError(result.error)
+    assert.equal(result.status, status, result.stdout + result.stderr)
+    return result.stdout + result.stderr
+  }
+  try {
+    symlinkSync(join(repository, 'node_modules'), join(root, 'node_modules'), 'dir')
+    put('package.json', '{"type":"module"}')
+    for (const name of ['generate-declarations.mjs', 'operation-contracts.mjs'])
+      put(`scripts/script/${name}`, readFileSync(join(repository, 'scripts/script', name), 'utf8'))
+    put('scripts/ownership/governed-modules.mjs', 'export const GovernedModules=[]')
+    put(
+      'scripts/script/surfaces.mjs',
+      `
+      export const AgentViewTag='@AgentView';
+      export const BannedModelFacingAliases={};
+      export const CapabilityModulePrefix='velaros:';
+      export const HostContextTypes=new Set(['FixtureContext']);
+      export const CodeSurfaces=[
+        {namespace:'first',directory:'fixture',interfaces:['FirstApi'],templates:'template.js'},
+        {namespace:'sibling',directory:'fixture',interfaces:['SiblingApi'],templates:'template.js'},
+        {namespace:'other',directory:'other',interfaces:['OtherApi'],templates:'template.js'}
+      ];
+      export const StandardSurfaces=[
+        {namespace:'standard',specifier:'velaros:standard',directory:'standard',interface:'StandardApi',constant:'Standard'},
+        {namespace:'standard-sibling',specifier:'velaros:standard-sibling',directory:'standard',interface:'StandardSiblingApi',constant:'StandardSibling'}
+      ];
+      export const surfaceConstantName=(name)=>name;
+    `
+    )
+    for (const name of ['fixture', 'other', 'standard', 'middle', 'dependency']) {
+      put(
+        `packages/${name}/package.json`,
+        JSON.stringify({
+          name: `@velaros-ai/${name}`,
+          dependencies:
+            name === 'fixture'
+              ? { '@velaros-ai/middle': 'workspace:*' }
+              : name === 'middle'
+                ? { '@velaros-ai/dependency': 'workspace:*' }
+                : {},
+        })
+      )
+      put(
+        `packages/${name}/tsconfig.json`,
+        JSON.stringify({
+          compilerOptions: { target: 'ES2022', module: 'ESNext', strict: true, types: [] },
+          include: ['src/**/*.ts'],
+        })
+      )
+      put(`packages/${name}/template.js`, '// fixture template')
+      mkdirSync(join(root, `packages/${name}/src/contract`), { recursive: true })
+    }
+    const api = (name, result = 'string') => `/** @AgentView ${name} */
+      export interface ${name} {
+        /** @AgentView Read.
+         * @OperationEffect none
+         */
+        read(context: FixtureContext): Promise<${result}>
+      }`
+    put('packages/fixture/src/api.ts', api('FirstApi', 'Payload') + api('SiblingApi'))
+    put('packages/other/src/api.ts', api('OtherApi'))
+    put('packages/middle/src/index.ts', 'export {}')
+    const dependency = '/** @AgentView dependency */\nexport interface Payload { value: string }'
+    put('packages/dependency/src/types.ts', dependency)
+    put(
+      'packages/standard/src/api.ts',
+      '/** @AgentView standard */\nexport interface StandardApi {value: string}\n/** @AgentView sibling */\nexport interface StandardSiblingApi {count: number}'
+    )
+    put(
+      'packages/velaros/act/runtime/types/native-tools.ts',
+      ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone']
+        .map((name) => `export interface ${name}Input {value: string}`)
+        .join('\n')
+    )
+    mkdirSync(join(root, 'packages/velaros/act/runtime/contract'), { recursive: true })
+
+    assert.match(run(['--write']), /范围：全量/)
+    const first = read('baselines/script/first.d.ts')
+    const shared = read('packages/fixture/src/contract/surface.ts')
+    const standard = read('packages/standard/src/contract/surface.ts')
+    const native = read('packages/velaros/act/runtime/contract/surface.ts')
+    assert.match(run(['--module', 'first']), /校验：first, sibling/)
+    run(['--module', 'first', '--module', 'first', '--write'])
+    assert.equal(read('packages/fixture/src/contract/surface.ts'), shared)
+    assert.equal(read('baselines/script/first.d.ts'), first)
+    run(['--module', 'standard', '--write'])
+    assert.equal(read('packages/standard/src/contract/surface.ts'), standard)
+    run(['--module', 'native-tools'])
+    assert.equal(read('packages/velaros/act/runtime/contract/surface.ts'), native)
+    assert.match(
+      run(['--module', 'first', '--module', 'standard']),
+      /校验：first, sibling, standard, standard-sibling/
+    )
+    assert.match(run(['--module', 'missing', '--write'], 1), /未知模块：missing/)
+    assert.match(run(['--module'], 1), /需要一个登记的 namespace/)
+    assert.match(run(['--module', '--write'], 1), /需要一个登记的 namespace/)
+    assert.match(run(['--out'], 1), /需要一个目录/)
+    assert.match(run(['--module', 'native-tools', '--out', 'isolated'], 1), /不能与 --out/)
+    assert.equal(read('packages/fixture/src/contract/surface.ts'), shared)
+
+    put('baselines/script/other.d.ts', 'unrelated sentinel')
+    put('baselines/script/retired.d.ts', 'retired sentinel')
+    assert.match(run(['--module', 'first', '--write', '--out', 'isolated']), /仅处理/)
+    assert.equal(read('isolated/first.d.ts'), first)
+    assert.equal(read('isolated/sibling.d.ts'), read('baselines/script/sibling.d.ts'))
+    assert.equal(read('packages/fixture/src/contract/surface.ts'), shared)
+    run(['--module', 'first'])
+    assert.equal(read('baselines/script/other.d.ts'), 'unrelated sentinel')
+    assert.equal(read('baselines/script/retired.d.ts'), 'retired sentinel')
+    const fullFailure = run([], 1)
+    assert.match(fullFailure, /other: 生成物与源码不一致/)
+    assert.match(fullFailure, /登记表之外的声明/)
+
+    put('packages/dependency/src/types.ts', dependency.replace('value: string', 'value: number'))
+    assert.match(run(['--module', 'first'], 1), /first: 生成物与源码不一致/)
+    run(['--module', 'first', '--write'])
+    assert.match(read('baselines/script/first.d.ts'), /value: number/)
+    assert.notEqual(read('packages/fixture/src/contract/surface.ts'), shared)
+    run(['--module', 'first'])
+    put('packages/fixture/template.js', '// changed template')
+    assert.match(run(['--module', 'first'], 1), /随包|surface.ts/)
+    run(['--module', 'first', '--write'])
+    const updated = read('packages/fixture/src/contract/surface.ts')
+    put('packages/fixture/src/api.ts', api('FirstApi', 'Payload'))
+    assert.match(run(['--module', 'first', '--write'], 1), /找不到接口 SiblingApi/)
+    assert.equal(read('packages/fixture/src/contract/surface.ts'), updated)
+    put('packages/fixture/src/api.ts', api('FirstApi', 'Payload') + api('SiblingApi'))
+    put('packages/dependency/src/types.ts', dependency.replace('@AgentView', 'unmarked'))
+    assert.match(run(['--module', 'first'], 1), /Payload/)
+    put(
+      'packages/dependency/src/types.ts',
+      dependency + '\n/** @AgentView stray */\nexport interface Stray {unused: string}'
+    )
+    run(['--module', 'first', '--write'])
+    assert.match(run([], 1), /Stray/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 test('method call examples in AgentView preserve complete comments and every generated operation export', () => {
   const root = mkdtempSync(join(tmpdir(), 'declaration-comments-'))

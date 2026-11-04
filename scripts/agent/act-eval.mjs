@@ -12,6 +12,7 @@ import {
   UnlimitedBudget,
 } from '@velaros-ai/agent-lab'
 import { evaluationScenario } from './act-scenarios.mjs'
+import { workflowMetrics } from './workflow-metrics.mjs'
 import { createEvidenceCheckpoints } from './evidence-checkpoints.mjs'
 import { createRuntime } from '@velaros-ai/velaros'
 
@@ -594,6 +595,7 @@ export async function runActEvaluation({
     usage: measuredUsage(traces),
     storageBytes: (await stat(join(directory, 'state/context.sqlite'))).size,
   }
+  summary.workflow = workflowMetrics(traces, summary)
   await writeFile(join(directory, 'summary.json'), JSON.stringify(summary, null, 2))
   return { summary, archive, traces, branches }
 }

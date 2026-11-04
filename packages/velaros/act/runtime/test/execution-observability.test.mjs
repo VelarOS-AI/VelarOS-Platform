@@ -1350,13 +1350,94 @@ test('a second wait is bounded and stopping the wait program leaves its target a
         events: f.events.filter((event) => event.type === 'error'),
       })
     )
-    assert.equal(f.requests.length, 6)
+    // stop 只确认停止请求；目标终态可能与 stop 回执同帧或在下一帧交付。
+    const tail = f.frames.slice(5)
+    assert.equal(tail.at(-1).jobs.find((job) => job.executionId === target).status, 'cancelled')
+    assert(tail.length === 1 || tail.length === 2)
+    if (tail.length === 2) {
+      const before = tail[0].jobs.find((job) => job.executionId === target)
+      const after = tail[1].jobs.find((job) => job.executionId === target)
+      assert.equal(before.status, 'running')
+      assert.equal(before.stopRequested, true)
+      assert.equal(before.resultRef, undefined)
+      assert(after.resultRef, 'the extra request must carry the newly settled target result')
+    }
   } finally {
     clearTimeout(watchdog)
     f.controller.abort()
     await running
   }
 })
+
+for (const transport of ['tools', 'text'])
+  for (const outcome of ['succeeded', 'failed'])
+    test(`${transport}: passive workflow stays silent until steering and ${outcome} result`, async (t) => {
+      let target
+      const waiting = () =>
+        f.events.filter((event) => event.type === 'state' && event.status === 'waiting').length
+      const f = await fixture(t, transport, async (f) => {
+        if (f.requests.length === 1)
+          return [
+            {
+              code: held
+                .replace("console.log('started');", '')
+                .replace(
+                  "console.log('finished');",
+                  outcome === 'failed'
+                    ? "throw new Error('WORKFLOW_FAILURE');"
+                    : "console.log('WORKFLOW_RESULT');"
+                ),
+            },
+          ]
+        if (f.requests.length === 2) {
+          await waitFile(f.root, 'started')
+          target = f.frames.at(-1).jobs[0].executionId
+          return { type: 'text', text: 'Waiting for the existing execution.' }
+        }
+        if (f.requests.length === 3) {
+          assert(JSON.stringify(f.requests.at(-1)).includes('WORKFLOW_STEERING'))
+          assert.equal(
+            (await f.session.executions.read({ executionId: target }, f.controller.signal)).status,
+            'running'
+          )
+          return { type: 'text', text: 'Still waiting; no new execution is needed.' }
+        }
+        assert.equal(
+          f.requests.length,
+          4,
+          'only steering and a new terminal result may resume the model'
+        )
+        const job = f.frames.at(-1).jobs.find((job) => job.executionId === target)
+        assert.equal(job.status, outcome)
+        assert(job.resultRef, 'the terminal wake must deliver its result identity')
+      })
+      const running = f.collect()
+      const watchdog = setTimeout(() => f.controller.abort(), 8000)
+      try {
+        await until(() => waiting() === 1)
+        assert.equal(f.requests.length, 2)
+        // 在已进入被动等待后推进虚拟时间，不靠增加真实超时证明静默。
+        t.mock.timers.enable({ apis: ['setTimeout'] })
+        t.mock.timers.tick(180000)
+        for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve))
+        assert.equal(f.requests.length, 2, 'pure waiting must not poll the model')
+        t.mock.timers.reset()
+        await f.session.steer('WORKFLOW_STEERING: keep waiting on the same execution.')
+        await until(() => waiting() === 2)
+        assert.equal(f.requests.length, 3)
+        await writeFile(join(f.root, 'release'), 'go')
+        await running
+        assert.equal(f.controller.signal.aborted, false)
+        assert.equal(f.requests.length, 4)
+        assert.equal((await f.programs.state()).jobs.length, 1)
+        assert.equal(f.events.at(-1).status, 'completed')
+      } finally {
+        t.mock.timers.reset()
+        clearTimeout(watchdog)
+        f.controller.abort()
+        await running
+      }
+    })
 
 test('progress wake drops settled output but preserves other live output and later notifications', async (t) => {
   const { ExecutionProgress } = await import('../../../dist/act/runtime/impl/ExecutionProgress.js')

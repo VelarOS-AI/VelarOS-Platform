@@ -90,6 +90,25 @@ async function consumedMessages(storage, spaceId, traces) {
 // 工作负载只定义任务、输入和独立判据，执行始终交给正式 Runtime。
 export function evaluationScenario(name) {
   if (name === 'read-edit-observe') return null
+  if (name === 'workflow-local-edit')
+    return {
+      id: name,
+      title: '局部编辑、重复文本定位与约束保持',
+      files: { 'settings.txt': 'heading\nobsolete hint\nkeep\nrepeat\nrepeat\nfooter\n' },
+      prompt:
+        '只修改 settings.txt：删除 obsolete hint 整行，把原第5行的 repeat 改为 updated，保留原第4行的 repeat；在 footer 前插入 added 一行。可以按文本、行范围或其他可靠方法编辑，方法不限。保留其余正文、state.txt 和 protected.txt，核实结果后完成，不需要持续观察。',
+      async verify({ root, status }) {
+        const checks = {
+          completed: status === 'completed',
+          exact:
+            (await readFile(join(root, 'settings.txt'), 'utf8')) ===
+            'heading\nkeep\nrepeat\nupdated\nadded\nfooter\n',
+          state: (await readFile(join(root, 'state.txt'), 'utf8')) === 'one\n',
+          protected: (await readFile(join(root, 'protected.txt'), 'utf8')) === 'keep this\n',
+        }
+        return { passed: Object.values(checks).every(Boolean), evidence: { checks } }
+      },
+    }
   if (name === 'system-cooperation')
     return {
       id: name,

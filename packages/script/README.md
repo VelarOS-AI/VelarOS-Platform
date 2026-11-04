@@ -67,3 +67,27 @@ if (result.checked) console.log(result.result.process)
 `NodeCodeRunnerOptions.acquireRuntime` 可在每次执行前获取 `NodeRuntimeLease`，其不可变环境优先于静态 `runtime`。租约的命令目录随 `NodeProcessRequest.binDirectories` 交给进程宿主；内置宿主会将其加入本次 PATH。进程树完整结束后释放，回收不完整时调用可选 retain 保留文件。
 
 能力桥使用本地 Unix socket / Windows 命名管道。Windows + Bun 在支持 HTTP connection 处理器时通过 net 监听并交给同一 HTTP 鉴权处理器；执行结束关闭监听和接入连接。Bun 1.3.13 缺少该处理器，会明确拒绝而不挂起；Bun 1.4.3 已通过该兼容路径回归。此兼容路径不改变默认 POSIX 进程宿主的适用范围，测试条件与本机验证结果见[测试与平台支持](../../docs/engineering/testing.md)。
+
+
+### 可选进程事实视图
+
+外层脚本正常退出不代表内层命令成功，更不代表测试或业务通过。默认 console、exec 自由执行方式和既有视图不变；需要避免长日志淹没命令状态时，可显式交出普通 JSON 事实：
+
+```js
+import {execa} from 'velaros:npm/execa'
+import {output} from 'velaros'
+const r = await execa('node', ['check.mjs'], {reject: false, stdin: 'ignore', timeout: 30000})
+output({
+  exitCode: r.exitCode, failed: r.failed, signal: r.signal, code: r.code,
+  timedOut: r.timedOut, isCanceled: r.isCanceled, isTerminated: r.isTerminated,
+  isMaxBuffer: r.isMaxBuffer, durationMs: r.durationMs,
+  shortMessage: r.shortMessage, message: r.message,
+  stdout: r.stdout, stderr: r.stderr,
+}, {key: 'check-process', priority: 'high', view: {mode: 'process'}})
+```
+
+- execa 的失败结果可能是 Error，`message` 等属性不可枚举。不要直接 `output(error)` 或依赖对象展开保存全部诊断；显式提取所需字段。输出仍遵循普通 JSON、无 getter、无环和采集上限合同。
+- `scope: caller-provided-process` 表明这些是脚本提供的事实，不是宿主探测到的子进程状态。`processStatus` 只可能为 `failed`、`exited-zero`、`unknown`；失败标志、非零退出码或信号优先。只有明确 `exitCode: 0`、`failed: false` 且没有已知异常或畸形字段才显示 `exited-zero`。缺失或无效信息不补猜。
+- `businessStatus` 始终为 `unknown`。视图不解析任意日志中的 “pass/fail”，不因退出码 0 推断测试执行数、业务完成或产物有效；需要专门报告或额外验收证据。
+- 原值仍完整归档（在采集上限以内）；视图为 `excerpt`，不是完整结果。stdout/stderr 只给出原值 `rawRef`、JSON Pointer 和字符串 UTF-16 长度，可按来源分段续读；长诊断同样引用，不被截成假完整值。字段未提供时不虚构日志。这里的完整仅指调用者交出的原值，不保证子进程上游没有裁剪。
+- `maxChars` 与全局预算照旧有效，放不下则仅给引用；该模式不与 `paths`、`lines`、`maxItems`、`edge` 组合。若要看具体日志片段，按引用续读或改用既有字段/文本视图。采集超限不会用截断日志冒充全量，超大日志应由调用者保存文件并交出真实来源。

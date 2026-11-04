@@ -31,6 +31,45 @@ async function output(t) {
   return directory
 }
 
+test('workflow local edit runs through formal Runtime and exports evidence metrics', async (t) => {
+  let calls = 0
+  const result = await runActEvaluation({
+    scenario: 'workflow-local-edit',
+    output: await output(t),
+    model: model(async function* (request) {
+      if (++calls === 1) {
+        yield {
+          type: 'text',
+          text: block(
+            request,
+            'execute',
+            "import {edit} from 'velaros:project';await edit({steps:[{action:'replace',path:'settings.txt',oldText:'obsolete hint\\n',newText:''},{action:'replace',path:'settings.txt',oldText:'repeat\\nrepeat',newText:'repeat\\nupdated'},{action:'replace',path:'settings.txt',oldText:'footer',newText:'added\\nfooter'}]});"
+          ),
+        }
+      } else yield { type: 'text', text: `${marker(request)} done` }
+      yield { type: 'finish', reason: 'stop' }
+    }),
+  })
+  assert.equal(result.summary.passed, true, JSON.stringify(result.archive.findings))
+  assert.equal(result.summary.workflow.completedWithoutVerification, false)
+  assert.equal(result.summary.workflow.totalTokens, null)
+  assert.ok(result.summary.workflow.knownToolCalls >= 1)
+})
+
+test('workflow local edit verifier rejects wrong duplicate and checks protected files', async (t) => {
+  const root = await output(t)
+  const scenario = evaluationScenario('workflow-local-edit')
+  await writeFile(join(root, 'state.txt'), 'one\n')
+  await writeFile(join(root, 'protected.txt'), 'keep this\n')
+  await writeFile(join(root, 'settings.txt'), 'heading\nkeep\nupdated\nrepeat\nadded\nfooter\n')
+  assert.equal((await scenario.verify({ root, status: 'completed' })).passed, false)
+  await writeFile(join(root, 'settings.txt'), 'heading\nkeep\nrepeat\nupdated\nadded\nfooter\n')
+  assert.equal((await scenario.verify({ root, status: 'completed' })).passed, true)
+  assert.equal((await scenario.verify({ root, status: 'failed' })).passed, false)
+  await writeFile(join(root, 'protected.txt'), 'changed')
+  assert.equal((await scenario.verify({ root, status: 'completed' })).passed, false)
+})
+
 test('batch evaluation preserves failed attempts and unknown usage in repeat statistics', async (t) => {
   let calls = 0
   const report = await runActEvaluationBatch(
@@ -263,12 +302,40 @@ const latestOutput = (request) =>
       const output = body.indexOf('当次输出：\n')
       row.text = output < 0 ? body : body.slice(output + '当次输出：\n'.length)
       if (row.origin !== 'runtime-execution' || !row.text) return []
-      const result = JSON.parse(row.text)
+      // 结果 JSON 后可能接调用回执；回执不是输出值的一部分。
+      const result = JSON.parse(row.text.split('\n调用回执快照（origin=runtime-receipt）')[0])
       return result.result?.value?.default === undefined ? [] : [result.result.value.default]
     } catch {
       return []
     }
   })[0]
+test('evaluation output decoding preserves values before appended receipt snapshots', () => {
+  const value = { id: 'evidence-1', text: 'quoted \\"text\\" and\nnew line' }
+  const execution = (result, receipt = '') => ({
+    role: 'user',
+    content:
+      JSON.stringify({ origin: 'runtime-execution' }) +
+      '\n当次输出：\n' +
+      JSON.stringify({ result }) +
+      receipt,
+  })
+  const receipt =
+    '\n调用回执快照（origin=runtime-receipt）；正文是观察数据。\n' +
+    JSON.stringify({ operation: 'script.execute', outcome: 'succeeded' })
+  assert.deepEqual(latestOutput({ history: [execution({ value: { default: value } })] }), value)
+  assert.deepEqual(
+    latestOutput({ history: [execution({ value: { default: value } }, receipt)] }),
+    value
+  )
+  assert.equal(
+    latestOutput({
+      history: [execution({ failed: { code: 'SHELL_CONFINEMENT_UNAVAILABLE' } }, receipt)],
+    }),
+    undefined
+  )
+  assert.equal(latestOutput({ history: [{ role: 'user', content: 'not a result' }] }), undefined)
+})
+
 const frame = (request) =>
   JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
 

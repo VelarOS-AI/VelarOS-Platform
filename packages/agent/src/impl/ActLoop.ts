@@ -188,7 +188,23 @@ export class ActLoop implements ActLoopApi {
         )
       await this.options.view.begin(user.ref, controller.signal, inputValue.task ?? 'continue')
       ownsView = true
-      yield { type: 'input', runId, ref: user.ref, inputId: inputValue.inputId, source: 'submit' }
+      let content = await this.options.context.readInput(user.ref)
+      let text = content.text
+      while (text.length < content.totalChars) {
+        controller.signal.throwIfAborted()
+        content = await this.options.context.readInput(user.ref, { offset: text.length })
+        if (!content.text) throw new AppError('PROTOCOL', '已接受的输入原文读取未推进')
+        text += content.text
+      }
+      yield {
+        type: 'input',
+        runId,
+        ref: user.ref,
+        inputId: inputValue.inputId,
+        source: 'submit',
+        text,
+        origin: inputValue.origin,
+      }
       let inputApplied = false
       heartbeat = timers.every(
         Math.max(1, Math.floor(this.options.view.limits.leaseMs / 3)),

@@ -24,7 +24,7 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
       ? '程序源码放 code，程序选项放 options。code 按 JSON 字符串编码，解码后的值作为 JavaScript 源码执行；引号、换行和反斜线按 JSON 规则转义。options.input 与 options.inputRef:"host:名称" 互斥；通过 import {input} from "velaros:program" 读取参数。其他字段包括 options.modules、options.blobs:{名称:额外原文}。'
       : '',
     hasProgram
-      ? `复制或转换已有内容时，先在程序内读取文件或授权来源引用，再由实际读到的值生成输出及校验预期；模型重写的副本只能证明自洽。新写的文档、补丁和源码片段随使用它的程序一次提交到 ${allowed.includes('execute') ? name('execute') : name('observe')} 的 options.blobs，code 写读取和应用逻辑；反引号、插值标记和反斜线保持原样，只经过工具 JSON 编码。原文示例：${JSON.stringify({ code: 'import {blobs} from "velaros:program"; console.log(blobs.content)', options: { blobs: { content: '新写的内容' } } })}。`
+      ? `复制或转换已有内容时，先在程序内读取文件或授权来源引用，再由实际读到的值生成输出及校验预期；模型重写的副本只能证明自洽。新写的文档、补丁和源码片段随使用它的程序一次提交到 ${allowed.includes('execute') ? name('execute') : name('observe')} 的 options.blobs，code 写读取和应用逻辑。编辑中的大段或多行 oldText/newText 同样放 options.blobs，通过 blobs.oldText/blobs.newText 引用，不内嵌为字符串、模板字符串或字符串拼接；从文件读取并截取的旧文直接用读取值，短定位文本可内联；反引号、插值标记和反斜线保持原样，只经过工具 JSON 编码。原文示例：${JSON.stringify({ code: 'import {blobs} from "velaros:program"; console.log(blobs.content)', options: { blobs: { content: '新写的内容' } } })}。`
       : '',
     hasProgram
       ? 'options.sourceRef 复用归档源码，options.edits:[{oldText,newText,module?}] 精确编辑；引用或编辑时 code 为 ""。options.format:"program" 时 code 是序列化后的完整程序 JSON，程序字段在该对象内提供。示例中的原文、源码片段和引用应换成本轮实际值。'

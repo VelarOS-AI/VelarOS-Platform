@@ -80,10 +80,10 @@ export function closeProject() {
 - `createProjectCapabilityModule` 将领域确认的实际写入效果交给 Kernel：blocked 和无变化记录为 none，真实变化记录为 committed。自行装配项目操作时，调用上下文的 `recordWriteOutcome` 应连接宿主 `recordEffect`；SDK 直接调用不要求效果日志。
 - `edit` 按路径指文件：`write` 整份写入（没有就新建），`replace` 把唯一的一段原文换掉；同文件接连几步按前一步结果计算。读取凭据由系统在规划时获取。
 - `write.expectedText` 可直接接收 Node 已读的完整原文，`null` 表示仅允许新建，空串表示现有空文件；省略时才按提交时内容覆盖。核对忽略输入开头的编码 BOM，换行与其他正文逐字比较，不匹配报 `BASE_REVISION_MISMATCH` 且整批未写入。同文件多步核对前一步结果；规划至提交期间继续使用内核版本保护。编码和原换行仍保留，撤回仍检查外部修改。
-- `replace` 直接按唯一原文定位，外部对其他位置的修改保留，目标消失或歧义时拒绝整批。局部编辑默认 `edit.replace`，删除用空 `newText`，歧义补上下文，无需先 `select`；结构编辑用 `select + patch`。计算生成整份正文才用 JS + `write.expectedText`，复用 Node 已读原文；特殊编码读取可用 `read`。
+- 编辑方式按任务选择：唯一文本用 `edit.replace`（删除用空 `newText`）；已知行号用 `read({files:[{path,range:[startLine,endLine]}]})` 返回的 `target` 交给 `patch`，行号从 1 起且含末行，`replace` 替换、空 `text` 删除、`before/after` 插入；结构用 `select + patch`。三者并列，不强制默认路径。已有目标可直接复用，版本冲突须重新定位，不按陈旧行号盲写。整份生成或重写可用 `write.expectedText`，复用 Node 已读完整原文。大块正文放 `options.blobs`，程序只引用；同批 `patch` 使用原始坐标，不受前面增删行影响。
 - `changeRef`、选区与失败计划分别为 `change:`、`target:`、`plan:` 加 8 位十六进制。按会话与项目核对，内部保留完整 SHA256；碰撞重新签发，已签发身份和已消费计划保留轻量占用记录。正文受条数和字符预算约束；过期后重新读取定位，提交成功的计划不能重放。源码和编辑视图内部使用 `source:` / `view:`，历史完整引用在所属会话内精确解析。
 - `edit` 的步骤合成一个事务，全成或全不成；领域明确未写入的失败按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。提交后核回执差量与 `changedFiles`，再做必要测试，不重复写后全文校验。事务已提交后外层程序失败不能重放；回执丢失先查执行状态与差量，不能把程序失败当作事务未提交。
-- 模型模板优先展示精确替换、局部批改的一次 `edit` 和 `undo`；计算生成才复用已读原文整体写入。普通读取失败就停止依赖的提交，不把成功子集当整批；冲突后重新读取、合并，不移除保护重试。高级结构编辑才使用 `select/patch`：一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
+- 模型模板并列展示文本替换、行范围增删改及结构定位，整份生成或重写复用已读原文并保留冲突保护。普通读取失败就停止依赖的提交，不把成功子集当整批；冲突后重新读取、合并，不移除保护重试。`select/patch` 一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
 - `undo` 遇到外部改动抛 `CONFLICT_WITH_EXTERNAL_EDIT`、不覆盖，撤过的再撤是幂等成功；可撤销历史按条数和字节预算淘汰，被挤出去的撤销报 `NOT_SUPPORTED`。
 - 读、列、搜不折叠，`ProjectFileLimits` 只为守内存：超了整个失败，批量读里装不下的文件进 `issues`；一个事务缺省最多改 `ProjectPolicyDefaults.maxChangedFilesPerTransaction` 个文件，建内核时用 `corePolicy` 调。
 - `search.contextLines` 接受非负安全整数，缺省 1；命中窗口止于文件边界，相交或相邻的段合并。合并后的连续正文一次最多 20000000 个 Unicode 字符，超限明确失败，减小 contextLines、收窄范围或用 read 的 range 分段读取。

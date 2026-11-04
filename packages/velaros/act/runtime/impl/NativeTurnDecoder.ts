@@ -56,7 +56,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       throw protocolFailure('原生工具名称必须唯一')
     const descriptions = {
       execute:
-        '执行一次程序。code 写 JavaScript 逻辑；复制或转换已有内容时，直接读取来源，在程序内由该值生成输出及校验预期。options.blobs 传递新写的文档、补丁和源码片段，通过 import {blobs} from "velaros:program" 读取，独立于 JavaScript 字面量编码。省略 options.async 使用短等待返回；true 立即后台，false 优先等待完成；新输入、并行程序收束或子任务进展会提前返回执行身份，原程序继续。options.retain 控制结果保留。等待已有执行完成时，用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}；单次等待 1..60000 毫秒，默认 60000，到期返回当前状态，目标继续运行，无需循环 read 或运行定时器。检查/停止用 kind:"read"/"stop"；read/wait 可加 cursor/limit。每次只受理一个等待，等待与检查/停止通道独立，普通执行槽满时仍可用。依赖步骤顺序 await；检查执行结果后继续。',
+        '执行一次程序。code 写 JavaScript 逻辑；复制或转换已有内容时，直接读取来源，在程序内由该值生成输出及校验预期。options.blobs 传递新写的文档、补丁和源码片段；编辑中的大段或多行 oldText/newText 也必须放 blobs，code 只引用，不内嵌大块字符串；旧文可直接使用文件读取值，通过 import {blobs} from "velaros:program" 读取，独立于 JavaScript 字面量编码。省略 options.async 使用短等待返回；true 立即后台，false 优先等待完成；新输入、并行程序收束或子任务进展会提前返回执行身份，原程序继续。options.retain 控制结果保留。等待已有执行完成时，用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}；单次等待 1..60000 毫秒，默认 60000，到期返回当前状态，目标继续运行，无需循环 read 或运行定时器。检查/停止用 kind:"read"/"stop"；read/wait 可加 cursor/limit。每次只受理一个等待，等待与检查/停止通道独立，普通执行槽满时仍可用。依赖步骤顺序 await；检查执行结果后继续。',
       observe:
         '登记或整体替换当前持续只读观察，下个正常业务轮运行；每份响应最多一次。options.clear:true 退订，options.edits 局部修改；引用、编辑、快照或清除时 code 为 ""。',
       blobs:

@@ -131,3 +131,5 @@ Node 收尾说明要求模型核对原始需求、最终产物和实际验证；
 - 两种传输的普通非零退出在进程和后代完成回收、能力回执落定后保留为失败结果，其余独立调用继续按序执行；取消、超时、信号终止、回收不完整、未知效果的失败与宿主故障仍停止后续派发。有依赖的步骤在同一次调用中处理失败。
 - `packageEnvironment` 为 agent 绑定持久 npm 环境；标准 Node 宿主和 `dataDir` 默认装配。安装、更新、替换和删除通过 `velaros:system.environment` 管理，当前会话下一次执行自动获取快照，子任务沿用同一环境与宿主权限。自定义环境通过 `createEnvironmentRegistry` 配置，`false` 关闭。
 宿主可用 `session.completedTask()` 读取已完成任务的身份、已接纳轮次和固定归档范围，再通过 `taskMaterials(task, after)` 分页列举、`readTaskMaterial(task, ref, offset, limit)` 读取原文；默认页大小见 `TaskMaterialLimits`。这些宿主接口不启动模型或恢复原任务，新任务不扩大旧索引范围。
+
+任务展示把最新用户输入引用单列为 `task.latestInput`。有最新输入且当前认识为 `pending-review` 时，`active.items` 保留全部约束，模型问题完整移至 `historicalInterpretation.items`；待核对输入按最新引用与其他引用分组，保持全部引用而不截断。历史分组是待核对的认识，不是当前授权任务清单，也不表示目标完成、输入取消或约束失效。没有最新输入锚点或已核对时保持原认识。此分层仅用于展示，维护快照、持久状态、证据校验和用户输入原文不变，不触发强制反思。

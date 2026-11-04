@@ -49,6 +49,25 @@ Platform 是多个 Agent 产品复用的基础。跨仓库问题优先修共享�
 
 ## 修改公开能力
 
+本地迭代可显式按 `scripts/script/surfaces.mjs` 的 **namespace** 生成或校验（不是包名，也不是 `velaros:` import 名）：
+
+```sh
+node scripts/script/generate-declarations.mjs --module project --write
+node scripts/script/generate-declarations.mjs --module project
+node scripts/script/generate-declarations.mjs --module project --module browser
+node scripts/script/generate-declarations.mjs --module program --write --out .tmp/script-preview
+node scripts/script/generate-declarations.mjs --module native-tools
+```
+
+- `--module` 可重复，重复值去重；未知模块或缺少参数失败，不回退为全量。
+- 同一 `contract/surface.ts` 是最小生成单位：选择 `project` 会同时处理 `code`，选择标准模块也会带上同文件兄弟模块。输出列明请求和实际范围；只处理这些模块的基线及随包合同，其他产物保持不动。
+- `native-tools` 表示原生执行入口 schema，不是模型可 import 模块。它只有随包合同，不能与 `--out` 合用。其他模块的 `--out` 只读写指定目录中的声明，不动任何随包合同。
+- 每次仍从权威 TypeScript 源码及工作区依赖传递闭包生成，并读取当前模板；没有磁盘缓存，不要求先 build 依赖。局部校验仍检查所选模型面的标记、操作合同和生成物一致性。依赖改动影响多个消费模块时，需显式选齐消费者或执行全量。
+- 局部模式**不执行全库孤立 `@AgentView` 与遗留声明审计**，输出会明确提示；不能代替提交门禁。未传 `--module` 时仍全量处理（包括 native schema、全库标记和遗留声明审计），原有 `generate:script` / `check:script` 命令语义不变。
+- 局部生成若兄弟模块出错，不发布残缺的共享合同；已成功生成的声明可能已写入，修复后重新生成并校验。生成不是跨文件事务。
+
+下面仍是完整提交流程：
+
 模型操作从所属 TypeScript 操作接口生成。先在登记的 `surfaceFile` 中更新操作签名、`@AgentView`、`@OperationEffect` 和执行模式，数值限制引用所属常量表；实现、验收与模板同步更新。详见 [仓库规则](../../AGENTS.md) 和 [操作面登记](../../scripts/script/surfaces.mjs)。
 
 ```sh

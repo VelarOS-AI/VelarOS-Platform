@@ -26,6 +26,8 @@ import type {
   ScriptOutputView,
 } from '../types/output.js'
 
+import { processOutputView } from './output-process.js'
+
 /** 原值指纹不包含执行号和采集时间，用于严格绑定摘要。 */
 export function outputContentHash(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -82,6 +84,20 @@ function renderBlock(
   const cap = Math.min(budget, view.maxChars ?? budget)
   if (view.mode === 'reference' || cap === 0)
     return reference(view.mode === 'reference' ? 'source-policy' : 'view-budget')
+  if (view.mode === 'process') {
+    const facts = processOutputView(block.value, ref, item.pointer)
+    if (!facts) return reference('process-object-required')
+    const text = JSON.stringify(facts)
+    return text.length <= cap
+      ? {
+          ...item,
+          representation: 'excerpt',
+          text,
+          bodyIncluded: true,
+          reason: 'explicit-process-facts',
+        }
+      : reference('process-view-budget')
+  }
   if (type === 'image' || type === 'file') {
     const data = block.value as Record<string, unknown>
     const info = Object.fromEntries(

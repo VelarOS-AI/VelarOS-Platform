@@ -433,6 +433,8 @@ test('native raw-text guidance produces self-contained executable calls for scop
   for (const kind of ['execute', 'observe']) {
     const options = { allowed: [kind], names: { [kind]: 'work' } }
     const rules = nativeProtocolRules(options)
+    assert.match(rules, /大段或多行 oldText\/newText 同样放 options\.blobs/)
+    assert.match(rules, /不内嵌为字符串、模板字符串或字符串拼接/)
     const example = JSON.parse(rules.match(/原文示例：(\{[^\n]+\})。/u)[1])
     example.options.blobs.content = raw
     const decoder = new NativeTurnDecoder(options)

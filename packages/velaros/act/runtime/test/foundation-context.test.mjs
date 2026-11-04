@@ -1,4 +1,32 @@
 import assert from 'node:assert/strict'
+
+function expandPending(value) {
+  return Array.isArray(value)
+    ? value
+    : value.groups.flatMap(({ sessionId, ids }) => ids.map((id) => ({ sessionId, id })))
+}
+
+test('pending groups preserve interleaved sessions, duplicates and reduce large histories', () => {
+  const refs = Array.from({ length: 1000 }, (_, i) => ({
+    sessionId: i < 500 || i > 750 ? 's' : 'other',
+    id: String(i % 10),
+  }))
+  const active = {
+    revision: 1,
+    status: 'pending-review',
+    items: [],
+    pendingInputs: refs,
+    pendingSources: [],
+  }
+  const before = structuredClone(active)
+  const projected = taskActiveProjection(active, { sessionId: 's', id: 'latest' })
+    .historicalInterpretation.pendingInputs
+  assert.equal(projected.count, 1000)
+  assert.deepEqual(expandPending(projected), refs)
+  assert(JSON.stringify(projected).length < JSON.stringify(refs).length / 2)
+  assert.deepEqual(active, before)
+})
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +40,119 @@ import { ActiveContext } from '../../../dist/act/runtime/impl/ActiveContext.js'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
+import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
+import { taskActiveProjection } from '../../../dist/act/runtime/utils/task-projection.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
+
+test('task projection: lossless pending history split preserves constraints and reference identity', () => {
+  const refs = Array.from({ length: 1000 }, (_, i) => ({ sessionId: 's', id: String(i) }))
+  const constraint = {
+    id: 'c',
+    kind: 'constraint',
+    text: 'Do not publish',
+    sources: [refs[0]],
+    origin: 'model-interpretation',
+  }
+  const question = {
+    id: 'q',
+    kind: 'question',
+    text: 'done resolved 完成 does not prove completion',
+    sources: [refs[1]],
+    origin: 'model-interpretation',
+  }
+  const active = {
+    revision: 9,
+    status: 'pending-review',
+    items: [question, constraint],
+    pendingInputs: refs,
+    pendingSources: [refs[2]],
+  }
+  const original = structuredClone(active)
+  const projected = JSON.parse(JSON.stringify(taskActiveProjection(active, refs.at(-1))))
+  assert.deepEqual(projected.active.items, [constraint])
+  assert.deepEqual(projected.active.pendingInputs, [refs.at(-1)])
+  assert.deepEqual(projected.historicalInterpretation.items, [question])
+  assert.deepEqual(
+    [
+      ...expandPending(projected.historicalInterpretation.pendingInputs),
+      ...projected.active.pendingInputs,
+    ],
+    refs
+  )
+  assert.deepEqual(projected.active.pendingSources, active.pendingSources)
+  assert.equal(projected.active.status, 'pending-review')
+  assert.deepEqual(active, original)
+  assert.deepEqual(taskActiveProjection(active).active, active)
+  const reviewed = { ...active, status: 'reviewed', pendingInputs: [] }
+  assert.deepEqual(taskActiveProjection(reviewed, refs.at(-1)).active, reviewed)
+  const otherSession = taskActiveProjection(active, { sessionId: 'other', id: '999' })
+  assert.deepEqual(otherSession.active.pendingInputs, [])
+  assert.deepEqual(expandPending(otherSession.historicalInterpretation.pendingInputs), refs)
+})
+
+test('task projection: SQLite frame, recall, reopen and Node serialization preserve pending history', async (t) => {
+  const f = await setup(t)
+  const first = await f.context.append({
+    kind: 'user',
+    body: 'Investigate failures; do not publish.',
+  })
+  await f.task.begin(first.ref)
+  await f.context.summarizeInput({
+    ref: first.ref,
+    baseRevision: 0,
+    summary: 'Investigate',
+    constraints: ['Do not publish'],
+    unresolved: [],
+  })
+  const text = 'Historical failure remains unverified. '.repeat(20)
+  const narrative = await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({ volume: first.ref, negativeAttempts: [], unresolved: [text] }),
+  })
+  const next = await f.context.append({
+    kind: 'user',
+    body: 'Continue investigating the same failure.',
+  })
+  await f.task.appendGoal(next.ref)
+  const latest = await f.context.append({ kind: 'user', body: 'Also inspect its retry path.' })
+  await f.task.appendGoal(latest.ref)
+  const active = new ActiveContext('s', f.context, f.storage)
+  const before = await active.read(signal())
+  const goals = await Promise.all(
+    [first, next, latest].map((record) => f.context.projectInput(record.ref, 6000))
+  )
+  const projected = await f.memory.project({ ...view('s'), goals }, undefined, [], signal(), 24000)
+  const frame = JSON.parse(projected.body)
+  const task = frame.partitions.task
+  assert.deepEqual(task.latestInput, latest.ref)
+  assert.deepEqual(
+    task.active.items.map((item) => item.text),
+    ['Do not publish']
+  )
+  assert.deepEqual(
+    task.historicalInterpretation.items.map((item) => item.text),
+    [text]
+  )
+  assert.deepEqual(task.historicalInterpretation.pendingInputs, [first.ref, next.ref])
+  assert.deepEqual(task.active.pendingInputs, [latest.ref])
+  assert.deepEqual(task.historicalInterpretation.items[0].sources, [narrative.ref])
+  assert.equal(
+    (await f.context.read(narrative.ref)).text,
+    JSON.stringify({ volume: first.ref, negativeAttempts: [], unresolved: [text] })
+  )
+  assert.deepEqual(await active.read(signal()), before)
+  frame.presentation = 'node'
+  frame.memoryStatus.maintenance = { unresolved: [text] }
+  const encoded = JSON.stringify(frame)
+  const prompt = memoryPrompt(encoded)
+  assert(prompt.includes('historicalInterpretation'))
+  const shown = JSON.parse(prompt.split('内存状态：\n')[1]).maintenance
+  assert.deepEqual(shown.unresolved, [text], 'no dangling pointer into filtered active.items')
+  assert.equal(JSON.stringify(frame), encoded)
+  const reopened = await f.reopen()
+  assert.deepEqual(await new ActiveContext('s', reopened.context, f.storage).read(signal()), before)
+})
 
 const signal = () => new AbortController().signal
 const view = (id) => ({

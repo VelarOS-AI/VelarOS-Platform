@@ -5,6 +5,7 @@ import { runActEvaluation } from './act-eval.mjs'
 
 export const evaluationScenarios = Object.freeze([
   'read-edit-observe',
+  'workflow-local-edit',
   'system-cooperation',
   'semantic-search',
   'reconciliation',

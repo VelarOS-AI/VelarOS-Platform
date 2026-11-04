@@ -29,6 +29,53 @@ import {
 const Here = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(Here, '../..')
 const ShouldWrite = process.argv.includes('--write')
+const RequestedModules = readModuleOptions()
+const IsPartial = RequestedModules.length > 0
+const NativeSurfacePath = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
+const AllSurfaces = [...CodeSurfaces, ...StandardSurfaces]
+const knownModules = new Set([...AllSurfaces.map((surface) => surface.namespace), 'native-tools'])
+for (const name of RequestedModules) {
+  if (!knownModules.has(name)) {
+    process.stderr.write(`未知模块：${name}。可选：${[...knownModules].join(', ')}\n`)
+    process.exit(1)
+  }
+}
+const selectedPaths = new Set(
+  AllSurfaces.filter((surface) => RequestedModules.includes(surface.namespace)).map(surfacePath)
+)
+if (RequestedModules.includes('native-tools')) selectedPaths.add(NativeSurfacePath)
+const SelectedCodeSurfaces = CodeSurfaces.filter(
+  (surface) => !IsPartial || selectedPaths.has(surfacePath(surface))
+)
+const SelectedStandardSurfaces = StandardSurfaces.filter(
+  (surface) => !IsPartial || selectedPaths.has(surfacePath(surface))
+)
+const IncludeNative = !IsPartial || selectedPaths.has(NativeSurfacePath)
+
+/** 同一文件是最小发布单位；不能只重写其中一个命名空间而丢掉兄弟常量。 */
+function surfacePath(surface) {
+  return resolve(
+    RepoRoot,
+    'packages',
+    surface.directory,
+    surface.unit ?? 'src',
+    'contract/surface.ts'
+  )
+}
+
+function readModuleOptions() {
+  const modules = []
+  for (let index = 2; index < process.argv.length; index++) {
+    if (process.argv[index] !== '--module') continue
+    const value = process.argv[++index]
+    if (!value || value.startsWith('--')) {
+      process.stderr.write('--module 需要一个登记的 namespace；多个模块请重复 --module\n')
+      process.exit(1)
+    }
+    modules.push(value)
+  }
+  return [...new Set(modules)]
+}
 
 /**
  * 产物目录。`--out <目录>` 可以改到别处：验证新格式时不该碰真基线，
@@ -36,10 +83,37 @@ const ShouldWrite = process.argv.includes('--write')
  */
 const OutputOption = readOutOption()
 const OutputDirectory = resolve(RepoRoot, OutputOption ?? 'baselines/script')
+const selectedNames = [...SelectedCodeSurfaces, ...SelectedStandardSurfaces].map(
+  (surface) => surface.namespace
+)
+if (IncludeNative && !OutputOption) selectedNames.push('native-tools')
+process.stdout.write(
+  `范围：${IsPartial ? '模块级' : '全量'}；${ShouldWrite ? '生成' : '校验'}：${selectedNames.join(', ')}\n`
+)
+if (IsPartial) {
+  process.stdout.write(`请求：${RequestedModules.join(', ')}；同文件模块自动一起处理。\n`)
+  process.stdout.write(
+    '模块级不执行全库孤立 @AgentView / 遗留声明审计；提交前仍须运行 check:script 全量门禁。\n'
+  )
+}
+if (OutputOption)
+  process.stdout.write(
+    `--out：仅处理 ${OutputDirectory} 中的声明，不处理随包合同或 native-tools。\n`
+  )
+if (OutputOption && IsPartial && RequestedModules.includes('native-tools')) {
+  process.stderr.write('native-tools 仅有随包合同，不能与 --out 一起使用。\n')
+  process.exit(1)
+}
 
 function readOutOption() {
   const index = process.argv.indexOf('--out')
-  return index >= 0 ? process.argv[index + 1] : null
+  if (index < 0) return null
+  const value = process.argv[index + 1]
+  if (!value || value.startsWith('--')) {
+    process.stderr.write('--out 需要一个目录\n')
+    process.exit(1)
+  }
+  return value
 }
 
 /** 随包发布的那份（contract/surface.ts）的文件头；所有权门禁认这一行，手写的合同文件冒充不了。 */
@@ -767,10 +841,7 @@ function surfaceModules() {
   for (const surface of CodeSurfaces) {
     const result = generated.get(surface.namespace)
     if (!result || result.problems.length > 0) continue
-    const home = surface.unit
-      ? `packages/${surface.directory}/${surface.unit}`
-      : `packages/${surface.directory}/src`
-    const path = resolve(RepoRoot, home, 'contract', 'surface.ts')
+    const path = surfacePath(surface)
     const specifier = `${CapabilityModulePrefix}${surface.namespace}`
     const block = [
       `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/script/${surface.namespace}.d.ts 是同一份）、代码模版（${[surface.templates].flat().join(' + ')}）。 */`,
@@ -789,7 +860,7 @@ function surfaceModules() {
   for (const entry of StandardSurfaces) {
     const result = generatedStandard.get(entry.namespace)
     if (!result || result.problems.length > 0) continue
-    const path = resolve(RepoRoot, 'packages', entry.directory, 'src', 'contract', 'surface.ts')
+    const path = surfacePath(entry)
     const block = [
       `/** \`${entry.specifier}\` 的模型面：生成的完整声明（与 baselines/script/${entry.namespace}.d.ts 是同一份），检查器、包编译器与运行时说明都用它。 */`,
       `export const ${entry.constant} = ${JSON.stringify(result.text)}`,
@@ -841,7 +912,7 @@ function findStrayTags(marked) {
 let failed = false
 const nativeSurfaceBlocks = new Map()
 // 执行入口是传输合同，单独从类型生成；不将它注册成可 import 的应用能力。
-if (!OutputOption) {
+if (!OutputOption && IncludeNative) {
   const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
   const program = createSourceProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
   const checker = program.getTypeChecker()
@@ -863,12 +934,11 @@ if (!OutputOption) {
       return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(schema)} as const\n`
     }
   )
-  const target = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
-  nativeSurfaceBlocks.set(target, [declarations.join('\n').trimEnd()])
+  nativeSurfaceBlocks.set(NativeSurfacePath, [declarations.join('\n').trimEnd()])
 }
 const marked = new Set()
 const generated = new Map()
-for (const surface of CodeSurfaces) {
+for (const surface of SelectedCodeSurfaces) {
   const result = generate(surface)
   generated.set(surface.namespace, result)
   for (const name of result.marked) marked.add(name)
@@ -904,7 +974,7 @@ for (const surface of CodeSurfaces) {
 }
 
 const generatedStandard = new Map()
-for (const entry of StandardSurfaces) {
+for (const entry of SelectedStandardSurfaces) {
   const result = generateStandard(entry)
   generatedStandard.set(entry.namespace, result)
   for (const name of result.marked) marked.add(name)
@@ -939,7 +1009,8 @@ for (const entry of StandardSurfaces) {
 
 // 声明随包发布：每件能力在自己包的 contract/surface.ts 里带一份（模块名、放出去的方法、完整声明），
 // 空间挂它时交给代码面的门；和上面那份 baselines 是同一份。写到别的目录（--out）时不碰包里的文件。
-if (!OutputOption) {
+// 局部生成失败时不发布残缺的共享文件。全量路径保留原有行为。
+if (!OutputOption && !(IsPartial && failed)) {
   for (const [path, text] of surfaceModules()) {
     const current = ts.sys.fileExists(path)
       ? readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
@@ -957,7 +1028,7 @@ if (!OutputOption) {
   }
 }
 
-const stray = findStrayTags(marked)
+const stray = IsPartial ? [] : findStrayTags(marked)
 if (stray.length > 0) {
   failed = true
   process.stdout.write(
@@ -969,12 +1040,13 @@ if (stray.length > 0) {
 const expected = new Set(
   [...CodeSurfaces, ...StandardSurfaces].map((surface) => `${surface.namespace}.d.ts`)
 )
-const leftovers = ts.sys.directoryExists(OutputDirectory)
-  ? ts.sys
-      .readDirectory(OutputDirectory, ['.d.ts'])
-      .map((path) => path.slice(OutputDirectory.length + 1))
-      .filter((name) => !expected.has(name))
-  : []
+const leftovers =
+  !IsPartial && ts.sys.directoryExists(OutputDirectory)
+    ? ts.sys
+        .readDirectory(OutputDirectory, ['.d.ts'])
+        .map((path) => path.slice(OutputDirectory.length + 1))
+        .filter((name) => !expected.has(name))
+    : []
 if (leftovers.length > 0) {
   failed = true
   process.stdout.write(

@@ -57,6 +57,11 @@ declare module 'velaros:agents' {
    * profile 可省，省略就用宿主给的第一个配置（profiles() 里能看到）；materials 把已有原文引用复制给它（最多 32 条）。
    */
   interface AgentStart {
+    /** 可选协调声明，不是权限或锁；未声明不等于只读。root 为绝对路径，plannedWrites 最多 32 个相对路径前缀（不用 glob），每项及 root 最多 1024 字符。空数组表示没有声明范围。 */
+    readonly collaboration?: {
+      readonly root: string
+      readonly plannedWrites: readonly string[]
+    }
     readonly task: string
     readonly profile?: string
     readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
@@ -66,6 +71,18 @@ declare module 'velaros:agents' {
    * 一个子任务：status 为 waiting 时 pending 里有它在等的请求，用 reply 回答；结束后 result 是结果原文的引用，delivery 是交付清单，失败时 error 说明原因。
    */
   interface AgentJob {
+    /** 本次运行的可选写范围声明；仅词法规范化，不解析符号链接。 */
+    readonly collaboration?: AgentStart['collaboration']
+    /** start/resume 时同父任务活动兄弟的声明重叠快照，不是实时锁或无冲突保证。 */
+    readonly conflicts?: ReadonlyArray<{
+      readonly jobId: string
+      readonly sessionId: string
+      readonly path: string
+      readonly otherPath: string
+      readonly reason: 'path-overlap'
+    }>
+    /** 提示超过 64 条时省略的重叠数。 */
+    readonly omittedConflicts?: number
     /** 已落盘且仍待处理的子运行请求，答案通过 reply 绑定原运行。 */
     readonly pending?: ReadonlyArray<{
       readonly id: string
@@ -152,6 +169,8 @@ declare module 'velaros:agents' {
    * 续跑的内容：input 是新一阶段的目标与说明；给了 profile 就换成那个配置，materials 追加新的原文引用；Node 子任务的父输入摘录与 parentTask 文件刷新到本次派发时的输入。
    */
   interface AgentResume {
+    /** 省略沿用原声明；给值整体替换，plannedWrites 空数组清空范围。仍不改变权限。 */
+    readonly collaboration?: AgentStart['collaboration']
     /** 新一阶段的目标与说明。 */
     readonly input: string
     /** 可选替换为另一个宿主已配置的能力档案。 */

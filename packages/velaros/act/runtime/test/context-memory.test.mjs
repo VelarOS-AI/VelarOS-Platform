@@ -12,7 +12,7 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { SessionGoal } from '../../../dist/act/runtime/impl/SessionGoal.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   memoryCommittedGroups,
   memoryOutput,
@@ -28,6 +28,7 @@ import {
 } from '../../../dist/act/runtime/utils/materials.js'
 import { VelarSystemMemoryModule } from '../../../dist/act/system/contract/surface.js'
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 import { baseNotes, baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
@@ -2318,26 +2319,36 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
 })
 
 test('INV-74 actual requests retain maintenance narrative provenance through continued execution', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'narrative-provenance-'))
+  const node = createNodeExecutionEnvironment({
+    cwd: root,
+    directory: join(root, 'runs'),
+    host: createLocalShellHost({
+      cwd: root,
+      processConfinement: { mode: 'danger-full-access', workspaceRoot: root },
+    }),
+  })
   const summary = 'MAINTENANCE_NARRATIVE_ORIGINAL: the source was inspected. '.repeat(8)
   const unresolved = ['Review the remaining integration boundary. '.repeat(6)]
   let maintenanceCalls = 0
   let reused = 0
   const maintenance = {
     id: 'maintenance',
+    nativeTools: true,
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
       maintenanceCalls++
-      const snapshot = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
-      const patch = { baseRevision: snapshot.baseRevision, summary, unresolved }
-      const part = turn(request, {
-        execute: {
-          source: `import {submit} from 'velaros:context-materials';await submit(${JSON.stringify(patch)});`,
+      // 来源保持回归走真实材料数据协议，不依赖操作系统的只读子进程沙箱。
+      const { snapshot } = JSON.parse(request.materials[0].text)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'submit-narrative',
+          name: 'submit',
+          input: { baseRevision: snapshot.baseRevision, summary, unresolved },
         },
-      })
-      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      }
       yield { type: 'finish', reason: 'stop' }
     },
   }
@@ -2373,12 +2384,18 @@ test('INV-74 actual requests retain maintenance narrative provenance through con
         yield { type: 'finish', reason: 'stop' }
       }
     },
-    { context: { sources: [], maintenance: { model: maintenance } } }
+    {
+      // 仅授权本用例的固定业务脚本；整理材料仍走不创建进程的数据协议。
+      node,
+      context: { sources: [], maintenance: { model: maintenance, execution: 'data' } },
+    }
   )
-  await f.session.execute(
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const seeded = await f.session.execute(
     { source: `import {output} from 'velaros';output('${'retained source '.repeat(600)}');` },
     'task'
   )
+  assert(seeded.checked && !seeded.result.failed, JSON.stringify(seeded))
   await run(f, 'Continue the implementation and verification after inspecting the source.')
   assert.equal(maintenanceCalls, 1)
   assert.equal(f.requests.length, 6)
@@ -2661,7 +2678,7 @@ test('INV-52 current constraints and unresolved items remain separate from immut
   assert.match(base, /否定尝试[^\n]*："?\["N1"\]/)
   const active = JSON.parse(frame.body).partitions.task.active
   assert.deepEqual(
-    active.items.filter((item) => item.kind === 'question').map((item) => item.text),
+    JSON.parse(frame.body).partitions.task.historicalInterpretation.items.map((item) => item.text),
     ['U1', 'U2']
   )
   assert.deepEqual(
@@ -2709,9 +2726,9 @@ test('INV-52 current constraints and unresolved items remain separate from immut
   )
   assert(next.includes(narrative.ref.id))
   assert.deepEqual(
-    JSON.parse(nextFrame.body)
-      .partitions.task.active.items.filter((item) => item.kind === 'question')
-      .map((item) => item.text),
+    JSON.parse(nextFrame.body).partitions.task.historicalInterpretation.items.map(
+      (item) => item.text
+    ),
     ['U1', 'U2', 'U3']
   )
 })
@@ -4539,7 +4556,8 @@ test('INV-74 Node reuses only complete identical runtime directories and retains
   const runtime = (prompt) => JSON.parse(prompt.split('runtime：\n')[1].split('\n')[0])
   const full = runtime(memoryPrompt(original))
   const delta = runtime(memoryPrompt(original, original))
-  assert.deepEqual(delta.unchangedInEarlierFrame, ['inventory', 'children', 'jobs'])
+  assert.deepEqual(delta.unchangedInEarlierFrame, ['inventory', 'jobs'])
+  assert.deepEqual(delta.children, full.children, 'unknown or ambiguous children remain explicit')
   for (const key of delta.unchangedInEarlierFrame) assert.equal(delta[key], undefined)
   assert.deepEqual(delta.mandatory, full.mandatory)
   for (const value of [

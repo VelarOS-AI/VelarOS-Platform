@@ -35,6 +35,38 @@ export function decisionStateProjection(
     }
     current.progress = progress
   }
+  // 成功交付历史不随同一父任务无限增长；失败、未知、活动与待处理请求不能折叠。
+  if (originalChars > budget && isArray(runtime.children)) {
+    const children = runtime.children
+    const completed = children.flatMap((child, index) =>
+      isPlainObject(child) &&
+      child.status === 'completed' &&
+      !child.error &&
+      (!isPlainObject(child.delivery) || child.delivery.status === 'completed') &&
+      (!isArray(child.pending) || isEmpty(child.pending)) &&
+      isPlainObject(child.result) &&
+      isString(child.result.id) &&
+      child.result.id &&
+      isString(child.result.sessionId) &&
+      child.result.sessionId
+        ? [index]
+        : []
+    )
+    const omitted = new Set<number>()
+    for (const index of completed) {
+      if (JSON.stringify({ active, runtime: current }).length <= budget) break
+      omitted.add(index)
+      current.children = children.filter((_, i) => !omitted.has(i))
+      current.childrenHistory = {
+        count: omitted.size,
+        total: children.length,
+        pointer: '/children',
+        meaning:
+          '较早成功交付已转为可召回历史，不表示领域验收通过；完整有序子任务清单见 stateDetails。',
+      }
+    }
+    if (omitted.size) recalled.push('/children')
+  }
   const requiredIntents = new Set(
     isArray(runtime.gaps)
       ? runtime.gaps.flatMap((gap) =>

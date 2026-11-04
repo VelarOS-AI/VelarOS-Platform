@@ -33,7 +33,7 @@ async function template() {
     ])
   )
   const api = runInNewContext(
-    `${source.replace(imports, '')}\n({replaceOnce, replaceMany, rewriteSymbol, commitFiles})`,
+    `${source.replace(imports, '')}\n({replaceOnce, replaceMany, rewriteSymbol, commitFiles, editLines})`,
     bindings
   )
   return { api, calls, source }
@@ -62,6 +62,24 @@ test('歧义替换不降级为全文覆盖，补上下文后才提交', async ()
   await api.replaceOnce('a.txt', 'left old', 'left new')
   expect(calls).toEqual(['edit', 'edit'])
   expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('left new\nright old\n')
+})
+
+test('行号模板支持替换删除及前后插入，文本替换可接续使用', async () => {
+  const { api, calls } = await template()
+  for (const [op, text, expected] of [
+    ['replace', 'new', 'head\nnew\ntail\n'],
+    ['replace', '', 'head\ntail\n'],
+    ['before', 'new\n', 'head\nnew\nold\ntail\n'],
+    ['after', 'new\n', 'head\nold\nnew\ntail\n'],
+  ]) {
+    await writeFile(join(root, 'a.txt'), 'head\nold\ntail\n')
+    const result = await api.editLines('a.txt', 2, 2, text, op)
+    expect(result.status).toBe('applied')
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(expected)
+    await api.replaceOnce('a.txt', 'head', 'HEAD')
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(expected.replace('head', 'HEAD'))
+  }
+  expect(calls).toEqual(Array(4).fill(['read', 'patch', 'edit']).flat())
 })
 
 test('结构模板仅调用 select 和 patch', async () => {

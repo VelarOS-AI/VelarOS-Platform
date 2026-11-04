@@ -105,6 +105,17 @@ test('receipts bind full source, code and requirement hashes and consume a share
   assert.equal(f.calls(), 1)
 })
 
+test('identical validation requests execute again rather than reuse a prior pass', async () => {
+  const f = fixture()
+  const first = await f.validation.execute(input, signal)
+  const second = await f.validation.execute(input, signal)
+  assert.equal(first.status, 'passed')
+  assert.equal(second.status, 'passed')
+  assert.notEqual(first.identity, second.identity)
+  assert.equal(f.calls(), 2)
+  assert.equal(f.checked(), 4)
+})
+
 test('version changes invalidate an actual execution receipt without inventing a new version', async () => {
   let checks = 0
   const f = fixture({

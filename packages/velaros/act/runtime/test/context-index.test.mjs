@@ -1,4 +1,61 @@
 import assert from 'node:assert/strict'
+
+test('historical user images remain recallable without crowding out latest input images', async (t) => {
+  const f = await fixture(t)
+  const image = { type: 'image-data', mediaType: 'image/png', data: 'YWJj' }
+  const old = []
+  for (let i = 0; i < 21; i++)
+    old.push(
+      await f.context.append({
+        kind: 'audit',
+        title: 'user:image',
+        body: JSON.stringify({ ...image, label: `old-${i}` }),
+        sources: [f.goal.ref],
+      })
+    )
+  const latest = await f.context.append({ kind: 'user', body: 'Inspect this latest image' })
+  await f.view.appendGoal(latest.ref)
+  const current = await f.context.append({
+    kind: 'audit',
+    title: 'user:image',
+    body: JSON.stringify({ ...image, label: 'latest' }),
+    sources: [latest.ref],
+  })
+  const view = {
+    id: 'images',
+    scope: { sessionId: 's', revision: 0 },
+    goals: await Promise.all(
+      [f.goal, latest].map((record) => f.context.projectInput(record.ref, 6000))
+    ),
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  for (let i = 0; i < 2; i++) {
+    const projected = await f.programs.project(view, undefined, [], signal(), 100000)
+    assert.deepEqual(
+      projected.images.map((item) => item.label),
+      ['latest']
+    )
+    const status = JSON.parse(projected.body).materialStatus
+    assert.equal(status.imageDelivery.deferred, 0)
+    assert.equal(
+      status.imageReferences.find((item) => item.ref.id === current.ref.id).attached,
+      true
+    )
+    for (const record of old) {
+      const ref = status.imageReferences.find((item) => item.ref.id === record.ref.id)
+      assert.equal(ref.attached, false)
+      assert.equal(ref.deferred, false)
+      assert.deepEqual(ref.read.input.ref, record.ref)
+      assert.equal(JSON.parse((await f.context.read(record.ref)).text).data, image.data)
+    }
+  }
+})
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,6 +69,84 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
+
+test('same parent task across user inputs bounds completed child history and recalls exact archived entries', async (t) => {
+  const f = await fixture(t)
+  const children = []
+  for (let i = 0; i < 120; i++) {
+    if (i % 30 === 0) {
+      const input = await f.context.append({
+        kind: 'user',
+        body: `Continue phase ${i}; do not publish or change versions.`,
+      })
+      await f.view.appendGoal(input.ref)
+    }
+    const child = {
+      id: `child-${i}`,
+      parentTaskId: 'same-parent-task',
+      sessionId: `session-${i}`,
+      status: 'completed',
+      result: { sessionId: `session-${i}`, id: `result-${i}` },
+      profile: 'historical evidence '.repeat(30),
+    }
+    children.push(child)
+    await f.context.append({
+      kind: 'audit',
+      title: `act:child:${child.id}`,
+      body: JSON.stringify(child),
+    })
+  }
+  const failed = {
+    id: 'failed',
+    parentTaskId: 'same-parent-task',
+    status: 'failed',
+    error: 'unresolved failure evidence',
+  }
+  const waiting = {
+    id: 'waiting',
+    parentTaskId: 'same-parent-task',
+    status: 'waiting',
+    pending: [{ id: 'permission', message: 'require approval' }],
+  }
+  for (const child of [failed, waiting])
+    await f.context.append({
+      kind: 'audit',
+      title: `act:child:${child.id}`,
+      body: JSON.stringify(child),
+    })
+  const view = {
+    id: 'long-history',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [await f.context.projectInput(f.goal.ref, 6000)],
+    capsule: {},
+    mandatory: [{ id: 'unknown-effect', operation: 'write', outcome: 'failed', effect: 'unknown' }],
+    evidence: [],
+    gaps: [{ required: true, reason: 'must preserve missing evidence' }],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const projected = await f.memory.project(view, undefined, [], signal(), 100000)
+  const raw = JSON.parse(projected.body)
+  assert.equal(raw.partitions.runtime.children.length, 122)
+  const state = raw.memoryStatus.decisionState
+  assert(state.originalChars > 47000)
+  assert(state.shownChars <= state.budget)
+  assert(state.ref)
+  assert(projected.prompt.includes('childrenHistory'))
+  assert(projected.prompt.includes('unresolved failure evidence'))
+  assert(projected.prompt.includes('require approval'))
+  assert(projected.prompt.includes('must preserve missing evidence'))
+  assert(projected.prompt.includes('unknown-effect'))
+  for (const i of [0, 29, 60, 119]) {
+    const recalled = await f.memory.readMaterial(state.ref, 0, 10000, signal(), `/children/${i}`)
+    assert.deepEqual(JSON.parse(recalled.text), children[i])
+  }
+  const repeated = JSON.parse((await f.memory.project(view, undefined, [], signal(), 100000)).body)
+  assert.deepEqual(repeated.memoryStatus.decisionState.ref, state.ref)
+  t.diagnostic(
+    `decision state ${state.originalChars} -> ${state.shownChars}, budget ${state.budget}; all 122 children retained in internal frame`
+  )
+})
 
 async function fixture(t, mode = 'indexed') {
   const root = await mkdtemp(join(tmpdir(), 'runtime-index-'))
@@ -54,7 +189,14 @@ async function fixture(t, mode = 'indexed') {
   const view = createContextView({ sessionId: 's', storage: port, context, sources: [] })
   await view.begin(goal.ref)
   const programs = new ProgramContext('s', context, port)
-  const memory = new ContextMemory('s', context, port, view, programs, {})
+  const memory = new ContextMemory(
+    's',
+    context,
+    port,
+    view,
+    programs,
+    new RecentContext('s', context, port)
+  )
   return { storage, port, context, view, programs, memory, goal, path }
 }
 const signal = () => new AbortController().signal
@@ -311,9 +453,11 @@ for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector']
   })
 
 test('program publication rolls back all additions if lease publication fails', async (t) => {
+  const handle = { db: undefined }
+  t.after(() => handle.db?.close())
   const f = await fixture(t)
   const db = new DatabaseSync(f.path)
-  t.after(() => db.close())
+  handle.db = db
   const before = await f.storage.load('s')
   const sourceRef = crypto.randomUUID()
   const id = crypto.randomUUID()

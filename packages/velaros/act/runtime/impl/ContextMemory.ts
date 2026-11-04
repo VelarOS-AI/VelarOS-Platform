@@ -66,6 +66,7 @@ import {
 import { decisionStateProjection } from '../utils/decision-state.js'
 import { executionMaterial, materialHistoryDelta, readMaterialField } from '../utils/materials.js'
 import { segmentBase, skeletonLine } from '../utils/segment.js'
+import { taskActiveProjection } from '../utils/task-projection.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import { ActiveContext } from './ActiveContext.js'
@@ -1233,7 +1234,7 @@ export class ContextMemory implements ContextMemoryApi {
     }
     const partitions = {
       task: {
-        active,
+        ...taskActiveProjection(active, snapshot?.task?.goals.at(-1)),
         goals: this.policy.recentRecords
           ? goals.map((goal: ContextContent) => ({ ...goal, bodyInHistory: true }))
           : goals,
@@ -1316,6 +1317,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (stateProjection && stateProjection.savedChars > ActRuntimeTuning.stateMinimumSavings) {
       const title = `context:decision-state:${snapshot?.task?.id ?? 'none'}:${reset}`
       const detail = JSON.stringify({
+        children: partitions.runtime.children,
         readSet: partitions.runtime.readSet,
         evidence: partitions.runtime.evidence,
         progress: partitions.runtime.progress,

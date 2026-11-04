@@ -46,7 +46,7 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
  * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
  * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
  * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
- * 局部编辑默认 edit.replace，oldText 必须唯一，删除用空 newText，歧义时补充上下文；相关修改一次 edit 提交。结构编辑用 select + patch；计算生成整份正文才用 JS + write，expectedText 使用 Node 已读的完整原文，null 只新建。特殊编码读取可用 read。
+ * 编辑方式按任务选：文本替换用 edit.replace，oldText 须唯一，删除用空 newText；行号用 read 的 range:[startLine,endLine]（从 1 起、含末行）取得 target 后 patch，replace 替换、空 text 删除、before/after 插入；结构用 select + patch。三者并列，不强制单一路径；已有 target 可复用，版本冲突重新定位。整份生成或重写用 write，expectedText 使用 Node 已读完整原文，null 只新建。大块正文放 options.blobs，程序只引用；相关修改尽量批量提交。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。

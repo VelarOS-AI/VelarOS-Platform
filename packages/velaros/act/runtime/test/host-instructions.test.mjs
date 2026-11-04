@@ -33,17 +33,23 @@ const InstructionReviewBudgets = {
   // 从宿主迁入的分档执行策略单独预算；基础协议预算不放宽。
   policyChars: 1100,
 }
-test('编辑提示默认局部替换，结构和计算生成分流，提交后不重放', () => {
+test('编辑提示并列提供文本行号与结构路径，保留冲突保护且不重放', () => {
   const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
-  assert.match(text, /局部编辑默认 edit\.replace/)
+  assert.match(text, /文本替换、行号和结构定位并列/)
+  assert.match(text, /range:\[startLine,endLine\]/)
+  assert.match(text, /replace\/before\/after/)
   assert.match(text, /action:"replace",path,oldText,newText/)
-  assert.match(text, /结构编辑用 select \+ patch/)
-  assert.match(text, /计算生成整份正文才用 JS \+ write/)
+  assert.match(text, /大段或多行 oldText\/newText 及 patch\.text 放 options\.blobs/)
+  assert.match(text, /blobs\.oldText\/blobs\.newText/)
+  assert.match(text, /从文件读取并截取的原文值/)
+  assert.match(text, /短定位文本可内联/)
+  assert.match(text, /结构定位用 select \+ patch/)
+  assert.match(text, /整份生成或重写可用 write/)
   assert.match(text, /不重复写后全文校验/)
   assert.match(text, /事务已提交后外层程序失败不能重放/)
   assert.match(text, /回执丢失先查执行状态/)
   assert.doesNotMatch(text, /action:"write"/)
-  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /局部编辑默认 edit\.replace/)
+  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /文本替换、行号和结构定位并列/)
 })
 
 test('定位提示按授权选择语义工具，限制输出而非调查深度', () => {
@@ -62,6 +68,9 @@ test('调查停止与调整以证据为准，假设不冒充根因', async () =>
   for (const depth of ['low', 'medium', 'high', 'xhigh', 'max']) {
     for (const audience of ['primary', 'worker']) {
       const text = executionPolicy(depth, audience)
+      assert.match(text, /方法偏好可按证据调整，不是固定步骤/)
+      assert.match(text, /重叠写入先协调/)
+      assert.match(text, /交付列改动、检查回执、未覆盖和下一步/)
       assert.match(text, /停止调查并执行/)
       assert.match(text, /新证据改变关键假设时调整方案/)
       assert.match(text, /不按固定调用次数收尾/)
