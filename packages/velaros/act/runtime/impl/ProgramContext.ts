@@ -1144,24 +1144,27 @@ export class ProgramContext implements ProgramContextApi {
       resultRef?: string
       read: { module: string; export: string; operation: string; input: { ref: ContextRef } }
     }> = []
-    for (const record of snapshot?.records ?? [])
-      if (
+    const taskImages = (snapshot?.records ?? []).filter(
+      (record) =>
         record.title === 'user:image' &&
         record.sources.some((ref) =>
           view.goals.some(
             (goal) => goal.record.ref.id === ref.id && goal.record.ref.sessionId === ref.sessionId
           )
         )
-      ) {
+    )
+    const latestTaskImage = taskImages.at(-1)?.ref
+    for (const record of taskImages) {
         const data = await this.storage.get(this.sessionId, record.objectId)
         if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
         const image = JSON.parse(data) as ModelImage
-        // 当前任务相关用户图跨文本追问保持可见；总数和字节上限仍由 attachImage 统一约束。
-        const attached = attachImage(image)
+        // 最新任务图跨文本追问保持可见；旧图保留引用，不挤占视觉上下文。
+        const eligible = record.ref.id === latestTaskImage?.id
+        const attached = eligible && attachImage(image)
         imageReferences.push({
           ref: record.ref,
           attached,
-          deferred: !attached,
+          deferred: eligible && !attached,
           label: image.label,
           read: {
             module: 'velaros:system',

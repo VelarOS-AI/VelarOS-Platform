@@ -23,22 +23,38 @@ function taskPendingProjection(refs: readonly ContextRef[]) {
 }
 
 /** 只分层展示，不推断目标完成或输入失效；完整维护状态与原始来源保持不变。 */
-export function taskActiveProjection(active: ActiveContextState, latestInput?: ContextRef) {
+export function taskActiveProjection(
+  active: ActiveContextState,
+  latestInput?: ContextRef,
+  historicalSources?: ReadonlySet<string>
+) {
   const latest = (ref: ContextRef) =>
     ref.sessionId === latestInput?.sessionId && ref.id === latestInput.id
   // 没有最新输入锚点时不猜测历史边界；reviewed 状态沿用完整认识。
   if (!latestInput || active.status !== 'pending-review') return { active, latestInput }
+  const historicalInputs = active.pendingInputs.filter((ref) => !latest(ref))
+  const historicalIds = new Set(historicalInputs.map((ref) => `${ref.sessionId}:${ref.id}`))
+  const historicalQuestions = active.items.filter(
+    (item) =>
+      item.kind === 'question' &&
+      (historicalSources
+        ? item.sources.some((ref) => historicalSources.has(`${ref.sessionId}:${ref.id}`))
+        : true)
+  )
+  const historicalQuestionIds = new Set(historicalQuestions.map((item) => item.id))
   return {
     latestInput,
     active: {
       ...active,
+      items: active.items.filter((item) => !historicalQuestionIds.has(item.id)),
       pendingInputs: active.pendingInputs.filter(latest),
     },
     historicalInterpretation: {
       status: 'pending-review',
       meaning:
-        '旧输入引用待核对，不是当前授权任务清单；分层不表示已完成、已取消或约束失效。用户原文优先，相关历史可按 pendingInputs 召回。',
-      pendingInputs: taskPendingProjection(active.pendingInputs.filter((ref) => !latest(ref))),
+        '待核对的历史模型认识，不是当前授权任务清单；分层不表示已完成、已取消或约束失效。用户原文优先，相关历史可按 sources 或 pendingInputs 召回；无需为此强制反思。',
+      items: historicalQuestions,
+      pendingInputs: taskPendingProjection(historicalInputs),
     },
   }
 }

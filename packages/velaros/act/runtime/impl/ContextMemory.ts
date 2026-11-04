@@ -1232,9 +1232,17 @@ export class ContextMemory implements ContextMemoryApi {
       turns: history.items.filter((item) => item.role === 'assistant').length,
       faults: faults.length,
     }
+    const latestInput = snapshot?.task?.goals.at(-1)
+    const latestInputSequence = latestGoal?.record.sequence ?? 0
+    const historicalSources = new Set(
+      active.items
+        .flatMap((item) => item.sources)
+        .filter((ref) => (records.get(ref.id)?.sequence ?? 0) <= latestInputSequence)
+        .map((ref) => `${ref.sessionId}:${ref.id}`)
+    )
     const partitions = {
       task: {
-        ...taskActiveProjection(active, snapshot?.task?.goals.at(-1)),
+        ...taskActiveProjection(active, latestInput, historicalSources),
         goals: this.policy.recentRecords
           ? goals.map((goal: ContextContent) => ({ ...goal, bodyInHistory: true }))
           : goals,
