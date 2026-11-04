@@ -20,10 +20,11 @@ async function template() {
   const { call } = await projectToolFixture({ root })
   const calls: string[] = []
   const source = await readFile(new URL('../template.js', import.meta.url), 'utf8')
-  const imports = "import { edit, inspect, patch, select, undo } from 'velaros:project'"
+  const imports =
+    "import { edit, inspect, patch, read, search, select, undo } from 'velaros:project'"
   expect(source.split(imports)).toHaveLength(2)
   const bindings = Object.fromEntries(
-    ['edit', 'inspect', 'patch', 'select', 'undo'].map((operation) => [
+    ['edit', 'inspect', 'patch', 'read', 'search', 'select', 'undo'].map((operation) => [
       operation,
       (input: unknown) => {
         calls.push(operation)
