@@ -1,6 +1,6 @@
 import type { AgentSupervisorApi } from '@velaros-ai/agent'
 import type { ContextViewApi } from '@velaros-ai/context'
-import { isPlainObject } from '@velaros-ai/core'
+import { isEmpty, isPlainObject } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
@@ -124,7 +124,7 @@ export function createProjectCapabilityModule(
       abortSignal: call.signal,
       recordProjectCommit: (fact) => {
         const bounded = { ...fact, changedFiles: [...fact.changedFiles], omittedFiles: 0 }
-        while (JSON.stringify(bounded).length > 2048 && bounded.changedFiles.length) {
+        while (JSON.stringify(bounded).length > 2048 && !isEmpty(bounded.changedFiles)) {
           bounded.changedFiles.pop()
           bounded.omittedFiles += 1
         }

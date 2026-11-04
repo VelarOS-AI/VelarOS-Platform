@@ -158,7 +158,7 @@ export function searchInput(input: unknown): ProjectSearchInput {
       limit > ProjectFileLimits.searchPageMax
     )
       throw invalid('page.limit 要 1..200 的安全整数')
-    if (page.offset === null || page.limit === null)
+    if (isNull(page.offset) || isNull(page.limit))
       throw invalid('page.offset 和 page.limit 不能为 null')
     search.page = { offset, limit }
   }

@@ -1,4 +1,5 @@
 import {
+  Log,
   isArray,
   isNumber,
   isPlainObject,
@@ -31,7 +32,7 @@ export function summarizeInvocation(
     Math.max(0, maxChars - inputText.length - outputText.length)
   )
   return {
-    ...(projectChange ? { projectChange } : {}),
+    projectChange,
     moduleId: record.prepared.binding.moduleId,
     operation: record.prepared.operation,
     status: record.receipt?.outcome ?? 'pending',
@@ -91,6 +92,7 @@ function projectChangeSummary(
       patchOmitted: !diff,
     }
   } catch {
+    Log.tag('ActRuntime').debug('项目事务诊断不是有效 JSON，省略更改卡片并保留原回执')
     return undefined
   }
 }
