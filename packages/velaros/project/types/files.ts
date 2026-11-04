@@ -114,6 +114,8 @@ export interface ProjectSearchInput {
   regex?: boolean
   caseSensitive?: boolean
   contextLines?: number
+  /** @AgentView 显式请求定位页，不返回源码正文或 snippet，files 为空；contextLines 不用于定位页。offset 缺省 0，limit 缺省 50、最大 200。每页重新搜索，不是快照；变动可能造成跨页重复或遗漏。仍保留 5000 命中护栏，没搜全则失败。 */
+  page?: { offset?: number; limit?: number }
 }
 
 /** @AgentView 命中的位置，行列从 1 起。 */
@@ -134,13 +136,26 @@ export interface ProjectSearchHit {
 
 /**
  * @AgentView
- * hits 是全部命中的位置。files 是命中所在的那几段（连同前后 contextLines 行），连续的原文加起始行号。
+ * 未给 page 时 hits 是全部命中的位置。files 是命中所在的那几段（连同前后 contextLines 行），连续的原文加起始行号。
  * 找定义、引用、调用方用 `velaros:code` 更准；文本命中只是候选。
  */
 export interface ProjectSearchResult {
   hits: ProjectSearchHit[]
   files: ProjectWindow[]
+  page?: ProjectSearchPage
   note?: string
+}
+
+/** @AgentView 定位页元数据。total 是本次完整搜索的命中数（不是匹配子串数），totalFiles 是命中文件数；不保证整个项目的原子快照。groups 只列本页出现的文件，count 是该文件在本次搜索中的全部命中数，returned 是本页数量。用同一查询和 nextOffset 继续；需要正文时 read({files:[{path,range:[startLine,endLine]}]})，读取当前版本并核对 revision。 */
+export interface ProjectSearchPage {
+  offset: number
+  limit: number
+  total: number
+  totalFiles: number
+  hasMore: boolean
+  nextOffset?: number
+  consistency: 'live'
+  groups: Array<{ path: string; count: number; returned: number }>
 }
 
 // ── 改 ──────────────────────────────────────────────────────────
@@ -179,7 +194,7 @@ export type ProjectEditStep =
  * @AgentView
  * steps 按顺序执行、合成一个事务：全成或全不成，成了给一个 changeRef。一次最多 1000 步，一个事务缺省最多改 100 个文件。
  * expectedText 核对该步骤之前的完整正文；同文件多步时以前一步结果为准。不匹配报 BASE_REVISION_MISMATCH，先重新读取和合并，不能去掉核对后盲重试。
- * 失败时一个文件都没写，error.code 说明原因：TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
+ * 领域明确未写入的失败可按 error.code 处理；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
  * AMBIGUOUS_TARGET 是 oldText 出现了好几处，VALIDATION_FAILED 是改完的内容没过校验（message 里有诊断），
  * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
  */

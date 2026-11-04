@@ -46,11 +46,11 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
  * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
  * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
  * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
- * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
+ * 局部编辑默认 edit.replace，oldText 必须唯一，删除用空 newText，歧义时补充上下文；相关修改一次 edit 提交。结构编辑用 select + patch；计算生成整份正文才用 JS + write，expectedText 使用 Node 已读的完整原文，null 只新建。特殊编码读取可用 read。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
- * changeRef 只在本会话里有效，原样用，不能手写。
+ * changeRef 只在本会话里有效，原样用，不能手写。提交后核对回执差量和 changedFiles，再做必要测试，不重复写后全文校验；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。
  * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
 export interface ProjectFileOperationsApi {
@@ -69,7 +69,7 @@ export interface ProjectFileOperationsApi {
    * @OperationEffect none
    */
   list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
-  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中与连续正文。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
+  /** @AgentView 按字面文本或正则搜项目源码；默认交回全部命中与连续正文，page 显式请求无正文的有界定位页。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
    * @OperationEffect none
    */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
@@ -224,6 +224,13 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
       const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
         kernel.rollback({ transactionId }, ctx.abortSignal)
       )
+      ctx.recordProjectCommit?.({
+        root: ctx.project.getRootPath(),
+        transactionId,
+        lifecycle: 'rolled_back',
+        changedFiles: rolled.changedFiles,
+      })
+      ctx.recordWriteOutcome?.('applied')
       return {
         changeRef,
         changedFiles: rolled.changedFiles,

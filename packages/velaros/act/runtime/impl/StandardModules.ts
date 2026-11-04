@@ -122,6 +122,18 @@ export function createProjectCapabilityModule(
       resolveProject: options.resolveProject,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
+      recordProjectCommit: (fact) => {
+        const bounded = { ...fact, changedFiles: [...fact.changedFiles], omittedFiles: 0 }
+        while (JSON.stringify(bounded).length > 2048 && bounded.changedFiles.length) {
+          bounded.changedFiles.pop()
+          bounded.omittedFiles += 1
+        }
+        call.recordEffect('committed')
+        call.recordDiagnostic?.({
+          code: 'PROJECT_TRANSACTION_COMMITTED',
+          message: JSON.stringify(bounded),
+        })
+      },
       recordWriteOutcome: (outcome) =>
         call.recordEffect(outcome === 'applied' ? 'committed' : 'none'),
       recordSnapshotCompletion: () =>

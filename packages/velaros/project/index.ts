@@ -183,6 +183,7 @@ export type {
   ProjectRecodeReceipt,
   ProjectSearchHit,
   ProjectSearchInput,
+  ProjectSearchPage,
   ProjectSearchRange,
   ProjectSearchResult,
   ProjectUndoResult,

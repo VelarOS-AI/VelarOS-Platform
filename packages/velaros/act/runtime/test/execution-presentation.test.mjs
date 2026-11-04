@@ -174,3 +174,78 @@ test('full invocation presentation retains all input and output text', () => {
   assert.equal(summary.inputTruncated, false)
   assert.equal(summary.outputTruncated, false)
 })
+
+test('project commit facts survive failed results, summary receipts and replay without stdout parsing', () => {
+  const fact = {
+    root: 'D:/project',
+    transactionId: 'tx',
+    lifecycle: 'applied',
+    changedFiles: ['a.ts'],
+    omittedFiles: 0,
+  }
+  const record = {
+    prepared,
+    phase: 'settled',
+    receipt: {
+      outcome: 'failed',
+      effect: 'committed',
+      error: { code: 'AFTER', message: 'after commit' },
+      diagnostic: { code: 'PROJECT_TRANSACTION_COMMITTED', message: JSON.stringify(fact) },
+    },
+  }
+  const first = summarizeInvocation(record, 0).projectChange
+  assert.deepEqual(first, { ...fact, diff: '', patchOmitted: true })
+  assert.deepEqual(summarizeInvocation(structuredClone(record), 0).projectChange, first)
+  for (const operation of ['edit', 'patch', 'undo']) {
+    const view = summarizeInvocation({ ...record, prepared: { ...prepared, operation } }, 0)
+    assert.equal(view.projectChange.transactionId, 'tx')
+  }
+  const patch = '--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new\n'
+  assert.equal(
+    summarizeInvocation(
+      { ...record, receipt: { ...record.receipt, outcome: 'succeeded', value: { diff: patch } } },
+      8000
+    ).projectChange.diff,
+    patch
+  )
+  assert.equal(
+    summarizeInvocation(
+      { ...record, receipt: { ...record.receipt, diagnostic: undefined, value: fact } },
+      8000
+    ).projectChange,
+    undefined
+  )
+  assert.equal(
+    summarizeInvocation({ ...record, receipt: { ...record.receipt, effect: 'none' } }, 8000)
+      .projectChange,
+    undefined
+  )
+  assert.equal(
+    summarizeInvocation(
+      {
+        ...record,
+        receipt: {
+          ...record.receipt,
+          diagnostic: { ...record.receipt.diagnostic, truncated: true },
+        },
+      },
+      8000
+    ).projectChange,
+    undefined
+  )
+  const undo = { ...fact, lifecycle: 'rolled_back' }
+  assert.equal(
+    summarizeInvocation(
+      {
+        ...record,
+        receipt: {
+          ...record.receipt,
+          value: { diff: patch },
+          diagnostic: { code: 'PROJECT_TRANSACTION_COMMITTED', message: JSON.stringify(undo) },
+        },
+      },
+      0
+    ).projectChange.diff,
+    ''
+  )
+})

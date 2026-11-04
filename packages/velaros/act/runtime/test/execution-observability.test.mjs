@@ -1357,3 +1357,41 @@ test('a second wait is bounded and stopping the wait program leaves its target a
     await running
   }
 })
+
+test('progress wake drops settled output but preserves other live output and later notifications', async (t) => {
+  const { ExecutionProgress } = await import('../../../dist/act/runtime/impl/ExecutionProgress.js')
+  const { ExecutionObservabilityLimits } =
+    await import('../../../dist/act/runtime/contract/constants.js')
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let wakes = 0
+  const writes = []
+  const progress = new ExecutionProgress(
+    { progress: async (id, output) => writes.push({ id, output }) },
+    () => wakes++,
+    assert.fail
+  )
+  t.after(() => progress.close())
+  progress.begin('finished')
+  progress.begin('silent')
+  progress.append('finished', 'complete output')
+  await progress.finish('finished')
+  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
+  assert.equal(wakes, 0, 'a silent live job must not inherit a settled job notification')
+  assert.equal(writes[0].output.chunks[0].text, 'complete output')
+  progress.begin('a')
+  progress.begin('b')
+  progress.append('a', 'a output')
+  progress.append('b', 'b output')
+  await progress.finish('a')
+  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
+  assert.equal(wakes, 1, 'another live output retains its notification')
+  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
+  assert.equal(wakes, 1, 'no new output means no repeated wake')
+  progress.append('b', 'next output')
+  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
+  assert.equal(wakes, 2)
+  progress.append('b', 'closing output')
+  await progress.close()
+  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
+  assert.equal(wakes, 2, 'close cancels outstanding notifications')
+})

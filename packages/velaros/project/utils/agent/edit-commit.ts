@@ -72,6 +72,12 @@ export async function commitPreparedProjectEdit(
       ctx.abortSignal
     )
     const final = kernel.getTransaction(prepared.transactionId) ?? prepared
+    ctx.recordProjectCommit?.({
+      root: ctx.project.getRootPath(),
+      transactionId: prepared.transactionId,
+      lifecycle: 'applied',
+      changedFiles: applied.changedFiles,
+    })
     const created = projectCreatedPaths(final.patches)
     const receipt: ProjectEditResult = {
       changeRef: saveReceipt(ctx, 'change', {
@@ -112,6 +118,13 @@ export async function commitPreparedProjectEdit(
   } catch (error) {
     const status = kernel.getTransaction(prepared.transactionId)?.status
     if (status === 'applied' || status === 'rolled_back') {
+      const committed = kernel.getTransaction(prepared.transactionId)
+      ctx.recordProjectCommit?.({
+        root: ctx.project.getRootPath(),
+        transactionId: prepared.transactionId,
+        lifecycle: status,
+        changedFiles: committed?.changedFiles ?? [],
+      })
       const changeRef = saveReceipt(ctx, 'change', { transactionId: prepared.transactionId })
       const failure = AppError.from(error)
       throw new AppError(

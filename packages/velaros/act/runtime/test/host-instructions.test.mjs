@@ -33,6 +33,49 @@ const InstructionReviewBudgets = {
   // 从宿主迁入的分档执行策略单独预算；基础协议预算不放宽。
   policyChars: 1100,
 }
+test('编辑提示默认局部替换，结构和计算生成分流，提交后不重放', () => {
+  const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
+  assert.match(text, /局部编辑默认 edit\.replace/)
+  assert.match(text, /action:"replace",path,oldText,newText/)
+  assert.match(text, /结构编辑用 select \+ patch/)
+  assert.match(text, /计算生成整份正文才用 JS \+ write/)
+  assert.match(text, /不重复写后全文校验/)
+  assert.match(text, /事务已提交后外层程序失败不能重放/)
+  assert.match(text, /回执丢失先查执行状态/)
+  assert.doesNotMatch(text, /action:"write"/)
+  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /局部编辑默认 edit\.replace/)
+})
+
+test('定位提示按授权选择语义工具，限制输出而非调查深度', () => {
+  const text = nodeRuntimeInstructions('/workspace', ['velaros:project', 'velaros:code'])
+  assert.match(text, /定位先窄后宽/)
+  assert.match(text, /候选路径\/命中数/)
+  assert.match(text, /输出注明范围、遗漏和续读位置/)
+  assert.match(text, /不递归扫整个 node_modules/)
+  assert.match(text, /@vscode\/ripgrep 的 rgPath/)
+  assert.match(text, /velaros:code.query/)
+  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /velaros:code.query/)
+})
+
+test('调查停止与调整以证据为准，假设不冒充根因', async () => {
+  const { executionPolicy } = await import('../../../dist/act/runtime/utils/execution-policy.js')
+  for (const depth of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    for (const audience of ['primary', 'worker']) {
+      const text = executionPolicy(depth, audience)
+      assert.match(text, /停止调查并执行/)
+      assert.match(text, /新证据改变关键假设时调整方案/)
+      assert.match(text, /不按固定调用次数收尾/)
+      assert.match(text, /区分观察、候选原因和已验证根因/)
+      assert.match(text, /不凭猜测改超时或加兜底/)
+      assert.match(text, /仅可信通过且相关输入未变才复用，不拿记录代替验收/)
+      assert.match(text, /失败、失效或覆盖缺口只扩大到受影响范围/)
+      assert.match(text, /区分源码已改、检查通过、构建生成、应用加载和原故障复测，不能逐级推定/)
+      assert.ok(text.length <= InstructionReviewBudgets.policyChars)
+    }
+  }
+  assert.equal(executionPolicy('high', 'auxiliary'), '')
+})
+
 async function fixture(t, options) {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-instructions-'))
   const runtime = await createRuntime({
@@ -1050,6 +1093,15 @@ test('Node 验收说明按实际改动选择检查，不强制扩大验证', () 
   assert.match(text, /仅改动影响打包时验证打包入口/)
   assert.doesNotMatch(text, /临时必失败断言|验证用户及打包入口|收尾核要求、差异、回执/)
   assert.match(text, /reject:false 查 failed\/stdout\/stderr/)
+  assert.match(text, /文案\/展示先局部检查/)
+  assert.match(text, /逻辑改动测行为和失败路径/)
+  assert.match(text, /共享接口\/格式测消费方与兼容性/)
+  assert.match(text, /不按行数判断风险/)
+  assert.match(text, /零测试\/跳过不算通过/)
+  assert.match(text, /必需门禁不省略/)
+  assert.match(text, /验证留简记：命令\/范围、结果回执、代码状态和未覆盖项/)
+  assert.match(text, /复用前确认源码、依赖、配置及环境未变/)
+  assert.match(text, /无法确认就重跑受影响检查/)
 })
 
 // 真实请求验证策略归属与档位；驱动无供应商推理字段，策略仍按宿主选择生效。
@@ -1076,6 +1128,9 @@ for (const executionDepth of [undefined, 'low', 'medium', 'high', 'xhigh', 'max'
     assert.match(text, /所有档位均守住授权、安全/)
     assert.match(text, /剩余未知不会实质改变方案或安全性时，停止调查/)
     assert.match(text, /不猜测成功，不隐藏失败/)
+    assert.match(text, /不拿记录代替验收/)
+    assert.match(text, /应用加载和原故障复测，不能逐级推定/)
+    assert.match(text, /复用前确认源码、依赖、配置及环境未变/)
     assert.match(text, /简单明确任务不扩大调查/)
     if (['high', 'xhigh', 'max'].includes(executionDepth)) {
       assert.match(text, /先理解任务相关全貌再动手/)

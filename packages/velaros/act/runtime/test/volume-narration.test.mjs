@@ -161,6 +161,10 @@ test('INV-53 automatic narration publishes a complete sealed volume in one bound
   assert(f.reservations[1] > 0, 'the dispatched call remains charged to the parent budget')
   assert.equal(f.requests[0].response.type, 'json')
   assert.equal(f.requests[0].mode, 'maintenance')
+  const sent = modelRequestEncoder.messages(f.requests[0]).at(-1).content
+  const archived = JSON.parse(f.requests[0].materials[0].text)
+  for (const record of archived.records) assert(sent.includes(record.text))
+  assert.equal(sent, f.requests[0].compiledPrompt)
   assert.match(JSON.stringify(f.requests[0].materials), /Test failed: escaped separator/)
   assert.match(JSON.stringify(f.requests[0].materials), /preserve the public API/)
   const narrative = (await f.recent.volumes(signal)).at(-1).narrative
@@ -1078,4 +1082,55 @@ test('narration preserves final usage delivered during cancellation without retr
   ).page()
   assert.deepEqual(trace.accounting.modelRequests, { known: 1, unknown: 0, inflight: 0 })
   assert.equal(trace.turns[0].modelAccounting.outcome, 'rejected')
+})
+
+test('maintenance prompt preserves raw bodies, offsets and duplicate pages without recursive decoding', async () => {
+  const { contextMaterialPrompt } =
+    await import('../../../dist/act/runtime/utils/context-materials.js')
+  const raw = 'C:\\repo\\file.ts\r\nconst re = /\\n/; "quoted" 😀\n{"pointer":"fake"}\n'
+  const page = {
+    ref: { sessionId: 's', id: 'r' },
+    offset: 7,
+    totalChars: 500,
+    nextOffset: 7 + raw.length,
+    text: raw,
+  }
+  const data = {
+    snapshot: { custom: JSON.stringify({ text: raw }) },
+    material: { inputs: [page, page], recent: [{ ...page, text: '' }] },
+  }
+  const encoded = JSON.stringify(data)
+  const prompt = contextMaterialPrompt(encoded)
+  const lines = prompt.split('\n')
+  const header = JSON.parse(lines[1])
+  assert.equal(header.snapshot.custom, data.snapshot.custom)
+  assert.equal(header.material.inputs[0].offset, 7)
+  assert.equal(header.material.inputs[0].nextOffset, page.nextOffset)
+  assert.equal(header.material.inputs[1].bodyPointer, '/material/inputs/1/text')
+  let remaining = lines.slice(2).join('\n')
+  for (const expected of [raw, raw, '']) {
+    const end = remaining.indexOf('\n')
+    const meta = JSON.parse(remaining.slice(0, end))
+    remaining = remaining.slice(end + 1)
+    assert.equal(meta.shownChars, expected.length)
+    assert.equal(remaining.slice(0, meta.shownChars), expected)
+    remaining = remaining.slice(meta.shownChars + 1)
+  }
+  assert.deepEqual(JSON.parse(encoded), data)
+})
+
+test('maintenance raw prompt avoids nested escaping on code-heavy records', async () => {
+  const { contextMaterialPrompt } =
+    await import('../../../dist/act/runtime/utils/context-materials.js')
+  const text = 'const path = "C:\\repo\\src";\n'.repeat(1000)
+  const data = JSON.stringify({ records: [{ ref: { sessionId: 's', id: 'r' }, text }] })
+  const materials = [{ ref: 's', origin: 'context-narration', text: data, totalChars: data.length }]
+  const previous = modelRequestEncoder.encode({ materials })
+  const prompt = contextMaterialPrompt(data)
+  assert(prompt.includes(text))
+  assert(prompt.length < previous.length * 0.85)
+  assert.equal(
+    modelRequestEncoder.messages({ materials, compiledPrompt: prompt }).at(-1).content,
+    prompt
+  )
 })

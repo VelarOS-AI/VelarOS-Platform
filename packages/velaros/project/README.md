@@ -80,10 +80,10 @@ export function closeProject() {
 - `createProjectCapabilityModule` 将领域确认的实际写入效果交给 Kernel：blocked 和无变化记录为 none，真实变化记录为 committed。自行装配项目操作时，调用上下文的 `recordWriteOutcome` 应连接宿主 `recordEffect`；SDK 直接调用不要求效果日志。
 - `edit` 按路径指文件：`write` 整份写入（没有就新建），`replace` 把唯一的一段原文换掉；同文件接连几步按前一步结果计算。读取凭据由系统在规划时获取。
 - `write.expectedText` 可直接接收 Node 已读的完整原文，`null` 表示仅允许新建，空串表示现有空文件；省略时才按提交时内容覆盖。核对忽略输入开头的编码 BOM，换行与其他正文逐字比较，不匹配报 `BASE_REVISION_MISMATCH` 且整批未写入。同文件多步核对前一步结果；规划至提交期间继续使用内核版本保护。编码和原换行仍保留，撤回仍检查外部修改。
-- `replace` 直接按唯一原文定位，外部对其他位置的修改保留，目标消失或歧义时拒绝整批。无需先 `select`；全文变换优先复用已有原文和 `write.expectedText`。只有结构定位、特殊编码读取或减少大块传输时才选择 `read/select + patch`。
+- `replace` 直接按唯一原文定位，外部对其他位置的修改保留，目标消失或歧义时拒绝整批。局部编辑默认 `edit.replace`，删除用空 `newText`，歧义补上下文，无需先 `select`；结构编辑用 `select + patch`。计算生成整份正文才用 JS + `write.expectedText`，复用 Node 已读原文；特殊编码读取可用 `read`。
 - `changeRef`、选区与失败计划分别为 `change:`、`target:`、`plan:` 加 8 位十六进制。按会话与项目核对，内部保留完整 SHA256；碰撞重新签发，已签发身份和已消费计划保留轻量占用记录。正文受条数和字符预算约束；过期后重新读取定位，提交成功的计划不能重放。源码和编辑视图内部使用 `source:` / `view:`，历史完整引用在所属会话内精确解析。
-- `edit` 的步骤合成一个事务，全成或全不成；失败时一个文件都没写，按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。
-- 模型模板优先展示精确替换、复用已读原文的一次多文件 `edit` 和 `undo`。普通读取失败就停止依赖的提交，不把成功子集当整批；冲突后重新读取、合并，不移除保护重试。高级结构编辑才使用 `select/patch`：一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
+- `edit` 的步骤合成一个事务，全成或全不成；领域明确未写入的失败按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。提交后核回执差量与 `changedFiles`，再做必要测试，不重复写后全文校验。事务已提交后外层程序失败不能重放；回执丢失先查执行状态与差量，不能把程序失败当作事务未提交。
+- 模型模板优先展示精确替换、局部批改的一次 `edit` 和 `undo`；计算生成才复用已读原文整体写入。普通读取失败就停止依赖的提交，不把成功子集当整批；冲突后重新读取、合并，不移除保护重试。高级结构编辑才使用 `select/patch`：一次最多 1000 个目标、100 个源码文件，完整源码与输出各最多 20000000 字符，一项歧义最多 20 个完整候选。超过上限按独立范围拆分，每次提交各自成事务。
 - `undo` 遇到外部改动抛 `CONFLICT_WITH_EXTERNAL_EDIT`、不覆盖，撤过的再撤是幂等成功；可撤销历史按条数和字节预算淘汰，被挤出去的撤销报 `NOT_SUPPORTED`。
 - 读、列、搜不折叠，`ProjectFileLimits` 只为守内存：超了整个失败，批量读里装不下的文件进 `issues`；一个事务缺省最多改 `ProjectPolicyDefaults.maxChangedFilesPerTransaction` 个文件，建内核时用 `corePolicy` 调。
 - `search.contextLines` 接受非负安全整数，缺省 1；命中窗口止于文件边界，相交或相邻的段合并。合并后的连续正文一次最多 20000000 个 Unicode 字符，超限明确失败，减小 contextLines、收窄范围或用 read 的 range 分段读取。
@@ -94,3 +94,11 @@ export function closeProject() {
 - `createRuntime({ workspace })` 已经按工作区装好 `velaros:project` 和 id 为 `project` 的证据源（`project: { code: true, images: true }` 时另挂 `velaros:code` 与项目里的 `velaros:images`），再挂同名模块或来源报 `VALIDATION`；要自己装就传 `project: false`，证据源用 `createProjectContextSource({ id, kernel })` 交进 `context.sources`。
 
 通用文件读写使用 Node 标准库；项目事务能力由 `velaros:project` 的 read/select/patch/edit/inspect/undo 提供。宿主文件搜索 `createLocalFileSearch` 服务产品文件浏览器。
+
+### 搜索定位页（可选）
+
+`search({ query, path, page: { offset: 0, limit: 50 } })` 显式选择无正文的定位页，默认搜索合同不变。`limit` 为 1–200，`offset` 为 0–5000；缺省分别为 50、0。定位页的 `files` 为空，不返回 snippet，`contextLines` 不用于定位页，长行也不会撑大正文输出。
+
+`page.total/totalFiles` 是本次完整搜索的命中数/文件数；`groups` 只列本页文件，`count` 为该文件全部命中数，`returned` 为本页数。命中保留路径、版本、行列号。用相同查询及 `page.nextOffset` 继续，`hasMore=false` 表示本次搜索已到末尾。需要正文时 `read({files:[{path,range:[startLine,endLine]}]})` 小窗口读取，并核对 revision。
+
+`consistency:'live'`：每页重新搜索，不缓存快照；外部变化可能让跨页重复/遗漏，计数不证明跨文件原子快照。仍沿用 5000 命中和底层搜索完整性护栏，超限、超时或不完整明确失败，缩小 query/path/include 后重试。此优化减少展示与二次窗口读取，不承诺底层扫描更快；编码、ignore、路径安全策略不变。

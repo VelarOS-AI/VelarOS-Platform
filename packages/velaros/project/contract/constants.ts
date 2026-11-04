@@ -4,7 +4,7 @@
  */
 
 /** 本单元的版本，写进内置插件；和 `@velaros-ai/velaros` 的 package.json 一致，check:project-arch 核对。 */
-export const ProjectPackageVersion = '0.6.31' as const
+export const ProjectPackageVersion = '0.6.32' as const
 
 /**
  * 项目的两件工具与内核对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
@@ -61,6 +61,10 @@ export const ProjectFileLimits = Object.freeze({
   listEntries: 100_000,
   /** search 一次最多多少处命中，同样只为守住内存：超了整个调用失败，收窄 query、path 或 include 再搜。 */
   searchHits: 5_000,
+  /** search 定位页缺省命中数。 */
+  searchPageDefault: 50,
+  /** search 定位页最多返回的命中数。 */
+  searchPageMax: 200,
   /** search 合并重叠窗口后，一次交回的正文总共最多多少 Unicode 字符；超了整个调用失败。 */
   searchChars: 20_000_000,
   /** search 不给 contextLines 时每处命中前后各带几行。 */

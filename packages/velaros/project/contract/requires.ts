@@ -417,6 +417,13 @@ export interface ProjectSpacePort {
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** 提交事实独立于业务返回值，宿主写入已有调用诊断。 */
+  recordProjectCommit?(fact: {
+    root: string
+    transactionId: string
+    lifecycle: 'applied' | 'rolled_back'
+    changedFiles: readonly string[]
+  }): void
   /** 每次跨项目操作重新授权真实根和读写权限；宿主拒绝未授权根并遵守取消，返回该根受限内核端口。 */
   resolveProject?(
     root: string,

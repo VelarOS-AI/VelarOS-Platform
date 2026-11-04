@@ -257,7 +257,8 @@ export class RuntimeTrace implements RuntimeTraceApi {
       // 当前 journal 与目录快照分别读取；迟到事实保留在原 executionId，读取不会等待物理 IO。
       for (const invocation of await this.journal.list(this.sessionId, executionId)) {
         const summary = summarizeInvocation(invocation, remaining, fullContent)
-        remaining -= summary.input.length + summary.output.length
+        remaining -=
+          summary.input.length + summary.output.length + (summary.projectChange?.diff.length ?? 0)
         const body = JSON.stringify(invocation)
         const text = body.slice(0, remaining)
         remaining -= text.length
@@ -811,7 +812,8 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const executionId of executions)
       for (const invocation of journal.get(executionId)!) {
         const summary = summarizeInvocation(invocation, remaining, fullContent)
-        remaining -= summary.input.length + summary.output.length
+        remaining -=
+          summary.input.length + summary.output.length + (summary.projectChange?.diff.length ?? 0)
         const rawBody = JSON.stringify(invocation)
         invocations.push({
           id: invocation.prepared.id,

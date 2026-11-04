@@ -2,11 +2,11 @@
  * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
  * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
  * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
- * 需要事务时优先一次 edit：直接传路径、oldText/newText 或 text；Node 已读的完整原文可作 write.expectedText，不必先 read/select。read/select + patch 仅在需要结构定位、特殊编码读取或减少大块传输时使用。
+ * 局部编辑默认 edit.replace，oldText 必须唯一，删除用空 newText，歧义时补充上下文；相关修改一次 edit 提交。结构编辑用 select + patch；计算生成整份正文才用 JS + write，expectedText 使用 Node 已读的完整原文，null 只新建。特殊编码读取可用 read。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
- * changeRef 只在本会话里有效，原样用，不能手写。
+ * changeRef 只在本会话里有效，原样用，不能手写。提交后核对回执差量和 changedFiles，再做必要测试，不重复写后全文校验；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。
  * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
 declare module 'velaros:project' {
@@ -22,7 +22,7 @@ declare module 'velaros:project' {
    */
   export function list(input: ProjectListInput): Promise<ProjectListResult>
 
-  /** 按字面文本或正则搜项目源码，交回全部命中与连续正文。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
+  /** 按字面文本或正则搜项目源码；默认交回全部命中与连续正文，page 显式请求无正文的有界定位页。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
    */
   export function search(input: ProjectSearchInput): Promise<ProjectSearchResult>
 
@@ -129,15 +129,18 @@ declare module 'velaros:project' {
     regex?: boolean
     caseSensitive?: boolean
     contextLines?: number
+    /** 显式请求定位页，不返回源码正文或 snippet，files 为空；contextLines 不用于定位页。offset 缺省 0，limit 缺省 50、最大 200。每页重新搜索，不是快照；变动可能造成跨页重复或遗漏。仍保留 5000 命中护栏，没搜全则失败。 */
+    page?: { offset?: number; limit?: number }
   }
 
   /**
-   * hits 是全部命中的位置。files 是命中所在的那几段（连同前后 contextLines 行），连续的原文加起始行号。
+   * 未给 page 时 hits 是全部命中的位置。files 是命中所在的那几段（连同前后 contextLines 行），连续的原文加起始行号。
    * 找定义、引用、调用方用 `velaros:code` 更准；文本命中只是候选。
    */
   interface ProjectSearchResult {
     hits: ProjectSearchHit[]
     files: ProjectWindow[]
+    page?: ProjectSearchPage
     note?: string
   }
 
@@ -179,7 +182,7 @@ declare module 'velaros:project' {
   /**
    * steps 按顺序执行、合成一个事务：全成或全不成，成了给一个 changeRef。一次最多 1000 步，一个事务缺省最多改 100 个文件。
    * expectedText 核对该步骤之前的完整正文；同文件多步时以前一步结果为准。不匹配报 BASE_REVISION_MISMATCH，先重新读取和合并，不能去掉核对后盲重试。
-   * 失败时一个文件都没写，error.code 说明原因：TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
+   * 领域明确未写入的失败可按 error.code 处理；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
    * AMBIGUOUS_TARGET 是 oldText 出现了好几处，VALIDATION_FAILED 是改完的内容没过校验（message 里有诊断），
    * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
    */
@@ -311,6 +314,18 @@ declare module 'velaros:project' {
     revision?: string
     range?: ProjectSearchRange
     snippet?: string
+  }
+
+  /** 定位页元数据。total 是本次完整搜索的命中数（不是匹配子串数），totalFiles 是命中文件数；不保证整个项目的原子快照。groups 只列本页出现的文件，count 是该文件在本次搜索中的全部命中数，returned 是本页数量。用同一查询和 nextOffset 继续；需要正文时 read({files:[{path,range:[startLine,endLine]}]})，读取当前版本并核对 revision。 */
+  interface ProjectSearchPage {
+    offset: number
+    limit: number
+    total: number
+    totalFiles: number
+    hasMore: boolean
+    nextOffset?: number
+    consistency: 'live'
+    groups: Array<{ path: string; count: number; returned: number }>
   }
 
   /** 精确选择一个目标：path 与 within 二选一，symbol 与 match 二选一。symbol 是完整的声明名，如 Cache.load、outer.inner；内置解析器支持 JS/TS/JSX/TSX、Python/pyi。match 是唯一字面片段（CRLF/LF 等价，其余字符精确），只在 within 目标内查找。歧义返回候选，必须明确选中。 */

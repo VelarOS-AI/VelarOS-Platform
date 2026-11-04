@@ -26,7 +26,12 @@ export function summarizeInvocation(
     0,
     fullContent ? output.length : Math.min(6000, maxChars - inputText.length)
   )
+  const projectChange = projectChangeSummary(
+    record,
+    Math.max(0, maxChars - inputText.length - outputText.length)
+  )
   return {
+    ...(projectChange ? { projectChange } : {}),
     moduleId: record.prepared.binding.moduleId,
     operation: record.prepared.operation,
     status: record.receipt?.outcome ?? 'pending',
@@ -35,6 +40,58 @@ export function summarizeInvocation(
     output: outputText,
     inputTruncated: inputText.length < input.length,
     outputTruncated: outputText.length < output.length,
+  }
+}
+
+/** 只接受领域诊断，不解析程序输出或被裁剪的展示文本。 */
+function projectChangeSummary(
+  record: InvocationRecord,
+  patchBudget: number
+): ActInvocationSummary['projectChange'] {
+  const diagnostic = record.receipt?.diagnostic
+  if (
+    record.prepared.binding.moduleId !== 'velaros:project' ||
+    !['edit', 'patch', 'undo'].includes(record.prepared.operation) ||
+    record.receipt?.effect !== 'committed' ||
+    diagnostic?.code !== 'PROJECT_TRANSACTION_COMMITTED' ||
+    diagnostic.truncated
+  )
+    return undefined
+  try {
+    const fact: unknown = JSON.parse(diagnostic.message)
+    if (
+      !isPlainObject(fact) ||
+      !isString(fact.root) ||
+      !fact.root ||
+      !isString(fact.transactionId) ||
+      !fact.transactionId ||
+      (fact.lifecycle !== 'applied' && fact.lifecycle !== 'rolled_back') ||
+      !isArray(fact.changedFiles) ||
+      !fact.changedFiles.every(isString) ||
+      !isNumber(fact.omittedFiles) ||
+      !Number.isSafeInteger(fact.omittedFiles) ||
+      fact.omittedFiles < 0
+    )
+      return undefined
+    const value = record.receipt.value
+    const diff =
+      fact.lifecycle === 'applied' &&
+      isPlainObject(value) &&
+      isString(value.diff) &&
+      value.diff.length <= Math.min(65536, patchBudget)
+        ? value.diff
+        : ''
+    return {
+      root: fact.root,
+      transactionId: fact.transactionId,
+      lifecycle: fact.lifecycle,
+      changedFiles: fact.changedFiles,
+      omittedFiles: fact.omittedFiles,
+      diff,
+      patchOmitted: !diff,
+    }
+  } catch {
+    return undefined
   }
 }
 

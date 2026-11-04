@@ -140,6 +140,28 @@ export function searchInput(input: unknown): ProjectSearchInput {
       throw invalid(`contextLines 要非负安全整数，这里给的是 ${JSON.stringify(value.contextLines)}`)
     search.contextLines = value.contextLines
   }
+  if (!isUndefined(value.page)) {
+    const page = objectOf(value.page, 'page')
+    const offset = page.offset ?? 0
+    const limit = page.limit ?? ProjectFileLimits.searchPageDefault
+    if (
+      !isNumber(offset) ||
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      offset > ProjectFileLimits.searchHits
+    )
+      throw invalid('page.offset 要 0..5000 的安全整数')
+    if (
+      !isNumber(limit) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > ProjectFileLimits.searchPageMax
+    )
+      throw invalid('page.limit 要 1..200 的安全整数')
+    if (page.offset === null || page.limit === null)
+      throw invalid('page.offset 和 page.limit 不能为 null')
+    search.page = { offset, limit }
+  }
   return search
 }
 

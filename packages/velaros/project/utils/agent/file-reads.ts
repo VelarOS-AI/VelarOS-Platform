@@ -18,6 +18,7 @@ import type {
   ProjectReadItem,
   ProjectReadResult,
   ProjectSearchHit,
+  ProjectSearchPage,
   ProjectSearchResult,
 } from '../../types/files.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
@@ -260,6 +261,36 @@ export async function searchFiles(
     regex: input.regex,
     caseSensitive: input.caseSensitive,
   })
+  ctx.abortSignal.throwIfAborted()
+  if (input.page) {
+    const offset = input.page.offset ?? 0
+    const limit = input.page.limit ?? ProjectFileLimits.searchPageDefault
+    const counts = new Map<string, number>()
+    for (const hit of result.hits) counts.set(hit.path, (counts.get(hit.path) ?? 0) + 1)
+    const hits: ProjectSearchHit[] = result.hits.slice(offset, offset + limit).map((hit) => ({
+      path: hit.path,
+      revision: hit.revision,
+      range: hit.range,
+    }))
+    const returned = new Map<string, number>()
+    for (const hit of hits) returned.set(hit.path, (returned.get(hit.path) ?? 0) + 1)
+    const hasMore = offset + hits.length < result.hits.length
+    const page: ProjectSearchPage = {
+      offset,
+      limit,
+      total: result.hits.length,
+      totalFiles: counts.size,
+      hasMore,
+      consistency: 'live',
+      groups: [...returned].map(([path, count]) => ({
+        path,
+        count: counts.get(path)!,
+        returned: count,
+      })),
+    }
+    if (hasMore) page.nextOffset = offset + hits.length
+    return { hits, files: [], page, note: result.nextAction }
+  }
   const windows: ProjectSourceWindow[] = []
   let remaining = searchChars
   for (const file of hitSpans(

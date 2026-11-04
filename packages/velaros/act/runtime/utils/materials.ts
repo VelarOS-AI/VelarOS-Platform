@@ -138,6 +138,44 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
     }
     // 保留有界原文及其准确来源；不让一个大字符串把整层数组变成只有引用的回执。
     if (isString(item)) {
+      // 只对宿主进程日志保留头尾；普通源码与业务字符串仍按前缀展示。
+      if (pointer === '/result/process/stdout' || pointer === '/result/process/stderr') {
+        const excerpt = (count: number) => {
+          let head = Math.floor(count / 2)
+          let tail = item.length - (count - head)
+          if (/[\uD800-\uDBFF]/u.test(item[head - 1]!)) head--
+          if (/[\uDC00-\uDFFF]/u.test(item[tail]!)) tail++
+          return {
+            ...metadata,
+            representation: 'excerpt',
+            bodyIncluded: true,
+            fragments: [
+              { from: 0, shown: head, text: item.slice(0, head) },
+              { from: tail, shown: item.length - tail, text: item.slice(tail) },
+            ],
+            selection: { total: item.length, unit: 'utf16' },
+            omitted: { from: head, shown: tail - head, unit: 'utf16' },
+            read: {
+              ...metadata.read,
+              offset: head,
+              limit: Math.min(ContextLimits.readChars, tail - head),
+            },
+          }
+        }
+        let low = 0
+        let high = Math.min(item.length, budget)
+        while (low < high) {
+          const middle = Math.ceil((low + high) / 2)
+          if (JSON.stringify(excerpt(middle)).length <= budget) low = middle
+          else high = middle - 1
+        }
+        const projected = excerpt(low)
+        if (projected.fragments.every((fragment) => fragment.shown > 0)) {
+          omitted.push(pointer)
+          return projected
+        }
+        return fallback()
+      }
       const excerpt = (end: number) => ({
         ...metadata,
         representation: 'excerpt',

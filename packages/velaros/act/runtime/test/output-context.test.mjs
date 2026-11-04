@@ -880,12 +880,16 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
     [false, 'auto'],
     [true, 'auto'],
   ]) {
-    const f = await fixture(t, "import {output} from 'velaros';output(1)")
+    // 使用标准 execute 宿主；仅注入 runner 会走只读端口，Windows 无法执行。
+    const f = await fixture(t, "import {output} from 'velaros';output(1)", undefined, {
+      runner: undefined,
+    })
     const body = `GROWTH_START\n${Array.from({ length: 1800 }, (_, index) => `line ${index} body\n`).join('')}GROWTH_END`
     const result = await f.session.execute({
       source: `import {output} from 'velaros';output('small',{key:'small',required:true,view:{mode:'full',maxChars:1000}});output(${JSON.stringify(body)},{key:'growing',type:'code',required:${required},view:{mode:${JSON.stringify(mode)},maxChars:40000}});`,
     })
     assert.equal(result.checked, true)
+    assert.equal(result.result.failed, undefined)
     const view = (await f.session.view.inspect()).view
     const first = await f.memory.project(view, undefined, [], signal, 24000)
     const firstFrame = JSON.parse(first.body)
@@ -987,11 +991,16 @@ test('INV-58 legacy history without presentation fingerprints keeps current cont
 
 test('INV-58 complete raw history covers a smaller projection and partial history covers only exact prior ranges', async (t) => {
   for (const firstChars of [600000, 4000]) {
-    const f = await fixture(t, "import {output} from 'velaros';output(1)")
+    // 使用标准 execute 宿主；仅注入 runner 会走只读端口，Windows 无法执行。
+    const f = await fixture(t, "import {output} from 'velaros';output(1)", undefined, {
+      runner: undefined,
+    })
     const body = 'raw evidence '.repeat(350)
     const result = await f.session.execute({
       source: `import {output} from 'velaros';output(${JSON.stringify(body)});`,
     })
+    assert.equal(result.checked, true)
+    assert.equal(result.result.failed, undefined)
     const view = (await f.session.view.inspect()).view
     const first = await f.memory.project(view, undefined, [], signal, firstChars)
     await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
@@ -1581,4 +1590,57 @@ output({value:'required-state'},{key:'critical',required:true,view:{mode:'full'}
   assert(
     (await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
   )
+})
+
+test('process log head-tail projection keeps conclusions, exact gaps and history safety', async () => {
+  const { materialHistoryDelta } = await import('../../../dist/act/runtime/utils/materials.js')
+  const ref = { sessionId: 's', id: 'logs' }
+  const log = `START\n${'😀"\\\n'.repeat(6000)}\nFINAL: 12 passed`
+  const archive = JSON.stringify({ result: { process: { exitCode: 1, stdout: log, stderr: log } } })
+  const projected = projectMaterial(archive, ref, 8000)
+  assert(projected.text.length <= 8000)
+  const process = JSON.parse(projected.text).result.process
+  assert.equal(process.exitCode, 1)
+  for (const key of ['stdout', 'stderr']) {
+    const field = process[key]
+    assert.equal(field.fragments.length, 2)
+    assert.match(field.fragments[0].text, /^START/)
+    assert.match(field.fragments[1].text, /FINAL: 12 passed$/)
+    for (const fragment of field.fragments) {
+      assert.equal(fragment.text, log.slice(fragment.from, fragment.from + fragment.shown))
+      assert.equal(fragment.text.isWellFormed(), true)
+    }
+    const [head, tail] = field.fragments
+    assert.equal(field.omitted.from, head.shown)
+    assert.equal(field.omitted.shown, tail.from - head.shown)
+    let middle = ''
+    for (let offset = head.shown; offset < tail.from;) {
+      const part = readMaterialField(
+        archive,
+        field.read.pointer,
+        offset,
+        Math.min(1000, tail.from - offset)
+      )
+      middle += part.text
+      offset += part.text.length
+    }
+    assert.equal(head.text + middle + tail.text, log)
+  }
+  assert.equal(materialHistoryDelta(archive, archive, projected.text, ref), undefined)
+  assert.equal(materialHistoryDelta(archive, projected.text, archive, ref), undefined)
+  assert.equal(materialHistoryDelta(archive, projected.text, projected.text, ref), undefined)
+  for (const budget of [0, 200, 512, 1000, 2000, 4000]) {
+    const view = projectMaterial(archive, ref, budget)
+    assert(view.text.length <= budget)
+    if (view.text) JSON.parse(view.text)
+  }
+  const short = JSON.stringify({ result: { process: { stdout: 'ok', stderr: '' } } })
+  assert.equal(projectMaterial(short, ref, 8000).text, short)
+  const ordinary = projectMaterial(
+    JSON.stringify({ result: { value: { stdout: log } } }),
+    ref,
+    8000
+  )
+  assert.equal(JSON.parse(ordinary.text).result.value.stdout.selection.from, 0)
+  assert.equal(JSON.parse(ordinary.text).result.value.stdout.fragments, undefined)
 })

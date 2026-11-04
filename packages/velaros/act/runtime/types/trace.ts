@@ -34,6 +34,16 @@ export interface ActTraceRecord {
 
 /** Kernel 调用事实的有界展示；原始回执与外部效果分别表达。 */
 export interface ActInvocationSummary {
+  /** 独立提交事实；补丁缺失时只展示事务摘要，不能推算净差异。 */
+  readonly projectChange?: {
+    readonly root: string
+    readonly transactionId: string
+    readonly lifecycle: 'applied' | 'rolled_back'
+    readonly changedFiles: readonly string[]
+    readonly omittedFiles: number
+    readonly diff: string
+    readonly patchOmitted: boolean
+  }
   /** 实际调用的模块。 */
   readonly moduleId: string
   /** 实际调用的操作。 */
