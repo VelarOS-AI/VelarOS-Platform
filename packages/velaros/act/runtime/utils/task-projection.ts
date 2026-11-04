@@ -33,7 +33,6 @@ export function taskActiveProjection(
   // 没有最新输入锚点时不猜测历史边界；reviewed 状态沿用完整认识。
   if (!latestInput || active.status !== 'pending-review') return { active, latestInput }
   const historicalInputs = active.pendingInputs.filter((ref) => !latest(ref))
-  const historicalIds = new Set(historicalInputs.map((ref) => `${ref.sessionId}:${ref.id}`))
   const historicalQuestions = active.items.filter(
     (item) =>
       item.kind === 'question' &&
