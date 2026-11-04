@@ -380,10 +380,11 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     let pending: ContextContent[] = []
     let finalizationRetried = false
     const names = ['list', 'read', 'submit'] as const
+    let projectionChars = this.profile.projectionChars
     for (let turn = 1; turn <= this.profile.modelCalls; turn++) {
       signal.throwIfAborted()
       if (activity.failure) throw activity.failure
-      const material = state.material(snapshot, this.profile.projectionChars)
+      const material = state.material(snapshot, projectionChars)
       const text = JSON.stringify({
         snapshot: isEmpty(history) ? snapshot : undefined,
         material,
@@ -412,8 +413,15 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         ),
         signal
       )
-      if (!compiled.okToSend)
+      if (!compiled.okToSend) {
+        // 首次派发前只缩小展示，不消耗模型轮次，也不确认未送达的证据。
+        if (isEmpty(history) && projectionChars > 1) {
+          projectionChars = Math.max(1, Math.floor(projectionChars / 2))
+          turn--
+          continue
+        }
         throw new AppError('CONTEXT_BUDGET', '上下文材料与历史超过本次整理窗口')
+      }
       const audit = await context.append(
         {
           kind: 'audit',

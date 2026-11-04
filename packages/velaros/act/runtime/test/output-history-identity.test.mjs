@@ -85,7 +85,7 @@ async function archive(f, blocks, maxChars = 40000, issues = []) {
   return result.ref
 }
 
-async function archiveRaw(f, stdout, short = true) {
+async function archiveRaw(f, stdout, short = true, field = 'stdout') {
   const uuid = crypto.randomUUID()
   const id = short ? uuid.slice(0, 8) : uuid
   const source = await f.session.context.append({
@@ -97,7 +97,10 @@ async function archiveRaw(f, stdout, short = true) {
     kind: 'audit',
     title: `script:${id}:result`,
     sources: [source.ref],
-    body: JSON.stringify({ mode: 'execute', result: { process: { stdout, exitCode: 0 } } }),
+    body: JSON.stringify({
+      mode: 'execute',
+      result: { process: { [field]: stdout, exitCode: 0 } },
+    }),
   })
   await f.programs.add(result.ref, source.ref, id, 'task')
   return result.ref
@@ -471,18 +474,18 @@ test('INV-69 body deduplication preserves collection diagnostics and reference m
   assertNoInternalProof(second)
 })
 
-test('INV-69 raw partial history contributes its exact prefix without repeating it in a wider frame', async (t) => {
+test('INV-69 ordinary string partial history contributes its exact prefix without repeating it in a wider frame', async (t) => {
   const f = await fixture(t)
   const stdout = Array.from({ length: 450 }, (_, i) => `line-${i}: ${'x'.repeat(55)}\n`).join('')
-  const ref = await archiveRaw(f, stdout)
+  const ref = await archiveRaw(f, stdout, true, 'text')
   const first = await project(f, 20000, true)
   const frozen = retained(first, ref)
-  const prior = JSON.parse(frozen.text.split('当次输出：\n').at(-1)).result.process.stdout
+  const prior = JSON.parse(frozen.text.split('当次输出：\n').at(-1)).result.process.text
   assert(prior.selection.shown > 1000 && prior.selection.shown < stdout.length)
   const second = await project(f, 100000)
   assert.equal(retained(second, ref).text, frozen.text, 'frozen history remains byte-identical')
   const shown = current(second, ref)
-  const next = JSON.parse(shown.text).result.process.stdout
+  const next = JSON.parse(shown.text).result.process.text
   assert.equal(next.history?.shown, prior.selection.shown)
   assert.equal(next.selection.from, prior.selection.shown)
   assert.equal(
@@ -493,6 +496,77 @@ test('INV-69 raw partial history contributes its exact prefix without repeating 
   assert.equal(shown.bodyInHistory, undefined, 'partial history is not proof of the entire value')
   assert(shown.truncated)
 })
+
+for (const field of ['stdout', 'stderr']) {
+  test(`INV-69 raw ${field} head-tail history preserves exact ranges and unread middle in wider frames`, async (t) => {
+    const f = await fixture(t)
+    const value = Array.from(
+      { length: 450 },
+      (_, i) => `line-${i}: 中文😀 ${'x'.repeat(4)}\n`
+    ).join('')
+    const ref = await archiveRaw(f, value, true, field)
+    const first = await project(f, 10000, true)
+    const frozen = retained(first, ref)
+    const prior = JSON.parse(frozen.text.split('当次输出：\n').at(-1)).result.process[field]
+    const checkRanges = (projection) => {
+      assert.equal(projection.representation, 'excerpt')
+      assert.equal(projection.bodyIncluded, true)
+      assert.equal(projection.position, `/result/process/${field}`)
+      assert.deepEqual(projection.ref, ref)
+      assert.deepEqual(projection.selection, { total: value.length, unit: 'utf16' })
+      assert.equal(projection.fragments.length, 2)
+      const [head, tail] = projection.fragments
+      assert.equal(head.from, 0)
+      assert(head.shown > 0 && tail.shown > 0)
+      assert(head.shown < tail.from, 'The omitted middle must not be claimed as delivered')
+      assert.equal(tail.from + tail.shown, value.length)
+      for (const fragment of projection.fragments) {
+        assert.equal(fragment.text.length, fragment.shown)
+        assert.equal(fragment.text, value.slice(fragment.from, fragment.from + fragment.shown))
+        assert(!/[\uD800-\uDBFF]$/u.test(fragment.text))
+        assert(!/^[\uDC00-\uDFFF]/u.test(fragment.text))
+      }
+      assert.deepEqual(projection.omitted, {
+        from: head.shown,
+        shown: tail.from - head.shown,
+        unit: 'utf16',
+      })
+      assert.equal(projection.read.pointer, `/result/process/${field}`)
+      assert.equal(projection.read.ref, ref.id)
+      assert.equal(projection.read.offset, head.shown)
+      assert(projection.read.limit > 0 && projection.read.limit <= projection.omitted.shown)
+      assert.equal(projection.history, undefined, 'Fragments are not contiguous prefix proof')
+    }
+    checkRanges(prior)
+    assert(!frozen.text.includes('line-225:'), 'The middle is absent from actual retained history')
+    const page = await f.memory.readMaterial(
+      ref,
+      prior.read.offset,
+      prior.read.limit,
+      signal,
+      prior.read.pointer
+    )
+    assert.equal(page.offset, prior.omitted.from)
+    assert.equal(page.totalChars, value.length)
+    assert.equal(page.text, value.slice(prior.read.offset, prior.read.offset + prior.read.limit))
+    assert(page.text.includes('line-225:'), 'The omitted middle remains recoverable')
+    const second = await project(f, 16000)
+    assert.equal(retained(second, ref).text, frozen.text, 'Frozen history remains byte-identical')
+    const shown = current(second, ref)
+    const next = JSON.parse(shown.text).result.process[field]
+    checkRanges(next)
+    assert(next.fragments[0].shown > prior.fragments[0].shown)
+    assert(next.fragments[1].from < prior.fragments[1].from)
+    assert.equal(shown.bodyInHistory, undefined, 'Head and tail do not prove full delivery')
+    assert(shown.truncated)
+    const full = await project(f, 600000)
+    assert.equal(retained(full, ref).text, frozen.text)
+    assert.equal(JSON.parse(current(full, ref).text).result.process[field], value)
+    assert.equal(current(full, ref).bodyInHistory, undefined)
+    assertNoInternalProof(second)
+    assertNoInternalProof(full)
+  })
+}
 
 test('INV-69 raw history delta preserves new strings, paths, Unicode and unread bounds', () => {
   const ref = { sessionId: 'material-delta', id: '12345678' }

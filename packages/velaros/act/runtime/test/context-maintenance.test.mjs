@@ -1139,14 +1139,20 @@ test('native maintenance locally sizes its initial evidence using the standard p
     },
     async *stream(request) {
       calls++
-      const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
+      const facts = JSON.parse(request.materials[0].text).material
+      assert.equal(request.mode, 'maintenance')
+      assert.equal(request.response.type, 'tools')
+      assert.deepEqual(
+        request.response.tools.map((tool) => tool.name),
+        ['list', 'read', 'submit']
+      )
       const input = facts.inputs.find((item) => item.text.startsWith('Review every batch'))
       firstInputChars = input?.text.length ?? 0
       t.diagnostic(
         JSON.stringify({
           modelCall: calls,
           firstInputChars,
-          phase: request.contextStatus.phase,
+          mode: request.mode,
           estimate: await estimator.estimate(request),
         })
       )
@@ -1156,7 +1162,9 @@ test('native maintenance locally sizes its initial evidence using the standard p
         'the complete original fits in the locally resized first request'
       )
       assert.equal(input?.text, original)
-      assert.equal(request.contextStatus.phase, 'work')
+      assert.equal(input.offset, 0)
+      assert.equal(input.totalChars, original.length)
+      assert.equal(input.nextOffset, null)
       assert((await estimator.estimate(request)).tokens <= 32768)
       const candidate = {
         baseRevision: facts.baseRevision,
@@ -1176,16 +1184,16 @@ test('native maintenance locally sizes its initial evidence using the standard p
         type: 'tool-call',
         value: {
           id: 'sized-delivery',
-          name: 'exec',
-          input: {
-            code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(candidate)}));`,
-          },
+          name: 'submit',
+          input: candidate,
         },
       }
       yield finish
     },
   }
-  const f = await setupTool(t, driver(done), maintenance)
+  const f = await setupTool(t, driver(done), maintenance, {
+    context: { sources: [], maintenance: { model: maintenance } },
+  })
   await f.session.context.append({
     kind: 'assistant',
     body: 'Observed the imported batch; verification remains pending. '.repeat(800),
@@ -1206,7 +1214,7 @@ test('native maintenance locally sizes its initial evidence using the standard p
         calls,
         estimates,
         child: await Promise.all(
-          child.records
+          (child?.records ?? [])
             .filter((record) =>
               /act:error|script:.*:result|act:state|model-response/.test(record.title)
             )
@@ -1220,6 +1228,14 @@ test('native maintenance locally sizes its initial evidence using the standard p
   }
   assert.equal(outcome.status, 'applied', outcome.error)
   assert.equal(calls, 1)
+  assert(estimates > 1, 'oversized initial evidence must be locally resized before dispatch')
+  const summary = state.inputSummaries.find((item) => item.revision === 1)
+  assert(summary, 'the input patch must be persisted in the parent session')
+  assert.equal(summary.revision, 1)
+  const persisted = await f.session.context.read(summary.summary)
+  const body = JSON.parse(persisted.text)
+  assert.equal(body.summary, 'Review every batch')
+  assert.deepEqual(body.constraints, ['Preserve each original constraint'])
   t.diagnostic(
     JSON.stringify({
       modelCalls: calls,
