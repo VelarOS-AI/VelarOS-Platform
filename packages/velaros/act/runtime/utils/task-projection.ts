@@ -32,14 +32,12 @@ export function taskActiveProjection(active: ActiveContextState, latestInput?: C
     latestInput,
     active: {
       ...active,
-      items: active.items.filter((item) => item.kind !== 'question'),
       pendingInputs: active.pendingInputs.filter(latest),
     },
     historicalInterpretation: {
       status: 'pending-review',
       meaning:
-        '待核对的历史模型认识，不是当前授权任务清单；分层不表示已完成、已取消或约束失效。用户原文优先，相关历史可按 sources 或 pendingInputs 召回；无需为此强制反思。',
-      items: active.items.filter((item) => item.kind === 'question'),
+        '旧输入引用待核对，不是当前授权任务清单；分层不表示已完成、已取消或约束失效。用户原文优先，相关历史可按 pendingInputs 召回。',
       pendingInputs: taskPendingProjection(active.pendingInputs.filter((ref) => !latest(ref))),
     },
   }
