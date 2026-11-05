@@ -44,7 +44,6 @@ const node = process.execPath
 // 这些检查互补且便宜；继续执行可在一次本地运行里汇总格式、静态和声明错误。
 run('format', bun, ['run', 'check:format'])
 run('lint', bun, ['run', 'lint'])
-run('typecheck', bun, ['run', 'typecheck'])
 run('lockfile', bun, ['run', 'check:lockfile-consistency'])
 run('project architecture', bun, ['run', 'check:project-arch'])
 run('generated platform', bun, ['run', 'check:platform-generation'])
@@ -53,6 +52,8 @@ run('release contracts', bun, ['run', 'check:release-source'])
 const built = run('build', bun, ['run', 'build'])
 
 if (built) {
+  // 包入口解析 dist 声明；干净 checkout 必须先构建，再检查跨包类型。
+  run('typecheck', bun, ['run', 'typecheck'])
   const pattern = [
     'historical user images remain',
     'user-only image input remains',
@@ -77,7 +78,7 @@ if (built) {
     'packages/velaros/act/runtime/test/node-runtime.test.mjs',
     'packages/velaros/act/runtime/test/text-runtime.test.mjs',
   ])
-} else skipped.push('core runtime behavior（构建失败）')
+} else skipped.push('typecheck（构建失败）', 'core runtime behavior（构建失败）')
 
 const durationMs = Math.round(performance.now() - started)
 if (skipped.length) console.error(`跳过：${skipped.join('；')}`)
