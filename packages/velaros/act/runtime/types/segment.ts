@@ -101,7 +101,7 @@ export interface ContextSegment {
   /** 底座目录里的卷数。 */
   readonly volumes: number
   readonly reason: SegmentReason
-  /** 自动封成、只有骨架的上一卷：那一段做了很多事却没改笔记和计划，等整理支线在下一个请求边界补写叙事。 */
+  /** 自动封成、只有骨架的上一卷：那一段做了很多事却没改笔记和计划，保留按需补叙事的标记，不阻塞业务请求。 */
   readonly narrate: Nullable<ContextRef>
   /** 本段笔记的份额上限，封段时按上一段的缺页调整；旧的段记录没有这一项，按宿主配置。 */
   readonly workspaceShare?: number
@@ -241,4 +241,21 @@ export interface SegmentOutputCoverage {
   readonly projection: ScriptOutputProjection
   /** 无摘要、路径、行或条目选择的原值展示。 */
   readonly keys: readonly string[]
+}
+
+/** 段起点从已有权威记录机械选出的恢复入口；不是新事实或授权。 */
+export interface SegmentHandoff {
+  readonly origin: 'runtime-handoff'
+  readonly through: number
+  readonly active?: { readonly revision: number; readonly ref: ContextRef }
+  readonly entries: ReadonlyArray<{
+    readonly kind: 'goal' | 'plan' | 'question' | 'transition' | 'result' | 'effect'
+    readonly ref?: ContextRef
+    readonly id?: string
+    readonly text: string
+    readonly status?: string
+    readonly sources?: readonly ContextRef[]
+  }>
+  readonly omitted: number
+  readonly recall: string
 }

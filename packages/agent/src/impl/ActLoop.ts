@@ -93,6 +93,8 @@ export class ActLoop implements ActLoopApi {
     )
       throw new AppError('VALIDATION', '上下文容量策略无效')
     this.planner = new ContextPlanner({ foldTurns, minTurns })
+    if (prefix.recovery?.modelId !== options.model.id)
+      prefix.recovery = { modelId: options.model.id, accepted: 0, increases: [] }
     for (const value of Object.values(options.limits))
       if (!Number.isSafeInteger(value) || value < 1)
         throw new AppError('VALIDATION', '运行预算必须是正整数')
@@ -562,6 +564,17 @@ export class ActLoop implements ActLoopApi {
                   this.prefix.visualTranscript = undefined
                 }
               }
+              const recovery = this.prefix.recovery!
+              if (frame.retained && !isUndefined(recovery.tokens)) {
+                const increase = compiled.estimate.tokens - recovery.tokens
+                if (increase > 0)
+                  recovery.increases = [...recovery.increases, increase].slice(
+                    -ContextPlanTuning.growthSamples
+                  )
+              }
+              recovery.tokens = compiled.estimate.tokens
+              recovery.accepted++
+              if (frame.retention.rebuild) recovery.rebuiltAt = recovery.accepted
               yield {
                 type: 'accepted',
                 runId,
@@ -941,6 +954,9 @@ export class ActLoop implements ActLoopApi {
     const { outputTokens, window, budget } = this.capacity()
     const retainedFrameLimit = Math.floor(window * this.policy.retainedFrameRatio)
     let rebuiltFromTokens: Optional<number>
+    let rebuild: ActComposedFrame['retention']['rebuild']
+    let needsMaintenance = false
+    const recovery = this.prefix.recovery!
     // 显式整理请求在请求边界处理：Runtime 先封段，再运行整理支线
     if (attempt === 0)
       await frames.maintain?.({ reason: 'boundary', targetChars: budget }, maintenanceSignal)
@@ -957,7 +973,7 @@ export class ActLoop implements ActLoopApi {
           reportAvailable: Boolean(this.completionFeedback.report),
         }
       : undefined
-    const recovery = completionStatus
+    const completionRecovery = completionStatus
       ? `\n上次完成检查尚未通过：${JSON.stringify(completionStatus)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
       : ''
     // 本次运行里连续没有进展的步数：从运行开始时的计数起算，用户新的输入之后重新给机会
@@ -989,13 +1005,17 @@ export class ActLoop implements ActLoopApi {
       signal.throwIfAborted()
       return Math.max(0, compiled.estimate.tokens - plain.estimate.tokens)
     }
+    let cycle: Awaited<ReturnType<NonNullable<typeof frames.beginFrame>>> | undefined
     const compose = async (maxChars: number) => {
-      const projected = await frames.project(evidence, signal, maxChars)
+      cycle ??= await frames.beginFrame?.(evidence, signal, budget)
+      const projected = cycle
+        ? await cycle.project(maxChars)
+        : await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
       const logical = projected.history ?? []
       const retained = retain ? this.retained(logical, projected.images) : undefined
       const history = retained ? retained.history : projected.history
-      const reconciled = await frames.reconcile?.(
+      const reconciled = await (cycle?.reconcile ?? frames.reconcile)?.(
         projected.body,
         history ?? [],
         retained?.body,
@@ -1023,7 +1043,7 @@ export class ActLoop implements ActLoopApi {
           outputTokens,
           cacheKey,
         },
-        `${protocolInstructions}\n${phase.instructions}${recovery}${reflection}`
+        `${protocolInstructions}\n${phase.instructions}${completionRecovery}${reflection}`
       )
       const compiled = await this.compiler.compileModelTurn(
         request,
@@ -1032,6 +1052,7 @@ export class ActLoop implements ActLoopApi {
         this.planner.calibration()
       )
       return {
+        publication: cycle,
         segment: projected.segment,
         phase,
         request,
@@ -1047,6 +1068,77 @@ export class ActLoop implements ActLoopApi {
     }
     const fits = (current: Awaited<ReturnType<typeof compose>>) =>
       current.compiled.okToSend && current.compiled.estimate.tokens <= window
+    // 候选只在本地编译；不清除已接受前缀、不确认交付。增长按重新积累前缀的布局保守估算。
+    const recoveryGrowth = () => {
+      const samples = [...recovery.increases].sort((a, b) => a - b)
+      return Math.max(
+        this.planner.growth(window, true),
+        samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.75))] ?? 0
+      )
+    }
+    const recoverPrefix = async (
+      previous: Awaited<ReturnType<typeof compose>>,
+      maxChars: number,
+      capacity: boolean
+    ) => {
+      retain = false
+      const candidate = await compose(maxChars)
+      if (capacity && previous.retained) {
+        const growth = Math.max(
+          recoveryGrowth(),
+          isUndefined(recovery.tokens) ? 0 : previous.compiled.estimate.tokens - recovery.tokens
+        )
+        const runwayTurns = Math.max(0, (window - candidate.compiled.estimate.tokens) / growth)
+        const repeated =
+          !isUndefined(recovery.rebuiltAt) &&
+          recovery.accepted - recovery.rebuiltAt < this.policy.minTurns
+        rebuild = {
+          beforeTokens: previous.compiled.estimate.tokens,
+          afterTokens: candidate.compiled.estimate.tokens,
+          runwayTurns,
+          repeated,
+        }
+        needsMaintenance ||= !fits(candidate) || runwayTurns < this.policy.minTurns || repeated
+      }
+      return candidate
+    }
+    // 同一段/同一工作集无效不重试；跨提交也保留冷却，只有真正接受的业务请求推进计数。
+    const maintainPressure = async (
+      current: Awaited<ReturnType<typeof compose>>,
+      targetChars: number
+    ) => {
+      const spent = recovery.maintenance
+      if (
+        attempt > 0 ||
+        !frames.maintain ||
+        current.phase.phase === 'finalizing' ||
+        (spent &&
+          (recovery.accepted - spent.at < this.policy.minTurns ||
+            (spent.segment && spent.segment === current.segment?.id) ||
+            (spent.body === current.body &&
+              JSON.stringify(spent.logical) === JSON.stringify(current.logical))))
+      )
+        return false
+      recovery.maintenance = {
+        at: recovery.accepted,
+        segment: current.segment?.id,
+        logical: current.logical,
+        body: current.body,
+      }
+      if (current.segment) this.planner.exhaust(current.segment.id)
+      let published = false
+      try {
+        // 逻辑历史本身过大时先用既有封段口形成可整理卷；原始记录仍可召回。
+        if (needsMaintenance) await this.fold('overflow', budget, signal)
+        published = await frames.maintain({ reason: 'pressure', targetChars }, maintenanceSignal)
+      } catch (error) {
+        signal.throwIfAborted()
+        maintenanceSignal.throwIfAborted()
+        Log.tag('ActRuntime').debug('压力整理失败，重新核对可发送的机械候选', error)
+      }
+      // 新升级路径可能已封段，必须重读；既有超窗兜底未发布时不重复封段。
+      return needsMaintenance || published
+    }
     // 恢复预算是兜底。先验证最小投影，再有界试算能容纳的较大正文，避免直接截掉仍可交付的材料。
     // 试算不调用模型、不确认送达；最终重建选中的投影，所有状态仍按它核对。
     const recoverProjection = async () => {
@@ -1101,16 +1193,23 @@ export class ActLoop implements ActLoopApi {
     }
     const first = repair.recovery ? Math.min(budget, limits.recoveryChars) : budget
     let current = await compose(first)
+    if (attempt > 0 && recovery.maintenance) {
+      recovery.maintenance = {
+        ...recovery.maintenance,
+        segment: current.segment?.id,
+        logical: current.logical,
+        body: current.body,
+      }
+    }
     let runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     retain = current.retained
     // 历史帧达到独立预算或完整请求放不下时，先从逻辑历史和完整当前帧重建。
     // 重建重新核对正文交付，不封段、不消费租约，也不凭增长预测改写事实。
     if (current.retained && (current.historyTokens > retainedFrameLimit || !fits(current))) {
       if (current.historyTokens > retainedFrameLimit) rebuiltFromTokens = current.historyTokens
-      retain = false
-      this.prefix.transcript = undefined
-      this.prefix.visualTranscript = undefined
-      current = await compose(first)
+      current = await recoverPrefix(current, first, !fits(current))
+      if (needsMaintenance && (await maintainPressure(current, target)))
+        return this.frame(signal, decoder, repair, attempt + 1)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
     // 无可延续前缀时仍按剩余轮数规划；预算内的完整前缀继续沿用。
@@ -1122,6 +1221,7 @@ export class ActLoop implements ActLoopApi {
       retain = false
       this.prefix.transcript = undefined
       this.prefix.visualTranscript = undefined
+      cycle = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
@@ -1146,6 +1246,7 @@ export class ActLoop implements ActLoopApi {
             : undefined
       if (reason && (await this.fold(reason, budget, signal))) {
         folded = true
+        cycle = undefined
         current = await compose(budget)
         runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
       }
@@ -1154,8 +1255,7 @@ export class ActLoop implements ActLoopApi {
       current = await recoverProjection()
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
-    // 本地重组后仍放不下才调用额外整理模型。预测余量和重复缺页留作当前帧提示，
-    // 不把尚可执行的主线变成另一条付费工作流；显式整理仍在请求边界处理。
+    // 除回收收益差/短期复发升级外，保留不可发送时的压力整理兜底；低预测和缺页本身不触发。
     const faults = current.segment?.faults ?? 0
     const faulting =
       faults >= ContextPlanTuning.faultCount &&
@@ -1164,11 +1264,8 @@ export class ActLoop implements ActLoopApi {
       // 同一段只整理一次：整理过仍不够，就不再每轮重复，等下次封段
       const segment = current.segment?.id
       if (attempt > 0 && segment) this.planner.exhaust(segment)
-      if (attempt === 0 && !(segment && this.planner.exhausted(segment)) && frames.maintain) {
-        if (await frames.maintain({ reason: 'pressure', targetChars: target }, maintenanceSignal))
-          return this.frame(signal, decoder, repair, attempt + 1)
-        if (segment) this.planner.exhaust(segment)
-      }
+      if (await maintainPressure(current, target))
+        return this.frame(signal, decoder, repair, attempt + 1)
       if (!fits(current)) {
         current = await compose(Math.min(budget, limits.recoveryChars))
         if (!fits(current)) {
@@ -1262,14 +1359,15 @@ export class ActLoop implements ActLoopApi {
       retainedTokens > retainedFrameLimit
     ) {
       if (retainedTokens > retainedFrameLimit) rebuiltFromTokens = retainedTokens
-      retain = false
-      this.prefix.transcript = undefined
-      this.prefix.visualTranscript = undefined
-      current = await compose(
+      current = await recoverPrefix(
+        { ...current, compiled },
         compiled.okToSend && compiled.estimate.tokens <= window
           ? first
-          : Math.min(budget, limits.recoveryChars)
+          : Math.min(budget, limits.recoveryChars),
+        !compiled.okToSend || compiled.estimate.tokens > window
       )
+      if (needsMaintenance && (await maintainPressure(current, target)))
+        return this.frame(signal, decoder, repair, attempt + 1)
       compiled = await finalize()
       retainedTokens = 0
     }
@@ -1293,6 +1391,9 @@ export class ActLoop implements ActLoopApi {
     frames.setPhase(current.phase.phase)
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
+    signal.throwIfAborted()
+    await current.publication?.publish(current.body, signal)
+    signal.throwIfAborted()
     return {
       projection: {
         revision: evidence.scope.revision,
@@ -1311,6 +1412,7 @@ export class ActLoop implements ActLoopApi {
         limitTokens: retainedFrameLimit,
         historyTokens: retainedTokens,
         rebuiltFromTokens,
+        rebuild: rebuild ? { ...rebuild, afterTokens: compiled.estimate.tokens } : undefined,
       },
       ...compiled,
     }

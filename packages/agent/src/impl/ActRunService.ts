@@ -374,6 +374,7 @@ class ActRunService implements ActRunServiceApi {
     })
     this.prefix.transcript = undefined
     this.prefix.visualTranscript = undefined
+    this.prefix.recovery = undefined
     await this.writes
   }
   private snapshot(): ActRunSnapshot {

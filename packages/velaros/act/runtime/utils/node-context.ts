@@ -6,6 +6,7 @@ import {
   isString,
   isTrue,
   isUndefined,
+  optionalWhenLazy,
 } from '@velaros-ai/core'
 
 import type { MemoryFrameDisplay } from '../types/memory.js'
@@ -159,7 +160,7 @@ export function nodeFrameState(
 
 /** 只比较权威状态与结果引用，不从输出文本推断检查成功，也不重复日志。 */
 function nodeJobChanges(jobs: unknown, previous: unknown): Array<Record<string, unknown>> {
-  const earlier = new Map<string, Record<string, unknown> | null>()
+  const earlier = new Map<string, Nullable<Record<string, unknown>>>()
   for (const job of nodeJobs(previous))
     earlier.set(job.executionId, earlier.has(job.executionId) ? null : job)
   return nodeJobs(jobs).flatMap((job) => {
@@ -168,7 +169,7 @@ function nodeJobChanges(jobs: unknown, previous: unknown): Array<Record<string, 
     return [
       {
         ...job,
-        ...(before ? { previousStatus: before.status } : {}),
+        previousStatus: optionalWhenLazy(before, () => before!.status),
         terminal: ['succeeded', 'failed', 'cancelled'].includes(job.status),
       },
     ]

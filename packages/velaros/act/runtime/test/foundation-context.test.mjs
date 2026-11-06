@@ -712,3 +712,364 @@ test('foundation: rephrased old summaries cannot restore retired constraints whi
   )
   assert.equal((await f.context.readInput(first.ref)).text, original)
 })
+
+// 轻量更新复用整理器的证据和发布链，但不把 question 更新冒充为输入审阅。
+test('active questions: resolve and supersede persist across segments and reopen; explicit maintenance can reopen', async (t) => {
+  const f = await setup(t)
+  const goal = await f.context.append({
+    kind: 'user',
+    body: 'Investigate both failures; do not publish.',
+  })
+  await f.task.begin(goal.ref)
+  await f.context.summarizeInput({
+    ref: goal.ref,
+    baseRevision: 0,
+    summary: 'Investigate',
+    constraints: ['Do not publish'],
+    unresolved: [],
+  })
+  const body = JSON.stringify({
+    volume: goal.ref,
+    negativeAttempts: [],
+    constraints: [],
+    unresolved: ['Failure one', 'Failure two'],
+  })
+  const old = await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body,
+  })
+  const result = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: 'first fixed; second narrowed',
+  })
+  const active = new ActiveContext('s', f.context, f.storage)
+  const before = await active.read(signal())
+  const questions = before.items.filter((item) => item.kind === 'question')
+  const proof = [{ ref: result.ref, offset: 0, quote: 'first fixed; second narrowed' }]
+  const receipt = await f.memory.updateActive(
+    {
+      baseRevision: before.revision,
+      changes: [
+        { id: questions[0].id, status: 'resolved', evidence: proof },
+        {
+          id: questions[1].id,
+          status: 'superseded',
+          replacement: 'Second failure: narrowed boundary',
+          evidence: proof,
+        },
+      ],
+    },
+    signal()
+  )
+  assert.equal(receipt.revision, before.revision + 1)
+  assert.deepEqual(
+    receipt.updated.map(({ id, status }) => ({ id, status })),
+    questions.map((item, i) => ({ id: item.id, status: i ? 'superseded' : 'resolved' }))
+  )
+  assert.notEqual(receipt.updated[1].replacement.id, questions[1].id)
+  const after = await active.read(signal())
+  assert.deepEqual(after.pendingInputs, before.pendingInputs)
+  assert.equal(after.status, 'pending-review')
+  assert.deepEqual(
+    after.items.filter((item) => item.kind === 'constraint'),
+    before.items.filter((item) => item.kind === 'constraint')
+  )
+  assert.deepEqual(
+    after.items.filter((item) => item.kind === 'question').map((item) => item.text),
+    ['Second failure: narrowed boundary']
+  )
+  const state = await f.storage.load('s')
+  const transitionRecord = state.records.findLast(
+    (item) => item.title === 'context:active-transition'
+  )
+  const transition = JSON.parse(await f.storage.get('s', transitionRecord.objectId))
+  assert.equal(transition.actor, 'main-model')
+  assert.equal(transition.reviewedInput, undefined)
+  assert.deepEqual(transition.transitions[0].prior, questions[0])
+  assert.deepEqual(transition.transitions[0].evidence, proof)
+  assert.equal((await f.context.read(old.ref)).text, body)
+  await f.recent.seal(0, state.records.at(-1).sequence, signal())
+  await f.context.append({ kind: 'checkpoint', title: 'context:volume-narrative', body })
+  assert.deepEqual((await active.read(signal())).items, after.items)
+  const reopened = await f.reopen()
+  const restored = new ActiveContext('s', reopened.context, f.storage)
+  const current = await restored.read(signal())
+  assert.deepEqual(current.items, after.items)
+  await restored.apply(
+    {
+      baseRevision: current.revision,
+      reviewedInput: goal.ref,
+      changes: [],
+      additions: [{ kind: 'question', text: questions[0].text, evidence: proof }],
+    },
+    [goal.ref],
+    signal()
+  )
+  const added = (await restored.read(signal())).items.find(
+    (item) => item.text === questions[0].text
+  )
+  assert(added)
+  assert.notEqual(added.id, questions[0].id)
+})
+
+test('active questions: constraint, additions, retraction, stale version, invalid quotes and invented sources reject atomically', async (t) => {
+  const f = await setup(t)
+  const goal = await f.context.append({ kind: 'user', body: 'Investigate; do not publish.' })
+  await f.task.begin(goal.ref)
+  await f.context.summarizeInput({
+    ref: goal.ref,
+    baseRevision: 0,
+    summary: 'Investigate',
+    constraints: ['Do not publish'],
+    unresolved: [],
+  })
+  await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({ unresolved: ['Failure one', 'Failure two'] }),
+  })
+  const result = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: 'test passed',
+  })
+  const note = await f.context.append({ kind: 'note', body: 'test passed' })
+  const active = new ActiveContext('s', f.context, f.storage)
+  const before = await active.read(signal())
+  const question = before.items.find((item) => item.kind === 'question')
+  const constraint = before.items.find((item) => item.kind === 'constraint')
+  const change = {
+    id: question.id,
+    status: 'resolved',
+    evidence: [{ ref: result.ref, offset: 0, quote: 'test passed' }],
+  }
+  const patch = { baseRevision: before.revision, changes: [change] }
+  const cases = [
+    [{ ...patch, baseRevision: before.revision - 1 }, 'CONFLICT'],
+    [{ ...patch, changes: [] }, 'VALIDATION'],
+    [{ ...patch, additions: [] }, 'VALIDATION'],
+    [{ ...patch, changes: [{ ...change, status: 'retracted' }] }, 'VALIDATION'],
+    [
+      {
+        ...patch,
+        changes: [
+          { ...change, id: constraint.id, status: 'superseded', replacement: 'Publish freely' },
+        ],
+      },
+      'VALIDATION',
+    ],
+    [{ ...patch, changes: [change, { ...change, id: 'unknown' }] }, 'VALIDATION'],
+    [{ ...patch, changes: [change, change] }, 'VALIDATION'],
+    [
+      {
+        ...patch,
+        changes: [{ ...change, evidence: [{ ref: note.ref, offset: 0, quote: 'test passed' }] }],
+      },
+      'PERMISSION',
+    ],
+    [
+      {
+        ...patch,
+        changes: [{ ...change, evidence: [{ ref: result.ref, offset: 1, quote: 'test passed' }] }],
+      },
+      'CONFLICT',
+    ],
+    [
+      {
+        ...patch,
+        changes: [
+          {
+            ...change,
+            evidence: [
+              { ref: { sessionId: 'other', id: result.ref.id }, offset: 0, quote: 'test passed' },
+            ],
+          },
+        ],
+      },
+      'VALIDATION',
+    ],
+    [
+      {
+        ...patch,
+        changes: [
+          {
+            ...change,
+            evidence: [
+              { ref: { sessionId: 's', id: 'invented' }, offset: 0, quote: 'test passed' },
+            ],
+          },
+        ],
+      },
+      'PERMISSION',
+    ],
+    [{ ...patch, changes: [{ ...change, replacement: 'unexpected' }] }, 'VALIDATION'],
+    [{ ...patch, changes: [{ ...change, status: 'superseded' }] }, 'VALIDATION'],
+  ]
+  for (const [input, code] of cases) {
+    await assert.rejects(active.updateQuestions(input, signal()), { code })
+    assert.deepEqual(await active.read(signal()), before)
+  }
+  const save = f.storage.compareAndSwapMetadata.bind(f.storage)
+  t.mock.method(f.storage, 'compareAndSwapMetadata', async () => false)
+  await assert.rejects(active.updateQuestions(patch, signal()), { code: 'CONFLICT' })
+  t.mock.restoreAll()
+  assert.deepEqual(await active.read(signal()), before)
+  await active.updateQuestions(patch, signal())
+  await assert.rejects(active.updateQuestions(patch, signal()), { code: 'CONFLICT' })
+  assert(save)
+})
+
+test('active questions: history reset forbids old execution evidence and cancellation does not publish', async (t) => {
+  const f = await setup(t)
+  const goal = await f.context.append({ kind: 'user', body: 'Investigate' })
+  await f.task.begin(goal.ref)
+  const result = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: 'test passed',
+  })
+  await f.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+  await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({ unresolved: ['Failure'] }),
+  })
+  const active = new ActiveContext('s', f.context, f.storage)
+  const before = await active.read(signal())
+  const patch = {
+    baseRevision: before.revision,
+    changes: [
+      {
+        id: before.items[0].id,
+        status: 'resolved',
+        evidence: [{ ref: result.ref, offset: 0, quote: 'test passed' }],
+      },
+    ],
+  }
+  await assert.rejects(active.updateQuestions(patch, signal()), { code: 'PERMISSION' })
+  const aborted = AbortSignal.abort()
+  await assert.rejects(active.updateQuestions(patch, aborted), { name: 'AbortError' })
+  assert.deepEqual(await active.read(signal()), before)
+})
+
+test('handoff: mechanical recovery keeps current questions and original evidence across segments and reopen', async (t) => {
+  const f = await setup(t)
+  const goal = await f.context.append({
+    kind: 'user',
+    body: 'Continue the serializer; do not publish',
+  })
+  await f.task.begin(goal.ref)
+  await f.task.startStep('handoff-plan', signal())
+  await f.task.updateCapsule({ nextObjective: 'Verify the serializer', decisions: ['Keep API'] })
+  await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({
+      volume: goal.ref,
+      unresolved: ['First failure', 'Second failure'],
+      negativeAttempts: [],
+    }),
+  })
+  const active = new ActiveContext('s', f.context, f.storage)
+  const before = await active.read(signal())
+  const result = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: 'First failure fixed',
+  })
+  await f.memory.updateActive(
+    {
+      baseRevision: before.revision,
+      changes: [
+        {
+          id: before.items[0].id,
+          status: 'resolved',
+          evidence: [{ ref: result.ref, offset: 0, quote: 'First failure fixed' }],
+        },
+      ],
+    },
+    signal()
+  )
+  const first = await f.memory.project(view('s'), undefined, [], signal(), 24000)
+  const base = first.history.map((x) => JSON.stringify(x)).join('\n')
+  assert.match(base, /runtime-handoff/)
+  const h = await f.recent.handoff(signal())
+  assert.deepEqual(
+    h.entries.filter((x) => x.kind === 'question').map((x) => x.text),
+    ['Second failure']
+  )
+  assert(h.entries.some((x) => x.kind === 'transition' && x.text === 'First failure'))
+  const transition = h.entries.find((x) => x.kind === 'transition')
+  assert.match((await f.context.read(transition.ref)).text, /First failure fixed/)
+  await f.recent.seal(0, (await f.storage.load('s')).records.at(-1).sequence, signal())
+  await f.task.settle([], signal())
+  await f.task.end()
+  const reopened = await f.reopen()
+  assert.deepEqual(
+    (await reopened.recent.handoff(signal())).entries
+      .filter((x) => x.kind === 'question')
+      .map((x) => x.text),
+    ['Second failure']
+  )
+  const secondGoal = await reopened.context.append({ kind: 'user', body: 'Now verify the parser' })
+  await reopened.task.begin(secondGoal.ref, signal())
+  await reopened.context.append({ kind: 'assistant', body: 'Continue without repeating the write' })
+  for (let index = 0; index < 70; index++)
+    await reopened.context.append({ kind: 'assistant', body: `Segment work ${index}` })
+  assert.equal(await reopened.memory.fold('boundary', 24000, signal()), true)
+  const second = await reopened.memory.project(view('s'), undefined, [], signal(), 24000)
+  assert.match(JSON.stringify(second.history), /Now verify the parser/)
+  assert.equal(JSON.stringify(first.history).includes('Now verify the parser'), false)
+  const failure = await reopened.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: JSON.stringify({
+      result: { failed: { code: 'PROCESS_FAILED', message: 'parser failed' } },
+    }),
+  })
+  const thirdHandoff = await reopened.recent.handoff(signal())
+  assert(
+    thirdHandoff.entries.some((item) => item.kind === 'result' && item.ref.id === failure.ref.id)
+  )
+  await reopened.context.append({ kind: 'assistant', body: 'Failure remains open' })
+  for (let index = 0; index < 70; index++)
+    await reopened.context.append({ kind: 'assistant', body: `Segment work ${index}` })
+  assert.equal(await reopened.memory.fold('boundary', 24000, signal()), true)
+  const third = await reopened.memory.project(view('s'), undefined, [], signal(), 24000)
+  assert.match(JSON.stringify(third.history), /execution-failed/)
+  assert.deepEqual(
+    (await reopened.recent.handoff(signal())).entries
+      .filter((item) => item.kind === 'question')
+      .map((item) => item.text),
+    ['Second failure']
+  )
+  assert.equal(
+    JSON.stringify(h).includes('First failure fixed'),
+    false,
+    'execution body is not copied into handoff'
+  )
+})
+
+test('handoff: total budget is bounded and reset prevents old state and evidence leakage', async (t) => {
+  const f = await setup(t)
+  const goal = await f.context.append({ kind: 'user', body: 'OLD_SECRET' })
+  await f.task.begin(goal.ref)
+  await f.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({
+      unresolved: Array.from({ length: 25 }, (_, i) => `OLD_SECRET ${i}${'x'.repeat(800)}`),
+    }),
+  })
+  await new ActiveContext('s', f.context, f.storage).read(signal())
+  const h = await f.recent.handoff(signal())
+  assert(h.omitted > 0)
+  assert(JSON.stringify(h).length <= 6000)
+  await f.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+  const reset = await f.recent.handoff(signal())
+  assert.doesNotMatch(JSON.stringify(reset), /OLD_SECRET/)
+  assert.equal(reset.active, undefined)
+  assert.deepEqual(reset.entries, [])
+})

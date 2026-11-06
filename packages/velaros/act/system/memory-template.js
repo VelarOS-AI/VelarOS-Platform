@@ -36,3 +36,9 @@ async function readFailedCallPage(ref,invocation,keyPrefix,offset=0){
  output(page,{key:keyPrefix+'_'+offset,view:{mode:'full'}});
  return page.offset+page.text.length<page.totalChars?page.offset+page.text.length:null;
 }
+
+// 只在 execute 中按当前帧 revision 和 question.id 关闭旧事项，不调用整理模型、不改用户约束。
+// evidence 使用真实用户原文或执行结果的逐字引文，不能用笔记或摘要；冲突后按新帧重新决定。
+async function resolveQuestion(baseRevision,id,ref,offset,quote){
+ output(await memory.updateActive({baseRevision,changes:[{id,status:'resolved',evidence:[{ref,offset,quote}]}]}));
+}

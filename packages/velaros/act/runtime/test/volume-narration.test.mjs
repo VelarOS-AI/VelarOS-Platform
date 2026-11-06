@@ -1134,3 +1134,56 @@ test('maintenance raw prompt avoids nested escaping on code-heavy records', asyn
     prompt
   )
 })
+
+test('business boundaries do not consume automatic narration; explicit and pressure maintenance still run', async (t) => {
+  const { done } = await import('./support/model-turn.mjs')
+  const calls = []
+  let modelCalls = 0
+  const runtime = await createRuntime({
+    storage: localContextStorage({ path: ':memory:' }),
+    runner: nodeSubprocessCodeRunner,
+    modules: [],
+    model: {
+      id: 'no-automatic-narration',
+      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+      async *stream(request) {
+        modelCalls++
+        yield* done(request)
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('root')
+  let consumed = 0
+  session.memory.narration = async () => {
+    consumed++
+    return { sessionId: 'root', id: 'pending-volume' }
+  }
+  runtime.maintenance.maintain = async (_id, input) => {
+    calls.push(input.reason)
+    return false
+  }
+  const events = []
+  for await (const event of session.submit(
+    'Continue the business task without prewriting history.'
+  ))
+    events.push(event)
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(modelCalls, 1)
+  assert.equal(consumed, 0, 'business preparation must not consume the deferred narrative')
+  assert.deepEqual(calls, ['boundary'])
+  const frames = session.agent.options.frames
+  const folds = []
+  session.memory.fold = async (reason) => {
+    folds.push(reason)
+    return true
+  }
+  session.organizePending = async () => true
+  await frames.maintain({ reason: 'boundary', targetChars: 12000 }, signal)
+  await frames.maintain({ reason: 'pressure', targetChars: 12000 }, signal)
+  await frames.maintain({ reason: 'provider', targetChars: 12000 }, signal)
+  assert.deepEqual(folds, ['organize'])
+  assert.deepEqual(calls, ['boundary', 'boundary', 'pressure', 'provider'])
+  assert.equal(consumed, 0)
+})

@@ -14,6 +14,8 @@ import type {
 } from '../types/executions.js'
 import type { GoalState, GoalUpdate } from '../types/goal.js'
 import type {
+  ActiveContextQuestionPatch,
+  ActiveContextUpdateReceipt,
   ContextMaintenancePage,
   ContextMaterialsQuery,
   ContextMaterialsReadInput,
@@ -71,6 +73,11 @@ export interface MemorySession {
 }
 /** 只复用当前会话的授权存储。 */
 export interface MemoryStore {
+  /** 主模型按版本更新旧未解事项；旧宿主未装配时明确报告不支持。 */
+  updateActive?(
+    input: ActiveContextQuestionPatch,
+    signal: AbortSignal
+  ): Promise<ActiveContextUpdateReceipt>
   /** 主模型更新自己的不可变笔记版本。 */
   update(input: WorkspaceUpdate, signal: AbortSignal): Promise<WorkspaceEntry>
   /** 元数据分页和查找。 */

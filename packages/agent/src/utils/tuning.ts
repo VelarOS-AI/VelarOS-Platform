@@ -15,7 +15,7 @@ export const ContextPlanTuning = Object.freeze({
   minTurns: 4,
   /** 工作窗口上限，token；与模型输入上限取较小值。 */
   windowTokens: 200_000,
-  /** 历史状态帧的独立工作窗比例；在有界窗口内保留已接受前缀。 */
+  /** 默认缓存优先；仅完整请求放不下时回收，宿主可显式降低历史帧比例。 */
   retainedFrameRatio: 1,
   /** 供应商超窗拒绝与完成检查的修复次数。 */
   recoveryAttempts: 2,

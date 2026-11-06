@@ -1,3 +1,4 @@
+import { isArray, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { AgentCollaborationLimits, ChildDeliveryLimits } from '../contract/constants.js'
@@ -8,12 +9,12 @@ import type { AgentJob, AgentStart } from '../types/delegation.js'
 export function agentCollaboration(
   input: AgentStart['collaboration']
 ): AgentStart['collaboration'] {
-  if (input === undefined) return undefined
+  if (isUndefined(input)) return undefined
   if (
     !input ||
-    typeof input.root !== 'string' ||
+    !isString(input.root) ||
     input.root.length > AgentCollaborationLimits.chars ||
-    !Array.isArray(input.plannedWrites) ||
+    !isArray(input.plannedWrites) ||
     input.plannedWrites.length > AgentCollaborationLimits.paths
   )
     throw new AppError('VALIDATION', '协作声明需要绝对 root 和有界 plannedWrites')
@@ -40,7 +41,7 @@ export function agentCollaboration(
   let root = prefix + parts.join('/')
   if (windows) root = root.toLowerCase()
   const plannedWrites = input.plannedWrites.map((value: string) => {
-    if (typeof value !== 'string' || !value || value.length > AgentCollaborationLimits.chars)
+    if (!isString(value) || !value || value.length > AgentCollaborationLimits.chars)
       throw new AppError('VALIDATION', '协作路径必须是有界非空相对路径')
     const path = value.replaceAll('\\', '/')
     if (

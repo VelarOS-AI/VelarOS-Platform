@@ -25,15 +25,12 @@ export class ExecutionProgress implements ExecutionProgressApi {
   private readonly buffers = new Map<string, ExecutionOutputState>()
   private readonly writes = new Map<string, Promise<void>>()
   private readonly dirty = new Set<string>()
-  private readonly pendingWake = new Set<string>()
   private readonly timers = new TimerScope({ name: 'ExecutionProgress' })
   private flushTimer?: TimerLease
-  private wakeTimer?: TimerLease
   private closed = false
 
   public constructor(
     private readonly programs: ProgramContextApi,
-    private readonly wake: () => void,
     private readonly failed: (error: unknown) => void
   ) {}
 
@@ -54,13 +51,6 @@ export class ExecutionProgress implements ExecutionProgressApi {
       this.flushTimer = undefined
       for (const id of [...this.dirty]) void this.flush(id).catch(this.failed)
     })
-    // 只为仍存活且有新输出的作业合并通知，完成回执不再留下迟到唤醒。
-    this.pendingWake.add(executionId)
-    this.wakeTimer ??= this.timers.after(ExecutionObservabilityLimits.wakeMs, () => {
-      this.wakeTimer = undefined
-      this.pendingWake.clear()
-      this.wake()
-    })
   }
 
   public current(executionId: string): Optional<ExecutionOutputState> {
@@ -78,11 +68,6 @@ export class ExecutionProgress implements ExecutionProgressApi {
   }
 
   public async finish(executionId: string): Promise<void> {
-    this.pendingWake.delete(executionId)
-    if (this.pendingWake.size === 0) {
-      this.wakeTimer?.cancel()
-      this.wakeTimer = undefined
-    }
     try {
       await this.flush(executionId)
     } finally {

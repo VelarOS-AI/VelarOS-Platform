@@ -99,7 +99,7 @@ class AgentSupervisor implements AgentSupervisorApi {
         status: 'running',
       }
       if (snapshot?.task) Object.assign(job, { parentTaskId: snapshot.task.id })
-      if (input.collaboration !== undefined)
+      if (!isUndefined(input.collaboration))
         Object.assign(job, { collaboration: agentCollaboration(input.collaboration) })
       Object.assign(
         job,
@@ -136,7 +136,7 @@ class AgentSupervisor implements AgentSupervisorApi {
         ...rest
       } = prior
       const job: AgentJob = { ...rest, status: 'running', profile: input.profile ?? prior.profile }
-      if (input.collaboration !== undefined)
+      if (!isUndefined(input.collaboration))
         Object.assign(job, { collaboration: agentCollaboration(input.collaboration) })
       Object.assign(
         job,

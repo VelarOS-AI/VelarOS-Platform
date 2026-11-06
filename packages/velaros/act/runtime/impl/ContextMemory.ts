@@ -22,7 +22,11 @@ import { scriptOutputs } from '@velaros-ai/script'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
 
 import { WorkspaceLimits } from '../../system/contract/constants.js'
-import type { ContextProjectionPolicy } from '../../system/types/maintenance.js'
+import type {
+  ActiveContextQuestionPatch,
+  ActiveContextUpdateReceipt,
+  ContextProjectionPolicy,
+} from '../../system/types/maintenance.js'
 import type {
   MemoryContent,
   MemoryPage,
@@ -94,6 +98,11 @@ export interface ContextMemoryApi {
   ): Promise<MemoryRetention>
   /** 按稳定键及版本前提追加不可变笔记版本。 */
   update(input: WorkspaceUpdate, signal: AbortSignal): Promise<WorkspaceEntry>
+  /** 主模型逐项更新当前事项，约束和授权仍由当前状态权威校验。 */
+  updateActive(
+    input: ActiveContextQuestionPatch,
+    signal: AbortSignal
+  ): Promise<ActiveContextUpdateReceipt>
   /** 当前授权代次内的笔记目录，包含已移出内存的条目。 */
   list(
     input: { after?: string; limit?: number },
@@ -108,6 +117,18 @@ export interface ContextMemoryApi {
     limit: Optional<number>,
     signal: AbortSignal
   ): Promise<ContextContent>
+  /** 周期私有候选；稳定准备可登记底座/退役，候选不发布正式帧或请求证明。 */
+  beginFrame(
+    view: ModelView,
+    observation: Optional<ContextRef>,
+    images: readonly ModelImage[],
+    signal: AbortSignal,
+    maxChars: number
+  ): Promise<{
+    project(maxChars: number): ReturnType<ContextMemoryApi['project']>
+    reconcile: ContextMemoryApi['reconcile']
+    publish(body: string, signal: AbortSignal): Promise<void>
+  }>
   /** 合并段底座、段内历史与本帧五分区，生成同一快照。 */
   project(
     view: ModelView,
@@ -166,6 +187,13 @@ export class ContextMemory implements ContextMemoryApi {
     private readonly journal?: ContextInvocationJournalApi
   ) {
     this.policy = memoryPolicy(policy)
+  }
+
+  public updateActive(
+    input: ActiveContextQuestionPatch,
+    signal: AbortSignal
+  ): Promise<ActiveContextUpdateReceipt> {
+    return new ActiveContext(this.id, this.context, this.storage).updateQuestions(input, signal)
   }
 
   private async snapshot(signal: AbortSignal, selections?: readonly ContextRecordSelection[]) {
@@ -652,14 +680,7 @@ export class ContextMemory implements ContextMemoryApi {
     return this.projectFrame(view, observation, images, signal, maxChars, true)
   }
 
-  private async projectFrame(
-    view: ModelView,
-    observation: Optional<ContextRef>,
-    images: readonly ModelImage[],
-    signal: AbortSignal,
-    maxChars: number,
-    reuseRetained: boolean
-  ): ReturnType<ContextMemoryApi['project']> {
+  private async prepareFrame(maxChars: number, signal: AbortSignal) {
     const active = await new ActiveContext(this.id, this.context, this.storage).read(signal)
     const programState = await this.programs.state()
     const { snapshot, reset, notes } = await this.notes(signal, true, [
@@ -718,6 +739,136 @@ export class ContextMemory implements ContextMemoryApi {
       'released',
       signal
     )
+    return {
+      active,
+      snapshot,
+      reset,
+      lastAttempt,
+      pending,
+      presentation,
+      residents,
+      segment,
+      archive: undefined as Promise<ContextRecord> | undefined,
+      registrations: new Map<string, () => Promise<void>>(),
+    }
+  }
+
+  public async beginFrame(
+    view: ModelView,
+    observation: Optional<ContextRef>,
+    images: readonly ModelImage[],
+    signal: AbortSignal,
+    maxChars: number
+  ): ReturnType<ContextMemoryApi['beginFrame']> {
+    const facts = await this.frameVersion(signal, false)
+    const prepared = await this.prepareFrame(maxChars, signal)
+    if (facts !== (await this.frameVersion(signal, false)))
+      throw new AppError('STALE_VIEW', '稳定材料准备期间授权或输入事实发生变化')
+    const audits = new Map<string, Parameters<ContextRuntime['append']>[0]>()
+    const proofs = new Map<string, Parameters<ContextRuntime['append']>[0]>()
+    const save = (audit: Parameters<ContextRuntime['append']>[0]) => {
+      audits.set(JSON.parse(audit.body).frameId, audit)
+    }
+    // 首次准备允许归档同一份决策细节；后续候选只复用该不可变引用。
+    const version = await this.frameVersion(signal)
+    const initial = await this.projectFrame(
+      view,
+      observation,
+      images,
+      signal,
+      maxChars,
+      true,
+      prepared,
+      save
+    )
+    if (version !== (await this.frameVersion(signal)))
+      throw new AppError('STALE_VIEW', '准备期间上下文事实发生变化')
+    let published = false
+    return {
+      project: async (budget) =>
+        budget === maxChars
+          ? initial
+          : this.projectFrame(view, observation, images, signal, budget, true, prepared, save),
+      reconcile: (body, history, previous, currentSignal) => {
+        const audit = audits.get(JSON.parse(body).frameId)
+        if (!audit) throw new AppError('NOT_FOUND', '候选上下文帧不属于本周期')
+        return this.reconcile(body, history, previous, currentSignal, {
+          audit,
+          save: (proof) => proofs.set(body, proof),
+        }).then((result) => {
+          const proof = proofs.get(body)!
+          proofs.set(result.body, proof)
+          return result
+        })
+      },
+      publish: async (body, currentSignal) => {
+        currentSignal.throwIfAborted()
+        if (published) throw new AppError('CONFLICT', '组帧周期已发布')
+        if (version !== (await this.frameVersion(currentSignal)))
+          throw new AppError('STALE_VIEW', '发布前上下文授权或输入事实发生变化')
+        const audit = audits.get(JSON.parse(body).frameId)
+        const proof = proofs.get(body)
+        if (!audit || !proof || JSON.parse(proof.body).bodyHash !== scriptOutputs.hash(body))
+          throw new AppError('VALIDATION', '选中帧缺少实际正文证明')
+        // 一旦开始正式写入就不允许同一周期重放；部分写入失败也不消费租约。
+        published = true
+        const record = await this.context.append(audit, currentSignal)
+        await this.context.append({ ...proof, sources: [record.ref] }, currentSignal)
+        await prepared.registrations.get(JSON.parse(body).frameId)?.()
+        audits.clear()
+        proofs.clear()
+      },
+    }
+  }
+
+  private async frameVersion(signal: AbortSignal, includeSegment = true): Promise<string> {
+    const state = await this.snapshot(signal, [
+      { title: 'search:history-reset', latest: true },
+      { title: 'context:active-state', latest: true },
+      { title: 'script:lease-state', latest: true },
+      { title: 'context:projection-policy', latest: true },
+      { title: 'session:goal', latest: true },
+      { title: 'context-maintenance:request', latest: true },
+      { title: 'context-maintenance:outcome', latest: true },
+      { titlePrefix: 'workspace:note:', latestPerTitle: true },
+      { kind: 'user' },
+    ])
+    const segment = await this.recent.segment(signal)
+    const task = state?.task
+    const leases = await this.programs.state()
+    return scriptOutputs.hash([
+      task && {
+        id: task.id,
+        revision: task.revision,
+        startedSequence: task.startedSequence,
+        goals: task.goals,
+        capsule: task.capsule,
+        activeExecutions: task.activeExecutions,
+        mandatory: task.mandatory,
+        status: task.status,
+      },
+      state?.records
+        .filter((record) => record.title !== 'script:lease-state')
+        .map((record) => [record.ref, record.objectId]),
+      leases,
+      state?.inputSummaries,
+      includeSegment ? [segment?.id, segment?.revision] : undefined,
+    ])
+  }
+
+  private async projectFrame(
+    view: ModelView,
+    observation: Optional<ContextRef>,
+    images: readonly ModelImage[],
+    signal: AbortSignal,
+    maxChars: number,
+    reuseRetained: boolean,
+    prepared?: Awaited<ReturnType<ContextMemory['prepareFrame']>>,
+    save?: (input: Parameters<ContextRuntime['append']>[0]) => void
+  ): ReturnType<ContextMemoryApi['project']> {
+    const stable = prepared ?? (await this.prepareFrame(maxChars, signal))
+    const { active, snapshot, reset, lastAttempt, pending, presentation, residents, segment } =
+      stable
     const workspaceBudget = Math.max(
       0,
       Math.floor(maxChars * (segment.workspaceShare ?? this.policy.workspaceShare))
@@ -832,7 +983,8 @@ export class ContextMemory implements ContextMemoryApi {
       images,
       signal,
       Math.max(1, maxChars - base.length - cards.used),
-      retained
+      retained,
+      Boolean(save)
     )
     const material = JSON.parse(frame.body)
     const sequence = new Map(
@@ -906,7 +1058,16 @@ export class ContextMemory implements ContextMemoryApi {
           )
       )
     )
-      return this.projectFrame(view, observation, images, signal, maxChars, false)
+      return this.projectFrame(
+        view,
+        observation,
+        images,
+        signal,
+        maxChars,
+        false,
+        save ? stable : undefined,
+        save
+      )
     // 正文已在段内历史里的结果，本帧尾只留状态与引用；当次源码在产生它的那条响应里
     const inHistory = new Set(
       history.items
@@ -1111,7 +1272,13 @@ export class ContextMemory implements ContextMemoryApi {
         recall:
           '必需输出补齐：用 missing[].read 作为 memory.read 输入，从 offset 0 开始；每页以 page.offset + page.text.length 续读，到该页返回的 page.totalChars 停止。每页原样 output(page, {key:唯一键,view:{mode:"full"}})。可在一次 execute 中逐页输出；只有本次模型历史实际完整保留的页连续覆盖该表示全文才满足。局部字段、裸 page.text、未展示完的页与初始摘录不计入覆盖；展示额度不足时分批读取，不自动 release。',
       })
-    await this.programs.delivered(material.programFrame.id, resultRefs, signal)
+    if (save) {
+      const register = frame.registerFrame
+      stable.registrations.set(material.programFrame.id, async () => {
+        await register?.()
+        await this.programs.delivered(material.programFrame.id, resultRefs, signal)
+      })
+    } else await this.programs.delivered(material.programFrame.id, resultRefs, signal)
     const entries = [
       ...residents.map((item) => {
         const card = workspace.find((current) => current.key === item.note.key)
@@ -1322,7 +1489,12 @@ export class ContextMemory implements ContextMemoryApi {
         : undefined
     // 仅在细节确实可减少时归档原文；原内部帧与正文证明保持完整。
     let stateRecord: Optional<ContextRecord>
-    if (stateProjection && stateProjection.savedChars > ActRuntimeTuning.stateMinimumSavings) {
+    if (
+      stateProjection &&
+      (stable.archive ||
+        decisionStateProjection(partitions.runtime, active, 1).savedChars >
+          ActRuntimeTuning.stateMinimumSavings)
+    ) {
       const title = `context:decision-state:${snapshot?.task?.id ?? 'none'}:${reset}`
       const detail = JSON.stringify({
         children: partitions.runtime.children,
@@ -1336,7 +1508,10 @@ export class ContextMemory implements ContextMemoryApi {
       stateRecord =
         previous && (await this.storage.get(this.id, previous.objectId)) === detail
           ? previous
-          : await this.context.append({ kind: 'audit', title, body: detail }, signal)
+          : await (stable.archive ??= this.context.append(
+              { kind: 'audit', title, body: detail },
+              signal
+            ))
     }
     const footprint = Object.fromEntries(
       Object.entries(partitions).map(([name, value]) => [name, JSON.stringify(value).length])
@@ -1396,49 +1571,48 @@ export class ContextMemory implements ContextMemoryApi {
           '按当前能力合同维护工作记忆；检查分区占用、材料变化与整理回执。引用不代表正文已读。',
       },
     })
-    await this.context.append(
-      {
-        kind: 'audit',
-        title: `context:frame:${material.programFrame.id}`,
-        body: JSON.stringify({
-          frameId: material.programFrame.id,
-          budget: { maxChars, program: frame.budget, historyEntryChars },
-          entries,
-          segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },
-          proof: {
-            authorization: reset,
-            missing: material.decision.missing,
-            history: history.items.flatMap((item, index) =>
-              item.role === 'user' && item.bodyIncluded && item.outputProofs?.length
+    const audit: Parameters<ContextRuntime['append']>[0] = {
+      kind: 'audit',
+      title: `context:frame:${material.programFrame.id}`,
+      body: JSON.stringify({
+        frameId: material.programFrame.id,
+        budget: { maxChars, program: frame.budget, historyEntryChars },
+        entries,
+        segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },
+        proof: {
+          authorization: reset,
+          missing: material.decision.missing,
+          history: history.items.flatMap((item, index) =>
+            item.role === 'user' && item.bodyIncluded && item.outputProofs?.length
+              ? [
+                  {
+                    message: memoryMessageKey(history.messages[index]!),
+                    proofs: item.outputProofs,
+                  },
+                ]
+              : []
+          ),
+          current: material.results.flatMap(
+            (item: { ref: string; text?: string; outputFormat?: string }) => {
+              const proofs = workingProofs.get(item.ref)
+              return item.text && item.text === workingTexts.get(item.ref) && proofs?.length
                 ? [
                     {
-                      message: memoryMessageKey(history.messages[index]!),
-                      proofs: item.outputProofs,
+                      ref: item.ref,
+                      text: scriptOutputs.hash([item.ref, item.outputFormat, item.text]),
+                      proofs,
                     },
                   ]
                 : []
-            ),
-            current: material.results.flatMap(
-              (item: { ref: string; text?: string; outputFormat?: string }) => {
-                const proofs = workingProofs.get(item.ref)
-                return item.text && item.text === workingTexts.get(item.ref) && proofs?.length
-                  ? [
-                      {
-                        ref: item.ref,
-                        text: scriptOutputs.hash([item.ref, item.outputFormat, item.text]),
-                        proofs,
-                      },
-                    ]
-                  : []
-              }
-            ),
-          },
-          squeezed,
-        }),
-        sources: [],
-      },
-      signal
-    )
+            }
+          ),
+        },
+        squeezed,
+      }),
+      sources: [],
+    }
+    if (save) save(audit)
+    else await this.context.append(audit, signal)
     return {
       body,
       images: resetAfterStart ? [] : frame.images,
@@ -1736,6 +1910,7 @@ export class ContextMemory implements ContextMemoryApi {
       })
     }
     const text = segmentBase({
+      handoff: await this.recent.handoff(signal),
       index: input.index,
       from: input.from,
       volumes,
@@ -1824,7 +1999,11 @@ export class ContextMemory implements ContextMemoryApi {
     body: string,
     history: readonly ModelHistoryMessage[],
     previous: Optional<string>,
-    signal: AbortSignal
+    signal: AbortSignal,
+    draft?: {
+      audit: Parameters<ContextRuntime['append']>[0]
+      save(input: Parameters<ContextRuntime['append']>[0]): void
+    }
   ): Promise<{ body: string; prompt: string }> {
     const projected = JSON.parse(body)
     const selected = await this.snapshot(signal, [
@@ -1834,8 +2013,10 @@ export class ContextMemory implements ContextMemoryApi {
     const record = selected?.records.findLast(
       (item) => item.title === `context:frame:${projected.frameId}`
     )
-    if (!record) throw new AppError('NOT_FOUND', '待核对的上下文帧尚未登记')
-    const saved = JSON.parse((await this.storage.get(this.id, record.objectId))!)
+    if (!record && !draft) throw new AppError('NOT_FOUND', '待核对的上下文帧尚未登记')
+    const saved = JSON.parse(
+      draft ? draft.audit.body : (await this.storage.get(this.id, record!.objectId))!
+    )
     if (!saved.proof) return { body, prompt: memoryPrompt(body, previous) }
     const delivered = selected?.records.findLast((item) => item.title === 'context:delivered')
     const accepted = delivered
@@ -1910,25 +2091,24 @@ export class ContextMemory implements ContextMemoryApi {
     projected.memoryStatus.footprint.runtime = JSON.stringify(projected.partitions.runtime).length
     const resolved = JSON.stringify(projected)
     const prompt = memoryPrompt(resolved, previous)
-    await this.context.append(
-      {
-        kind: 'audit',
-        title: `context:request-proof:${projected.frameId}`,
-        body: JSON.stringify({
-          frameId: projected.frameId,
-          authorization: saved.proof.authorization,
-          segment: { id: saved.segment.id, revision: saved.segment.revision },
-          bodyHash: scriptOutputs.hash(resolved),
-          promptHash: scriptOutputs.hash(prompt),
-          promptChars: prompt.length,
-          carriers: authorized,
-          current: currentProofs,
-          missing: saved.proof.missing,
-        }),
-        sources: [record.ref],
-      },
-      signal
-    )
+    const proof: Parameters<ContextRuntime['append']>[0] = {
+      kind: 'audit',
+      title: `context:request-proof:${projected.frameId}`,
+      body: JSON.stringify({
+        frameId: projected.frameId,
+        authorization: saved.proof.authorization,
+        segment: { id: saved.segment.id, revision: saved.segment.revision },
+        bodyHash: scriptOutputs.hash(resolved),
+        promptHash: scriptOutputs.hash(prompt),
+        promptChars: prompt.length,
+        carriers: authorized,
+        current: currentProofs,
+        missing: saved.proof.missing,
+      }),
+      sources: record ? [record.ref] : [],
+    }
+    if (draft) draft.save(proof)
+    else await this.context.append(proof, signal)
     return { body: resolved, prompt }
   }
 

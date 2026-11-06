@@ -25,9 +25,11 @@ import type {
   ContextSegment,
   ContextVolume,
   SegmentEntry,
+  SegmentHandoff,
   SegmentHistory,
   SegmentLeasedResult,
   SegmentLedgers,
+  StoredActiveContext,
   VolumeNarrativeRecord,
   VolumeView,
 } from '../types/segment.js'
@@ -52,6 +54,8 @@ export interface RecentContextApi {
   segment(signal: AbortSignal): Promise<Nullable<ContextSegment>>
   /** 目录里的卷（已被合并的不再单列）及各自最新的叙事，按区间排序。 */
   volumes(signal: AbortSignal): Promise<readonly VolumeView[]>
+  /** 当前段起点的有界机械交接，不调用模型、不写业务状态。 */
+  handoff(signal: AbortSignal): Promise<SegmentHandoff>
   /** 当前授权代次的全部卷叙事，含已并进上一级的卷，按写入顺序。 */
   narratives(signal: AbortSignal): Promise<readonly VolumeNarrativeRecord[]>
   /** 读取已增量归并的有界长期单，不扫描全部叙事。 */
@@ -652,6 +656,117 @@ export class RecentContext implements RecentContextApi {
           ? current.materialCoverage.identity
           : undefined,
     }
+  }
+
+  public async handoff(signal: AbortSignal): Promise<SegmentHandoff> {
+    signal.throwIfAborted()
+    const limit = ActRuntimeTuning.handoffItems
+    const state = await this.snapshot([
+      { title: 'context:active-state', latest: true },
+      { title: 'context:active-transition', last: limit },
+      { titlePrefix: 'script:', titleSuffix: ':result', last: limit },
+      { kind: 'user', last: 1 },
+    ])
+    const reset = this.reset(state)
+    const records = state?.records.filter((record) => record.sequence > reset) ?? []
+    const activeRecord = records.findLast((record) => record.title === 'context:active-state')
+    const active: StoredActiveContext | undefined = activeRecord
+      ? JSON.parse((await this.storage.get(this.id, activeRecord.objectId))!)
+      : undefined
+    const entries: Array<SegmentHandoff['entries'][number]> = []
+    const goal = records.findLast(
+      (record) =>
+        record.kind === 'user' && state?.task?.goals.some((ref) => ref.id === record.ref.id)
+    )
+    if (goal) {
+      const input = await this.context.readInput(goal.ref, {
+        limit: ActRuntimeTuning.volumeLineChars,
+      })
+      entries.push({
+        kind: 'goal',
+        ref: goal.ref,
+        text: skeletonLine(input.text.split('\n')[0] ?? ''),
+      })
+    }
+    if (goal && state?.task?.capsule.nextObjective)
+      entries.push({
+        kind: 'plan',
+        text: skeletonLine(state.task.capsule.nextObjective),
+        sources: [goal.ref],
+        status: 'model-interpretation',
+      })
+    const questions =
+      active?.reset === reset ? active.items.filter((item) => item.kind === 'question') : []
+    for (const item of questions.slice(0, limit))
+      entries.push({
+        kind: 'question',
+        id: item.id,
+        ref: activeRecord!.ref,
+        text: skeletonLine(item.text),
+        sources: item.sources.slice(0, limit),
+        status: 'model-interpretation',
+      })
+    let omitted = Math.max(0, questions.length - limit)
+    for (const record of records
+      .filter((item) => item.title === 'context:active-transition')
+      .reverse()) {
+      const value = archivedJson(await this.storage.get(this.id, record.objectId))
+      const changes = isArray(value.transitions) ? value.transitions : []
+      omitted += Math.max(0, changes.length - limit)
+      for (const change of changes.slice(0, limit)) {
+        if (!isPlainObject(change) || !isPlainObject(change.prior) || !isString(change.prior.text))
+          continue
+        entries.push({
+          kind: 'transition',
+          ref: record.ref,
+          text: skeletonLine(change.prior.text),
+          status: `historical-model-interpretation:${String(change.status)}`,
+        })
+      }
+    }
+    for (const record of records
+      .filter((item) => item.title.startsWith('script:') && item.title.endsWith(':result'))
+      .reverse()) {
+      const result = archivedJson(await this.storage.get(this.id, record.objectId))
+      if (result.mode === 'observe') continue
+      const failure = programFailure(result)
+      if (failure)
+        entries.push({
+          kind: 'result',
+          ref: record.ref,
+          text: skeletonLine(failure.message),
+          status: `execution-failed:${failure.code ?? 'unknown'}`,
+        })
+      const executionId = record.title.slice(7, -7)
+      for (const effect of (state?.task?.mandatory ?? [])
+        .filter((item) => item.executionId === executionId && item.effect !== 'none')
+        .slice(0, limit))
+        entries.push({
+          kind: 'effect',
+          ref: record.ref,
+          text: skeletonLine(effect.operation),
+          status: `${effect.effect}:${effect.outcome};不可自动重放，不代表领域验收通过`,
+        })
+    }
+    const handoff: SegmentHandoff = {
+      origin: 'runtime-handoff',
+      through: Math.max(reset, ...records.map((record) => record.sequence)),
+      active:
+        active && active.reset === reset && activeRecord
+          ? { revision: active.revision, ref: activeRecord.ref }
+          : undefined,
+      entries,
+      omitted,
+      recall:
+        '每类仅选最近记录；更早材料用 memory.list 分页，条目 ref 用 memory.read；交接缺席不表示没有风险，历史 transition 不是当前未解项。',
+    }
+    while (JSON.stringify(handoff).length > ActRuntimeTuning.handoffChars && !isEmpty(entries)) {
+      entries.pop()
+      omitted++
+      Object.assign(handoff, { omitted })
+    }
+    signal.throwIfAborted()
+    return handoff
   }
 
   public async seal(from: number, through: number, signal: AbortSignal): Promise<ContextRef> {

@@ -65,7 +65,10 @@ export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
 export type { VolumeNarrative } from './types/history.js'
 export type {
   ActiveContextEvidence,
+  ActiveContextItem,
   ActiveContextPatch,
+  ActiveContextQuestionPatch,
+  ActiveContextUpdateReceipt,
   ContextMaintenancePage,
   ContextMaterialsQuery,
   ContextMaterialsReadInput,

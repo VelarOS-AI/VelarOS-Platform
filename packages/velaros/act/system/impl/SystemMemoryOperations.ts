@@ -20,6 +20,10 @@ import { memoryOperations } from '@velaros-ai/velaros/memory'
 import { MemoryRecallLimits } from '../contract/constants.js'
 import type { SystemMemoryOperationContext } from '../contract/requires.js'
 import type {
+  ActiveContextQuestionPatch,
+  ActiveContextUpdateReceipt,
+} from '../types/maintenance.js'
+import type {
   LongTermMemoryPage,
   LongTermMemoryQuery,
   MemoryContent,
@@ -42,6 +46,15 @@ import { assembledPort } from '../utils/ports.js'
  * 改动只能在 execute 里做。
  */
 export interface SystemMemoryOperationsWorkingApi {
+  /** @AgentView 按当前版本和 ID 解决或取代旧 question；只接受真实用户原文或执行结果引文，不修改用户约束、不启动整理模型。回执给出提交版本及取代后的新 ID；不会把待核对用户输入标成已审阅。
+   * @OperationEffect write
+   * @OperationModes execute
+   */
+  updateActive(
+    input: ActiveContextQuestionPatch,
+    ctx: SystemMemoryOperationContext
+  ): Promise<ActiveContextUpdateReceipt>
+
   /** @AgentView 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
    * @OperationEffect none
    */
@@ -115,6 +128,15 @@ export interface SystemMemoryOperationsApi
     SystemMemoryOperationsLongTermApi {}
 
 export class SystemMemoryOperations implements SystemMemoryOperationsApi {
+  public async updateActive(
+    input: ActiveContextQuestionPatch,
+    ctx: SystemMemoryOperationContext
+  ): Promise<ActiveContextUpdateReceipt> {
+    ctx.abortSignal.throwIfAborted()
+    if (!ctx.memory.updateActive) throw new AppError('UNAVAILABLE', '当前宿主不支持轻量事项更新')
+    return ctx.memory.updateActive(input, ctx.abortSignal)
+  }
+
   public async list(input: MemoryQuery, ctx: SystemMemoryOperationContext): Promise<MemoryPage> {
     ctx.abortSignal.throwIfAborted()
     return ctx.memory.catalog(input, ctx.abortSignal)

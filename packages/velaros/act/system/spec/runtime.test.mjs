@@ -858,3 +858,114 @@ for (const inputText of ['preserve '.repeat(160), '中文 "quoted" \\ path\n'.re
     assert(paged.recent.some((item) => item.text.length > 0))
     assert(JSON.stringify(paged).length <= Math.floor(completeInputSize / 2))
   })
+
+test('memory.updateActive: real Node import, discovery, effect, versioned update and execute-only contract', async (t) => {
+  // 显式的测试宿主授权，不放宽产品默认进程策略；临时目录只用于本测试。
+  const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/index.js')
+  const { createLocalShellHost } = await import('../../../dist/execution/local.js')
+  const root = await mkdtemp(join(tmpdir(), 'active-question-node-'))
+  const host = createLocalShellHost({
+    cwd: root,
+    processConfinement: { mode: 'danger-full-access', workspaceRoot: root },
+  })
+  t.after(async () => {
+    await host.dispose()
+    await rm(root, { recursive: true, force: true })
+  })
+  const node = createNodeExecutionEnvironment({ cwd: root, directory: join(root, 'runs'), host })
+  const f = await fixture(t, { runner: undefined, node, packageEnvironment: false })
+  const { ActiveContext } = await import('../../../dist/act/runtime/impl/ActiveContext.js')
+  await submit(f.session)
+  const goal = { ref: (await f.storage.loadMetadata('s')).task.goals.at(-1) }
+  await f.session.context.summarizeInput({
+    ref: goal.ref,
+    baseRevision: 0,
+    summary: 'Investigate',
+    constraints: ['Do not publish'],
+    unresolved: [],
+  })
+  await f.session.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume-narrative',
+    body: JSON.stringify({ unresolved: ['Failure remains'] }),
+  })
+  const proof = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: 'test passed',
+  })
+  const active = new ActiveContext('s', f.session.context, f.storage)
+  const before = await active.read(new AbortController().signal)
+  const question = before.items.find((item) => item.kind === 'question')
+  const input = {
+    baseRevision: before.revision,
+    changes: [
+      {
+        id: question.id,
+        status: 'resolved',
+        evidence: [{ ref: proof.ref, offset: 0, quote: 'test passed' }],
+      },
+    ],
+  }
+  const found = await execute(
+    f.session,
+    `${prelude}output(await system.modules.describe({module:'velaros:system',exports:['memory']}));`
+  )
+  assert.match(found.value.declarations, /updateActive/)
+  const source = `${prelude}import {input} from 'velaros:program';output(await system.memory.updateActive(input));`
+  const descriptor = f.runtime
+    .modules()
+    .items.find((card) => card.binding.moduleId.startsWith('velaros:system-memory'))
+  assert(descriptor)
+  const updated = await execute(f.session, source, { input })
+  assert.equal(updated.value.revision, before.revision + 1)
+  assert.deepEqual(updated.value.updated, [{ id: question.id, status: 'resolved' }])
+  const after = await active.read(new AbortController().signal)
+  assert(!after.items.some((item) => item.id === question.id))
+  assert.deepEqual(after.pendingInputs, before.pendingInputs)
+  const journal = await createContextInvocationJournal(f.storage).list('s')
+  const call = journal.findLast((item) => item.prepared.operation === 'updateActive')
+  assert(call)
+  assert.equal(call.receipt.effect, 'committed')
+  const stale = await f.session.execute({ source, input })
+  assert(stale.result.failed)
+  assert.deepEqual(await active.read(new AbortController().signal), after)
+  assert.deepEqual(found.value.exports.memory.operations.updateActive.allowedModes, ['execute'])
+  assert.equal(found.value.exports.memory.operations.updateActive.effects, 'write')
+  const rejected = (await createContextInvocationJournal(f.storage).list('s')).findLast(
+    (item) => item.prepared.operation === 'updateActive'
+  )
+  assert.equal(rejected.receipt.effect, 'none')
+})
+
+test('memory.updateActive: old host fails explicitly and generated limits use owning constants', async () => {
+  const operations = new SystemMemoryOperations()
+  await assert.rejects(
+    operations.updateActive(
+      { baseRevision: 0, changes: [] },
+      { memory: {}, abortSignal: new AbortController().signal }
+    ),
+    { code: 'UNAVAILABLE' }
+  )
+  const { ActiveContextLimits } = await import('../../../dist/act/system/contract/constants.js')
+  const definition = memoryModule.create({}, false, false)
+  const kernel = createOperationRuntime({ modules: [definition], journal: {} })
+  try {
+    const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
+    const description = catalog.describe('s', {
+      module: 'velaros:system',
+      exports: ['memory'],
+      template: true,
+    })
+    assert.match(description.declarations, new RegExp(`1 到 ${ActiveContextLimits.changes} 项`))
+    assert.match(description.declarations, new RegExp(`1 到 ${ActiveContextLimits.evidence} 段`))
+    assert.match(description.declarations, new RegExp(`1 到 ${ActiveContextLimits.textChars} 字符`))
+    assert.match(
+      description.declarations,
+      new RegExp(`1 到 ${ActiveContextLimits.quoteChars} 字符`)
+    )
+    assert.match(description.template, /memory\.updateActive/)
+  } finally {
+    await kernel.dispose()
+  }
+})

@@ -548,15 +548,11 @@ export class RuntimeSession implements VelarosSession {
         return script.dependencies(program)
       },
     })
-    this.executionProgress = new ExecutionProgress(
-      this.programs,
-      () => {
-        for (const wake of [...this.progressWaiters]) wake()
-      },
-      (error) => {
-        this.backgroundFailure = error
-      }
-    )
+    this.executionProgress = new ExecutionProgress(this.programs, (error) => {
+      this.backgroundFailure = error
+      // 持久化失败需要主线处理；普通日志不触发业务决策。
+      for (const wake of [...this.progressWaiters]) wake()
+    })
     this.executions = {
       read: (input, signal) => this.readExecution(input, signal),
       wait: (input, caller, signal) => this.waitForExecution(input, caller, signal),
@@ -821,15 +817,9 @@ export class RuntimeSession implements VelarosSession {
           maintain: dependencies.maintain
             ? async (input, signal) => {
                 if (input.reason === 'boundary') {
-                  // 显式整理先把段内较早的历史封成一卷，整理支线再给这一卷写叙事
+                  // 仅显式整理先封卷；自动卷骨架可召回，不在业务请求前补叙事。
                   if (await this.organizePending())
                     await this.memory.fold('organize', input.targetChars, signal)
-                  // 自动封的上一卷只有骨架、那一段又没改笔记和计划：整理支线给它补写叙事
-                  else if (await this.memory.narration(signal))
-                    return dependencies.maintain!(
-                      { reason: 'narrate', targetChars: input.targetChars },
-                      signal
-                    )
                 }
                 return dependencies.maintain!(input, signal)
               }
@@ -886,6 +876,8 @@ export class RuntimeSession implements VelarosSession {
               )
               .map((item) => item.executionId)
           },
+          beginFrame: (view, signal, maxChars) =>
+            this.beginFrame(view, signal, maxChars, nativeTools),
           project: (view, signal, maxChars) => this.project(view, signal, maxChars, nativeTools),
           delta: (body, previous) => memoryPrompt(body, previous),
           reconcile: (body, history, previous, signal) =>
@@ -1023,7 +1015,11 @@ export class RuntimeSession implements VelarosSession {
   }
 
   /** 每次模型请求重新读授权和依赖事实，首帧无需执行探索脚本。 */
-  private async inventory(signal: AbortSignal, maxChars: number): Promise<RuntimeInventory> {
+  private async inventory(
+    signal: AbortSignal,
+    maxChars: number,
+    version?: (value: string) => void
+  ): Promise<RuntimeInventory> {
     const capabilities = capabilityHints(
       this.dependencies.allowedModules().map((module) => this.dependencies.kernel.describe(module)),
       this.dependencies.packages
@@ -1038,6 +1034,7 @@ export class RuntimeSession implements VelarosSession {
         lease = await node.acquireRuntime?.(signal)
         signal.throwIfAborted()
         const runtime = lease?.environment ?? node.runtime
+        version?.(scriptOutputs.hash(toNullable(runtime)))
         npm = { environment: runtime?.id ?? 'base' }
         const installed = new Map(
           [
@@ -1095,12 +1092,7 @@ export class RuntimeSession implements VelarosSession {
       : Math.min(this.submissionDeadline, parent ?? this.submissionDeadline)
   }
 
-  private async project(
-    view: ModelView,
-    signal: AbortSignal,
-    maxChars: number,
-    nativeTools: boolean
-  ) {
+  private async prepareFrame(signal: AbortSignal, maxChars: number, nativeTools: boolean) {
     const stores = await this.dependencies.stores?.frame(
       Math.max(1, Math.min(8, Math.floor(maxChars / 4000))),
       Math.min(StoreProjectionLimits.activeChars, Math.floor(maxChars / 4))
@@ -1126,8 +1118,85 @@ export class RuntimeSession implements VelarosSession {
       ...frameEnvironment(this.dependencies.environment),
     }
     if (this.dependencies.parentTask) environment.parentTask = this.dependencies.parentTask
-    const inventory = await this.inventory(
+    let environmentVersion: string | undefined
+    const inventory = await this.inventory(signal, ActRuntimeTuning.inventoryChars, (value) => {
+      environmentVersion = value
+    })
+    return { stores, tool, goal, goalControl, environment, inventory, environmentVersion }
+  }
+
+  private async beginFrame(
+    view: ModelView,
+    signal: AbortSignal,
+    maxChars: number,
+    nativeTools: boolean
+  ) {
+    const capabilities = () => {
+      try {
+        return scriptOutputs.hash([
+          this.dependencies
+            .allowedModules()
+            .map((module) => this.dependencies.kernel.describe(module)),
+          this.dependencies.environment,
+        ])
+      } catch (error) {
+        if ((error as { code?: string }).code === 'NOT_FOUND')
+          throw new AppError('STALE_VIEW', '能力授权已变化，需重新准备帧')
+        throw error
+      }
+    }
+    const version = capabilities()
+    const stable = await this.prepareFrame(signal, maxChars, nativeTools)
+    if (version !== capabilities())
+      throw new AppError('STALE_VIEW', '稳定材料准备期间能力授权发生变化')
+    const memory = await this.memory.beginFrame(
+      view,
+      this.observationResult,
+      this.observationImages,
       signal,
+      maxChars
+    )
+    return {
+      project: (budget: number) => this.project(view, signal, budget, nativeTools, stable, memory),
+      reconcile: memory.reconcile,
+      publish: async (body: string, currentSignal: AbortSignal) => {
+        currentSignal.throwIfAborted()
+        const node = this.dependencies.node
+        if (node) {
+          let lease: NodeRuntimeLease | undefined
+          try {
+            lease = await node.acquireRuntime?.(currentSignal)
+            currentSignal.throwIfAborted()
+            if (
+              stable.environmentVersion !==
+              scriptOutputs.hash(toNullable(lease?.environment ?? node.runtime))
+            )
+              throw new AppError('STALE_VIEW', '发布前 npm 环境版本发生变化')
+          } finally {
+            await lease?.release()
+          }
+        }
+        if (version !== capabilities())
+          throw new AppError('STALE_VIEW', '发布前能力授权或环境事实发生变化')
+        if (!(await this.view.validate(view, currentSignal)))
+          throw new AppError('STALE_VIEW', '发布前证据版本发生变化')
+        await memory.publish(body, currentSignal)
+      },
+    }
+  }
+
+  private async project(
+    view: ModelView,
+    signal: AbortSignal,
+    maxChars: number,
+    nativeTools: boolean,
+    prepared?: Awaited<ReturnType<RuntimeSession['prepareFrame']>>,
+    memory?: Awaited<ReturnType<ContextMemoryApi['beginFrame']>>
+  ) {
+    const stable = prepared ?? (await this.prepareFrame(signal, maxChars, nativeTools))
+    const { stores, tool, goal, goalControl, environment } = stable
+    const inventory = boundedInventory(
+      stable.inventory,
       Math.min(ActRuntimeTuning.inventoryChars, Math.floor(maxChars / 4))
     )
     const observedAt = Date.now()
@@ -1152,13 +1221,15 @@ export class RuntimeSession implements VelarosSession {
       (goalControl ? JSON.stringify(goalControl).length : 0) +
       (stores ? JSON.stringify(stores).length : 0) +
       (tool ? JSON.stringify(tool).length : 0)
-    const projected = await this.memory.project(
-      view,
-      this.observationResult,
-      this.observationImages,
-      signal,
-      Math.max(1, maxChars - extra)
-    )
+    const projected = memory
+      ? await memory.project(Math.max(1, maxChars - extra))
+      : await this.memory.project(
+          view,
+          this.observationResult,
+          this.observationImages,
+          signal,
+          Math.max(1, maxChars - extra)
+        )
     const frame = JSON.parse(projected.body)
     if (this.executionRunner.environment === 'node') frame.presentation = 'node'
     frame.partitions.runtime = {

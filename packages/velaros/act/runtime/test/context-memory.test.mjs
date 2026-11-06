@@ -5068,3 +5068,196 @@ test('full assistant history preserves original prose and JSON without adding ru
       .every((item) => item.representation === 'full')
   )
 })
+
+test('frame candidates publish only the selected audit and exact proof, without consuming leases', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  await archiveRequired(f, programs, ['required candidate body'], 8000)
+  const before = await programs.state()
+  const cycle = await f.memory.beginFrame(requiredView(), undefined, [], signal, 600000)
+  const baseline = (await f.storage.load('s')).records
+  const audits = () =>
+    f.storage
+      .load('s')
+      .then((state) =>
+        state.records.filter(
+          (record) =>
+            record.title.startsWith('context:frame:') ||
+            record.title.startsWith('context:request-proof:')
+        )
+      )
+  const initial = await audits()
+  let selected
+  for (const budget of [6000, 12000, 24000, 600000]) {
+    const projected = await cycle.project(budget)
+    selected = {
+      ...projected,
+      ...(await cycle.reconcile(projected.body, projected.history, undefined, signal)),
+    }
+    assert.equal((await audits()).length, initial.length)
+  }
+  assert.equal(
+    (await f.storage.load('s')).records.filter((record) => record.title === 'context:segment-body')
+      .length,
+    baseline.filter((record) => record.title === 'context:segment-body').length
+  )
+  assert.equal((await programs.state()).completedTurns, before.completedTurns)
+  await cycle.publish(selected.body, signal)
+  const saved = (await audits()).slice(initial.length)
+  assert.equal(saved.length, 2)
+  assert.equal(saved[0].title, `context:frame:${JSON.parse(selected.body).frameId}`)
+  const proof = JSON.parse(await f.storage.get('s', saved[1].objectId))
+  assert.equal(proof.bodyHash, scriptOutputs.hash(selected.body))
+  assert.equal(proof.promptHash, scriptOutputs.hash(selected.prompt))
+  assert.equal((await programs.state()).completedTurns, before.completedTurns)
+  await f.memory.acknowledge(
+    JSON.parse(selected.body).frameId,
+    signal,
+    acceptedMemoryRequest(selected)
+  )
+  const id = JSON.parse(selected.body).frameId
+  await programs.consume(id, signal)
+  await programs.consume(id, signal)
+  assert.equal((await programs.state()).completedTurns, before.completedTurns + 1)
+  await assert.rejects(cycle.publish(selected.body, signal), { code: 'CONFLICT' })
+})
+
+for (const change of ['input', 'authorization', 'cancelled', 'append-failure']) {
+  test(`frame publication rejects ${change} without consuming leases`, async (t) => {
+    const f = await fixture(t)
+    const programs = new ProgramContext('s', f.session.context, f.storage)
+    const cycle = await f.memory.beginFrame(requiredView(), undefined, [], signal, 24000)
+    const projected = await cycle.project(12000)
+    const selected = await cycle.reconcile(projected.body, projected.history, undefined, signal)
+    const before = await programs.state()
+    const count = async () =>
+      (await f.storage.load('s')).records.filter((record) =>
+        record.title.startsWith('context:frame:')
+      ).length
+    const frames = await count()
+    let currentSignal = signal
+    let restore
+    if (change === 'input') await f.session.context.append({ kind: 'user', body: 'new facts' })
+    if (change === 'authorization')
+      await f.session.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+    if (change === 'cancelled') currentSignal = AbortSignal.abort()
+    if (change === 'append-failure') {
+      const append = f.session.context.append
+      f.session.context.append = async () => {
+        throw Error('injected publication failure')
+      }
+      restore = () => {
+        f.session.context.append = append
+      }
+    }
+    try {
+      await assert.rejects(
+        cycle.publish(selected.body, currentSignal),
+        change === 'input' || change === 'authorization' ? { code: 'STALE_VIEW' } : undefined
+      )
+    } finally {
+      restore?.()
+    }
+    assert.equal(await count(), frames)
+    assert.deepEqual(await programs.state(), before)
+  })
+}
+
+test('runtime frame cycle prepares inventory once, rechecks npm version, and never reuses across cycles', async (t) => {
+  const f = await fixture(t)
+  // TypeScript private 是宿主实现边界；本测试直接驱动真实周期而非模拟 project。
+  const { RuntimeSession } = await import('../../../dist/act/runtime/impl/RuntimeSession.js')
+  assert(f.session instanceof RuntimeSession)
+  const dependencies = f.session.dependencies
+  let acquisitions = 0
+  let releases = 0
+  let inventoryReads = 0
+  let version = 'first'
+  const originalNode = dependencies.node
+  dependencies.node = {
+    acquireRuntime: async () => {
+      acquisitions++
+      return {
+        environment: { id: version, packages: [], skills: [] },
+        release: async () => {
+          releases++
+        },
+      }
+    },
+  }
+  const inventory = f.session.inventory
+  f.session.inventory = function (...args) {
+    inventoryReads++
+    return inventory.apply(this, args)
+  }
+  t.after(() => {
+    dependencies.node = originalNode
+    f.session.inventory = inventory
+  })
+  const input = await f.session.context.append({ kind: 'user', body: 'inventory cycle' })
+  await f.session.view.begin(input.ref, signal)
+  const evidence = await f.session.view.build({ maxChars: 24000, visibleExecutionIds: [] }, signal)
+  const cycle = await f.session.beginFrame(evidence, signal, 24000, false)
+  let selected
+  for (const budget of [24000, 12000, 6000]) {
+    const projected = await cycle.project(budget)
+    selected = await cycle.reconcile(projected.body, projected.history, undefined, signal)
+  }
+  assert.equal(inventoryReads, 1)
+  assert.equal(acquisitions, 1)
+  await cycle.publish(selected.body, signal)
+  assert.equal(inventoryReads, 1)
+  assert.equal(acquisitions, 2)
+  assert.equal(releases, 2)
+  const next = await f.session.beginFrame(evidence, signal, 24000, false)
+  const projected = await next.project(12000)
+  const resolved = await next.reconcile(projected.body, projected.history, undefined, signal)
+  version = 'changed-during-estimate'
+  const before = (await f.storage.load('s')).records.filter((r) =>
+    r.title.startsWith('context:frame:')
+  ).length
+  await assert.rejects(next.publish(resolved.body, signal), { code: 'STALE_VIEW' })
+  assert.equal(
+    (await f.storage.load('s')).records.filter((r) => r.title.startsWith('context:frame:')).length,
+    before
+  )
+  assert.equal(inventoryReads, 2)
+  assert.equal(acquisitions, 4)
+  assert.equal(releases, 4)
+  version = 'third'
+  const revoked = await f.session.beginFrame(evidence, signal, 24000, false)
+  const draft = await revoked.project(12000)
+  const checked = await revoked.reconcile(draft.body, draft.history, undefined, signal)
+  const allowedModules = dependencies.allowedModules
+  dependencies.allowedModules = () => ['test:revoked-during-estimate']
+  try {
+    await assert.rejects(revoked.publish(checked.body, signal), { code: 'STALE_VIEW' })
+  } finally {
+    dependencies.allowedModules = allowedModules
+  }
+  assert.equal(
+    (await f.storage.load('s')).records.filter((r) => r.title.startsWith('context:frame:')).length,
+    before
+  )
+  const failed = await f.session.beginFrame(evidence, signal, 24000, false)
+  const failureDraft = await failed.project(12000)
+  const failureBody = await failed.reconcile(
+    failureDraft.body,
+    failureDraft.history,
+    undefined,
+    signal
+  )
+  const acquire = dependencies.node.acquireRuntime
+  dependencies.node.acquireRuntime = async () => {
+    throw Error('snapshot unavailable')
+  }
+  try {
+    await assert.rejects(failed.publish(failureBody.body, signal), /snapshot unavailable/)
+  } finally {
+    dependencies.node.acquireRuntime = acquire
+  }
+  assert.equal(
+    (await f.storage.load('s')).records.filter((r) => r.title.startsWith('context:frame:')).length,
+    before
+  )
+})

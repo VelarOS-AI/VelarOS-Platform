@@ -62,6 +62,7 @@ class MemoryModule implements MemoryModuleApi {
         hasErrorCode(error, [
           'VALIDATION',
           'CONFLICT',
+          'PERMISSION',
           'MEMORY_INPUT',
           'SCOPE_MISMATCH',
           'WORKSPACE_CONFLICT',

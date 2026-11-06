@@ -1418,6 +1418,7 @@ for (const transport of ['tools', 'text'])
         assert.equal(f.requests.length, 2)
         // 在已进入被动等待后推进虚拟时间，不靠增加真实超时证明静默。
         t.mock.timers.enable({ apis: ['setTimeout'] })
+        f.session.executionProgress.append(target, 'ordinary build heartbeat\n', 'stdout')
         t.mock.timers.tick(180000)
         for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve))
         assert.equal(f.requests.length, 2, 'pure waiting must not poll the model')
@@ -1439,40 +1440,54 @@ for (const transport of ['tools', 'text'])
       }
     })
 
-test('progress wake drops settled output but preserves other live output and later notifications', async (t) => {
+test('ordinary output remains readable and persisted without decision wake timers', async (t) => {
   const { ExecutionProgress } = await import('../../../dist/act/runtime/impl/ExecutionProgress.js')
   const { ExecutionObservabilityLimits } =
     await import('../../../dist/act/runtime/contract/constants.js')
   t.mock.timers.enable({ apis: ['setTimeout'] })
-  let wakes = 0
   const writes = []
   const progress = new ExecutionProgress(
     { progress: async (id, output) => writes.push({ id, output }) },
-    () => wakes++,
     assert.fail
   )
   t.after(() => progress.close())
-  progress.begin('finished')
-  progress.begin('silent')
-  progress.append('finished', 'complete output')
-  await progress.finish('finished')
-  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
-  assert.equal(wakes, 0, 'a silent live job must not inherit a settled job notification')
-  assert.equal(writes[0].output.chunks[0].text, 'complete output')
-  progress.begin('a')
-  progress.begin('b')
-  progress.append('a', 'a output')
-  progress.append('b', 'b output')
-  await progress.finish('a')
-  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
-  assert.equal(wakes, 1, 'another live output retains its notification')
-  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
-  assert.equal(wakes, 1, 'no new output means no repeated wake')
-  progress.append('b', 'next output')
-  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
-  assert.equal(wakes, 2)
-  progress.append('b', 'closing output')
+  progress.begin('live')
+  progress.append('live', 'first log', 'stdout')
+  assert.equal(progress.current('live').totalChars, 9)
+  t.mock.timers.tick(ExecutionObservabilityLimits.flushMs)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].output.chunks[0].text, 'first log')
+  progress.append('live', 'second log', 'stderr')
+  t.mock.timers.tick(180000)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(writes.length, 2)
+  assert.equal(progress.current('live').chunks.at(-1).text, 'second log')
+  await progress.finish('live')
+  assert.equal(progress.current('live'), undefined)
+  progress.append('live', 'late output')
   await progress.close()
-  t.mock.timers.tick(ExecutionObservabilityLimits.wakeMs)
-  assert.equal(wakes, 2, 'close cancels outstanding notifications')
+  t.mock.timers.tick(180000)
+  assert.equal(writes.length, 2)
+})
+
+test('output persistence errors still report failure', async (t) => {
+  const { ExecutionProgress } = await import('../../../dist/act/runtime/impl/ExecutionProgress.js')
+  const failure = new Error('storage failed')
+  const failures = []
+  const progress = new ExecutionProgress(
+    {
+      progress: async () => {
+        throw failure
+      },
+    },
+    (error) => failures.push(error)
+  )
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  progress.begin('live')
+  progress.append('live', 'output')
+  t.mock.timers.tick(1000)
+  for (let index = 0; index < 5; index++) await Promise.resolve()
+  assert.deepEqual(failures, [failure])
+  await assert.rejects(progress.close(), (error) => error === failure)
 })

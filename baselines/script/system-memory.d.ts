@@ -4,6 +4,10 @@
  * 改动只能在 execute 里做。
  */
 declare module 'velaros:system-memory' {
+  /** 按当前版本和 ID 解决或取代旧 question；只接受真实用户原文或执行结果引文，不修改用户约束、不启动整理模型。回执给出提交版本及取代后的新 ID；不会把待核对用户输入标成已审阅。
+   */
+  export function updateActive(input: ActiveContextQuestionPatch): Promise<ActiveContextUpdateReceipt>
+
   /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
    */
   export function list(input: MemoryQuery): Promise<MemoryPage>
@@ -31,6 +35,32 @@ declare module 'velaros:system-memory' {
   /** 声明下一阶段的 focus 与必须保留的引用，安排在下一次模型请求之前整理上下文；只是排队，结果出现在下一帧的 memoryStatus.maintenance。
    */
   export function organize(input: MemoryOrganizeIntent): Promise<MemoryOrganizeReceipt>
+
+  /**
+   * 主模型轻量更新旧未解事项：baseRevision 照抄 task.active 或 historicalInterpretation 对应的 revision，changes 为 1 到 64 项，逐条按现有 question 的 id 解决或取代。
+   * 不允许新增、撤销或改动用户约束；superseded 必须给 replacement（1 到 1000 字符），resolved 不能给 replacement。
+   * 每项 evidence 为 1 到 8 段真实用户原文或执行结果引文，每段 quote 为 1 到 4000 字符，offset 为 UTF-16 起点；笔记、摘要和模型回复不能作为证据。
+   * 只更新模型解释，不表示用户授权或全部输入已核对；冲突后读取新帧重新决定，不盲目重放。重开事项仍由整理的 active.additions 显式提交。
+   */
+  interface ActiveContextQuestionPatch {
+    readonly baseRevision: number
+    readonly changes: ReadonlyArray<{
+      readonly id: string
+      readonly status: 'superseded' | 'resolved'
+      readonly replacement?: string
+      readonly evidence: readonly ActiveContextEvidence[]
+    }>
+  }
+
+  /** 已按版本发布的事项变更：revision 是本次提交的新版本，updated 逐项保留旧 id，取代时给出新的 replacement 身份。 */
+  interface ActiveContextUpdateReceipt {
+    readonly revision: number
+    readonly updated: ReadonlyArray<{
+      readonly id: string
+      readonly status: 'superseded' | 'retracted' | 'resolved'
+      readonly replacement?: ActiveContextItem
+    }>
+  }
 
   /**
    * 查当前任务的材料目录：kind 按种类筛（notes 笔记、inputs 用户输入、programs 脚本、results 执行结果、history 回复与结果、artifacts 交付物），默认全部；
@@ -144,6 +174,22 @@ declare module 'velaros:system-memory' {
     readonly focus: string
     readonly preserve: readonly ContextRef[]
     readonly boundary: 'next-model-request'
+  }
+
+  /** 一段直接证据：ref 指原文；offset 为 UTF-16 起点；quote 为该位置逐字引文，最多 4000 字符。 */
+  interface ActiveContextEvidence {
+    readonly ref: ContextRef
+    readonly offset: number
+    readonly quote: string
+  }
+
+  /** 当前状态的一项模型解释；sources 始终指向不可变原文。 */
+  interface ActiveContextItem {
+    readonly id: string
+    readonly kind: 'constraint' | 'question'
+    readonly text: string
+    readonly sources: readonly ContextRef[]
+    readonly origin: 'model-interpretation'
   }
 
   /** 目录里的一份材料：原文元数据；是笔记时还带着 key、revision（改它时作为 baseRevision 交回）与 resident。 */

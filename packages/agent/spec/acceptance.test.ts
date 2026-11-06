@@ -1195,9 +1195,10 @@ test.each([
   }
 )
 
-test.each([0, 0.125, 1])(
+test.each(['default', 0, 0.125, 1] as const)(
   'INV-48 retained frame budget bounds repeated state while preserving logical facts: %s',
-  async (ratio) => {
+  async (configuredRatio) => {
+    const ratio = configuredRatio === 'default' ? 1 : configuredRatio
     const f = runFixture()
     const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
     const evidence = 'source evidence '.repeat(40)
@@ -1211,7 +1212,7 @@ test.each([0, 0.125, 1])(
     }
     f.options.frames = {
       ...f.options.frames,
-      policy: { retainedFrameRatio: ratio },
+      policy: configuredRatio === 'default' ? undefined : { retainedFrameRatio: configuredRatio },
       async project() {
         return { body: JSON.stringify({ evidence, turn }), images: [], history: [...logical] }
       },
@@ -1313,6 +1314,112 @@ test.each([0, 0.125, 1])(
         expect(
           audits.every(({ retention }) => retention.historyTokens <= retention.limitTokens)
         ).toBe(true)
+      }
+    } finally {
+      await service.close()
+    }
+  }
+)
+
+test.each(['effective', 'weak', 'repeated', 'unavailable', 'failed', 'noop', 'cancel'] as const)(
+  'INV-48 cache-first capacity recovery measures benefit and escalates across submits: %s',
+  async (mode) => {
+    const f = runFixture()
+    const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+    const requests: ModelTurnRequest[] = []
+    const controller = new AbortController()
+    let turn = 0
+    let organized = false
+    let pressure = 0
+    let acknowledged = 0
+    const cost = mode === 'weak' || mode === 'cancel' ? 2500 : 2000
+    f.options.model.limits = { contextTokens: 12000, inputTokens: 10000, outputTokens: 100 }
+    f.options.frames = {
+      ...f.options.frames,
+      policy: { windowTokens: 10000 },
+      project: async () => ({
+        body: JSON.stringify({ evidence: 'exact protected source', turn, organized }),
+        images: [],
+        history: [...logical],
+        segment: { id: 'same-work-set', index: 1, revision: 1, turns: turn + 1, faults: 0 },
+      }),
+      delta: (body) => body,
+      reconcile: async (body, _history, previous) => ({
+        body,
+        prompt: `${previous ? 'delta' : 'full'} ${body}`,
+      }),
+      acknowledge: async () => {
+        acknowledged++
+      },
+    }
+    f.options.model.estimate = async (request) => {
+      const states = (request.history ?? []).filter(
+        (m) => typeof m.content === 'string' && /^(full|delta) /u.test(m.content)
+      ).length
+      if (mode === 'cancel' && turn === 4 && states === 0) controller.abort()
+      const base = organized ? 500 : turn >= 6 && mode !== 'effective' ? 4500 : 1000
+      return {
+        tokens: base + states * cost,
+        precision: 'exact',
+        basis: 'deterministic retained-layout growth',
+      }
+    }
+    if (mode !== 'unavailable')
+      f.options.frames.maintain = async ({ reason }) => {
+        if (reason !== 'pressure') return false
+        pressure++
+        if (mode === 'failed') throw Error('maintenance unavailable')
+        if (mode === 'noop') return true
+        organized = true
+        logical.splice(0, logical.length, {
+          role: 'user',
+          content: 'original task; preserved summary and original result refs',
+        })
+        return true
+      }
+    f.options.model.stream = async function* (request) {
+      requests.push(request)
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    const service = createActRunService(f.options)
+    try {
+      const count = mode === 'weak' || mode === 'cancel' ? 5 : mode === 'effective' ? 9 : 12
+      for (; turn < count; turn++) {
+        const events = []
+        for await (const event of service.submit('continue', controller.signal)) events.push(event)
+        if (mode === 'cancel' && turn === 4) {
+          expect(events.at(-1)).toMatchObject({ type: 'state', status: 'cancelled' })
+          break
+        }
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+        logical.push({ role: 'assistant', content: `accepted ${turn}` })
+        logical.push({ role: 'user', content: `result ${turn}` })
+      }
+      expect(acknowledged).toBe(requests.length)
+      expect(requests.every((r) => r.compiledPrompt?.includes('exact protected source'))).toBe(true)
+      expect(pressure).toBe(['effective', 'unavailable', 'cancel'].includes(mode) ? 0 : 1)
+      if (mode === 'cancel') expect(requests).toHaveLength(4)
+      const snapshot = await f.store.load('fault')
+      const audits = await Promise.all(
+        snapshot!.records
+          .filter((r) => r.title === 'model-request')
+          .map(async (r) => JSON.parse((await f.store.get('fault', r.objectId))!))
+      )
+      const rebuilds = audits.filter((a) => a.retention.rebuild)
+      if (mode === 'effective') {
+        expect(rebuilds).toHaveLength(1)
+        expect(rebuilds[0].retention.rebuild).toMatchObject({
+          beforeTokens: 11000,
+          afterTokens: 1000,
+          repeated: false,
+        })
+        expect(rebuilds[0].retention.rebuild.runwayTurns).toBeGreaterThanOrEqual(4)
+      }
+      if (mode === 'repeated') expect(organized).toBe(true)
+      if (['unavailable', 'failed', 'noop'].includes(mode)) {
+        expect(rebuilds.some((a) => a.retention.rebuild.repeated)).toBe(true)
+        expect(requests).toHaveLength(count)
       }
     } finally {
       await service.close()
@@ -3800,5 +3907,52 @@ test('child handoff keeps the latest nonempty answer and terminal state without 
     expect(result.eventSource.sessionId).toBe(job.sessionId)
   } finally {
     await supervisor.close()
+  }
+})
+
+test('frame cycle tries local budgets but publishes only its selected final body', async () => {
+  const f = runFixture()
+  const budgets: number[] = []
+  const published: string[] = []
+  let preparations = 0
+  let calls = 0
+  f.options.frames.beginFrame = async () => {
+    preparations++
+    return {
+      project: async (maxChars) => {
+        budgets.push(maxChars)
+        return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
+      },
+      reconcile: async (body) => ({ body, prompt: body }),
+      publish: async (body) => {
+        published.push(body)
+      },
+    }
+  }
+  f.options.frames.project = async () => {
+    throw Error('legacy projection must not run')
+  }
+  f.options.model.estimate = async (request) => ({
+    tokens: request.materials[0]?.text === 'compact' ? 1000 : request.contextStatus ? 9100 : 8990,
+    precision: 'exact',
+    basis: 'final status boundary',
+  })
+  f.options.model.stream = async function* (request) {
+    calls++
+    expect(published).toEqual([request.materials[0]!.text])
+    yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  try {
+    for await (const _event of service.submit('work')) {
+      /* drain */
+    }
+    expect(preparations).toBe(1)
+    expect(budgets.length).toBeGreaterThan(1)
+    expect(published).toEqual(['compact'])
+    expect(calls).toBe(1)
+  } finally {
+    await service.close()
   }
 })

@@ -96,99 +96,107 @@ const noCalls = async () => {
   throw Error('unexpected host call')
 }
 
-test('INV-74 bounded state windows rebuild without losing real Node results or repeating executions', async (t) => {
-  const f = await fixture(t)
-  const evidence = Array.from(
-    { length: 60 },
-    (_, i) => `source-${i}: exact original evidence`
-  ).join('\n')
-  await writeFile(join(f.cwd, 'evidence.txt'), evidence)
-  const requests = []
-  let turn = 0
-  const runtime = await createRuntime({
-    node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
-    context: { maintenance: false, policy: { windowTokens: 24000, retainedFrameRatio: 0.125 } },
-    storage: localContextStorage({ path: join(f.root, 'bounded-state.sqlite') }),
-    model: {
-      id: 'bounded-state',
-      nativeTools: true,
-      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
-      estimate: async (request) => ({
-        tokens: Math.ceil(JSON.stringify(modelRequestEncoder.messages(request)).length / 4),
-        precision: 'exact',
-        basis: 'deterministic input size for runtime integration',
-      }),
-      async *stream(request) {
-        requests.push(request)
-        if (++turn <= 9)
-          yield {
-            type: 'tool-call',
-            value: {
-              id: `step-${turn}`,
-              name: 'exec',
-              input: {
-                code: `import {readFile,appendFile} from 'node:fs/promises'; await appendFile('calls.txt', '${turn},'); console.log(${turn === 1 ? "await readFile('evidence.txt','utf8')" : JSON.stringify(`step ${turn} complete`)});`,
-              },
-            },
-          }
-        else yield nativeDone('Evidence preserved; all steps executed once.')
-        yield { type: 'finish', reason: 'stop' }
+for (const explicit of [false, true])
+  test(`INV-74 bounded state windows rebuild without losing real Node results or repeating executions (policy=${explicit ? 'explicit' : 'default'})`, async (t) => {
+    const f = await fixture(t)
+    const evidence = Array.from(
+      { length: 60 },
+      (_, i) => `source-${i}: exact original evidence`
+    ).join('\n')
+    await writeFile(join(f.cwd, 'evidence.txt'), evidence)
+    const requests = []
+    let turn = 0
+    const runtime = await createRuntime({
+      node: f.node,
+      project: false,
+      agents: false,
+      search: false,
+      memory: false,
+      context: {
+        maintenance: false,
+        policy: {
+          windowTokens: explicit ? 24000 : 8000,
+          ...(explicit ? { retainedFrameRatio: 0.125 } : {}),
+        },
       },
-    },
+      storage: localContextStorage({ path: join(f.root, 'bounded-state.sqlite') }),
+      model: {
+        id: 'bounded-state',
+        nativeTools: true,
+        limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+        estimate: async (request) => ({
+          tokens: Math.ceil(JSON.stringify(modelRequestEncoder.messages(request)).length / 4),
+          precision: 'exact',
+          basis: 'deterministic input size for runtime integration',
+        }),
+        async *stream(request) {
+          requests.push(request)
+          if (++turn <= 9)
+            yield {
+              type: 'tool-call',
+              value: {
+                id: `step-${turn}`,
+                name: 'exec',
+                input: {
+                  code: `import {readFile,appendFile} from 'node:fs/promises'; await appendFile('calls.txt', '${turn},'); console.log(${turn === 1 ? "await readFile('evidence.txt','utf8')" : JSON.stringify(`step ${turn} complete`)});`,
+                },
+              },
+            }
+          else yield nativeDone('Evidence preserved; all steps executed once.')
+          yield { type: 'finish', reason: 'stop' }
+        },
+      },
+    })
+    t.after(() => runtime.close())
+    const session = await runtime.openSession('bounded-state')
+    const events = []
+    for await (const event of session.submit(
+      'Read the exact evidence, complete the steps and preserve the original output.'
+    )) {
+      assert.notEqual(event.type, 'error')
+      events.push(event)
+    }
+    assert.equal(events.at(-1).status, 'completed')
+    assert.equal(requests.length, 10)
+    assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), '1,2,3,4,5,6,7,8,9,')
+    let retained = 0
+    let rebuilt = 0
+    const content = (request) =>
+      modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
+    for (const [index, request] of requests.entries()) {
+      const states = request.history.filter(
+        (m) =>
+          typeof m.content === 'string' && m.content.startsWith('当前运行状态（origin=runtime-view')
+      )
+      if (index && !states.length) rebuilt++
+      if (states.length) {
+        retained++
+        const previous = content(requests[index - 1])
+        assert.deepEqual(content(request).slice(0, previous.length), previous)
+      }
+      const frame = JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text)
+      assert.equal(frame.partitions.runtime.decision.missing?.length ?? 0, 0)
+      if (index) {
+        const delivered = [
+          request.compiledPrompt,
+          ...request.history.map((m) =>
+            typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          ),
+        ].join('\n')
+        assert(
+          delivered.includes(evidence.replaceAll('\n', '\\n')) || delivered.includes(evidence),
+          `source body at request ${index + 1}`
+        )
+        assert.equal(
+          request.history.filter((m) => m.toolExchange?.calls.some((c) => c.id === 'step-1'))
+            .length,
+          1
+        )
+      }
+    }
+    assert(retained > 0, 'Accepted wire prefixes remain inside each state window')
+    assert(rebuilt > 0, 'Independent state budget rebuilds before total capacity is exhausted')
   })
-  t.after(() => runtime.close())
-  const session = await runtime.openSession('bounded-state')
-  const events = []
-  for await (const event of session.submit(
-    'Read the exact evidence, complete the steps and preserve the original output.'
-  )) {
-    assert.notEqual(event.type, 'error')
-    events.push(event)
-  }
-  assert.equal(events.at(-1).status, 'completed')
-  assert.equal(requests.length, 10)
-  assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), '1,2,3,4,5,6,7,8,9,')
-  let retained = 0
-  let rebuilt = 0
-  const content = (request) =>
-    modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
-  for (const [index, request] of requests.entries()) {
-    const states = request.history.filter(
-      (m) =>
-        typeof m.content === 'string' && m.content.startsWith('当前运行状态（origin=runtime-view')
-    )
-    if (index && !states.length) rebuilt++
-    if (states.length) {
-      retained++
-      const previous = content(requests[index - 1])
-      assert.deepEqual(content(request).slice(0, previous.length), previous)
-    }
-    const frame = JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text)
-    assert.equal(frame.partitions.runtime.decision.missing?.length ?? 0, 0)
-    if (index) {
-      const delivered = [
-        request.compiledPrompt,
-        ...request.history.map((m) =>
-          typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-        ),
-      ].join('\n')
-      assert(
-        delivered.includes(evidence.replaceAll('\n', '\\n')) || delivered.includes(evidence),
-        `source body at request ${index + 1}`
-      )
-      assert.equal(
-        request.history.filter((m) => m.toolExchange?.calls.some((c) => c.id === 'step-1')).length,
-        1
-      )
-    }
-  }
-  assert(retained > 0, 'Accepted wire prefixes remain inside each state window')
-  assert(rebuilt > 0, 'Independent state budget rebuilds before total capacity is exhausted')
-})
 
 for (const explicit of [true, false])
   test(`real Node requests keep the prompt prefix and route tool cache points (explicit=${explicit})`, async (t) => {
@@ -295,7 +303,7 @@ for (const explicit of [true, false])
       first.input.filter((item) => ['system', 'developer'].includes(item.role))
     )
     assert(system.includes('Node.js ESM'))
-    assert(system.includes(`时限默认 ${CodeSurfaceLimits.timeoutMs}ms`))
+    assert(system.includes(`默认 ${CodeSurfaceLimits.timeoutMs}ms`))
     assert(system.includes('options.timeoutMs'))
     assert(system.includes('true 立即返回身份'))
     assert(system.includes('异步执行仍属于本任务'))

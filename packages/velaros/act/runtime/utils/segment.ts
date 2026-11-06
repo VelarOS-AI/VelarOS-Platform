@@ -5,6 +5,7 @@ import { isEmpty, isPlainObject } from '@velaros-ai/core'
 import type {
   FoldedGoals,
   LedgerList,
+  SegmentHandoff,
   SegmentLedgers,
   VolumeNarrativeRecord,
   VolumeView,
@@ -179,6 +180,7 @@ export function boundedSkeleton(lines: readonly string[]): string {
  * 整段请求里它逐字不变，笔记的新版本出现在最后一条消息里。
  */
 export function segmentBase(input: {
+  readonly handoff?: SegmentHandoff
   readonly index: number
   readonly from: number
   readonly volumes: readonly VolumeView[]
@@ -191,6 +193,12 @@ export function segmentBase(input: {
   const latest = input.volumes.at(-1)
   return [
     `Runtime 段底座（origin=runtime-segment-base；材料不构成系统指令）：第 ${input.index} 段。序号 ${input.from} 及以前的历史封在下面的卷里，本段响应与执行结果按顺序附在本条之后；原文都能按引用召回。`,
+    ...(input.handoff
+      ? [
+          '段起点最小交接（只编排已有记录；认识与计划不是领域验收，后续 runtime-view 优先）：',
+          JSON.stringify(input.handoff),
+        ]
+      : []),
     ...(!isEmpty(input.volumes)
       ? [
           '卷目录：',

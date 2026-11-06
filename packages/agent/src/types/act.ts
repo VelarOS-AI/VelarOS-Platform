@@ -168,7 +168,7 @@ export interface ActContextPolicy {
   readonly minTurns?: number
   /** 工作窗口上限（token），与模型输入上限取较小值，默认 200000。 */
   readonly windowTokens?: number
-  /** 已接受历史帧占输入工作窗口的上限比例，默认 1，仅受总容量限制；0 每次重建。按同一驱动校准后的边际输入估算，非供应商账单。 */
+  /** 已接受历史帧占输入工作窗口的上限比例，默认 1，缓存优先、仅受总容量限制；可显式降低比例，超额从逻辑历史与当前帧重建，0 每次重建。按同一驱动校准后的边际输入估算，非供应商账单。 */
   readonly retainedFrameRatio?: number
   /** 供应商超窗拒绝与完成检查的修复次数，默认 2。 */
   readonly recoveryAttempts?: number
@@ -238,5 +238,12 @@ export type ActComposedFrame = {
     readonly limitTokens: number
     readonly historyTokens: number
     readonly rebuiltFromTokens?: number
+    /** 实际容量受阻时的机械候选；仅接受请求后计入回收周期，不含显式低比例回收。 */
+    readonly rebuild?: {
+      readonly beforeTokens: number
+      readonly afterTokens: number
+      readonly runwayTurns: number
+      readonly repeated: boolean
+    }
   }
 } & CompiledModelRequest

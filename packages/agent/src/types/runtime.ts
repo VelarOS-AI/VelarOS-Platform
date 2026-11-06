@@ -20,6 +20,20 @@ export interface ActRequestPrefix {
   transcript?: ActRequestTranscript
   /** 与纯文本基线分开保存；图片过期后可以退回文本基线，不保留失效图像。 */
   visualTranscript?: ActRequestTranscript
+  /** 会话级容量回收状态；跨 submit 保留，关闭或重新打开会话后释放。 */
+  recovery?: {
+    modelId: string
+    accepted: number
+    tokens?: number
+    increases: readonly number[]
+    rebuiltAt?: number
+    maintenance?: {
+      at: number
+      segment?: string
+      logical: readonly ModelHistoryMessage[]
+      body: string
+    }
+  }
 }
 
 /** 调度器持有活动权；持久状态不包含这些进程对象。 */

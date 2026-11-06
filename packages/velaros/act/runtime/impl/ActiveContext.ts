@@ -16,13 +16,20 @@ import type {
   ActiveContextEvidence,
   ActiveContextItem,
   ActiveContextPatch,
+  ActiveContextQuestionPatch,
   ActiveContextState,
+  ActiveContextUpdateReceipt,
 } from '../../system/types/maintenance.js'
 import type { StoredActiveContext } from '../types/segment.js'
 import { memoryReference } from '../utils/context-memory.js'
 
 /** 当前认识的持久投影：原文与历史摘要不变，逐项取代、撤销和解决都有来源。 */
 export interface ActiveContextApi {
+  /** 主模型只按 ID 解决或取代旧未解事项，不核销用户输入审阅。 */
+  updateQuestions(
+    patch: ActiveContextQuestionPatch,
+    signal: AbortSignal
+  ): Promise<ActiveContextUpdateReceipt>
   /** 增量导入输入摘要和未解事项，并返回尚待核对的原始用户输入。 */
   read(signal: AbortSignal): Promise<ActiveContextState>
   /** 在整理事务里发布带来源的逐项变更；visibleInputs 是全文实际进入该模型材料的输入。 */
@@ -278,7 +285,7 @@ export class ActiveContext implements ActiveContextApi {
         !isString(evidence.quote) ||
         !evidence.quote.trim() ||
         evidence.quote.length > ActiveContextLimits.quoteChars ||
-        evidence.ref.sessionId !== this.id
+        evidence.ref?.sessionId !== this.id
       )
         throw new AppError('VALIDATION', '当前状态证据引文无效')
       const selected = this.storage.selectSnapshot
@@ -347,6 +354,29 @@ export class ActiveContext implements ActiveContextApi {
     visibleInputs: readonly ContextRef[],
     signal: AbortSignal
   ): Promise<void> {
+    await this.publish(patch, visibleInputs, signal, 'context-maintenance')
+  }
+
+  public async updateQuestions(
+    patch: ActiveContextQuestionPatch,
+    signal: AbortSignal
+  ): Promise<ActiveContextUpdateReceipt> {
+    if (
+      Object.keys(patch).some((key) => !['baseRevision', 'changes'].includes(key)) ||
+      !isArray(patch.changes) ||
+      isEmpty(patch.changes) ||
+      patch.changes.some((change) => !['resolved', 'superseded'].includes(change.status))
+    )
+      throw new AppError('VALIDATION', '主模型只可按 ID 解决或取代旧未解事项')
+    return this.publish(patch, [], signal, 'main-model')
+  }
+
+  private async publish(
+    patch: Omit<ActiveContextPatch, 'reviewedInput'> & { readonly reviewedInput?: ContextRef },
+    visibleInputs: readonly ContextRef[],
+    signal: AbortSignal,
+    actor: 'main-model' | 'context-maintenance'
+  ): Promise<ActiveContextUpdateReceipt> {
     if (
       !Number.isSafeInteger(patch.baseRevision) ||
       !isArray(patch.changes) ||
@@ -359,20 +389,26 @@ export class ActiveContext implements ActiveContextApi {
     const { state, value } = await this.current(signal)
     if (value.revision !== patch.baseRevision) throw new AppError('CONFLICT', '当前认识版本已变化')
     const latest = state.task?.goals.at(-1)
+    const review =
+      actor === 'context-maintenance' && 'reviewedInput' in patch ? patch.reviewedInput : undefined
     if (
-      !latest ||
-      latest.id !== patch.reviewedInput?.id ||
-      patch.reviewedInput.sessionId !== this.id ||
-      !visibleInputs.some((ref) => ref.id === latest.id && ref.sessionId === this.id)
+      actor === 'context-maintenance' &&
+      (!latest ||
+        latest.id !== review?.id ||
+        review.sessionId !== this.id ||
+        !visibleInputs.some((ref) => ref.id === latest.id && ref.sessionId === this.id))
     )
       throw new AppError('CONTEXT_INPUT_UNSEEN', '核对当前状态前必须完整阅读最新用户原文')
-    const reviewed = state.records.find((record) => record.ref.id === latest.id)!
+    const reviewed = review
+      ? state.records.find((record) => record.ref.id === review.id)
+      : undefined
     const items = new Map(value.items.map((item) => [item.id, item]))
     const transitions = []
     for (const change of patch.changes) {
       const prior = items.get(change.id)
       if (
         !prior ||
+        (actor === 'main-model' && prior.kind !== 'question') ||
         !['superseded', 'retracted', 'resolved'].includes(change.status) ||
         (prior.kind === 'constraint' && change.status === 'resolved') ||
         (prior.kind === 'question' && change.status === 'retracted') ||
@@ -442,12 +478,26 @@ export class ActiveContext implements ActiveContextApi {
         {
           ...value,
           revision: value.revision + 1,
-          reviewedThrough: reviewed.sequence,
+          reviewedThrough: reviewed?.sequence ?? value.reviewedThrough,
           items: [...items.values()],
         },
-        { reviewedInput: latest, transitions, additions, additionEvidence: patch.additions ?? [] }
+        {
+          actor,
+          reviewedInput: review,
+          transitions,
+          additions,
+          additionEvidence: patch.additions ?? [],
+        }
       ))
     )
       throw new AppError('CONFLICT', '当前认识发布版本冲突')
+    return {
+      revision: value.revision + 1,
+      updated: transitions.map(({ prior, status, replacement }) => ({
+        id: prior.id,
+        status,
+        replacement,
+      })),
+    }
   }
 }

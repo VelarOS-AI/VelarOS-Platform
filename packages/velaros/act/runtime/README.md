@@ -1,6 +1,9 @@
 # @velaros-ai/velaros/act/runtime
+
 Act 运行时：把模型、脚本执行、Kernel 与上下文存储装成一条执行链，宿主用 `createRuntime` 开会话、交用户输入、收运行事件。它承载 velaros 包的根入口；模型自管理的 `velaros:system` 在 [act/system](../system/README.md)，搜索与子任务在 [act/search](../search/README.md)、[act/agents](../agents/README.md)。 模型普通 exec 按批次依赖顺序运行，默认等待最多 10000 毫秒后返回稳定作业身份；显式 async:true 立即后台，async:false 优先等待完整结果；新输入、并行程序收束或子任务进展可提前返回稳定执行身份，原程序继续。宿主 execute 等待完整结果。返回窗口独立于程序计时；executions 端口核对当前任务的状态、流输出、游标与定向停止。控制通道与普通进程槽、副作用写锁分离，权限与效果回执继续经共享 Kernel。
+
 ## 用法
+
 ```ts
 import { createRuntime, createNodeExecutionEnvironment } from '@velaros-ai/velaros'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
@@ -9,9 +12,16 @@ declare const apiKey: string
 declare const projectRoot: string
 declare const stateDir: string
 declare function askUser(message: string): Promise<string>
-const shell = createLocalShellHost({cwd:projectRoot, processConfinement:{mode:'workspace-write',workspaceRoot:projectRoot}})
+const shell = createLocalShellHost({
+  cwd: projectRoot,
+  processConfinement: { mode: 'workspace-write', workspaceRoot: projectRoot },
+})
 const runtime = await createRuntime({
-  node: createNodeExecutionEnvironment({cwd:projectRoot, directory:`${stateDir}/node`, host: shell}),
+  node: createNodeExecutionEnvironment({
+    cwd: projectRoot,
+    directory: `${stateDir}/node`,
+    host: shell,
+  }),
   workspace: projectRoot,
   dataDir: stateDir,
   model: { provider: 'openai', model: 'your-model', baseURL: 'https://api.openai.com/v1', apiKey },
@@ -21,10 +31,15 @@ try {
   const session = await runtime.openSession('main')
   let status = 'idle'
   for await (const event of session.submit('找出登录失败的原因并修好')) {
-    if (event.type === 'accepted') console.log(event.text) // 这一轮被接纳的正文；流式预览在 text、program 事件里
+    if (event.type === 'accepted')
+      console.log(event.text) // 这一轮被接纳的正文；流式预览在 text、program 事件里
     else if (event.type === 'interaction')
       // 模型的 ask、confirm：一个请求只收一次答案
-      await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.message) })
+      await session.answer({
+        id: event.request.id,
+        runId: event.request.runId,
+        value: await askUser(event.request.message),
+      })
     else if (event.type === 'error') console.error(event.message)
     else if (event.type === 'state') status = event.status
   }
@@ -34,7 +49,9 @@ try {
   await shell.dispose()
 }
 ```
+
 渲染进程把同一串事件投影成界面状态：
+
 ```ts
 import type { ActRunEvent } from '@velaros-ai/agent'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
@@ -47,6 +64,7 @@ for await (const event of liveEvents) {
 }
 projector.finish() // 交付结束：清掉没接纳的预览
 ```
+
 标准 Node 会话支持等价的原生 JSON 工具与自定义文本控制段。`createRuntime({ protocol: { transport: 'tools' } })` 选择原生工具，`transport: 'text'` 选择文本协议；省略时使用公开的 `DefaultScriptProtocolTransport`，驱动声明不支持工具时自动使用文本，显式要求工具而驱动不支持时返回错误。主会话默认开放 execute、observe、blobs、done，受限会话仍按 `allowed` 裁剪。默认值为 `tools`，依据及费用覆盖限制见 [2026-10-07 双路真实任务评测](../../../../docs/engineering/scriptact-protocol-ab-20261007.md)。
 原生入口为 `exec({code, options?})`、`observe({code, options?})`、`blobs({name, text})`、`done({message?, completion?})`。文本入口仍使用本帧标记加同名声明（execute 对应 exec），闭合段承载裸源码或原文。两者共用参数绑定、来源引用与编辑、快照观察、异步调度、结果租约和显式完成判定；工具调用与真实回执按各自身份持久配对。原生 exec 与 observe 分别生成参数 Schema：async/retain 属于执行，snapshot/refresh/clear 属于观察。程序与原文只能在整份响应校验通过后派发。完整结束并已回收的进程返回非零码时，保留失败回执并继续本批独立程序；取消、超时、宿主故障与未知效果仍停止后续派发。依赖步骤应放在同一程序中顺序 await。有后台程序或子任务待处理时，模型仅回复进度即可等待；本地程序、子任务或共享状态任一进展都唤醒父任务，结束等待保留其他工作。
 模型说明由共同运行语义和所选传输的用法组成，按 `allowed` 与 `names` 同步裁剪、命名。原生模式说明同一响应的多个调用、`code/options` 字段、JSON 转义与 `blobs` 的 `name/text`；文本模式说明本帧控制头、裸源码/原文段及闭合行。两套说明各自给出观察整体替换、编辑、刷新和退订的对应写法；原生 JSON 示例经过实际解码器验证。共享参数校验的修复错误采用通用的源码与选项术语。
@@ -56,13 +74,17 @@ projector.finish() // 交付结束：清掉没接纳的预览
 Node 收尾说明要求模型核对原始需求、最终产物和实际验证；涉及改动时审阅最终差异、受影响调用方及兼容约束，按证据报告完成范围。运行结束状态表示协议收束，具体任务的正确性仍由独立验收与产物复核判断。 实现与复核均从既有契约和定义行为的调用链核对兼容语义；新增测试只证明覆盖的样本。现有资料从实际来源读取并在程序内转换；项目会话有工作记忆时，说明如何按用户输入引用读取原文并核对保留内容。原生执行工具将新写的补丁等内容放在 options.blobs；非原子编辑失败后按当前差异恢复。
 普通项目任务可将 `context.completion` 设为 `{ kind: 'model-review', artifacts }`。宿主可另传 `validation`，开放独立的 `validate_evidence` 操作；`createNodeCompletionValidationHost` 使用同一产物授权与完整快照，最多两次执行、每次十五秒，回执绑定需求、源码、验证代码及实际环境哈希。只读证据操作与执行操作分别声明效果；取消等待进程清理，版本变化使回执失效。Node 后端目前要求 macOS 每次通过权限预检，条件不满足时明确返回不可用。`CompletionArtifactSource.capture` 提供授权工作区的完整 UTF-8 文本或明确的 `metadata: { bytes, sha256 }`，指纹覆盖全部依赖、授权和 ABA 变化；元数据 text 严格为 `JSON.stringify(metadata)`，只证明存在与字节完整性。可选的 `read(identity, expected, maxBytes, signal)` 按同一快照读取最多 16 MiB 完整原文，返回指纹仍覆盖整个授权集合。Runtime 保留完整用户原文及锚点，按最新纠正区分 `artifact`、`execution`、`constraint`、`audit` 的证明义务；artifact 核验产品功能及状态，包括错误分支、顺序、禁止的副作用和兼容性；constraint 仅用于代理执行过程的行为边界，声明实际观察范围，具体违规仍失败，显式审计仍需证明。推测位置的纠正只改文件映射，保留判据和用户指定路径。清单仅在同一任务、完整原文且经复核确认完整时复用；引用必须来自实际送入模型的连续原文。 用户要求的交付入口在提取和复核时保持一致；生成、渲染、打包及导出范围须由实际内容或配置关联证明，内部源码不能自动替代公开交付。直接交付源码和普通文件仍按原要求核查。 裁定前可配置 `discoverEvidence: true`，独立补读原有契约、公开入口配置和调用链依赖，每轮最多八份文件、最多两轮，总文件、请求预算和复核期限保持原上限。补读身份只用于证据，不改变固定用户要求；缺失路径反馈给定位请求，所有新增文件与原有文件一起参与完整版本及授权核对。默认保持既有流程，启用效果按独立真实模型对照验收。 可选 `counterexampleReview: true` 需要已有 `validation` 宿主，在逐项裁定前共享同一额度实际尝试独立反例检查；最多两项调查意见，已执行结论绑定对应需求的可用回执。调查意见不能当作事实引文；后续裁定同时取得实际断言源码、哈希与回执，再按原始契约判断。该流程默认关闭，尚待真实新案例验证其效果与开销。 独立复核可接收宿主对缺失位置提供的有界目录条目，用于现有位置纠正和补充取证。目录提示不证明文件内容，也不新增交付要求；所选文件仍须重新读取并通过完整版本校验。
 复核专用 `retrieve_evidence` 从 `CompletionEvidenceOperationsApi` 生成合同，批量字面查找与读取版本绑定的文件片段及本任务、所属分支的不可变源码/回执对；`execution:task` 可查找已登记的执行正文，目录省略数保持显式。每份片段携带完整来源哈希、UTF-16 范围、总长度和省略标记，目录与元数据不代替正文。具备 read 端口时初始材料为 64000 字节，否则至多 1000000 字节；无效取证参数作为错误回执交回复核模型，占用已有轮次且不能作为证据；裁定必须显式声明布尔需求完整性。同轮多个原生调用合并后最多 16 项，全部参数校验后才开始读取。整个复核最多 4 批、64 项、128 KiB 返回正文，每批 32 KiB，总期限 10 分钟；每次模型请求最多 120 秒并共享父任务预算。完整需求清单始终可见，裁定每批至多八项，随较小的模型输出容量收缩；批次共享取证、执行验证、一次引文纠正及总期限，身份只接受当前批次，最终合并完整覆盖并保留全局需求遗漏。实际编译核对窗口，必要时有界缩短内联材料或连续片段，保留完整哈希及续读位置。版本、目录绑定或授权变化使旧证明失效。`verification` trace 保留请求、取证、失败和真实用量；瞬时故障最多原样重试两次，退避每次最多三十秒。引文的 JSON 转义表示须还原到实际送达的连续原文并保存匹配形式，原始模型响应保持归档；不拼接片段或改写空白、数字。逐项引文纠错最多一次，重验并保留有效裁定，耗尽后仅未核实项保持 unknown；身份、清单完整性或请求失败仍拒绝。取消先收束请求与迟到用量再关闭存储。`independent-model-review` 仅报告当前材料的复核结果，实际运行仍以源码及回执为据；域验收继续通过 `ContextCompletionPort` 提供。
+
 ## 入口
-| 入口 | 运行环境 | 内容 |
-| --- | --- | --- |
-| `@velaros-ai/velaros` | Node | `createRuntime` 与会话；把能力挂进来的 `createCapabilityModule`、`createProjectCapabilityModule`、`createMcpModule` 与 `createMcpClientConnection`；可靠交付 `createEventDelivery` |
-| `@velaros-ai/velaros/contracts` | 任何进程 | 默认协议 `DefaultScriptProtocolTransport`；上限与代际 `VelarosRunLimits`、`McpLimits`、`ScriptLeaseLimits`、`GoalLimits`（宿主用用户正文建目标前按它截断）、`VelarosRuntimeContract`，目标、笔记、追踪、搜索结果这些可移植数据 |
-| `@velaros-ai/velaros/renderer` | 任何进程，含渲染进程 | 事件投影 `createActEventProjector` 与展示快照 `ActPresentation` |
+
+| 入口                            | 运行环境             | 内容                                                                                                                                                                                                                           |
+| ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@velaros-ai/velaros`           | Node                 | `createRuntime` 与会话；把能力挂进来的 `createCapabilityModule`、`createProjectCapabilityModule`、`createMcpModule` 与 `createMcpClientConnection`；可靠交付 `createEventDelivery`                                             |
+| `@velaros-ai/velaros/contracts` | 任何进程             | 默认协议 `DefaultScriptProtocolTransport`；上限与代际 `VelarosRunLimits`、`McpLimits`、`ScriptLeaseLimits`、`GoalLimits`（宿主用用户正文建目标前按它截断）、`VelarosRuntimeContract`，目标、笔记、追踪、搜索结果这些可移植数据 |
+| `@velaros-ai/velaros/renderer`  | 任何进程，含渲染进程 | 事件投影 `createActEventProjector` 与展示快照 `ActPresentation`                                                                                                                                                                |
+
 ## 约定
+
 - `createRuntime({ executionDepth: 'high' })` 选择 Platform 的通用执行策略，支持 low/medium/high/xhigh/max，省略为 medium。它独立于模型供应商的 reasoningLevel 与回退，不修改模型参数、工具权限、预算或完成协议。low 优先最短可靠路径，medium 理解直接关联，high 先核实任务相关全貌，xhigh 检查系统耦合与方案取舍，max 挑战关键假设与高代价失败情形。高风险补足必要调查，简单任务不膨胀，关键未知不再影响决策时停止调查。业务子任务继承档位但只调查分配范围；专项模型不注入通用任务策略。宿主只传选择与产品专属指令，不重复维护默认执行规则。策略块身份为 `platform.runtime.execution-policy`，内容版本和启用依据随指令清单归档；提示词测试证明装配，不证明真实模型行为改善。
 - Node 的基础说明只在当前可用时提示子任务、深入搜索与整理包的用途，操作合同按需读取。宿主启动整理或搜索专项会话时，直接交付该会话必用的生成合同，固定在其系统前缀并计入容量预算。整理的用户输入与近期工作原文直接进入有界事实区，缺口附原文引用和续页位置；只有实际送达的完整用户输入才能支持约束改写。整理请求自身被截断时，也经 `velaros:context-materials.read` 在同一读取额度内分页补齐；当前请求引用与父快照材料分别校验，读取自身请求不构成父原文送达证明。整理候选使用真实父模型检查容量；超窗时按父循环的 `recoveryChars` 本地重投影一次，可选正文收紧后仍须通过必需材料、任务目标和容量检查，整组补丁才原子发布。合法整理补丁与搜索报告在原生调用成功后进入普通完成核查，无需另发一次模型确认。
 - 文本协议的控制段闭合后的连续协议外空白默认最多 4096 个字符，可用 `protocol.maxIdleWhitespaceChars` 调整；超限保存失败原文、停止本次接收并取消，不接受部分程序、不自动重发。源码和 blobs 原文按完整响应预算接收。未结算的上游用量保持未知。
@@ -95,10 +117,10 @@ Node 收尾说明要求模型核对原始需求、最终产物和实际验证；
 - 宿主配置的领域完成核查可返回有界 `report`，逐项保留实际范围、检查时间、证据和产物版本。报告由任务 `completionRef` 召回，`verification` 事件及 renderer 的 `verificationReport` 保留成功报告；旧报告只证明其原目标与原产物版本。 推断的临时文件若仅服务实际执行要求，位置纠正可回到该任务源码与回执；文件交付、明确审计或共享文件要求仍保留文件证据，目录授权不扩大。 定位纠正同时提供宿主已读取的文件身份，宿主执行日志沿执行证据核查。
 - 成功交付前重新探测 helper 已核对的产物，后续构建或改动使其失效时返回补验要求。默认 Node 提示要求验证最终交付版本；具体判据与完整依赖范围由宿主的领域验收器提供。
 - 帧中核查 `counts`、`completed` 与 `verified` 保留原报告事实；`applicabilityCounts` 单独计数本次探测的 current、historical 与 unknown，缺失探测按 unknown 表达。逐项细节省略时仍保留这两个计数及探测时刻。 核查细节在原额度内优先列失败、未知，再列通过项；`index` 始终指向原报告位置，适用性也按原位置绑定。长名称明确标记摘录，省略项保留数量；`ref` 指向完整报告，额度允许时给出整份 `memory.read` 入参。
-- 两种协议的普通答复无需控制调用即可接纳；没有后台工作时进入既有完成校验，有后台工作时作为进度材料等待。`done` 可显式提交完成依据。有活动目标时，带非空依据的 `done` 先完成领域核查，再将任务、原目标版本和报告一起 CAS 发布。失败、取消或目标在核查期间变化不会提前把目标标为完成；模型也可通过现有 `velaros:system` 的 `goal` 成员读取版本并显式更新状态和依据，`goal.update` 沿用自己的已有合同。已有执行或子任务仍在运行且当前只需等待时，模型仅返回普通文本进度，Runtime 挂起模型调用，等待执行进展、子任务结果或新输入。原生协议的固定说明与帧尾均明确这个入口；需要检查输出或决定停止时再读取状态，沿用既有执行身份。 已有执行可用空代码和 `control:{kind:"wait",executionId,waitMs:60000}` 等待终态；一次最多 60 秒、至多一个等待，独立的 read/stop 通道继续可用。
+- 两种协议的普通答复无需控制调用即可接纳；没有后台工作时进入既有完成校验，有后台工作时作为进度材料等待。`done` 可显式提交完成依据。有活动目标时，带非空依据的 `done` 先完成领域核查，再将任务、原目标版本和报告一起 CAS 发布。失败、取消或目标在核查期间变化不会提前把目标标为完成；模型也可通过现有 `velaros:system` 的 `goal` 成员读取版本并显式更新状态和依据，`goal.update` 沿用自己的已有合同。已有执行或子任务仍在运行且当前只需等待时，模型仅返回普通文本进度，Runtime 挂起模型调用，等待执行终态、子任务结果或新输入；普通 stdout/stderr 只缓存与落盘，不唤醒主模型，主动读取输出与显式等待仍可使用。原生协议的固定说明与帧尾均明确这个入口；需要检查输出或决定停止时再读取状态，沿用既有执行身份。 已有执行可用空代码和 `control:{kind:"wait",executionId,waitMs:60000}` 等待终态；一次最多 60 秒、至多一个等待，独立的 read/stop 通道继续可用。
 - 原文块与程序块分别闭合，下一控制头不能代替上一段的闭合行。帧尾按当前许可提示原文块边界；出现嵌套控制头时，反馈指出未闭合声明、当前精确闭合行和整份响应重发要求。协议修复沿用同帧身份，被拒绝响应中已经写好的程序也不会提前执行。
 - 闭合标记后允许 ASCII 行尾空格；只对控制行判定生效，源码和原文的空白逐字保留。缺失闭合、非空白尾部、孤立闭合和真正嵌套仍拒绝，控制头长度预算保持有效。
-- 模型通过文本协议或原生 Shell/Node 发起执行时，结果共用宿主 `protocol.defaultRetain`，默认使用 `segment` 期限：段内已交付正文保持稳定，结果随历史封段时统一退役，最近保留区内的结果继续进入下一段。上下文容量与剩余轮数决定封段；自动封卷达到六个模型轮次或六份实际执行结果、期间未更新笔记和计划时，由整理支线补写叙事，批量调用同样计入。显式的轮数与 `task` 期限继续跨段生效。宿主 `protocol.defaultRetain` 与脚本显式 `retain` 可指定期限，`memory.release` 可提前释放；保留仍受窗口和展示预算约束，不保证全文驻留。任务结束会释放 `segment` 与 `task` 租约，原文仍可召回，生产操作不重跑。直接调用 `session.execute` 的默认期限为两次实际曝光。
+- 模型通过文本协议或原生 Shell/Node 发起执行时，结果共用宿主 `protocol.defaultRetain`，默认使用 `segment` 期限：段内已交付正文保持稳定，结果随历史封段时统一退役，最近保留区内的结果继续进入下一段。上下文容量与剩余轮数决定封段；自动封卷先保存规则骨架与原文引用，不在下一业务请求前自动调用模型补写叙事；历史可按引用召回，显式整理与请求放不下时的压力整理仍按原流程运行。显式的轮数与 `task` 期限继续跨段生效。宿主 `protocol.defaultRetain` 与脚本显式 `retain` 可指定期限，`memory.release` 可提前释放；保留仍受窗口和展示预算约束，不保证全文驻留。任务结束会释放 `segment` 与 `task` 租约，原文仍可召回，生产操作不重跑。直接调用 `session.execute` 的默认期限为两次实际曝光。
 - 已在历史里的结果在工作帧只重复租约状态与缺口；连续成功作业可用 `completed-jobs` 映射逐项保留 executionId 与 resultRef，状态统一为 succeeded，仅在结果正文明确仍在历史且整段编码连同说明更短时使用。活动、失败、未知、未交付正文和带额外字段的作业保留逐条信息；重复身份或映射会改变顺序时也保留原条目。同类成功只读与已提交回执在实际编码更短时可跨执行合并次数与首尾 ID，失败、部分提交、未知效果、诊断与额外字段均逐条保留。完成校验读取完整事实，原始工作帧、历史正文和原文召回不受展示汇总影响。材料原始大小在精简前汇总，度量不会把省略元数据计为零。
 - 工作帧的结构化状态采用紧凑 JSON，保留字段、条目顺序和字符串内部原文；代码、诊断及用户输入里的换行与空格继续按原值交付。
 - 当前帧列出当前状态与有序列表，未变原文按身份保留在历史。Node 的 task 在完整保留上一请求、当前内容与状态逐字相同且说明明显更短时，直接说明沿用本次请求中最近的完整 task；任一字段或顺序变化、历史重建时重新完整展示。其余当前状态继续逐帧列出。引用信息的展示与原文交付分别标记；只有当前与先前帧都包含原文才声明此前已交付，首次正文即使展示元数据相同也会重新交付。
@@ -130,6 +152,8 @@ Node 收尾说明要求模型核对原始需求、最终产物和实际验证；
 - 原生调用在完整响应仍处于当前历史时，将同批已展示结果正文绑定回相应 Shell/Node 调用。标准模型驱动直接返回这些正文，历史复用、分页、裁剪、原文召回和交付证明沿用现有记录；重开会话可从持久引用重建绑定。
 - 两种传输的普通非零退出在进程和后代完成回收、能力回执落定后保留为失败结果，其余独立调用继续按序执行；取消、超时、信号终止、回收不完整、未知效果的失败与宿主故障仍停止后续派发。有依赖的步骤在同一次调用中处理失败。
 - `packageEnvironment` 为 agent 绑定持久 npm 环境；标准 Node 宿主和 `dataDir` 默认装配。安装、更新、替换和删除通过 `velaros:system.environment` 管理，当前会话下一次执行自动获取快照，子任务沿用同一环境与宿主权限。自定义环境通过 `createEnvironmentRegistry` 配置，`false` 关闭。
-宿主可用 `session.completedTask()` 读取已完成任务的身份、已接纳轮次和固定归档范围，再通过 `taskMaterials(task, after)` 分页列举、`readTaskMaterial(task, ref, offset, limit)` 读取原文；默认页大小见 `TaskMaterialLimits`。这些宿主接口不启动模型或恢复原任务，新任务不扩大旧索引范围。
-
+  宿主可用 `session.completedTask()` 读取已完成任务的身份、已接纳轮次和固定归档范围，再通过 `taskMaterials(task, after)` 分页列举、`readTaskMaterial(task, ref, offset, limit)` 读取原文；默认页大小见 `TaskMaterialLimits`。这些宿主接口不启动模型或恢复原任务，新任务不扩大旧索引范围。
 任务展示把最新用户输入引用单列为 `task.latestInput`。有最新输入且当前认识为 `pending-review` 时，`active.items` 保留全部约束，模型问题完整移至 `historicalInterpretation.items`；待核对输入按最新引用与其他引用分组，保持全部引用而不截断。历史分组是待核对的认识，不是当前授权任务清单，也不表示目标完成、输入取消或约束失效。没有最新输入锚点或已核对时保持原认识。此分层仅用于展示，维护快照、持久状态、证据校验和用户输入原文不变，不触发强制反思。
+- 一次组帧周期先准备稳定材料（能力 inventory、环境、当前段底座及已释放历史退役）；容量候选只试算正文和实际历史覆盖，不发布 `context:frame`、`context:request-proof` 或程序 `pendingFrame`。只有最终完整请求通过容量检查与证据验证，才发布选中帧及其正文 hash 证明，并登记程序帧。正式发布前重新核对授权、最新输入、段版本与 npm 环境；变化时丢弃周期并重新准备，不跨轮缓存。inventory 每周期一次，最终 npm 快照获取仅作版本复核并释放，须在计数中与 inventory 采集区分。
+- 本地候选仍执行实际正文/历史载体 proof 核对，不把引用视为已读；失败、取消和预算试算不消费租约。租约仍在成功接受响应后由原 acknowledge/consume 路径扣减。可选 `ActContextPort.beginFrame` 缺省时继续沿用旧 `project`/`reconcile`；直接程序投影默认仍登记其帧。
+- 段起点的最小交接由已有目标、计划、当前 question、带证据的历史变更和失败/写效果引用机械选出，不调用模型、不复制执行正文；最多 6000 字符，每类只选最近 4 条，超出保留省略计数和 `memory.list/read` 入口。计划和状态变更仍是模型解释，执行状态不等于领域验收；后续 `runtime-view` 优先，授权重置/任务切换后不携带旧交接。原文与旧段底座不变。

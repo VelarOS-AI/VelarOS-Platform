@@ -2,7 +2,7 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 20 种合同投影、104 个投影操作、62 项去重后的用法。系统包 `velaros:system` 有 7 个成员（modules、environment、programs、executions、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 20 种合同投影、108 个投影操作、63 项去重后的用法。系统包 `velaros:system` 有 7 个成员（modules、environment、programs、executions、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
@@ -10,10 +10,10 @@
 | [runtime/ — completion-evidence](runtime/README.md) | `retrieve` | 完成复核作用域，生成合同绑定原生只读接收门 | [completion-evidence-template.js](runtime/completion-evidence-template.js) |
 | [system/ — system-environment](system/README.md) | `list`、`search`、`describe`、`apply`、`rollback` | 宿主绑定持久 npm 环境，沿用会话权限 | [environment-template.js](system/environment-template.js) |
 | [system/ — system-goal](system/README.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
-| [system/ — system-memory-local](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
-| [system/ — system-memory](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
-| [system/ — system-memory-persistent-local](system/README.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release` | 主线宿主配置 memory，没有整理模型 | [memory-local-template.js](system/memory-local-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
-| [system/ — system-memory-persistent](system/README.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 主线宿主配置 memory，且具备整理模型 | [memory-template.js](system/memory-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-memory-local](system/README.md) | `updateActive`、`list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
+| [system/ — system-memory](system/README.md) | `updateActive`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
+| [system/ — system-memory-persistent-local](system/README.md) | `recall`、`save`、`remove`、`updateActive`、`list`、`read`、`update`、`plan`、`retain`、`release` | 主线宿主配置 memory，没有整理模型 | [memory-local-template.js](system/memory-local-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-memory-persistent](system/README.md) | `recall`、`save`、`remove`、`updateActive`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 主线宿主配置 memory，且具备整理模型 | [memory-template.js](system/memory-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
 | [system/ — system-store](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove`、`create` | 获配创建空间能力 | [store-template.js](system/store-template.js) |
 | [system/ — system-store-write](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
 | [system/ — system-store-read](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
@@ -53,6 +53,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.environment.rollback` | `execute` | `write` | 将 list.history 中的 revision 发布成新版本，baseRevision 必须是当前版本。下一次执行生效。 |
 | `system.goal.get` | `observe`、`execute` | `none` | 读当前目标的完整正文与状态：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。 工作帧里的 objectiveInRecord、reasonInRecord 是原文引用，不代表正文已读；可按其中的 ref、pointer 用 memory.read 分页读取。 |
 | `system.goal.update` | `execute` | `write` | 建立、暂停、恢复或结束目标；先 get 拿到 revision，版本变了就重新读取再改。 |
+| `system.memory.updateActive` | `execute` | `write` | 按当前版本和 ID 解决或取代旧 question；只接受真实用户原文或执行结果引文，不修改用户约束、不启动整理模型。回执给出提交版本及取代后的新 ID；不会把待核对用户输入标成已审阅。 |
 | `system.memory.list` | `observe`、`execute` | `none` | 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。 |
 | `system.memory.read` | `observe`、`execute` | `none` | 按引用分页读原文：输入、源码、结果、笔记与材料都用它。 |
 | `system.memory.update` | `execute` | `write` | 改自己的一份笔记，交回它的新版本。 |

@@ -62,6 +62,10 @@ export const ActRuntimeTuning = Object.freeze({
   materialDeltaSavings: 128,
   /** 一卷规则骨架的字符上限，超出保留首尾。 */
   volumeSkeletonChars: 6_000,
+  /** 段起点机械交接的总字符上限，不复制执行正文。 */
+  handoffChars: 6_000,
+  /** 交接每类只选最近几条，额外材料按引用召回。 */
+  handoffItems: 4,
   /** 骨架里每条说明文字的字符上限。 */
   volumeLineChars: 160,
   /** 一卷最多记下多少个改过的笔记键。 */

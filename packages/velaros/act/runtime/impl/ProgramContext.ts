@@ -143,9 +143,12 @@ export interface ProgramContextApi {
     images: readonly ModelImage[],
     signal: AbortSignal,
     maxChars?: number,
-    retained?: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>>
+    retained?: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>>,
+    candidate?: boolean
   ): Promise<{
     body: string
+    /** 本地候选正式发布时才登记，默认 project 已登记。 */
+    registerFrame?: () => Promise<void>
     images: readonly ModelImage[]
     prompt: string
     /** 租约有效、但因本帧容量放不下而没有列出的结果。 */
@@ -1074,12 +1077,14 @@ export class ProgramContext implements ProgramContextApi {
     observationImages: readonly ModelImage[],
     signal: AbortSignal,
     maxChars: number = ActRuntimeTuning.frameChars,
-    retained: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>> = []
+    retained: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>> = [],
+    candidate = false
   ): Promise<{
     body: string
     images: readonly ModelImage[]
     prompt: string
     squeezed: readonly string[]
+    registerFrame?: () => Promise<void>
     outputCoverage: readonly SegmentOutputCoverage[]
     budget: {
       maxChars: number
@@ -1919,27 +1924,30 @@ export class ProgramContext implements ProgramContextApi {
         },
       },
     })
-    await this.update(
-      (current) => ({
-        ...current,
-        pendingFrame: frameId,
-        pendingObservationSource: state.observation,
-        pendingOutputPresentation: outputPresentation,
-        pendingObservation: observation?.id,
-        pendingVisible: currentRefs,
-        pendingDelivered: visible
-          .filter((item) =>
-            results.some(
-              (result) => result.ref === item.ref && (result.bodyIncluded || result.bodyInHistory)
+    const registerFrame = async () =>
+      this.update(
+        (current) => ({
+          ...current,
+          pendingFrame: frameId,
+          pendingObservationSource: state.observation,
+          pendingOutputPresentation: outputPresentation,
+          pendingObservation: observation?.id,
+          pendingVisible: currentRefs,
+          pendingDelivered: visible
+            .filter((item) =>
+              results.some(
+                (result) => result.ref === item.ref && (result.bodyIncluded || result.bodyInHistory)
+              )
             )
-          )
-          .map((item) => ({ ref: item.ref, leaseId: item.leaseId ?? item.ref })),
-      }),
-      [],
-      signal
-    )
+            .map((item) => ({ ref: item.ref, leaseId: item.leaseId ?? item.ref })),
+        }),
+        [],
+        signal
+      )
+    if (!candidate) await registerFrame()
     return {
       body,
+      registerFrame: candidate ? registerFrame : undefined,
       outputCoverage,
       budget: { maxChars, resultBudgetChars, excerptChars, visibleResults: visible.length },
       images,

@@ -1,4 +1,13 @@
-import { isPlainObject } from '@velaros-ai/core'
+import {
+  isBoolean,
+  isEmpty,
+  isFalse,
+  isFiniteNumber,
+  isNull,
+  isPlainObject,
+  isString,
+  isTrue,
+} from '@velaros-ai/core'
 
 /** 只解释调用者显式交出的 JSON 字段，不探测进程、不扫描日志、不认证业务结果。 */
 export function processOutputView(value: unknown, rawRef: string, pointer: string) {
@@ -35,19 +44,19 @@ export function processOutputView(value: unknown, rawRef: string, pointer: strin
     const v = data[key]
     const valid =
       flags.includes(key) || key === 'logTruncated'
-        ? typeof v === 'boolean'
+        ? isBoolean(v)
         : key === 'exitCode'
-          ? v === null || (Number.isSafeInteger(v) && Number(v) >= 0)
+          ? isNull(v) || (Number.isSafeInteger(v) && Number(v) >= 0)
           : key === 'durationMs' || key === 'logBytes'
-            ? typeof v === 'number' && Number.isFinite(v) && v >= 0
-            : v === null || typeof v === 'string'
+            ? isFiniteNumber(v) && v >= 0
+            : isNull(v) || isString(v)
     if (!valid) {
       invalidFields.push(key)
       continue
     }
     // 长诊断仍可从原字段召回；关键状态不与长文本竞争。
     facts[key] =
-      typeof v === 'string' && v.length > 240
+      isString(v) && v.length > 240
         ? {
             representation: 'reference',
             rawRef,
@@ -57,16 +66,16 @@ export function processOutputView(value: unknown, rawRef: string, pointer: strin
         : v
   }
   const failure =
-    flags.some((key) => data[key] === true) ||
-    (typeof data.signal === 'string' && data.signal.length > 0) ||
+    flags.some((key) => isTrue(data[key])) ||
+    (isString(data.signal) && !isEmpty(data.signal)) ||
     (Number.isSafeInteger(data.exitCode) && Number(data.exitCode) > 0)
   const processStatus = failure
     ? 'failed'
-    : invalidFields.length === 0 &&
+    : isEmpty(invalidFields) &&
         data.exitCode === 0 &&
-        data.failed === false &&
-        (!Object.hasOwn(data, 'signal') || data.signal === null) &&
-        (!Object.hasOwn(data, 'code') || data.code === null)
+        isFalse(data.failed) &&
+        (!Object.hasOwn(data, 'signal') || isNull(data.signal)) &&
+        (!Object.hasOwn(data, 'code') || isNull(data.code))
       ? 'exited-zero'
       : 'unknown'
   const streams: Record<string, unknown> = {}
@@ -76,7 +85,7 @@ export function processOutputView(value: unknown, rawRef: string, pointer: strin
       representation: 'reference',
       rawRef,
       pointer: `${pointer}/${key}`,
-      ...(typeof data[key] === 'string' ? { totalChars: data[key].length, unit: 'utf16' } : {}),
+      ...(isString(data[key]) ? { totalChars: data[key].length, unit: 'utf16' } : {}),
     }
   }
   return {

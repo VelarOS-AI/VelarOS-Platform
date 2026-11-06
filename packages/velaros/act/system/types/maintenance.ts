@@ -100,7 +100,7 @@ export interface ContextPatch {
   }
 }
 
-/** 当前状态的一项模型解释；sources 始终指向不可变原文。 */
+/** @AgentView 当前状态的一项模型解释；sources 始终指向不可变原文。 */
 export interface ActiveContextItem {
   readonly id: string
   readonly kind: 'constraint' | 'question'
@@ -147,6 +147,33 @@ export interface ActiveContextPatch {
     readonly status: 'superseded' | 'retracted' | 'resolved'
     readonly replacement?: string
     readonly evidence: readonly ActiveContextEvidence[]
+  }>
+}
+
+/**
+ * @AgentView
+ * 主模型轻量更新旧未解事项：baseRevision 照抄 task.active 或 historicalInterpretation 对应的 revision，changes 为 1 到 64 项，逐条按现有 question 的 id 解决或取代。
+ * 不允许新增、撤销或改动用户约束；superseded 必须给 replacement（1 到 1000 字符），resolved 不能给 replacement。
+ * 每项 evidence 为 1 到 8 段真实用户原文或执行结果引文，每段 quote 为 1 到 4000 字符，offset 为 UTF-16 起点；笔记、摘要和模型回复不能作为证据。
+ * 只更新模型解释，不表示用户授权或全部输入已核对；冲突后读取新帧重新决定，不盲目重放。重开事项仍由整理的 active.additions 显式提交。
+ */
+export interface ActiveContextQuestionPatch {
+  readonly baseRevision: number
+  readonly changes: ReadonlyArray<{
+    readonly id: string
+    readonly status: 'superseded' | 'resolved'
+    readonly replacement?: string
+    readonly evidence: readonly ActiveContextEvidence[]
+  }>
+}
+
+/** @AgentView 已按版本发布的事项变更：revision 是本次提交的新版本，updated 逐项保留旧 id，取代时给出新的 replacement 身份。 */
+export interface ActiveContextUpdateReceipt {
+  readonly revision: number
+  readonly updated: ReadonlyArray<{
+    readonly id: string
+    readonly status: 'superseded' | 'retracted' | 'resolved'
+    readonly replacement?: ActiveContextItem
   }>
 }
 

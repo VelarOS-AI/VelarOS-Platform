@@ -62,7 +62,7 @@ export interface ActExecutionPort {
 export interface ActContextPort {
   /** 专项原生工具的最终产物已受理；成功执行后可进入普通完成核查。缺省仍由模型声明完成。 */
   deliveryReady?(): boolean
-  /** 安全轮边界的独立整理口；不执行业务脚本、不消费业务租约。 */
+  /** 安全轮边界的独立整理口；pressure 也用于机械回收收益不足或短期再次受阻，不执行业务脚本、不消费业务租约。返回值仅表示发布，循环仍重新核对容量。 */
   maintain?(
     input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
     signal: AbortSignal
@@ -100,6 +100,17 @@ export interface ActContextPort {
   prepare(signal: AbortSignal): Promise<void | { readonly sources: readonly ContextRef[] }>
   /** 本轮仍有可见租约的执行身份。 */
   visibleExecutions(): Promise<readonly string[]>
+  /** 单次组帧的稳定准备与本地候选；未提供时沿用 project/reconcile。事实变化须抛 STALE_VIEW，不跨周期复用。 */
+  beginFrame?(
+    view: ModelView,
+    signal: AbortSignal,
+    maxChars: number
+  ): Promise<{
+    project(maxChars: number): ReturnType<ActContextPort['project']>
+    reconcile: NonNullable<ActContextPort['reconcile']>
+    /** 仅对容量通过的最终正文发布审计；不消费交付租约。 */
+    publish(body: string, signal: AbortSignal): Promise<void>
+  }>
   /** 根据观察输出、租约和必要事实装配下一轮上下文。 */
   project(
     view: ModelView,

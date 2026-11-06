@@ -82,3 +82,5 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 `executions.read({executionId,cursor,limit})` 只读当前任务已受理作业；游标按合并输出的 UTF-16 偏移，保留末尾 32768 字符，单次默认 8000、最多 16000。返回流、游标、截断与完成标记；stderr 文本不代表失败，未知清理状态继续报告 unknown。`wait({executionId,waitMs,cursor,limit})` 按原身份等待终态，waitMs 为整数 1..60000、默认 60000；到期返回当前快照，取消仅结束等待，终态或 unknown 立即返回，不能等待自身。`stop({executionId})` 提交停止请求后继续读取实际终态，不能停止调用者自身。输出变化最多每分钟合并唤醒一次等待，正常结束即时唤醒。
 
 普通执行槽满时，用 exec 的空源码与 `options.control:{kind:"read",executionId:"回执身份"}` 或 `kind:"stop"`；文本传输在空 execute 段的选项里提供 `control`。宿主生成固定程序，独立控制通道最多同时执行一个，墙钟最多 5000 毫秒；自定义源码、模块、原文绑定及后台标志均不能夹带进入该通道。
+
+- 主模型用 `memory.updateActive({baseRevision,changes})` 按 ID 解决或取代旧 `question`，复用整理的版本、来源授权和逐字引文校验，不启动整理模型。只允许真实用户原文或执行结果作证，不开放约束撤销、新增或任意全量覆盖；轻量更新不推进用户输入核对进度。成功返回提交版本及新替代项身份，旧项及证据写入不可变审计，跨段或重新打开不因旧卷复活。显式重开仍走整理的 `active.additions`。旧宿主未装配端口时返回 `UNAVAILABLE`。
