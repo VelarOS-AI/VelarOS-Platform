@@ -15,7 +15,7 @@ import type {
   ProjectCommitResult,
   ProjectInspectInput,
 } from '../../types/files.js'
-import { unifiedDiff } from '../diff.js'
+import { combineDiffs, unifiedDiff } from '../diff.js'
 import { applyProjectMutations } from '../editing/content-planner.js'
 import { completeProjectCoverage } from '../editing/planner-coverage.js'
 import { selectProjectMutations } from '../editing/select.js'
@@ -29,7 +29,7 @@ import { ProjectTuning } from '../tuning.js'
 import { changeRecordOf, changeTransactionOf } from './change-records.js'
 import { readAgentFile } from './kernel-port.js'
 import { projectRelativePath } from './ports.js'
-import { projectCreatedPaths } from './transaction-result.js'
+import { projectCreatedPaths, projectFileStats } from './transaction-result.js'
 
 /** 统一 Node 客户端和直接宿主调用的字节表示，使逻辑相同的请求拥有同一指纹。 */
 function normalizeChange(change: ProjectCommitChange): ProjectCommitChange {
@@ -230,6 +230,21 @@ export function inspectedDiff(input: ProjectInspectInput, tx: AgentProjectStored
   }
 }
 
+/** 从留存补丁的首尾内容计算反向净差量，兼容一次事务多次修改同一路径的旧记录。 */
+export function rollbackDiff(tx: AgentProjectStoredTransaction): string {
+  const paths = new Map<string, { before?: string; after?: string }>()
+  for (const patch of tx.patches) {
+    const existing = paths.get(patch.path)
+    if (existing) existing.after = patch.newContent
+    else paths.set(patch.path, { before: patch.oldContent, after: patch.newContent })
+  }
+  return combineDiffs(
+    [...paths]
+      .reverse()
+      .map(([path, contents]) => unifiedDiff(path, contents.after, contents.before))
+  )
+}
+
 /** 读取事务自身的内容和状态生成有界回执。 */
 function receipt(tx: AgentProjectStoredTransaction, requestId: string): ProjectCommitResult {
   const truncated = tx.diff.length > ProjectFileLimits.commitDiffChars
@@ -308,6 +323,7 @@ export async function commitFiles(
         transactionId: current.transactionId,
         lifecycle: 'applied',
         changedFiles: current.changedFiles,
+        fileStats: projectFileStats(current.patches),
       })
     }
     throw error
@@ -320,6 +336,7 @@ export async function commitFiles(
       transactionId: tx.transactionId,
       lifecycle: 'applied',
       changedFiles: tx.changedFiles,
+      fileStats: projectFileStats(tx.patches),
     })
   ctx.recordWriteOutcome?.(result.changed ? 'applied' : 'not-applied')
   return result

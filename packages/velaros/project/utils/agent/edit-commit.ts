@@ -18,7 +18,11 @@ import { beforeWrite, rethrowNotApplied } from '../transactions/transaction-erro
 import { changeWindows } from './change-windows.js'
 import { saveReceipt } from './file-refs.js'
 import { projectPlannerResolver } from './planner-resolver.js'
-import { projectCreatedPaths, projectTransactionHasChanges } from './transaction-result.js'
+import {
+  projectCreatedPaths,
+  projectFileStats,
+  projectTransactionHasChanges,
+} from './transaction-result.js'
 
 /**
  * 规划并提交一次改动：规划是纯计算（版本过期时按原意图重新定位）；计划有写入时由内核准备、校验、提交，不问用户。
@@ -77,6 +81,7 @@ export async function commitPreparedProjectEdit(
       transactionId: prepared.transactionId,
       lifecycle: 'applied',
       changedFiles: applied.changedFiles,
+      fileStats: projectFileStats(final.patches),
     })
     const created = projectCreatedPaths(final.patches)
     const receipt: ProjectEditResult = {
@@ -124,6 +129,7 @@ export async function commitPreparedProjectEdit(
         transactionId: prepared.transactionId,
         lifecycle: status,
         changedFiles: committed?.changedFiles ?? [],
+        fileStats: projectFileStats(committed?.patches ?? [], status === 'rolled_back'),
       })
       const changeRef = saveReceipt(ctx, 'change', { transactionId: prepared.transactionId })
       const failure = AppError.from(error)

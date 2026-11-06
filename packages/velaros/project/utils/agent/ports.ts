@@ -104,7 +104,12 @@ function previewTexts(windows: ReadonlyArray<Record<string, unknown>>): string[]
 function describeProjectFailure(error: ProjectError): string {
   const details = isPlainObject(error.details) ? error.details : {}
   // 按路径的一步就是一处改动，只说第几步
-  const where = Number.isInteger(details.stepIndex) ? `steps[${String(details.stepIndex)}]` : ''
+  const where = [
+    optionalWhen(Number.isInteger(details.stepIndex), `steps[${String(details.stepIndex)}]`),
+    optionalWhen(isString(details.path) && !error.message.includes(details.path), details.path),
+  ]
+    .filter(isString)
+    .join(' ')
   const parts = [where ? `${where}：${error.message}` : error.message]
   const recovery = optionalWhen(isPlainObject, details.recovery)
   const candidates = isArray(recovery?.candidates) ? recovery.candidates.filter(isPlainObject) : []

@@ -431,6 +431,7 @@ export interface ProjectOperationContext {
     transactionId: string
     lifecycle: 'applied' | 'rolled_back'
     changedFiles: readonly string[]
+    fileStats?: Record<string, { additions: number; deletions: number }>
   }): void
   /** 每次跨项目操作重新授权真实根和读写权限；宿主拒绝未授权根并遵守取消，返回该根受限内核端口。 */
   resolveProject?(

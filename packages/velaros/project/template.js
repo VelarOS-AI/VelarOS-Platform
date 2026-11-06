@@ -13,4 +13,6 @@ async function commitFiles(changes) {
 
 // 未收到回执时查当前会话在同一项目的最近事务；并行任务可指定 requestId。
 async function inspectLatest() { return inspect({}) }
+// 撤回回执带 status、changed、changedFiles、反向 diff 与 diffTruncated，按回执确认结果。
+// 冲突会点明路径，保留用户后续修改；重复撤回 changed:false、alreadyUndone:true。
 async function revert(changeRef) { return undo({ changeRef }) }

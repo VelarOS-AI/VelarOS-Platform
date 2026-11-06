@@ -87,4 +87,6 @@ export function closeProject() {
 
 模型通过 `commit({changes})` 提交，`inspect({changeRef, path})` 展开已提交差量，`undo({changeRef})` 核对磁盘后整批撤回。Node 客户端将原始 Buffer 基线转为 SHA-256，将字节结果编码传输；文本结果沿用项目编码。紧凑回执最多携带 8192 字符差量。
 
+`undo` 回执给出 `status:'rolled_back'`、`changed`、实际文件和反向 `diff`，同样按 8192 字符截断并标记 `diffTruncated`。重复撤回返回 `changed:false`、`alreadyUndone:true` 与空差量。遇到后续修改时错误文字指出冲突路径，整批保持现场。常用提交、检查与撤回合同随 Node 指令提供，其余能力按需定向发现。
+
 事务请求归属会话和项目，Node 客户端自动分配请求号，连接中断后用同号重试一次；其他宿主默认取调用号。持久历史保留期内，`inspect({requestId})` 可在重启后定位请求，`inspect({})` 取当前会话在目标根最近的一笔，previousChangeRef 可向前浏览。相同请求并发或重试只返回留存事务；同号异内容拒绝。快照继续供只读观察计划使用。宿主的语言服务、文件浏览和历史记录使用各自的公开端口。

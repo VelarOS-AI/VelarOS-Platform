@@ -50,7 +50,7 @@ test('two files, concurrent retry, lost reply, restart and guarded undo', async 
   ).rejects.toThrow()
   await expect(project.inspect({ changeRef: a.changeRef }, await reopen('other'))).rejects.toThrow()
   await writeFile(join(root, 'b.txt'), 'user')
-  await expect(project.undo({ changeRef: a.changeRef }, latest)).rejects.toThrow()
+  await expect(project.undo({ changeRef: a.changeRef }, latest)).rejects.toThrow('b.txt')
   expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha')
   expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('user')
 })
@@ -158,4 +158,59 @@ test('unique fragment, no-op, and guarded move/delete', async () => {
   )
   await project.undo({ changeRef: deleted.changeRef }, reopened)
   expect(await readFile(join(root, 'y.txt'), 'utf8')).toBe(content)
+})
+
+test('undo receipts describe restored, created and deleted files and repeated undo writes nothing', async () => {
+  const ctx = await reopen()
+  await writeFile(join(root, 'old.txt'), 'original\n')
+  await writeFile(join(root, 'removed.txt'), 'restore me\n')
+  const tx = await project.commit(
+    {
+      changes: [
+        { path: 'old.txt', before: 'original\n', after: 'replacement\n' },
+        { path: 'created.txt', before: null, after: 'new file\n' },
+        { path: 'removed.txt', before: 'restore me\n', after: null },
+      ],
+    },
+    ctx
+  )
+  const result = await project.undo({ changeRef: tx.changeRef }, ctx)
+  expect(result.status).toBe('rolled_back')
+  expect(result.changed).toBe(true)
+  expect(result.changedFiles).toEqual(tx.changedFiles)
+  expect(result.diffTruncated).toBe(false)
+  expect(result.diff).toContain('-replacement\n+original')
+  expect(result.diff).toContain('-new file')
+  expect(result.diff).toContain('+restore me')
+  for (const path of ['old.txt', 'created.txt', 'removed.txt']) {
+    expect(result.diff).toContain(`--- a/${path}`)
+    expect(result.diff).toContain(`+++ b/${path}`)
+  }
+  expect(await readFile(join(root, 'old.txt'), 'utf8')).toBe('original\n')
+  expect(await readFile(join(root, 'removed.txt'), 'utf8')).toBe('restore me\n')
+  await expect(stat(join(root, 'created.txt'))).rejects.toThrow()
+  await writeFile(join(root, 'old.txt'), 'later user change\n')
+  expect(await project.undo({ changeRef: tx.changeRef }, ctx)).toMatchObject({
+    status: 'rolled_back',
+    changed: false,
+    alreadyUndone: true,
+    diff: '',
+    diffTruncated: false,
+  })
+  expect(await readFile(join(root, 'old.txt'), 'utf8')).toBe('later user change\n')
+})
+
+test('undo diff is bounded while the complete original bytes are restored', async () => {
+  const ctx = await reopen()
+  const original = 'original '.repeat(1500)
+  await writeFile(join(root, 'large.txt'), original)
+  const tx = await project.commit(
+    { changes: [{ path: 'large.txt', before: original, after: 'small' }] },
+    ctx
+  )
+  const result = await project.undo({ changeRef: tx.changeRef }, ctx)
+  expect(result.changed).toBe(true)
+  expect(result.diffTruncated).toBe(true)
+  expect(result.diff.length).toBeLessThanOrEqual(8192)
+  expect(await readFile(join(root, 'large.txt'), 'utf8')).toBe(original)
 })

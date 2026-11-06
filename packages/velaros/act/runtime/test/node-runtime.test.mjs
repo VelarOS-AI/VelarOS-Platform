@@ -1350,6 +1350,8 @@ test('runtime delivers native output to the next model turn with a small standar
   const instructionReview = {
     // 无项目/子任务能力的基准场景；仅作评审预算。必要说明增长时可说明原因并调整，不截断运行时指令。
     maxChars: 3000,
+    // 具名 ripgrep 导入和可直接运行的 execa 示例，单独保留评审空间。
+    nativeToolExampleChars: 150,
   }
   // 执行策略是独立角色层；保留原 Node/协议预算，另设策略上界并防止重复注入。
   const policy = executionPolicy(undefined, 'main')
@@ -1361,7 +1363,11 @@ test('runtime delivers native output to the next model turn with a small standar
   const baseInstructions = requests[0].instructions
     .replace(policy, '')
     .replace(cwdEntry, 'cwd:"<workspace>"')
-  assert.ok(baseInstructions.length <= instructionReview.maxChars, baseInstructions)
+  assert.ok(
+    baseInstructions.length <=
+      instructionReview.maxChars + instructionReview.nativeToolExampleChars,
+    baseInstructions
+  )
   const originalFrame = JSON.parse(
     requests[0].materials.find((item) => item.origin === 'runtime-view').text
   )

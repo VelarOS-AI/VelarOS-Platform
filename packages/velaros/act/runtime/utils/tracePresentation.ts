@@ -75,6 +75,7 @@ function projectChangeSummary(
     )
       return undefined
     const value = record.receipt.value
+    const fileStats = isPlainObject(fact.fileStats) ? fact.fileStats : {}
     if (isPlainObject(value) && (value.changed === false || value.alreadyUndone)) return undefined
     const diff =
       fact.lifecycle === 'applied' &&
@@ -88,6 +89,20 @@ function projectChangeSummary(
       transactionId: fact.transactionId,
       lifecycle: fact.lifecycle,
       changedFiles: fact.changedFiles,
+      fileStats: Object.fromEntries(
+        fact.changedFiles.flatMap((path) => {
+          const stats = fileStats[path]
+          return isPlainObject(stats) &&
+            Number.isSafeInteger(stats.additions) &&
+            isNumber(stats.additions) &&
+            stats.additions >= 0 &&
+            Number.isSafeInteger(stats.deletions) &&
+            isNumber(stats.deletions) &&
+            stats.deletions >= 0
+            ? [[path, { additions: stats.additions, deletions: stats.deletions }]]
+            : []
+        })
+      ),
       omittedFiles: fact.omittedFiles,
       diff,
       patchOmitted: !diff || (isPlainObject(value) && value.diffTruncated === true),

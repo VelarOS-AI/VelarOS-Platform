@@ -352,6 +352,11 @@ export interface ProjectUndoResult {
   /** 撤销已完成后的附带诊断。 */
   notes?: string[]
   changeRef: string
+  status: 'rolled_back'
+  changed: boolean
   changedFiles: string[]
+  /** 已完成撤回的反向差量，截断时可通过 inspect 查看原提交差量。 */
+  diff: string
+  diffTruncated: boolean
   alreadyUndone?: boolean
 }

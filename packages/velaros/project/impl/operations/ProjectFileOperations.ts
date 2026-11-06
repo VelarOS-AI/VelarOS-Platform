@@ -5,6 +5,7 @@
  */
 import { isString, optionalWhen } from '@velaros-ai/core'
 
+import { ProjectFileLimits } from '../../contract/constants.js'
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type {
   ProjectChangeInput,
@@ -29,7 +30,12 @@ import type {
   ProjectSelectInput,
   ProjectSelectResult,
 } from '../../types/selection.js'
-import { commitFiles, inspectedDiff, resolveCommit } from '../../utils/agent/commit.js'
+import {
+  commitFiles,
+  inspectedDiff,
+  resolveCommit,
+  rollbackDiff,
+} from '../../utils/agent/commit.js'
 import { commitProjectEdit } from '../../utils/agent/edit-commit.js'
 import { editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
@@ -38,6 +44,7 @@ import { projectFailure } from '../../utils/agent/ports.js'
 import { resolveProjectContext } from '../../utils/agent/project-routing.js'
 import { patchSelections } from '../../utils/agent/selection-patch.js'
 import { selectSources } from '../../utils/agent/selection-reads.js'
+import { projectFileStats } from '../../utils/agent/transaction-result.js'
 import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -70,7 +77,7 @@ export interface ProjectFileOperationsCommitApi {
     input: ProjectInspectInput,
     ctx: ProjectOperationContext
   ): Promise<ProjectChangeInspection>
-  /** @AgentView 整次撤销一次改动：写回原文、删掉它新建的文件。
+  /** @AgentView 整次撤回并返回实际文件和反向差量。宿主核对当前版本，冲突错误指出文件路径；使用回执确认撤回结果。
    * @OperationEffect write
    */
   undo(input: ProjectChangeInput, ctx: ProjectOperationContext): Promise<ProjectUndoResult>
@@ -230,8 +237,17 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
         // 撤销是幂等的：已经撤销过就如实回执，不报错。
         if (transaction.status === 'rolled_back') {
           ctx.recordWriteOutcome?.('not-applied')
-          return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
+          return {
+            changeRef,
+            status: 'rolled_back',
+            changed: false,
+            changedFiles: transaction.changedFiles,
+            diff: '',
+            diffTruncated: false,
+            alreadyUndone: true,
+          }
         }
+        const diff = rollbackDiff(transaction)
         const rolled = await kernel.rollback({ transactionId }, ctx.abortSignal)
         if (rolled.changedFiles.length) {
           ctx.recordProjectCommit?.({
@@ -239,12 +255,17 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
             transactionId,
             lifecycle: 'rolled_back',
             changedFiles: rolled.changedFiles,
+            fileStats: projectFileStats(transaction.patches, true),
           })
         }
         ctx.recordWriteOutcome?.(rolled.changedFiles.length ? 'applied' : 'not-applied')
         return {
           changeRef,
+          status: 'rolled_back',
+          changed: rolled.changedFiles.length > 0,
           changedFiles: rolled.changedFiles,
+          diff: diff.slice(0, ProjectFileLimits.commitDiffChars),
+          diffTruncated: diff.length > ProjectFileLimits.commitDiffChars,
           notes: optionalWhen(rolled.notes?.length, rolled.notes),
         }
       })

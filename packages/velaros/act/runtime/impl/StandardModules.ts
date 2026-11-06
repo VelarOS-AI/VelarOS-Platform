@@ -124,9 +124,15 @@ export function createProjectCapabilityModule(
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
       recordProjectCommit: (fact) => {
-        const bounded = { ...fact, changedFiles: [...fact.changedFiles], omittedFiles: 0 }
+        const bounded = {
+          ...fact,
+          fileStats: { ...fact.fileStats },
+          changedFiles: [...fact.changedFiles],
+          omittedFiles: 0,
+        }
         while (JSON.stringify(bounded).length > 2048 && !isEmpty(bounded.changedFiles)) {
-          bounded.changedFiles.pop()
+          const path = bounded.changedFiles.pop()!
+          delete bounded.fileStats[path]
           bounded.omittedFiles += 1
         }
         call.recordEffect('committed')

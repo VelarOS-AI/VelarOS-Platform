@@ -2,10 +2,32 @@
  * 事务结果的判定：一次提交到底有没有改动、哪些路径是新建出来的。
  */
 
+import { parsePatch } from 'diff'
+
 import { isString, isTrue } from '@velaros-ai/core'
 
 import type { PathEffect } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
+
+/** 行数从每份完整补丁统计，独立于模型差量正文的截断预算。 */
+export function projectFileStats(
+  patches: readonly AgentProjectPreparedPatch[],
+  reversed = false
+): Record<string, { additions: number; deletions: number }> {
+  const files: Record<string, { additions: number; deletions: number }> = Object.create(null)
+  for (const patch of patches) {
+    const stats = (files[patch.path] ??= { additions: 0, deletions: 0 })
+    for (const parsed of parsePatch(patch.diff)) {
+      for (const hunk of parsed.hunks) {
+        for (const line of hunk.lines) {
+          if (line.startsWith('+')) stats[reversed ? 'deletions' : 'additions']++
+          if (line.startsWith('-')) stats[reversed ? 'additions' : 'deletions']++
+        }
+      }
+    }
+  }
+  return files
+}
 
 /** 这个补丁是不是删掉文件（删除，或重命名留下的旧路径）。 */
 function deletes(patch: AgentProjectPreparedPatch): boolean {

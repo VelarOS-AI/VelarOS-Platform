@@ -40,6 +40,9 @@ export interface ActInvocationSummary {
     readonly transactionId: string
     readonly lifecycle: 'applied' | 'rolled_back'
     readonly changedFiles: readonly string[]
+    readonly fileStats?: Readonly<
+      Record<string, { readonly additions: number; readonly deletions: number }>
+    >
     readonly omittedFiles: number
     readonly diff: string
     readonly patchOmitted: boolean

@@ -16,7 +16,7 @@ declare module 'velaros:project' {
    */
   export function inspect(input: ProjectInspectInput): Promise<ProjectChangeInspection>
 
-  /** 整次撤销一次改动：写回原文、删掉它新建的文件。
+  /** 整次撤回并返回实际文件和反向差量。宿主核对当前版本，冲突错误指出文件路径；使用回执确认撤回结果。
    */
   export function undo(input: ProjectChangeInput): Promise<ProjectUndoResult>
 
@@ -105,7 +105,12 @@ declare module 'velaros:project' {
     /** 撤销已完成后的附带诊断。 */
     notes?: string[]
     changeRef: string
+    status: 'rolled_back'
+    changed: boolean
     changedFiles: string[]
+    /** 已完成撤回的反向差量，截断时可通过 inspect 查看原提交差量。 */
+    diff: string
+    diffTruncated: boolean
     alreadyUndone?: boolean
   }
 

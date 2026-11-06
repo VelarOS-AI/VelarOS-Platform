@@ -181,6 +181,7 @@ test('project commit facts survive failed results, summary receipts and replay w
     transactionId: 'tx',
     lifecycle: 'applied',
     changedFiles: ['a.ts'],
+    fileStats: { 'a.ts': { additions: 120, deletions: 40 } },
     omittedFiles: 0,
   }
   const record = {
@@ -195,6 +196,7 @@ test('project commit facts survive failed results, summary receipts and replay w
   }
   const first = summarizeInvocation(record, 0).projectChange
   assert.deepEqual(first, { ...fact, diff: '', patchOmitted: true })
+  assert.deepEqual(first.fileStats, fact.fileStats, '行统计独立于零正文预算保留')
   assert.deepEqual(summarizeInvocation(structuredClone(record), 0).projectChange, first)
   for (const operation of ['edit', 'patch', 'undo']) {
     const view = summarizeInvocation({ ...record, prepared: { ...prepared, operation } }, 0)

@@ -34,10 +34,19 @@ test('real commit fact survives outer throw; undo keeps identity and protects la
     }
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('first\n')
     expect(facts).toHaveLength(1)
-    expect(facts[0]).toMatchObject({ root, lifecycle: 'applied', changedFiles: ['a.ts'] })
+    expect(facts[0]).toMatchObject({
+      root,
+      lifecycle: 'applied',
+      changedFiles: ['a.ts'],
+      fileStats: { 'a.ts': { additions: 1, deletions: 0 } },
+    })
     await projectFileOperations.undo({ changeRef }, context)
     expect(facts).toHaveLength(2)
-    expect(facts[1]).toMatchObject({ root, lifecycle: 'rolled_back' })
+    expect(facts[1]).toMatchObject({
+      root,
+      lifecycle: 'rolled_back',
+      fileStats: { 'a.ts': { additions: 0, deletions: 1 } },
+    })
     await projectFileOperations.undo({ changeRef }, context)
     expect(facts).toHaveLength(2)
     const next = await projectFileOperations.edit(

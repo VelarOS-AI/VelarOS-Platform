@@ -32,6 +32,8 @@ const InstructionReviewBudgets = {
   fullChars: 3800,
   // 从宿主迁入的分档执行策略单独预算；基础协议预算不放宽。
   policyChars: 1100,
+  // 项目空间常驻可直接调用的事务合同，用于省掉查目录与声明的模型往返。
+  projectChars: 1100,
 }
 test('编辑提示提供唯一提交入口和回执查询', () => {
   const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
@@ -39,6 +41,16 @@ test('编辑提示提供唯一提交入口和回执查询', () => {
   assert.match(text, /原始 Buffer/)
   assert.match(text, /diff\/changedFiles/)
   assert.match(text, /inspect\(\{\}\)/)
+  assert.match(text, /import \{commit, inspect, undo\} from "velaros:project"/)
+  assert.match(
+    text,
+    /await commit\(\{changes:\[\{path:"src\/a.ts",oldText:"原文",newText:"新文"\}\]\}\)/
+  )
+  assert.match(text, /用回执 diff 确认单行修改/)
+  assert.match(text, /status:"applied"/)
+  assert.match(text, /status:"rolled_back"/)
+  assert.match(text, /反向 diff/)
+  assert.match(text, /只输出命中项/)
   assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /commit\(\{changes\}\)/)
 })
 
@@ -50,7 +62,7 @@ test('定位提示按授权选择语义工具，限制输出而非调查深度',
   assert.match(text, /注明范围、遗漏和续读位置/)
   assert.match(text, /直接复用完整原文，截短行只供定位/)
   assert.match(text, /不递归扫整个 node_modules/)
-  assert.match(text, /@vscode\/ripgrep 的 rgPath/)
+  assert.match(text, /import \{rgPath\} from "velaros:npm\/@vscode\/ripgrep"/)
   assert.match(text, /velaros:code.query/)
   assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /velaros:code.query/)
 })
@@ -431,12 +443,17 @@ test('base instructions stay small while authorized packages are discoverable on
     assert.match(instructions, /index.json/)
     const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
     assert(
-      prefixChars <= InstructionReviewBudgets.prefixChars + InstructionReviewBudgets.policyChars,
+      prefixChars <=
+        InstructionReviewBudgets.prefixChars +
+          InstructionReviewBudgets.policyChars +
+          (project ? InstructionReviewBudgets.projectChars : 0),
       `instruction prefix has ${prefixChars} characters`
     )
     assert(
       instructions.length <=
-        InstructionReviewBudgets.fullChars + InstructionReviewBudgets.policyChars,
+        InstructionReviewBudgets.fullChars +
+          InstructionReviewBudgets.policyChars +
+          (project ? InstructionReviewBudgets.projectChars : 0),
       'review full control semantics growth'
     )
     const result = await f.session.execute({
@@ -471,12 +488,17 @@ test('Node hints expose only available collaboration and search capabilities wit
       assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
       const prefixChars = instructions.split('完整响应全部校验后才执行')[0].length
       assert(
-        prefixChars <= InstructionReviewBudgets.prefixChars + InstructionReviewBudgets.policyChars,
+        prefixChars <=
+          InstructionReviewBudgets.prefixChars +
+            InstructionReviewBudgets.policyChars +
+            InstructionReviewBudgets.projectChars,
         `instruction prefix has ${prefixChars} characters`
       )
       assert(
         instructions.length <=
-          InstructionReviewBudgets.fullChars + InstructionReviewBudgets.policyChars,
+          InstructionReviewBudgets.fullChars +
+            InstructionReviewBudgets.policyChars +
+            InstructionReviewBudgets.projectChars,
         'review full control semantics growth'
       )
     }
