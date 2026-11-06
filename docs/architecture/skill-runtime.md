@@ -1,5 +1,7 @@
 # Skill 与标准 Node 运行环境
 
+产品能力管理使用 `@velaros-ai/velaros/features` 的合同，模型入口是 `velaros:features`。本单元继续承担底层依赖、代码合同与租约适配；下面的 Skill 包描述属于这层内部运行机制。Feature 模块可以通过 `sdkCapabilities` 声明宿主 SDK，使用 `velaros:host.invoke` 派生调用，每次重新经过 Kernel 授权，沿用父身份、模式与取消，禁止只读操作转发写入。
+
 Skill 是可以安装、升级和卸载的包。Agent 始终在标准 Node.js 中执行；Skill 按需要贡献标准 npm 包、说明、资源和外部能力。
 
 ```mermaid
@@ -43,6 +45,10 @@ flowchart TD
 ## 使用与发现
 
 宿主可通过 `createSkillSession({ registry, selection })` 启用按需会话：全部已安装 Skill 的用途进入发现目录，selection 只预加载工作区默认项与手动选择。模型调用 `load` 或对应能力时才装配所需依赖；并发重复加载合并，每次程序保持自己的固定快照，新增 npm 包从下一次执行使用。session 同时传给能力装配与管理上下文，并提供 Node 的 acquireRuntime。全部前台与后台执行收束后才 release。以下固定选择模式仍供需要显式范围的宿主使用。
+
+基础任务环境不公开 `typescript` 和 `ts-morph`；它们与格式化、结构搜索及网页测试依赖统一由 `jsts` 按需提供。Script 内部保留工具合同编译所需的 TypeScript 依赖，该内部依赖不进入模型默认包目录。工作区已有 npm 依赖仍按原生 Node 规则优先解析。
+
+基础 npm 只提供 `execa`、`@vscode/ripgrep`、`globby` 和 `diff`；普通文件与 JSON 处理使用 Node 标准库。其他库不作为 Script 基础依赖保存，由实际使用的工作区或能力模块自行声明。宿主模块用于 YAML、校验、Office 等功能的内部依赖不自动进入模型包目录。
 
 设置页管理本机库：从文件夹导入、查看包的说明与贡献、升级和删除。聊天框「+」沿用 Skill 选择菜单和可移除标签，按会话选择所需包；发送和排队保存确切安装代次及声明能力授权。升级后重新选择，已有队列不会自动获得新能力。默认未选择 Skill 的会话使用基础环境。
 

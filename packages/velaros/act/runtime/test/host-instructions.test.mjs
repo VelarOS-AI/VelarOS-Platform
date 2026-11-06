@@ -35,36 +35,19 @@ const InstructionReviewBudgets = {
   // 项目空间常驻可直接调用的事务合同，用于省掉查目录与声明的模型往返。
   projectChars: 1100,
 }
-test('编辑提示提供唯一提交入口和回执查询', () => {
-  const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
-  assert.match(text, /commit\(\{changes\}\)/)
-  assert.match(text, /原始 Buffer/)
-  assert.match(text, /diff\/changedFiles/)
-  assert.match(text, /inspect\(\{\}\)/)
-  assert.match(text, /import \{commit, inspect, undo\} from "velaros:project"/)
-  assert.match(
-    text,
-    /await commit\(\{changes:\[\{path:"src\/a.ts",oldText:"原文",newText:"新文"\}\]\}\)/
-  )
-  assert.match(text, /用回执 diff 确认单行修改/)
-  assert.match(text, /status:"applied"/)
-  assert.match(text, /status:"rolled_back"/)
-  assert.match(text, /反向 diff/)
-  assert.match(text, /只输出命中项/)
-  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /commit\(\{changes\}\)/)
-})
-
-test('定位提示按授权选择语义工具，限制输出而非调查深度', () => {
-  const text = nodeRuntimeInstructions('/workspace', ['velaros:project', 'velaros:code'])
-  assert.match(text, /rg --files 或 globby/)
-  assert.match(text, /少量命中给原文和邻近行，路径行号与正文分开/)
-  assert.match(text, /大量命中按文件汇总命中数和代表行/)
-  assert.match(text, /注明范围、遗漏和续读位置/)
-  assert.match(text, /直接复用完整原文，截短行只供定位/)
-  assert.match(text, /不递归扫整个 node_modules/)
-  assert.match(text, /import \{rgPath\} from "velaros:npm\/@vscode\/ripgrep"/)
-  assert.match(text, /velaros:code.query/)
-  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /velaros:code.query/)
+test('基础 Node 提示不因挂载领域模块而自动注入工作区任务规则', () => {
+  const ordinary = nodeRuntimeInstructions('/workspace')
+  const specialized = nodeRuntimeInstructions('/workspace', [
+    'velaros:project',
+    'velaros:code',
+    'velaros:browser',
+  ])
+  assert.equal(specialized, ordinary)
+  assert.match(ordinary, /Node.js ESM/)
+  assert.match(ordinary, /文件处理使用 node:fs\/promises/)
+  assert.doesNotMatch(ordinary, /fs-extra|lodash-es|date-fns|csv-parse|cheerio/)
+  assert.match(ordinary, /只输出命中项/)
+  assert.doesNotMatch(ordinary, /commit\(|rgPath|velaros:code.query|新增测试|打包入口|inspect\(\{/)
 })
 
 test('调查停止与调整以证据为准，假设不冒充根因', async () => {
@@ -74,15 +57,15 @@ test('调查停止与调整以证据为准，假设不冒充根因', async () =>
       const text = executionPolicy(depth, audience)
       assert.match(text, /方法偏好可按证据调整，不是固定步骤/)
       assert.match(text, /重叠写入先协调/)
-      assert.match(text, /交付列改动、检查回执、未覆盖和下一步/)
+      assert.match(text, /交付列结果、检查回执、未覆盖和下一步/)
       assert.match(text, /停止调查并执行/)
       assert.match(text, /新证据改变关键假设时调整方案/)
       assert.match(text, /不按固定调用次数收尾/)
       assert.match(text, /区分观察、候选原因和已验证根因/)
-      assert.match(text, /不凭猜测改超时或加兜底/)
+      assert.match(text, /不凭猜测修改环境或增加兜底/)
       assert.match(text, /仅可信通过且相关输入未变才复用，不拿记录代替验收/)
       assert.match(text, /失败、失效或覆盖缺口只扩大到受影响范围/)
-      assert.match(text, /区分源码已改、检查通过、构建生成、应用加载和原故障复测，不能逐级推定/)
+      assert.match(text, /区分计划、执行、交付和结果验证，不能逐级推定/)
       assert.ok(text.length <= InstructionReviewBudgets.policyChars)
     }
   }
@@ -1107,22 +1090,13 @@ test('trace binds instruction manifests to requests across preparation failure a
   assert.equal(new Set(refs).size, 1, 'repair reuses the successful preparation snapshot')
 })
 
-test('Node 验收说明按实际改动选择检查，不强制扩大验证', () => {
+test('基础 Node 验收按当前任务和实际结果，不预设开发工作流', () => {
   const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
-  assert.match(text, /按实际改动和项目要求选择必要检查/)
-  assert.match(text, /新增测试从运行清单确认被执行/)
-  assert.match(text, /仅改动影响打包时验证打包入口/)
+  assert.match(text, /实际产物和执行回执确认结果/)
+  assert.match(text, /按当前任务选择必要验证/)
   assert.doesNotMatch(text, /临时必失败断言|验证用户及打包入口|收尾核要求、差异、回执/)
   assert.match(text, /reject:false 查 failed\/stdout\/stderr/)
-  assert.match(text, /文案\/展示先局部检查/)
-  assert.match(text, /逻辑改动测行为和失败路径/)
-  assert.match(text, /共享接口\/格式测消费方与兼容性/)
-  assert.match(text, /不按行数判断风险/)
-  assert.match(text, /零测试\/跳过不算通过/)
-  assert.match(text, /必需门禁不省略/)
-  assert.match(text, /验证留简记：命令\/范围、结果回执、代码状态和未覆盖项/)
-  assert.match(text, /复用前确认源码、依赖、配置及环境未变/)
-  assert.match(text, /无法确认就重跑受影响检查/)
+  assert.doesNotMatch(text, /新增测试|打包入口|项目要求|源码已改/)
 })
 
 // 真实请求验证策略归属与档位；驱动无供应商推理字段，策略仍按宿主选择生效。
@@ -1150,8 +1124,8 @@ for (const executionDepth of [undefined, 'low', 'medium', 'high', 'xhigh', 'max'
     assert.match(text, /剩余未知不会实质改变方案或安全性时，停止调查/)
     assert.match(text, /不猜测成功，不隐藏失败/)
     assert.match(text, /不拿记录代替验收/)
-    assert.match(text, /应用加载和原故障复测，不能逐级推定/)
-    assert.match(text, /复用前确认源码、依赖、配置及环境未变/)
+    assert.match(text, /区分计划、执行、交付和结果验证，不能逐级推定/)
+    assert.match(text, /仅可信通过且相关输入未变才复用/)
     assert.match(text, /简单明确任务不扩大调查/)
     if (['high', 'xhigh', 'max'].includes(executionDepth)) {
       assert.match(text, /先理解任务相关全貌再动手/)

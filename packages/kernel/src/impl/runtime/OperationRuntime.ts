@@ -170,6 +170,28 @@ class OperationRuntime implements OperationRuntimeApi {
               const context = {
                 invocation: prepared,
                 signal,
+                invokeHost: (call: {
+                  module: string
+                  operation: string
+                  input: unknown
+                  callId: number
+                }) => {
+                  const child = this.descriptions.get(call.module)?.operations[call.operation]
+                  if (descriptor.effects === 'none' && child?.effects === 'write')
+                    throw new AppError('PERMISSION', '只读操作不能通过宿主 SDK 派发写操作')
+                  return this.invoke(
+                    {
+                      mode: prepared.mode,
+                      id: `${prepared.id}:host:${call.callId}`,
+                      sessionId: prepared.sessionId,
+                      executionId: prepared.executionId,
+                      binding: this.bind(prepared.sessionId, call.module),
+                      operation: call.operation,
+                      input: call.input,
+                    },
+                    signal
+                  )
+                },
                 recordDiagnostic: (value: NonNullable<InvocationReceipt['diagnostic']>) => {
                   if (!value || !isString(value.code) || !isString(value.message))
                     throw new AppError('VALIDATION', '调用诊断必须包含分类码和文本')

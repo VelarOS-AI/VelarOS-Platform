@@ -15,7 +15,10 @@ import type { ResolvedComputerPoint } from '../types/coordinates.js'
 /** 把移动的坐标翻成运行时的移动选项：按截图的坐标连同截图绑定原样交下去。 */
 export function moveOptionsFromInput(point: ComputerPoint): ComputerMoveOptions {
   if (point.coordinateSpace === 'global') return { coordinateSpace: 'global' }
-  return { coordinateSpace: 'primary-display', snapshotId: point.snapshotId }
+  return {
+    coordinateSpace: point.coordinateSpace ?? 'primary-display',
+    snapshotId: point.snapshotId,
+  }
 }
 
 /** 把点击翻成运行时的点击选项：按截图的坐标连同截图绑定原样交下去，按键与连击次数照带。 */
@@ -25,7 +28,7 @@ export function clickOptionsFromInput(input: ComputerClickInput): ComputerClickO
   return {
     button: input.button,
     count: input.count,
-    coordinateSpace: 'primary-display',
+    coordinateSpace: input.coordinateSpace ?? 'primary-display',
     snapshotId: input.snapshotId,
   }
 }
@@ -42,7 +45,7 @@ export function actionPointFromResult(
     y: result.y,
     localX: point.x,
     localY: point.y,
-    coordinateSpace: 'primary-display',
+    coordinateSpace: point.coordinateSpace ?? 'primary-display',
     displayId: result.displayId,
     snapshotId: point.snapshotId,
   }

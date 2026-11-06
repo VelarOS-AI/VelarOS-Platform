@@ -149,18 +149,33 @@ describe('坐标', () => {
 })
 
 describe('模型面', () => {
-  test('INV-6 模型面只发布桌面控制真正需要的五个动作', () => {
+  test('INV-6 模型面发布基础输入、窗口、控件语义和录像动作', () => {
     expect([...VelarComputerModule.methods].sort()).toEqual([
+      'capabilities',
       'click',
+      'drag',
+      'focusWindow',
+      'invokeElement',
       'key',
+      'keyDown',
+      'keyUp',
+      'mouseDown',
+      'mouseUp',
       'move',
+      'record',
+      'releaseInputs',
       'screenshot',
+      'screenshotWindow',
+      'scroll',
+      'setElementValue',
       'typeText',
+      'uiTree',
+      'windows',
     ])
     expect(ComputerDeclarations).not.toContain('screenSize')
   })
 
-  it('INV-11 声明从源码生成、只放出五个操作；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
+  it('INV-11 声明从源码生成并与操作一致；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
     expect(VelarComputerModule.specifier).toBe('velaros:computer')
     expect(VelarComputerModule.declarations).toBe(ComputerDeclarations)
     // 放出的方法就是空间挂上的那些操作。

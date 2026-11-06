@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/skill-jsts",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
   "license": "Apache-2.0",
   "type": "module",
@@ -15,6 +15,7 @@
   ],
   "dependencies": {
     "ts-morph": "28.0.0",
+    "typescript": "5.9.3",
     "prettier": "3.9.9",
     "jsonc-parser": "3.3.1",
     "@ast-grep/napi": "0.45.3",
@@ -24,6 +25,7 @@
     "instructions": "SKILL.md",
     "packages": [
       "ts-morph",
+      "typescript",
       "prettier",
       "jsonc-parser",
       "@ast-grep/napi",

@@ -53,7 +53,7 @@ def parse_pointer_coordinate_binding(
     if not isinstance(coordinate_space, str):
         raise ComputerHelperError(
             "screen_coordinate_space_invalid",
-            "coordinateSpace must be primary-display or global",
+            "coordinateSpace must be primary-display, window or global",
         )
     if coordinate_space == "global":
         if "snapshotId" in payload:
@@ -62,7 +62,7 @@ def parse_pointer_coordinate_binding(
                 "global coordinates must not carry snapshotId",
             )
         return coordinate_space, None
-    if coordinate_space == "primary-display":
+    if coordinate_space in ("primary-display", "window"):
         return coordinate_space, payload.get("snapshotId")
     raise ComputerHelperError(
         "screen_coordinate_space_invalid",
@@ -95,6 +95,11 @@ class ScreenSnapshotRegistry:
         while len(self._snapshots) > self._max_entries:
             self._snapshots.popitem(last=False)
         return snapshot_id
+
+    def binding(self, snapshot_id: Any) -> dict:
+        if not isinstance(snapshot_id, str) or snapshot_id not in self._snapshots:
+            raise ComputerHelperError("screen_snapshot_stale", "Unknown screenshot; take a new screenshot")
+        return dict(self._snapshots[snapshot_id])
 
     def resolve_primary_point(
         self,
@@ -140,7 +145,11 @@ class ScreenSnapshotRegistry:
     @staticmethod
     def _screen_state(display: "dict[str, Any]") -> "dict[str, Any]":
         try:
-            return {field: display[field] for field in SCREEN_STATE_FIELDS}
+            result = {field: display[field] for field in SCREEN_STATE_FIELDS}
+            if "windowId" in display:
+                result["windowId"] = display["windowId"]
+                result["processId"] = display["processId"]
+            return result
         except KeyError as exc:
             raise ComputerHelperError(
                 "screen_state_invalid",

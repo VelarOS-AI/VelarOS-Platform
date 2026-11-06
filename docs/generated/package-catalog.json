@@ -67,8 +67,8 @@
       "domain": "foundations",
       "directory": "packages/script",
       "name": "@velaros-ai/script",
-      "version": "0.3.10",
-      "description": "Native Node.js execution with mature file, source, data and document libraries, on-demand capabilities and host-owned process permissions.",
+      "version": "0.4.0",
+      "description": "Native Node.js execution with core command, search, file discovery and diff libraries, on-demand capabilities and host-owned process permissions.",
       "exportSubpaths": [
         ".",
         "./contracts"
@@ -79,7 +79,7 @@
       "domain": "foundations",
       "directory": "packages/skill-jsts",
       "name": "@velaros-ai/skill-jsts",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
       "exportSubpaths": [
         "./SKILL.md",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.6.36",
+      "version": "0.7.0",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -110,6 +110,8 @@
         "./execution",
         "./execution/contracts",
         "./execution/local",
+        "./features",
+        "./features/contracts",
         "./images",
         "./images/contracts",
         "./images/local",
@@ -137,7 +139,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.6.2",
+      "version": "0.7.0",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",

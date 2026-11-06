@@ -38,6 +38,10 @@ const Path = z.string().refine(isSkillRelativePath)
 const Contribution = z
   .object({
     instructions: Path.optional(),
+    sdkCapabilities: z
+      .array(z.string().regex(/^velaros:[a-z][a-z0-9-]*$/u))
+      .max(SkillLimits.capabilities)
+      .optional(),
     hostCapabilities: z
       .array(z.string().regex(/^(?:velaros:[a-z][a-z0-9-]*|project:language:[a-z][a-z0-9-]*)$/u))
       .max(SkillLimits.capabilities)
@@ -47,7 +51,7 @@ const Contribution = z
       .array(
         z
           .object({
-            module: z.string().regex(/^skill:[a-z][a-z0-9-]*$/u),
+            module: z.string().regex(/^(?:skill|feature):[a-z][a-z0-9-]*$/u),
             entry: Path,
             contract: Path,
           })
@@ -178,12 +182,15 @@ export function parseSkillManifest(value: unknown): SkillManifest {
     !contribution.instructions &&
     isEmpty(contribution.packages) &&
     isEmpty(contribution.capabilities) &&
-    isEmpty(contribution.hostCapabilities ?? [])
+    isEmpty(contribution.hostCapabilities ?? []) &&
+    isEmpty(contribution.sdkCapabilities ?? [])
   )
     throw new AppError('VALIDATION', 'Skill 需要提供说明、标准依赖或宿主能力')
   if (
     new Set(contribution.hostCapabilities ?? []).size !==
       (contribution.hostCapabilities ?? []).length ||
+    new Set(contribution.sdkCapabilities ?? []).size !==
+      (contribution.sdkCapabilities ?? []).length ||
     new Set(contribution.packages).size !== contribution.packages.length ||
     new Set(contribution.capabilities.map((capability) => capability.module)).size !==
       contribution.capabilities.length
@@ -209,7 +216,8 @@ export function checkSkillGrants(manifest: SkillManifest, grants: readonly strin
     grants.some(
       (module) =>
         !manifest.contribution.capabilities.some((capability) => capability.module === module) &&
-        !(manifest.contribution.hostCapabilities ?? []).includes(module)
+        !(manifest.contribution.hostCapabilities ?? []).includes(module) &&
+        !(manifest.contribution.sdkCapabilities ?? []).includes(module)
     )
   )
     throw new AppError('VALIDATION', 'Skill 授权包含未知或重复的能力')

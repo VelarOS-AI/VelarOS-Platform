@@ -1,6 +1,6 @@
 // velaros:computer 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
 // 截图跟在程序结果后面交给你看，所以一般分两段：这一段 screenshot 看屏幕，下一段按图上量出的坐标动手，带上那张图的 snapshotId（照返回值原样抄）。
-import { click, key, move, screenshot, typeText } from 'velaros:computer'
+import { capabilities, click, drag, invokeElement, key, keyDown, keyUp, move, record, screenshot, screenshotWindow, scroll, typeText, uiTree, windows } from 'velaros:computer'
 
 // 先看屏幕：图交给你看，返回值里是 snapshotId 与尺寸。
 async function look() {
@@ -51,4 +51,45 @@ async function whyUnavailable() {
   } catch (error) {
     return error.message
   }
+}
+
+// 先枚举窗口和后端能力，选定 id 后下一段再检查控件树或窗口截图。
+async function discoverWindows() {
+  return { capabilities: await capabilities(), windows: await windows() }
+}
+
+// 有控件树时优先查语义；没有时返回窗口截图，按该图的 window 坐标操作。
+async function inspectWindow(windowId) {
+  const support = await capabilities()
+  if (support.uiTree) return uiTree({ windowId, maxDepth: 6, maxNodes: 200 })
+  return screenshotWindow({ windowId })
+}
+
+// 控件 id 必须来自刚刚观察过的那次 uiTree；不把控件名称猜成坐标。
+async function activateControl(treeId, elementId) {
+  return invokeElement({ treeId, elementId })
+}
+
+// 独立滚轮与原子拖拽，坐标都携带对应截图的绑定。
+async function scrollAt(snapshotId, x, y) {
+  return scroll({ at: { x, y, snapshotId }, deltaY: 3 })
+}
+
+async function dragBetween(snapshotId, fromX, fromY, toX, toY) {
+  return drag({ from: { x: fromX, y: fromY, snapshotId }, to: { x: toX, y: toY, snapshotId }, durationMs: 500 })
+}
+
+// 跨动作修饰键必须保证释放；原子的快捷键优先直接用 key。
+async function modifiedClick(snapshotId, x, y) {
+  await keyDown({ key: 'shift' })
+  try {
+    return await click({ x, y, snapshotId })
+  } finally {
+    await keyUp({ key: 'shift' })
+  }
+}
+
+// 有限时长录像在编码器完全关闭后才返回；path 必须是不存在的绝对路径 MP4。
+async function recordEvidence(path) {
+  return record({ path, durationMs: 1000, fps: 5 })
 }

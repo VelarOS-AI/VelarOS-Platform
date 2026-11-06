@@ -119,6 +119,7 @@ export async function createSkillSession(options: SkillSessionOptions): Promise<
     ...record,
     grants: selected.find((item) => item.name === record.manifest.name)?.grants ?? [
       ...(record.manifest.contribution.hostCapabilities ?? []),
+      ...(record.manifest.contribution.sdkCapabilities ?? []),
       ...record.manifest.contribution.capabilities.map((item) => item.module),
     ],
   }))

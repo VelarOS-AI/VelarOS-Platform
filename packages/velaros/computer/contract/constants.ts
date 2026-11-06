@@ -9,7 +9,7 @@
  * 随本单元发布的 helper 资产（`runtime/` 里各平台的 Python 脚本）的版本：宿主的安装器按它判断装过的那份要不要重装。
  * 改了 helper 脚本就升这个号。
  */
-export const ComputerHelperVersion = '0.3.0' as const
+export const ComputerHelperVersion = '0.4.0' as const
 
 /**
  * 随插件分发的桌面控制平台包在磁盘上的布局。
@@ -109,6 +109,20 @@ export type ComputerEnvironmentVariable =
  * 输入类操作对外承诺的上限：模型在声明里看到的就是这些数（两边一致由验收核对），操作按它们核对入参。
  */
 export const ComputerInputLimits = Object.freeze({
+  /** 每轴滚轮刻度的绝对值上限。 */
+  scrollTicks: 100,
+  /** 拖拽最大时长。 */
+  dragDurationMs: 3_000,
+  /** 手动按住输入的自动释放期限。 */
+  inputLeaseMs: 5_000,
+  /** 查询控件树的最大深度。 */
+  treeDepth: 12,
+  /** 查询控件树的最大节点数。 */
+  treeNodes: 500,
+  /** 单次录像最大时长。 */
+  recordingDurationMs: 5_000,
+  /** 单次录像最高帧率。 */
+  recordingFps: 10,
   /** 坐标绝对值上限：虚拟桌面再大也不会超过它，超出即入参错误。 */
   coordinateBound: 20_000,
   /** 一次 typeText 最多输入多少字符。 */

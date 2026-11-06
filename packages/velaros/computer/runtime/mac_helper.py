@@ -25,6 +25,7 @@ from io import BytesIO
 from typing import Any, Iterator, Optional, Tuple
 
 import Quartz
+import ApplicationServices
 from PIL import Image
 
 from computer_helper_common import (
@@ -32,6 +33,7 @@ from computer_helper_common import (
     parse_pointer_coordinate_binding,
     run_stdio_loop,
 )
+from computer_desktop import ComputerDesktop
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 os.environ.setdefault("PYAUTOGUI_HIDE_SUPPORT_PROMPT", "1")
@@ -142,15 +144,15 @@ def primary_display() -> "dict[str, Any]":
 
 
 def _accessibility_access() -> bool:
-    probe = getattr(Quartz, "AXIsProcessTrusted", None)
+    probe = getattr(ApplicationServices, "AXIsProcessTrusted", None)
     if callable(probe):
         try:
             return bool(probe())
         except Exception:  # noqa: BLE001 - a permission probe must fail closed
             return False
 
-    probe_with_options = getattr(Quartz, "AXIsProcessTrustedWithOptions", None)
-    prompt_key = getattr(Quartz, "kAXTrustedCheckOptionPrompt", None)
+    probe_with_options = getattr(ApplicationServices, "AXIsProcessTrustedWithOptions", None)
+    prompt_key = getattr(ApplicationServices, "kAXTrustedCheckOptionPrompt", None)
     if callable(probe_with_options) and prompt_key is not None:
         try:
             return bool(probe_with_options({prompt_key: False}))
@@ -239,10 +241,8 @@ def mouse_move(payload: "dict[str, Any]") -> "dict[str, Any]":
     coordinate_space, snapshot_id = parse_pointer_coordinate_binding(payload)
     duration = max(0.0, min(float(payload.get("durationMs") or 0) / 1000.0, 0.8))
     display = None
-    if coordinate_space == "primary-display":
-        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
-            snapshot_id, x, y, primary_display()
-        )
+    if coordinate_space != "global":
+        x, y, display = DESKTOP.resolve_point(payload)
 
     # Keep snapshot validation and the actual event adjacent so the display
     # state cannot be silently recomputed through a second coordinate path.
@@ -261,10 +261,8 @@ def left_click(payload: "dict[str, Any]") -> "dict[str, Any]":
     button = str(payload.get("button") or "left")
     count = int(payload.get("count") or 1)
     display = None
-    if coordinate_space == "primary-display":
-        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
-            snapshot_id, x, y, primary_display()
-        )
+    if coordinate_space != "global":
+        x, y, display = DESKTOP.resolve_point(payload)
 
     # Keep snapshot validation and the actual event adjacent so the display
     # state cannot be silently recomputed through a second coordinate path.
@@ -346,7 +344,10 @@ def check(_payload: "dict[str, Any]") -> "dict[str, Any]":
     }
 
 
+DESKTOP = ComputerDesktop(SCREEN_SNAPSHOTS, primary_display, load_pyautogui, normalize_key, _capture_main_display_image)
+
 COMMANDS = {
+    **DESKTOP.commands(),
     "check": check,
     "screen_size": screen_size,
     "screenshot": screenshot,
@@ -365,4 +366,7 @@ def dispatch(command: str, payload: "dict[str, Any]") -> Any:
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_stdio_loop(dispatch))
+    try:
+        raise SystemExit(run_stdio_loop(dispatch))
+    finally:
+        DESKTOP.inputs.release_inputs()

@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { z } from 'zod'
+
 import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai/kernel'
@@ -139,22 +141,77 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
               }
               const result = await runner.run(
                 {
-                  source: `import * as provider from ${JSON.stringify(pathToFileURL(entry).href)};\nimport {input} from 'velaros:program';\nexport default await provider[${JSON.stringify(name)}](${hasInput ? (optionalInputs.includes(name) ? 'input === null ? undefined : input' : 'input') : ''});`,
+                  source: `import * as provider from ${JSON.stringify(pathToFileURL(entry).href)};\nimport {input} from 'velaros:program';\nimport {invoke} from 'velaros:host';\nexport default await provider[${JSON.stringify(name)}](${hasInput ? (optionalInputs.includes(name) ? 'input === null ? undefined : input' : 'input') : 'undefined'}, {host:{invoke}});`,
                   input,
                   modules: {},
                   blobs: {},
-                  operations: {},
+                  operations: { 'velaros:host': ['invoke'] },
                   mode: context.invocation.mode,
                   host: {
                     sessionId: context.invocation.sessionId,
                     executionId: context.invocation.executionId,
-                    modules: {},
+                    modules: {
+                      'velaros:host': {
+                        summary: '当前 Feature 声明且获授权的宿主 SDK。',
+                        declarations: `declare module 'velaros:host' { export function invoke(input: {module: string; operation: string; input?: unknown}): Promise<unknown> }`,
+                      },
+                    },
                   },
                   timeoutMs: SkillLimits.providerTimeoutMs,
                 },
-                async () => ({
-                  error: { code: 'PERMISSION', message: '此能力进程没有其他宿主能力授权' },
-                }),
+                async (call, holdClock) => {
+                  const release = holdClock()
+                  try {
+                    const target = z
+                      .object({
+                        module: z.string(),
+                        operation: z.string(),
+                        input: z.unknown().optional(),
+                      })
+                      .strict()
+                      .parse(call.input)
+                    if (
+                      call.namespace !== 'velaros:host' ||
+                      call.operation !== 'invoke' ||
+                      !(skill.manifest.contribution.sdkCapabilities ?? []).includes(
+                        target.module
+                      ) ||
+                      !skill.grants.includes(target.module) ||
+                      !context.invokeHost
+                    )
+                      throw new AppError('PERMISSION', 'Feature 未获授此宿主 SDK 能力')
+                    await options.registry.assertGranted(
+                      skill.manifest.name,
+                      skill.generation,
+                      capability.module
+                    )
+                    await options.registry.assertGranted(
+                      skill.manifest.name,
+                      skill.generation,
+                      target.module
+                    )
+                    const receipt = await context.invokeHost({
+                      ...target,
+                      input: toNullable(target.input),
+                      callId: call.callId,
+                    })
+                    for (const image of receipt.attachments ?? []) context.attach(image)
+                    if (receipt.effect !== 'none') context.recordEffect(receipt.effect)
+                    if (receipt.outcome !== 'succeeded')
+                      return {
+                        error: receipt.error ?? {
+                          code: 'UNAVAILABLE',
+                          message: '宿主 SDK 操作未成功',
+                        },
+                      }
+                    return { value: toNullable(receipt.value) }
+                  } catch (error) {
+                    const failure = AppError.from(error)
+                    return { error: { code: failure.code, message: failure.message } }
+                  } finally {
+                    release()
+                  }
+                },
                 () => {},
                 context.signal
               )

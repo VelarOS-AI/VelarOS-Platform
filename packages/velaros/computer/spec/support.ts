@@ -21,12 +21,22 @@ import type {
   ComputerAvailability,
   ComputerClickInput,
   ComputerClickOptions,
+  ComputerDragInput,
+  ComputerElementInput,
+  ComputerElementValueInput,
   ComputerKeyInput,
+  ComputerKeyStateInput,
+  ComputerMouseDownInput,
+  ComputerMouseUpInput,
   ComputerMoveOptions,
   ComputerOperationContext,
   ComputerPoint,
+  ComputerRecordInput,
+  ComputerScrollInput,
   ComputerSpacePort,
+  ComputerTreeInput,
   ComputerTypeInput,
+  ComputerWindowInput,
 } from '../index'
 import { computerOperations } from '../index'
 
@@ -72,6 +82,48 @@ export function computerDesk(
       )
   }
   const port: ComputerSpacePort = {
+    capabilities: async () => ({
+      platform: 'test',
+      windows: true,
+      uiTree: true,
+      recording: true,
+      captureMode: 'visible-region',
+      limitations: [],
+    }),
+    windows: async () => [],
+    screenshotWindow: async () => {
+      throw new Error('This test desktop has no screenshotWindow implementation')
+    },
+    focusWindow: async () => {
+      throw new Error('This test desktop has no focusWindow implementation')
+    },
+    scroll: async () => {
+      throw new Error('This test desktop has no scroll implementation')
+    },
+    drag: async () => {
+      throw new Error('This test desktop has no drag implementation')
+    },
+    mouseDown: async () => {
+      throw new Error('This test desktop has no mouseDown implementation')
+    },
+    mouseUp: async () => ({ held: [], released: [], leaseMs: 5000 }),
+    keyDown: async () => {
+      throw new Error('This test desktop has no keyDown implementation')
+    },
+    keyUp: async () => ({ held: [], released: [], leaseMs: 5000 }),
+    releaseInputs: async () => ({ held: [], released: [], leaseMs: 5000 }),
+    uiTree: async () => {
+      throw new Error('This test desktop has no uiTree implementation')
+    },
+    invokeElement: async () => {
+      throw new Error('This test desktop has no invokeElement implementation')
+    },
+    setElementValue: async () => {
+      throw new Error('This test desktop has no setElementValue implementation')
+    },
+    record: async () => {
+      throw new Error('This test desktop has no record implementation')
+    },
     ensureAvailable: async () => {
       availabilityChecks += 1
       return options.available ?? { available: true, reason: 'available', detail: null }
@@ -146,6 +198,32 @@ export function computerDesk(
   }
   const capabilities = createCapabilityPort({
     computer: {
+      capabilities: (_input, call) => computerOperations.capabilities(hostContext(call)),
+      windows: (_input, call) => computerOperations.windows(hostContext(call)),
+      screenshotWindow: (input, call) =>
+        computerOperations.screenshotWindow(input as ComputerWindowInput, hostContext(call)),
+      focusWindow: (input, call) =>
+        computerOperations.focusWindow(input as ComputerWindowInput, hostContext(call)),
+      scroll: (input, call) =>
+        computerOperations.scroll(input as ComputerScrollInput, hostContext(call)),
+      drag: (input, call) => computerOperations.drag(input as ComputerDragInput, hostContext(call)),
+      mouseDown: (input, call) =>
+        computerOperations.mouseDown(input as ComputerMouseDownInput, hostContext(call)),
+      mouseUp: (input, call) =>
+        computerOperations.mouseUp(input as ComputerMouseUpInput, hostContext(call)),
+      keyDown: (input, call) =>
+        computerOperations.keyDown(input as ComputerKeyStateInput, hostContext(call)),
+      keyUp: (input, call) =>
+        computerOperations.keyUp(input as ComputerKeyStateInput, hostContext(call)),
+      releaseInputs: (_input, call) => computerOperations.releaseInputs(hostContext(call)),
+      uiTree: (input, call) =>
+        computerOperations.uiTree(input as ComputerTreeInput, hostContext(call)),
+      invokeElement: (input, call) =>
+        computerOperations.invokeElement(input as ComputerElementInput, hostContext(call)),
+      setElementValue: (input, call) =>
+        computerOperations.setElementValue(input as ComputerElementValueInput, hostContext(call)),
+      record: (input, call) =>
+        computerOperations.record(input as ComputerRecordInput, hostContext(call)),
       screenshot: (_input, call) => computerOperations.screenshot(hostContext(call)),
       move: (input, call) => computerOperations.move(input as ComputerPoint, hostContext(call)),
       click: (input, call) =>

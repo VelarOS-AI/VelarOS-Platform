@@ -16,6 +16,8 @@ import type { ComputerHelperLaunchSpec } from '../types/computer.js'
 export function spawnComputerHelperProcess(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess {
   const child: ChildProcessWithoutNullStreams = spawn(spec.pythonCommand, [spec.helperScript], {
     cwd: spec.runtimeDir,
+    // 原生 helper 是后台服务，Windows 下不能额外弹出控制台窗口。
+    windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1' },
   })

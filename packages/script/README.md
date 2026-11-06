@@ -26,13 +26,8 @@ if (result.checked) console.log(result.result.process)
 | 用途 | 默认 npm 包 |
 | --- | --- |
 | 命令、搜索、遍历、差异 | `execa`、`@vscode/ripgrep`、`globby`、`diff` |
-| 文件便利操作 | `fs-extra`（普通读写仍可直接用 Node） |
-| TypeScript 结构化修改与格式化 | `ts-morph`、`typescript`、`prettier` |
-| HTML/XML、CSV 与 YAML | `cheerio`、`csv-parse`、`csv-stringify`、`yaml` |
-| 数据整理、日期与校验 | `lodash-es`、`date-fns`、`zod` |
-| 并发限制与 ZIP | `p-limit`、`jszip` |
 
-默认包只在程序 import 时加载，发现目录只读取包元数据，不预加载库代码或把 README 塞进上下文。工作区依赖仍优先，显式宿主导入可选固定版本；高级 JS/TS Skill 继续提供语义工作流、结构搜索与浏览器测试，选择它不是使用 ts-morph 或 prettier 的前置步骤。
+基础 npm 只保留命令、搜索、路径查找和文本差异工具；文件与 JSON 处理使用 Node 标准库。默认包只在程序 import 时加载，发现目录只读取包元数据，不预加载库代码或把 README 塞进上下文。其余库由实际使用的工作区或能力模块自行声明，不作为基础依赖分发。`typescript`、`ts-morph` 和 `prettier` 由 JS/TS 能力按需提供，加载后从下一次程序执行起进入环境。Script 内部用于合同编译的 TypeScript 依赖不向基础任务环境公开。
 
 `VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 

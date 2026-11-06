@@ -7,11 +7,12 @@
 
 /**
  * @AgentView
- * 一个坐标，两种写法选一种：按截图量的（x、y 从截图左上角算，带上那次 screenshot 交回的 snapshotId），
- * 或者虚拟桌面的全局坐标（coordinateSpace 写 'global'、不带 snapshotId，可以为负）。坐标都是整数，绝对值不超过 20000。
+ * 按主屏截图量的坐标携带 screenshot 的 snapshotId；按窗口截图量的坐标携带 screenshotWindow 的 snapshotId，coordinateSpace 必须写 'window'。
+ * 虚拟桌面的全局坐标写 coordinateSpace: 'global'，不带 snapshotId，可以为负。坐标都是整数，绝对值不超过 20000。
  */
 export type ComputerPoint =
   | { x: number; y: number; snapshotId: string; coordinateSpace?: 'primary-display' }
+  | { x: number; y: number; snapshotId: string; coordinateSpace: 'window' }
   | { x: number; y: number; coordinateSpace: 'global' }
 
 /** @AgentView 点击：坐标同 ComputerPoint；button 默认 left，count 默认 1（双击给 2，最多 3）。 */
@@ -37,6 +38,8 @@ export interface ComputerKeyInput {
  * display 开头的几项与 origin、scaleFactor 说明这块主屏在虚拟桌面上的位置，一般用不着。
  */
 export interface ComputerSnapshot {
+  /** 窗口截图时提供；该图上的坐标必须显式写 coordinateSpace: 'window'。 */
+  windowId?: string
   snapshotId: string
   width: number
   height: number
@@ -89,6 +92,7 @@ export interface ComputerScreenSize {
 
 /** 一次截图的结果：图片本体、与它绑定的不透明标识，以及拍下这张图时的屏幕几何。 */
 export interface ComputerScreenshot {
+  windowId?: string
   base64: string
   format: 'jpeg'
   /** 用这张截图上量出的坐标点击时必须原样带回的绑定标识。 */
@@ -125,8 +129,8 @@ export interface ComputerClickResult {
   snapshotId?: string
 }
 
-/** @AgentView 坐标空间：primary-display 是按截图量的坐标，global 是虚拟桌面的全局坐标。 */
-export type ComputerCoordinateSpace = 'primary-display' | 'global'
+/** @AgentView 坐标空间：primary-display 为主屏截图，window 为窗口截图，global 为虚拟桌面全局坐标。 */
+export type ComputerCoordinateSpace = 'primary-display' | 'window' | 'global'
 
 /** 两种坐标空间共用的点击修饰：按哪个键、连击几次。 */
 export interface ComputerClickModifiers {
@@ -143,7 +147,7 @@ export interface ComputerGlobalClickOptions extends ComputerClickModifiers {
 
 /** 主屏截图局部坐标点击的选项：必须带上给出这组坐标的那次截图的绑定标识。 */
 export interface ComputerPrimaryDisplayClickOptions extends ComputerClickModifiers {
-  coordinateSpace: 'primary-display'
+  coordinateSpace: 'primary-display' | 'window'
   /** 提供 x、y 的那次截图返回的不透明标识。 */
   snapshotId: string
 }
@@ -164,7 +168,7 @@ export interface ComputerGlobalMoveOptions extends ComputerMoveModifiers {
 
 /** 主屏截图局部坐标移动的选项：与点击同一套，必须带上那次截图的绑定标识。 */
 export interface ComputerPrimaryDisplayMoveOptions extends ComputerMoveModifiers {
-  coordinateSpace: 'primary-display'
+  coordinateSpace: 'primary-display' | 'window'
   /** 提供 x、y 的那次截图返回的不透明标识。 */
   snapshotId: string
 }
@@ -213,4 +217,151 @@ export interface ComputerHelperLaunchSpec {
   version: string
   /** 是否命中了随包解释器（兼容字段名）。 */
   bundledVenv: boolean
+}
+
+/** @AgentView 截图范围；省略 windowId 截主屏，窗口 id 从 windows 获取。 */
+export interface ComputerScreenshotInput {
+  windowId?: string
+}
+
+/** @AgentView 在 at 指定的位置滚轮滚动；正数向右/向下，负数向左/向上，单位是滚轮刻度，每轴绝对值最多 100。 */
+export interface ComputerScrollInput {
+  at: ComputerPoint
+  deltaX?: number
+  deltaY?: number
+}
+
+/** @AgentView 已完成的滚轮刻度，正号向右和向下。 */
+export interface ComputerScrollResult {
+  deltaX: number
+  deltaY: number
+}
+
+/** @AgentView 原子拖拽完成回执。 */
+export interface ComputerDragResult {
+  dragged: boolean
+}
+
+/** @AgentView 原子拖拽：先校验两端的截图绑定，再按下、移动、保证松开；durationMs 为 100–3000，默认 500。 */
+export interface ComputerDragInput {
+  from: ComputerPoint
+  to: ComputerPoint
+  button?: 'left' | 'right' | 'middle'
+  durationMs?: number
+}
+
+/** @AgentView 在 at 处按下鼠标；必须用 mouseUp 配对，最多保持 5000 毫秒后自动释放。 */
+export interface ComputerMouseDownInput {
+  at: ComputerPoint
+  button?: 'left' | 'right' | 'middle'
+}
+
+/** @AgentView 释放鼠标按钮，默认 left；可重复调用。 */
+export interface ComputerMouseUpInput {
+  button?: 'left' | 'right' | 'middle'
+}
+
+/** @AgentView 按住或释放单个键（如 ctrl、shift）；组合键仍用 key。按住最多 5000 毫秒自动释放。 */
+export interface ComputerKeyStateInput {
+  key: string
+}
+
+/** @AgentView 输入状态回执；released 表示本次实际释放的键和鼠标按钮。 */
+export interface ComputerInputState {
+  held: string[]
+  released: string[]
+  leaseMs: number
+}
+
+/** @AgentView 矩形使用虚拟桌面全局坐标。 */
+export interface ComputerBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** @AgentView 可见窗口，不透明 id 只在当前 helper 进程内有效。 */
+export interface ComputerWindow {
+  id: string
+  title: string
+  processId: number
+  bounds: ComputerBounds
+}
+
+/** @AgentView 指定一个 windows 返回的窗口。 */
+export interface ComputerWindowInput {
+  windowId: string
+}
+
+/** @AgentView 控件树查询；maxDepth 为 1–12（默认 6），maxNodes 为 1–500（默认 200）；超出预算以 truncated 标明。 */
+export interface ComputerTreeInput extends ComputerWindowInput {
+  maxDepth?: number
+  maxNodes?: number
+}
+
+/** @AgentView 扁平控件节点；不返回密码或输入框的值。节点 id 只用于同一次 treeId 下的语义操作。 */
+export interface ComputerElement {
+  id: string
+  parentId?: string
+  role: string
+  name: string
+  automationId: string
+  bounds: ComputerBounds
+  enabled: boolean
+}
+
+/** @AgentView 有界控件树；warnings 说明不可访问的子树，不能把截断结果视为完整界面。 */
+export interface ComputerTree {
+  treeId: string
+  windowId: string
+  nodes: ComputerElement[]
+  truncated: boolean
+  warnings: string[]
+}
+
+/** @AgentView 通过 UI 自动化激活控件；treeId、elementId 必须来自最近 30 秒内同一次 uiTree，不会回落成坐标点击。 */
+export interface ComputerElementInput {
+  treeId: string
+  elementId: string
+}
+
+/** @AgentView 通过控件的 Value/AXValue 接口设置文本，最多 10000 个字符。 */
+export interface ComputerElementValueInput extends ComputerElementInput {
+  value: string
+}
+
+/** @AgentView 控件语义操作回执。 */
+export interface ComputerElementAction {
+  treeId: string
+  elementId: string
+  action: 'invoke' | 'set-value'
+}
+
+/** @AgentView 录制主屏或窗口到新的绝对路径 MP4；durationMs 为 100–5000，fps 为 1–10（默认 5）；不覆盖已有文件，不含音频。 */
+export interface ComputerRecordInput extends ComputerScreenshotInput {
+  path: string
+  durationMs: number
+  fps?: number
+}
+
+/** @AgentView 已完成并关闭编码器的录像；durationMs 为实际采集时长，fps 为编码帧率。 */
+export interface ComputerRecording {
+  path: string
+  width: number
+  height: number
+  frames: number
+  fps: number
+  durationMs: number
+  bytes: number
+}
+
+/** @AgentView 当前运行环境支持情况；能力不可用时会返回原因，调用不伪装成功。 */
+export interface ComputerCapabilities {
+  platform: string
+  windows: boolean
+  uiTree: boolean
+  recording: boolean
+  captureMode: 'visible-region' | 'window'
+  limitations: string[]
 }

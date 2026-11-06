@@ -423,9 +423,20 @@ class ComposedRuntime implements VelarosRuntime {
     return ids
   }
 
+  private isInactiveSkillModule(module: string): boolean {
+    // 已安装只表示可发现；默认/显式选择或 load 后，扩展能力才进入当前会话。
+    const skills = this.options.skills
+    const catalog = skills?.session?.catalog ?? skills?.lease.skills ?? []
+    const active = skills?.session?.skills ?? skills?.lease.skills ?? []
+    return (
+      catalog.some((skill) => skill.grants.includes(module)) &&
+      !active.some((skill) => skill.grants.includes(module))
+    )
+  }
+
   private allows(id: string, module: string): boolean {
     const scope = this.scopes.get(id)
-    if (!scope) return false
+    if (!scope || this.isInactiveSkillModule(module)) return false
     if (module === ExecutionsModuleId) return true
     if (module === GoalModuleId) return scope.kind === 'main'
     if (module === ContextMaterialsModuleId)
@@ -485,7 +496,9 @@ class ComposedRuntime implements VelarosRuntime {
       outputTokens: profile.model.limits.outputTokens,
       ...profile.limits,
     }
-    const modules = profile.modules.filter((module) => module !== 'velaros:agents')
+    const modules = profile.modules.filter(
+      (module) => module !== 'velaros:agents' && !this.isInactiveSkillModule(module)
+    )
     for (const module of modules)
       if (!this.allows(job.parentSessionId, module))
         throw new AppError('VALIDATION', '子任务能力不能超过父任务')

@@ -1162,7 +1162,8 @@ export class RuntimeSession implements VelarosSession {
       publish: async (body: string, currentSignal: AbortSignal) => {
         currentSignal.throwIfAborted()
         const node = this.dependencies.node
-        if (node) {
+        // 环境索引读取失败时保留帧内诊断；没有取得版本基线就不做发布前版本比较。
+        if (node && !isUndefined(stable.environmentVersion)) {
           let lease: NodeRuntimeLease | undefined
           try {
             lease = await node.acquireRuntime?.(currentSignal)

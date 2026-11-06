@@ -275,7 +275,8 @@ class SkillRegistry implements SkillRegistryApi {
       !current ||
       current.generation !== generation ||
       (!current.manifest.contribution.capabilities.some((item) => item.module === module) &&
-        !(current.manifest.contribution.hostCapabilities ?? []).includes(module))
+        !(current.manifest.contribution.hostCapabilities ?? []).includes(module) &&
+        !(current.manifest.contribution.sdkCapabilities ?? []).includes(module))
     )
       throw new AppError('PERMISSION', `Skill 能力授权已失效：${module}`)
   }
@@ -337,7 +338,11 @@ class SkillRegistry implements SkillRegistryApi {
       })
     for (const skill of skills) {
       for (const module of skill.grants) {
-        if ((skill.manifest.contribution.hostCapabilities ?? []).includes(module)) continue
+        if (
+          (skill.manifest.contribution.hostCapabilities ?? []).includes(module) ||
+          (skill.manifest.contribution.sdkCapabilities ?? []).includes(module)
+        )
+          continue
         if (capabilities.has(module)) throw new AppError('CONFLICT', `Skill 能力名冲突：${module}`)
         capabilities.add(module)
       }

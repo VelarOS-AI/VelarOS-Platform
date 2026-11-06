@@ -32,6 +32,7 @@ class SkillComposition implements SkillCompositionApi {
         grants: [
           ...record.manifest.contribution.capabilities.map((item) => item.module),
           ...(record.manifest.contribution.hostCapabilities ?? []),
+          ...(record.manifest.contribution.sdkCapabilities ?? []),
         ],
       })
     }

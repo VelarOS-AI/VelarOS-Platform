@@ -13,14 +13,32 @@ import type { ImageAttachment } from '@velaros-ai/velaros/images'
 
 import type {
   ComputerAvailability,
+  ComputerCapabilities,
   ComputerClickOptions,
   ComputerClickResult,
+  ComputerDragInput,
+  ComputerDragResult,
+  ComputerElementAction,
+  ComputerElementInput,
+  ComputerElementValueInput,
   ComputerHelperLaunchSpec,
+  ComputerInputState,
   ComputerKeyResult,
+  ComputerKeyStateInput,
+  ComputerMouseDownInput,
+  ComputerMouseUpInput,
   ComputerMoveOptions,
   ComputerMoveResult,
+  ComputerRecording,
+  ComputerRecordInput,
   ComputerScreenshot,
+  ComputerScrollInput,
+  ComputerScrollResult,
+  ComputerTree,
+  ComputerTreeInput,
   ComputerTypeResult,
+  ComputerWindow,
+  ComputerWindowInput,
 } from '../types/computer.js'
 
 // ── 调用上下文与空间端口 ────────────────────────────────────────
@@ -42,24 +60,67 @@ export interface ComputerOperationContext {
  * 端口里只有操作真会调的方法，门禁按操作文件核对。
  */
 export interface ComputerSpacePort {
+  /** 查询本平台窗口、控件树和录像能力及限制。 */
+  capabilities(signal?: AbortSignal): Promise<ComputerCapabilities>
+  /** 枚举可见窗口；id 只用于本 helper，失效后重新枚举。 */
+  windows(signal?: AbortSignal): Promise<ComputerWindow[]>
+  /** 截取指定窗口。图经图片通道交给模型；图上坐标使用 coordinateSpace: 'window' 和本次 snapshotId。 */
+  screenshotWindow(input: ComputerWindowInput, signal?: AbortSignal): Promise<ComputerScreenshot>
+  /** 将指定窗口置前并聚焦；窗口身份失效时失败。 */
+  focusWindow(input: ComputerWindowInput, signal?: AbortSignal): Promise<ComputerWindow>
+  /** 在指定位置独立滚动；正数向右/下，负数向左/上，单位为滚轮刻度，每轴最多 100。 */
+  scroll(input: ComputerScrollInput, signal?: AbortSignal): Promise<ComputerScrollResult>
+  /** 原子拖拽，两端先校验再按下；durationMs 为 100–3000（默认 500），失败也释放鼠标。 */
+  drag(input: ComputerDragInput, signal?: AbortSignal): Promise<ComputerDragResult>
+  /** 在指定位置按下鼠标；用 mouseUp 配对，最多 5000 毫秒后自动释放。 */
+  mouseDown(input: ComputerMouseDownInput, signal?: AbortSignal): Promise<ComputerInputState>
+  /** 释放鼠标按钮；不需要旧截图，可以重复调用。 */
+  mouseUp(input: ComputerMouseUpInput, signal?: AbortSignal): Promise<ComputerInputState>
+  /** 按住单个键；必须用 keyUp 配对，最多 5000 毫秒后自动释放。 */
+  keyDown(input: ComputerKeyStateInput, signal?: AbortSignal): Promise<ComputerInputState>
+  /** 释放单个键；可重复调用。 */
+  keyUp(input: ComputerKeyStateInput, signal?: AbortSignal): Promise<ComputerInputState>
+  /** 释放此 helper 持有的全部键与鼠标按钮，用于错误恢复。 */
+  releaseInputs(signal?: AbortSignal): Promise<ComputerInputState>
+  /** 查询窗口的 UI 控件树；maxDepth 最多 12，maxNodes 最多 500；检查 truncated 和 warnings。 */
+  uiTree(input: ComputerTreeInput, signal?: AbortSignal): Promise<ComputerTree>
+  /** 经控件的 Invoke/AXPress 语义激活；绑定 uiTree 的身份，过期或不支持时报错，不猜坐标。 */
+  invokeElement(input: ComputerElementInput, signal?: AbortSignal): Promise<ComputerElementAction>
+  /** 经 Value/AXValue 设置控件文本，最多 10000 字符；不会把文本当快捷键。 */
+  setElementValue(
+    input: ComputerElementValueInput,
+    signal?: AbortSignal
+  ): Promise<ComputerElementAction>
+  /** 录制主屏或窗口到新的绝对路径 MP4；durationMs 100–5000，fps 1–10；不覆盖，不含音频。 */
+  record(input: ComputerRecordInput, signal?: AbortSignal): Promise<ComputerRecording>
   /** 探测桌面控制是否可用（含操作系统权限），永不抛错，一切失败都在结果里。 */
   ensureAvailable: () => Promise<ComputerAvailability>
   /** 截取主显示器，始终按逻辑分辨率，保证图上量出的像素与点击坐标 1:1。 */
-  screenshot: () => Promise<ComputerScreenshot>
+  screenshot: (signal?: AbortSignal) => Promise<ComputerScreenshot>
   /**
    * 移动指针，不点击。与点击同一套坐标契约：主屏坐标必须带上给出这组坐标的那次截图的
    * snapshotId，运行时在真正移动之前再校验一次绑定，布局变了就拒绝。
    */
-  mouseMove: (x: number, y: number, options?: ComputerMoveOptions) => Promise<ComputerMoveResult>
+  mouseMove: (
+    x: number,
+    y: number,
+    options?: ComputerMoveOptions,
+    signal?: AbortSignal
+  ) => Promise<ComputerMoveResult>
   /**
    * 在指定坐标空间点击。主屏坐标必须带上给出这组坐标的那次截图的 snapshotId，
    * 运行时在真正按下之前再校验一次绑定，布局变了就拒绝。
    */
-  click: (x: number, y: number, options?: ComputerClickOptions) => Promise<ComputerClickResult>
+  click: (
+    x: number,
+    y: number,
+    options?: ComputerClickOptions,
+    signal?: AbortSignal
+  ) => Promise<ComputerClickResult>
   /** 在当前焦点处原样输入文本。 */
-  typeText: (text: string) => Promise<ComputerTypeResult>
+  typeText: (text: string, signal?: AbortSignal) => Promise<ComputerTypeResult>
   /** 按下一个键或组合键（例如 `cmd+a`、`enter`）。 */
-  key: (keys: string) => Promise<ComputerKeyResult>
+  key: (keys: string, signal?: AbortSignal) => Promise<ComputerKeyResult>
 }
 
 // ── 运行时的注入口 ──────────────────────────────────────────────

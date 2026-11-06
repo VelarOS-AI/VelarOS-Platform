@@ -24,6 +24,7 @@ from computer_helper_common import (
     parse_pointer_coordinate_binding,
     run_stdio_loop,
 )
+from computer_desktop import ComputerDesktop
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 os.environ.setdefault("PYAUTOGUI_HIDE_SUPPORT_PROMPT", "1")
@@ -177,10 +178,8 @@ def mouse_move(payload: "dict[str, Any]") -> "dict[str, Any]":
     coordinate_space, snapshot_id = parse_pointer_coordinate_binding(payload)
     duration = max(0.0, min(float(payload.get("durationMs") or 0) / 1000.0, 0.8))
     display = None
-    if coordinate_space == "primary-display":
-        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
-            snapshot_id, x, y, primary_monitor()
-        )
+    if coordinate_space != "global":
+        x, y, display = DESKTOP.resolve_point(payload)
     # Keep the display lookup and validation directly adjacent to the input call.
     pyautogui.moveTo(x, y, duration=duration)
     result = {"x": x, "y": y, "coordinateSpace": coordinate_space}
@@ -198,10 +197,8 @@ def left_click(payload: "dict[str, Any]") -> "dict[str, Any]":
     count = int(payload.get("count") or 1)
     pyautogui = load_pyautogui()
     display = None
-    if coordinate_space == "primary-display":
-        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
-            snapshot_id, x, y, primary_monitor()
-        )
+    if coordinate_space != "global":
+        x, y, display = DESKTOP.resolve_point(payload)
     # Keep the display lookup and validation directly adjacent to the input call.
     pyautogui.click(x=x, y=y, button=button, clicks=count, interval=0.08)
     result = {
@@ -249,7 +246,10 @@ def check(_payload: "dict[str, Any]") -> "dict[str, Any]":
     return {"platform": "linux", "accessibility": available, "screenRecording": available}
 
 
+DESKTOP = ComputerDesktop(SCREEN_SNAPSHOTS, primary_monitor, load_pyautogui, normalize_key)
+
 COMMANDS = {
+    **DESKTOP.commands(),
     "check": check,
     "screen_size": screen_size,
     "screenshot": screenshot,
@@ -268,4 +268,7 @@ def dispatch(command: str, payload: "dict[str, Any]") -> Any:
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_stdio_loop(dispatch))
+    try:
+        raise SystemExit(run_stdio_loop(dispatch))
+    finally:
+        DESKTOP.inputs.release_inputs()

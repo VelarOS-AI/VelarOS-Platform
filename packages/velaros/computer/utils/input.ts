@@ -88,16 +88,20 @@ export function pointInput(input: unknown, action: string): ComputerPoint {
       coordinateSpace: 'global',
     }
   }
-  if (!isUndefined(value.coordinateSpace) && value.coordinateSpace !== 'primary-display') {
+  if (
+    !isUndefined(value.coordinateSpace) &&
+    value.coordinateSpace !== 'primary-display' &&
+    value.coordinateSpace !== 'window'
+  ) {
     throw invalid(
-      `coordinateSpace 只收 'primary-display'（按截图量的坐标，缺省就是它）或 'global'，这里给的是 ${JSON.stringify(value.coordinateSpace)}`
+      `coordinateSpace 只收 'primary-display'（主屏截图，缺省）、'window'（窗口截图）或 'global'，这里给的是 ${JSON.stringify(value.coordinateSpace)}`
     )
   }
   return {
     x: coordinate(value.x, 'x', 0),
     y: coordinate(value.y, 'y', 0),
     snapshotId: snapshotId(value.snapshotId, action),
-    coordinateSpace: 'primary-display',
+    coordinateSpace: value.coordinateSpace === 'window' ? 'window' : 'primary-display',
   }
 }
 

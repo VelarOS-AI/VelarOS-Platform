@@ -11,6 +11,13 @@ import type {
 
 /** 具体调用的受控上下文；模块资源在挂载时闭包注入。 */
 export interface OperationContext {
+  /** 宿主代码派生调用；沿用父会话、执行身份、模式与取消，重新经过 Kernel 授权。 */
+  invokeHost?(call: {
+    readonly module: string
+    readonly operation: string
+    readonly input: unknown
+    readonly callId: number
+  }): Promise<InvocationReceipt>
   /** 已固定的调用身份和参数。 */
   readonly invocation: PreparedInvocation
   /** 取消只要求停止后续工作，不表示撤销已发生的效果。 */

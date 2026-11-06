@@ -1,5 +1,5 @@
 /**
- * 桌面控制根入口（`@velaros-ai/velaros/computer`），给 Node 宿主：代码面 `velaros:computer` 的五个操作、
+ * 桌面控制根入口（`@velaros-ai/velaros/computer`），给 Node 宿主：代码面 `velaros:computer` 的操作、
  * 管 helper 子进程的运行时与 helper 定位器，外加它们用到的数据与注入面。
  * 另一个入口 `./computer/contracts` 是它的子集，只有可移植数据，渲染进程也能加载。
  */

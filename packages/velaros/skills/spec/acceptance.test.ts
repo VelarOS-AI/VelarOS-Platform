@@ -40,6 +40,109 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
 })
 
+test('INV-10 Feature 模块通过宿主 SDK 经 Kernel 派生调用，未声明能力和只读转写均被拒绝', async () => {
+  const f = await fixture()
+  const module = 'feature:sdk-example'
+  const directory = await source(f.root, 'sdk-example', '1.0.0', {
+    capabilities: [{ module, entry: 'index.mjs', contract: 'api.d.ts' }],
+    sdkCapabilities: ['velaros:widget'],
+  })
+  await writeFile(
+    join(directory, 'index.mjs'),
+    `export async function show(input, context) { return context.host.invoke({module:input.module,operation:'show',input:{value:input.value}}) }; export const read = show;`
+  )
+  await writeFile(
+    join(directory, 'api.d.ts'),
+    '/** @OperationEffect write @OperationModes execute */\nexport function show(input:{module:string;value:string}):Promise<string>;\n/** @OperationEffect none */\nexport function read(input:{module:string;value:string}):Promise<string>;'
+  )
+  const installed = await f.registry.install({ directory }, new AbortController().signal)
+  const lease = await f.registry.acquire([
+    { name: 'sdk-example', generation: installed.generation, grants: [module, 'velaros:widget'] },
+  ])
+  const node = await nodeOptions(f.root)
+  const modules = await skillCapabilityModules.create({ registry: f.registry, lease, node })
+  const records = new Map<string, InvocationRecord>()
+  let shown = 0
+  const kernel = createOperationRuntime({
+    modules: [
+      ...modules,
+      {
+        binding: {
+          moduleId: 'velaros:widget',
+          instanceId: 'sdk-host',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'SDK fixture',
+        operations: {
+          show: {
+            summary: '展示',
+            effects: 'write',
+            allowedModes: ['execute'],
+            input: { type: 'object' },
+            output: { type: 'string' },
+            run: async () => {
+              shown++
+              return 'shown'
+            },
+          },
+        },
+      },
+    ],
+    journal: {
+      read: async (_session, id) => records.get(id) ?? null,
+      claim: async (prepared) => {
+        const previous = records.get(prepared.id)
+        if (previous) return previous
+        records.set(prepared.id, { phase: 'reserved', prepared })
+        return null
+      },
+      prepare: async (prepared) => {
+        records.set(prepared.id, { phase: 'prepared', prepared })
+      },
+      settle: async (receipt) => {
+        records.set(receipt.invocation.id, {
+          phase: 'settled',
+          prepared: receipt.invocation,
+          receipt,
+        })
+      },
+    },
+  })
+  const invoke = (executionId: string, operation = 'show', target = 'velaros:widget') =>
+    createKernelScriptSession({
+      runtime: kernel,
+      runner: createNodeCodeRunner({ ...node, runtime: lease.environment }),
+      sessionId: 'sdk-session',
+      executionId,
+      allowedModules: [module],
+    }).run({
+      source: `import {${operation}} from '${module}'; export default await ${operation}({module:${JSON.stringify(target)},value:'diagram'});`,
+    })
+  try {
+    const result = await invoke('sdk-success')
+    expect(result.checked && result.rawValue).toBe('shown')
+    expect(shown).toBe(1)
+    const child = [...records.values()].find(
+      (item) => item.prepared.binding.moduleId === 'velaros:widget'
+    )!
+    expect(child.prepared.sessionId).toBe('sdk-session')
+    expect(child.prepared.executionId).toBe('sdk-success')
+    expect(child.prepared.id).toContain(':host:')
+    const denied = await invoke('sdk-denied', 'show', 'velaros:computer')
+    expect(denied.checked && denied.result.failed?.message).toContain('未获授')
+    const readonly = await invoke('sdk-readonly', 'read')
+    expect(readonly.checked && readonly.result.failed?.message).toContain('只读')
+    expect(shown).toBe(1)
+    await f.registry.remove('sdk-example')
+    const revoked = await invoke('sdk-revoked')
+    expect(revoked.checked && revoked.result.failed?.code).toBe('PERMISSION')
+  } finally {
+    await kernel.dispose()
+    await lease.release()
+  }
+}, 30000)
+
 async function fixture(
   installer: SkillDependencyInstaller = { install: async () => {} },
   builtins = false
@@ -761,6 +864,7 @@ test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公�
     'jsonc-parser',
     'prettier',
     'ts-morph',
+    'typescript',
   ])
   const runner = createNodeCodeRunner({
     ...(await nodeOptions(f.root)),
@@ -769,7 +873,7 @@ test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公�
   const result = await runner.run(
     {
       source: `
-    import {Project} from 'ts-morph'; import {format} from 'prettier';
+    import {Project} from 'ts-morph'; import ts from 'typescript'; import {format} from 'prettier';
     import {modify,applyEdits} from 'jsonc-parser'; import {parse,Lang} from '@ast-grep/napi';
     import {test} from '@playwright/test';
     const project = new Project({useInMemoryFileSystem:true});
@@ -777,7 +881,7 @@ test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公�
     const b=project.createSourceFile('/b.ts',"import {answer} from './a'; console.log(answer)");
     a.getVariableDeclarationOrThrow('answer').rename('total');
     const config='{// keep\\n"value":1}';
-    export default { code:b.getFullText(), formatted:await format('const n:number=42',{parser:'typescript',semi:false}), config:applyEdits(config,modify(config,['value'],2,{})), matches:parse(Lang.TypeScript,'call(42)').root().findAll('call($A)').length, playwright:typeof test};
+    export default { code:b.getFullText(), compiled:ts.transpileModule('const n:number=42;',{}).outputText, formatted:await format('const n:number=42',{parser:'typescript',semi:false}), config:applyEdits(config,modify(config,['value'],2,{})), matches:parse(Lang.TypeScript,'call(42)').root().findAll('call($A)').length, playwright:typeof test};
   `,
       modules: {},
       blobs: {},
@@ -794,6 +898,7 @@ test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公�
   expect(result.ok).toBe(true)
   expect(result.value).toMatchObject({
     code: "import {total} from './a'; console.log(total)",
+    compiled: 'var n = 42;\n',
     formatted: 'const n: number = 42\n',
     matches: 1,
     playwright: 'function',

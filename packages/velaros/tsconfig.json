@@ -9,6 +9,8 @@
     "noEmit": true,
     "baseUrl": "../..",
     "paths": {
+      "@velaros-ai/velaros/features": ["packages/velaros/features/index.ts"],
+      "@velaros-ai/velaros/features/contracts": ["packages/velaros/features/contracts.ts"],
       "@velaros-ai/velaros/images": ["packages/velaros/images/index.ts"],
       "@velaros-ai/velaros/images/contracts": ["packages/velaros/images/contracts.ts"],
       "@velaros-ai/velaros/images/local": ["packages/velaros/images/local.ts"],
@@ -47,6 +49,7 @@
   },
   "include": [
     "velaros-globals.d.ts",
+    "features/**/*.ts",
     "images/**/*.ts",
     "execution/**/*.ts",
     "sandbox/**/*.ts",

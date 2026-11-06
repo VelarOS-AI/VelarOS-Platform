@@ -1,8 +1,29 @@
 /** helper 进程的 stdio 线协议（行分隔 JSON）上流过的形状；只在包内用。 */
 
-/** 第一阶段 mac/win/linux helper 共用的命令面。 */
+/** mac/win/linux helper 共用的命令面。 */
 export type ComputerCommand =
-  'check' | 'screen_size' | 'screenshot' | 'mouse_move' | 'left_click' | 'type' | 'key'
+  | 'capabilities'
+  | 'windows'
+  | 'screenshot_window'
+  | 'focus_window'
+  | 'scroll'
+  | 'drag'
+  | 'mouse_down'
+  | 'mouse_up'
+  | 'key_down'
+  | 'key_up'
+  | 'release_inputs'
+  | 'ui_tree'
+  | 'invoke_element'
+  | 'set_element_value'
+  | 'record'
+  | 'check'
+  | 'screen_size'
+  | 'screenshot'
+  | 'mouse_move'
+  | 'left_click'
+  | 'type'
+  | 'key'
 
 /** 发给 Python helper 的一次请求。 */
 export interface ComputerHelperRequest {

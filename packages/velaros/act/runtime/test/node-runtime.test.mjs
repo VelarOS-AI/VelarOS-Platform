@@ -2025,26 +2025,22 @@ test('default npm packages work in entrypoints, saved files and child Node proce
     import {diffLines} from 'diff';
     import {rgPath} from '@vscode/ripgrep';
     import {globby} from 'globby';
-    import {parse,stringify} from 'yaml';
-    import {createNode} from 'yaml/util';
     import {writeFile} from 'node:fs/promises';
     const changes=diffLines('before\\n','after\\n');
     if(!changes.some(change=>change.added)) throw Error('diff unavailable');
     await writeFile('saved.mjs', "import {execa} from 'execa';import {diffLines} from 'diff';console.log((await execa(process.execPath,['-p','6*7'])).stdout,diffLines('a','b').length);");
-    await writeFile('fixture.yml',stringify({answer:42}));
-    if(parse(stringify({answer:42})).answer!==42) throw Error('YAML failed');
-    if(typeof createNode!=='function') throw Error('YAML subpath failed');
-    if(!(await globby(['*.yml'])).includes('fixture.yml')) throw Error('globby failed');
-    const match=await execa(rgPath,['--fixed-strings','42','fixture.yml']);
+    await writeFile('fixture.txt','answer: 42');
+    if(!(await globby(['*.txt'])).includes('fixture.txt')) throw Error('globby failed');
+    const match=await execa(rgPath,['--fixed-strings','42','fixture.txt']);
     console.log(match.stdout);
     const openInput=await execa(process.execPath,['-e',"process.stdin.resume();process.stdin.on('end',()=>console.log('eof'))"],{timeout:250,reject:false});
     if(!openInput.timedOut) throw Error('Expected the native open-stdin child to wait for EOF');
     const closedInput=await execa(process.execPath,['-e',"process.stdin.resume();process.stdin.on('end',()=>console.log('eof'))"],{stdin:'ignore',timeout:2000});
     if(closedInput.stdout!=='eof') throw Error('Noninteractive child did not observe EOF');
     const searched=await execa(rgPath,['--fixed-strings','answer: 42','.'],{stdin:'ignore',timeout:2000});
-    if(!searched.stdout.includes('fixture.yml:answer: 42')) throw Error('Explicit search path did not select workspace files');
+    if(!searched.stdout.includes('fixture.txt:answer: 42')) throw Error('Explicit search path did not select workspace files');
     console.log('noninteractive-stdin-and-search-passed');
-    await writeFile('packages.mjs',"import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {parse} from 'yaml';console.log(Boolean(rgPath), (await globby('*.yml')).length, parse('answer: 42').answer);");
+    await writeFile('packages.mjs',"import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';console.log(Boolean(rgPath), (await globby('*.txt')).length, 6*7);");
     console.log((await execa(process.execPath,['packages.mjs'])).stdout);
     const child=await execa(process.execPath,['saved.mjs']);
     console.log(child.stdout);
@@ -2103,46 +2099,31 @@ test('prettier is not a global fallback and a project can provide its own versio
   assert.equal(local.value, '1.0.0-project')
 })
 
-test('mature default libraries process files, source, HTML, CSV and archives without loading a Skill', async (t) => {
+test('core defaults use Node file APIs and do not expose removed or host-internal packages', async (t) => {
   const f = await fixture(t)
-  assert.equal(NodeDefaultPackages.includes('prettier'), false)
+  for (const name of ['typescript', 'ts-morph', 'prettier'])
+    assert.equal(NodeDefaultPackages.includes(name), false)
   const source = `
     import assert from 'node:assert/strict';
-    import fs from 'fs-extra'; import {Project} from 'ts-morph';
-    import ts from 'typescript';
-    import {load} from 'cheerio'; import {parse} from 'csv-parse/sync';
-    import {stringify} from 'csv-stringify/sync'; import {groupBy} from 'lodash-es';
-    import {addDays,formatISO} from 'date-fns'; import pLimit from 'p-limit';
-    import JSZip from 'jszip'; import {z} from 'zod';
+    import {mkdir,readFile,writeFile} from 'node:fs/promises';
     import {execa} from 'execa';
-    await fs.outputJson('nested/data.json',{name:'中文'});
-    assert.equal((await fs.readJson('nested/data.json')).name,'中文');
-    const project=new Project({useInMemoryFileSystem:true});
-    const file=project.createSourceFile('source.ts','export const answer = 1;');
-    file.getVariableDeclarationOrThrow('answer').setInitializer('42');
-    const formatted=file.getFullText();
-    assert.match(formatted,/answer = 42/);
-    assert.match(ts.transpileModule(formatted,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,/42/);
-    assert.equal(load('<article><h1>中文</h1></article>')('h1').text(),'中文');
-    const rows=[{name:'a,b',value:'quoted " text'},{name:'多行',value:'line\\nbreak'}];
-    assert.deepEqual(parse(stringify(rows,{header:true}),{columns:true}),rows);
-    assert.equal(groupBy(rows,'name')['a,b'].length,1);
-    assert.equal(formatISO(addDays(new Date(2026,0,1),2),{representation:'date'}),'2026-01-03');
-    const limit=pLimit(1); let active=0,peak=0;
-    await Promise.all([1,2,3].map(value=>limit(async()=>{active++;peak=Math.max(peak,active);await Promise.resolve(value);active--;})));
-    assert.equal(peak,1);
-    const zip=new JSZip();zip.file('data.txt','archive 中文');
-    const restored=await JSZip.loadAsync(await zip.generateAsync({type:'nodebuffer'}));
-    assert.equal(await restored.file('data.txt').async('string'),'archive 中文');
-    assert.equal(z.object({count:z.number().int()}).parse({count:42}).count,42);
-    await fs.outputFile('child.mjs',"import {parse} from 'csv-parse/sync';import {z} from 'zod';console.log(parse('a,b')[0].join(':'),z.number().parse(42));");
+    const removed=['yaml','fs-extra','cheerio','csv-parse','csv-stringify','lodash-es','date-fns','p-limit','jszip','zod','typescript','ts-morph','prettier'];
+    const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));
+    for(const name of removed) {
+      assert.equal(catalog.packages.some(pkg=>pkg.name===name),false);
+      await assert.rejects(import(name),{code:'ERR_MODULE_NOT_FOUND'});
+      await assert.rejects(import('velaros:npm/'+name),{code:'PERMISSION'});
+    }
+    await mkdir('nested');
+    await writeFile('nested/data.json',JSON.stringify({name:'中文'}));
+    assert.equal(JSON.parse(await readFile('nested/data.json','utf8')).name,'中文');
+    const child="import assert from 'node:assert/strict';import {createRequire} from 'node:module';const require=createRequire(import.meta.url);for(const name of "+JSON.stringify(removed)+"){await assert.rejects(import(name),{code:'ERR_MODULE_NOT_FOUND'});assert.throws(()=>require(name),{code:'MODULE_NOT_FOUND'});}console.log('removed-packages-unavailable');";
+    await writeFile('child.mjs',child);
     console.log((await execa(process.execPath,['child.mjs'],{stdin:'ignore',timeout:10000})).stdout);
-    console.log('mature-default-libraries-passed');
   `
   const result = await createNodeCodeRunner(f.node).run(request(source), noCalls, () => {})
   assert.equal(result.ok, true, JSON.stringify(result))
-  assert.match(result.process.stdout, /a:b 42/)
-  assert.match(result.process.stdout, /mature-default-libraries-passed/)
+  assert.match(result.process.stdout, /removed-packages-unavailable/)
 })
 
 test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints and child Node processes', async (t) => {
@@ -2164,11 +2145,13 @@ test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints an
   const child = `
     const assert = require('node:assert/strict');
     const {Project} = require('ts-morph');
+    const ts = require('typescript');
     const {format} = require('prettier');
     const typescript = require('prettier/plugins/typescript');
     const estree = require('prettier/plugins/estree');
     const project = new Project({tsConfigFilePath:'tsconfig.json'});
     assert.equal(project.getPreEmitDiagnostics().length,0);
+    assert.match(ts.transpileModule('const answer:number=42;',{}).outputText,/42/);
     project.emitSync();
     format('const total:number=42;', {parser:'typescript',plugins:[typescript,estree],semi:false})
       .then(formatted => console.log(formatted.trim()));
@@ -2176,10 +2159,12 @@ test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints an
   const result = await createNodeCodeRunner(f.node).run(
     request(`
       import {Project} from 'ts-morph';
+      import ts from 'typescript';
       import {format,resolveConfig} from 'prettier';
       import {execa} from 'execa';
       import {readFile,writeFile} from 'node:fs/promises';
       const project = new Project({tsConfigFilePath:'tsconfig.json'});
+      if(!ts.transpileModule('const answer:number=42;',{}).outputText.includes('42')) throw Error('TypeScript compiler unavailable');
       project.getSourceFileOrThrow('math.ts').getFunctionOrThrow('double').rename('twice');
       await project.save();
       const filepath = 'View.tsx';
@@ -2246,6 +2231,7 @@ test('standard package references expose installed versions, original docs and d
       ...new Set([
         ...NodeDefaultPackages,
         'ts-morph',
+        'typescript',
         'prettier',
         'jsonc-parser',
         '@ast-grep/napi',
@@ -2331,21 +2317,21 @@ test('package discovery follows workspace versions, aliases and hidden package m
     assert.equal(reference.root, await realpath(join(f.cwd, 'node_modules', name)))
     assert.equal(await readFile(reference.readme, 'utf8'), `Local documentation for ${name}`)
   }
-  assert.equal(catalog.packages.find((pkg) => pkg.name === 'yaml').source, 'runtime')
+  assert.equal(catalog.packages.find((pkg) => pkg.name === 'globby').source, 'runtime')
 })
 
 test('package discovery uses the exact nested entrypoint, package self-reference and symlinks', async (t) => {
   const f = await fixture(t)
   const nested = join(f.cwd, 'tools')
-  const dependency = join(f.root, 'linked-yaml')
+  const dependency = join(f.root, 'linked-globby')
   await mkdir(join(nested, 'node_modules'), { recursive: true })
   await mkdir(dependency)
   await writeFile(
     join(dependency, 'package.json'),
-    JSON.stringify({ name: 'yaml', version: '7.8.9', main: 'index.cjs' })
+    JSON.stringify({ name: 'globby', version: '7.8.9', main: 'index.cjs' })
   )
   await writeFile(join(dependency, 'index.cjs'), 'module.exports={version:"7.8.9"};')
-  await symlink(dependency, join(nested, 'node_modules', 'yaml'), 'dir')
+  await symlink(dependency, join(nested, 'node_modules', 'globby'), 'dir')
   await writeFile(
     join(nested, 'package.json'),
     JSON.stringify({ name: 'diff', version: '0.0.1', type: 'module', exports: './self.js' })
@@ -2354,10 +2340,10 @@ test('package discovery uses the exact nested entrypoint, package self-reference
   const result = await createNodeCodeRunner(f.node).run(
     {
       ...request(`
-      import yaml from 'yaml';
+      import globby from 'globby';
       import {version} from 'diff';
       import {readFileSync} from 'node:fs';
-      export default {yaml:yaml.version,diff:version,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
+      export default {globby:globby.version,diff:version,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
     `),
       path: 'tools/entry.mjs',
     },
@@ -2366,7 +2352,7 @@ test('package discovery uses the exact nested entrypoint, package self-reference
   )
   assert.equal(result.ok, true, JSON.stringify(result))
   for (const [name, root] of [
-    ['yaml', dependency],
+    ['globby', dependency],
     ['diff', nested],
   ]) {
     const reference = result.value.catalog.packages.find((pkg) => pkg.name === name)
@@ -2380,7 +2366,7 @@ test('invalid or versionless workspace manifests do not borrow fallback identiti
   const f = await fixture(t)
   for (const [name, manifest] of [
     ['diff', '{broken'],
-    ['yaml', '{}'],
+    ['globby', '{}'],
   ]) {
     const root = join(f.cwd, 'node_modules', name)
     await mkdir(root, { recursive: true })
@@ -2390,9 +2376,9 @@ test('invalid or versionless workspace manifests do not borrow fallback identiti
   const runner = createNodeCodeRunner(f.node)
   const result = await runner.run(
     request(`
-    import yaml from 'yaml';
+    import globby from 'globby';
     import {readFileSync} from 'node:fs';
-    export default {local:yaml.local,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
+    export default {local:globby.local,catalog:JSON.parse(readFileSync(process.env.VELAROS_HOST_DIR+'/index.json','utf8'))};
   `),
     noCalls,
     () => {}
@@ -2407,9 +2393,9 @@ test('invalid or versionless workspace manifests do not borrow fallback identiti
     diff.packageJson,
     join(await realpath(join(f.cwd, 'node_modules', 'diff')), 'package.json')
   )
-  const yaml = result.value.catalog.packages.find((pkg) => pkg.name === 'yaml')
-  assert.equal(yaml.version, undefined)
-  assert.equal(yaml.error, undefined)
+  const globby = result.value.catalog.packages.find((pkg) => pkg.name === 'globby')
+  assert.equal(globby.version, undefined)
+  assert.equal(globby.error, undefined)
   const broken = await runner.run(request("import 'diff';"), noCalls, () => {})
   assert.equal(broken.ok, false)
   assert.equal(broken.error.code, 'ERR_INVALID_PACKAGE_CONFIG')
@@ -2494,14 +2480,14 @@ test('workspace npm packages take precedence and broken workspace packages repor
   )
   assert.equal(broken.ok, false)
   assert.match(broken.process.stderr, /missing.js/)
-  const yaml = join(f.cwd, 'node_modules', 'yaml')
-  await mkdir(yaml)
+  const globby = join(f.cwd, 'node_modules', 'globby')
+  await mkdir(globby)
   await writeFile(
-    join(yaml, 'package.json'),
+    join(globby, 'package.json'),
     JSON.stringify({ type: 'module', exports: { '.': './index.js' } })
   )
-  await writeFile(join(yaml, 'index.js'), 'export const version="workspace";')
-  const privateSubpath = await runner.run(request("import 'yaml/util'"), noCalls, () => {})
+  await writeFile(join(globby, 'index.js'), 'export const version="workspace";')
+  const privateSubpath = await runner.run(request("import 'globby/private'"), noCalls, () => {})
   assert.equal(privateSubpath.ok, false)
   assert.equal(privateSubpath.error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
 })
@@ -2646,7 +2632,7 @@ test('host project bindings compose independently with selected Skills', async (
     }
     if (!names.includes(BuiltinSkillNames.jsts)) {
       const result = await session.execute({
-        source: `import {readFile} from 'node:fs/promises';const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));const unavailable=[];for(const name of ['ts-morph','prettier','jsonc-parser','@ast-grep/napi','@playwright/test']) {try {await import(name)} catch(error) {if(error.code==='ERR_MODULE_NOT_FOUND') unavailable.push(name);else throw error}}export default {packages:catalog.packages.map(p=>p.name),unavailable};`,
+        source: `import {readFile} from 'node:fs/promises';const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));const unavailable=[];for(const name of ['typescript','ts-morph','prettier','jsonc-parser','@ast-grep/napi','@playwright/test']) {try {await import(name)} catch(error) {if(error.code==='ERR_MODULE_NOT_FOUND') unavailable.push(name);else throw error}}export default {packages:catalog.packages.map(p=>p.name),unavailable};`,
       })
       assert.equal(result.result.failed, undefined, JSON.stringify(result))
       assert.deepEqual(result.rawValue.packages.sort(), [...NodeDefaultPackages].sort())
@@ -2655,6 +2641,8 @@ test('host project bindings compose independently with selected Skills', async (
         '@playwright/test',
         'jsonc-parser',
         'prettier',
+        'ts-morph',
+        'typescript',
       ])
     }
   }

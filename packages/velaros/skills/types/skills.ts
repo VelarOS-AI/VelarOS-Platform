@@ -12,6 +12,8 @@ export interface SkillContribution {
   readonly capabilities: readonly SkillCapability[]
   /** 由宿主绑定的能力或扩展身份；声明本身不授予权限。 */
   readonly hostCapabilities?: readonly string[]
+  /** 扩展代码可以通过 velaros:host 调用的宿主模块；不直接公开为模型工具。 */
+  readonly sdkCapabilities?: readonly string[]
 }
 
 /** @AgentView 静态校验后的包信息。 */

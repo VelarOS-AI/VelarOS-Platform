@@ -13,6 +13,13 @@
 
 export const CodeSurfaces = [
   {
+    namespace: 'features',
+    directory: 'velaros',
+    unit: 'features',
+    interfaces: ['FeaturesOperationsApi'],
+    templates: 'template.js',
+  },
+  {
     namespace: 'completion-validation',
     directory: 'velaros',
     unit: 'act/runtime',
@@ -312,6 +319,7 @@ export const StandardSurfaces = [
 export const HostContextTypes = new Set([
   'EnvironmentOperationContext',
   'SkillsOperationContext',
+  'FeaturesOperationContext',
   'ImageOperationContext',
   'SandboxOperationContext',
   'ProjectOperationContext',

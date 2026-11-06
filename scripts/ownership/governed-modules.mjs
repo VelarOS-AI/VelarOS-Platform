@@ -44,6 +44,22 @@
 export const GovernedModules = [
   {
     directory: 'velaros',
+    unit: 'features',
+    name: '@velaros-ai/velaros/features',
+    contract: 'features/contract',
+    types: 'features/types',
+    impl: 'features/impl',
+    utils: 'features/utils',
+    layers: [['FeaturesOperations.ts']],
+    browserSafeEntries: ['contracts.ts'],
+    surfaceFile: 'features/impl/FeaturesOperations.ts',
+    hostPort: 'FeatureHost',
+    hostPortField: 'features',
+    invariants: 'features/spec/invariants.md',
+    acceptance: 'features/spec/acceptance.test.ts',
+  },
+  {
+    directory: 'velaros',
     unit: 'act/bridge',
     name: '@velaros-ai/velaros/act/bridge',
     contract: 'act/bridge/contract',

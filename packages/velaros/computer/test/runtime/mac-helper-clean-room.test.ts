@@ -58,6 +58,7 @@ def set_unicode(event, length, units):
 quartz.CGEventKeyboardSetUnicodeString = set_unicode
 quartz.CGEventPost = lambda tap, event: posted_events.append((tap, dict(event)))
 sys.modules["Quartz"] = quartz
+sys.modules["ApplicationServices"] = quartz
 
 image_module = types.ModuleType("PIL.Image")
 image_module.Resampling = types.SimpleNamespace(LANCZOS="lanczos")
