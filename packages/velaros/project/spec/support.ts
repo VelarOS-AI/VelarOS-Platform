@@ -30,6 +30,7 @@ import {
   projectCapabilityPorts,
   type ProjectChangeInput,
   projectCodeOperations,
+  type ProjectCommitInput,
   type ProjectEditInput,
   projectFileOperations,
   type ProjectHostPort,
@@ -75,6 +76,8 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const operations = {
     project: {
+      commit: (input: unknown) =>
+        projectFileOperations.commit(input as ProjectCommitInput, context),
       snapshot: (input: unknown) =>
         projectFileOperations.snapshot(input as ProjectSnapshotInput, context),
       read: (input: unknown) => projectFileOperations.read(input as ProjectReadInput, context),

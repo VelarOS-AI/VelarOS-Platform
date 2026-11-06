@@ -12,6 +12,7 @@ import type {
   TransactionBytePlan,
 } from '../../types/transaction.js'
 import { ProjectError, projectErrorFromTextFile } from '../errors.js'
+import { sha256 } from '../hash.js'
 
 import { decodeStoredBytes } from './byte-codec.js'
 import { patchFileAttributes, patchTargetEncoding } from './patch-attributes.js'
@@ -28,6 +29,20 @@ export function prepareTransactionBytePlan(
   unavailable: ReadonlySet<string> = new Set()
 ): TransactionBytePlan {
   const staged = new Map(originals)
+  // 基线核对使用即将交给写前日志的同一份原字节，包括空文件与缺席的区别。
+  for (const [path, expected] of Object.entries(transaction.metadata?.commitBases ?? {})) {
+    const bytes = originals.get(path)
+    const actual = bytes === undefined ? null : sha256(Buffer.from(bytes))
+    if (unavailable.has(path) || expected !== actual) {
+      const preview = bytes && textCodec.decode(bytes)?.content.slice(0, 320)
+      throw new ProjectError(
+        'BASE_REVISION_MISMATCH',
+        `${path} 的原始字节已变化，整批未写入。${preview ? ` 当前开头：${JSON.stringify(preview)}` : ''}`,
+        { path, expected, actual },
+        '只需重新读取冲突文件。'
+      )
+    }
+  }
   const deleted = new Map<string, Uint8Array>()
   const patches: TransactionBytePatch[] = []
   const unknown = new Set(unavailable)
@@ -43,7 +58,10 @@ export function prepareTransactionBytePlan(
         path: patch.path,
       })
     let after: Uint8Array | undefined
-    if (!isDeletePatch(patch)) {
+    const exact = transaction.metadata?.commitBytes?.[patch.path]
+    if (isString(exact)) {
+      after = Buffer.from(exact, 'base64')
+    } else if (!isDeletePatch(patch)) {
       const sourcePath =
         patch.metadata?.op === 'rename_file_create' ? patch.metadata.from : undefined
       const source = isString(sourcePath)
@@ -93,6 +111,19 @@ export function prepareTransactionBytePlan(
       before: before ? Buffer.from(before).toString('base64') : undefined,
       after: after ? Buffer.from(after).toString('base64') : undefined,
     })
+  }
+  // 最终字节相同的路径不参与实际写入与撤回，仍已通过上面的基线核对。
+  if (transaction.metadata?.commitRequest) {
+    const firstBefore = new Map<string, string | undefined>()
+    const lastAfter = new Map<string, string | undefined>()
+    for (const patch of patches) {
+      if (!firstBefore.has(patch.path)) firstBefore.set(patch.path, patch.before)
+      lastAfter.set(patch.path, patch.after)
+    }
+    return {
+      transactionId: transaction.transactionId,
+      patches: patches.filter((patch) => firstBefore.get(patch.path) !== lastAfter.get(patch.path)),
+    }
   }
   return { transactionId: transaction.transactionId, patches }
 }

@@ -19,6 +19,7 @@ import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import { ProjectError } from '../errors.js'
 import { resolveInsideProject } from '../files/path-containment.js'
+import { normalizeRel } from '../path.js'
 import { ProjectTuning } from '../tuning.js'
 
 /** 空间端口抛的通用码对应到哪个原因码：项目的能力只用一套码。 */
@@ -171,5 +172,5 @@ export async function projectRelativePath(
   const root = resolve(ctx.project.getRootPath())
   const { resolved } = await insideProject(root, requested, '文件')
   const relative = relativeToRoot([root, await resolveRealPath(root)], resolved)
-  return relative === '.' ? '' : relative
+  return relative === '.' ? '' : normalizeRel(relative)
 }

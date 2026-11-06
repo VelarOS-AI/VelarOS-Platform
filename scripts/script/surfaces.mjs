@@ -51,7 +51,7 @@ export const CodeSurfaces = [
     namespace: 'project',
     directory: 'velaros',
     unit: 'project',
-    interfaces: ['ProjectFileOperationsApi'],
+    interfaces: ['ProjectFileOperationsCommitApi'],
     templates: 'template.js',
   },
   {

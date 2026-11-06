@@ -44,7 +44,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
       if (!project.sandbox)
         throw new AppError(
           'UNAVAILABLE',
-          '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 edit，要跑命令用 Node.js 的 Execa'
+          '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 commit，要跑命令用 Node.js 的 Execa'
         )
       return project.sandbox
     }

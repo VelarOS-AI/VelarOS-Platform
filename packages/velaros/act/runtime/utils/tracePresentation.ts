@@ -52,7 +52,7 @@ function projectChangeSummary(
   const diagnostic = record.receipt?.diagnostic
   if (
     record.prepared.binding.moduleId !== 'velaros:project' ||
-    !['edit', 'patch', 'undo'].includes(record.prepared.operation) ||
+    !['commit', 'edit', 'patch', 'undo'].includes(record.prepared.operation) ||
     record.receipt?.effect !== 'committed' ||
     diagnostic?.code !== 'PROJECT_TRANSACTION_COMMITTED' ||
     diagnostic.truncated
@@ -75,6 +75,7 @@ function projectChangeSummary(
     )
       return undefined
     const value = record.receipt.value
+    if (isPlainObject(value) && (value.changed === false || value.alreadyUndone)) return undefined
     const diff =
       fact.lifecycle === 'applied' &&
       isPlainObject(value) &&
@@ -89,7 +90,7 @@ function projectChangeSummary(
       changedFiles: fact.changedFiles,
       omittedFiles: fact.omittedFiles,
       diff,
-      patchOmitted: !diff,
+      patchOmitted: !diff || (isPlainObject(value) && value.diffTruncated === true),
     }
   } catch {
     Log.tag('ActRuntime').debug('项目事务诊断不是有效 JSON，省略更改卡片并保留原回执')

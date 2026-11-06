@@ -22,7 +22,10 @@ export type { ProjectCodeOperationsApi } from './impl/operations/ProjectCodeOper
 export { projectCodeOperations } from './impl/operations/ProjectCodeOperations.js'
 export type { ProjectExecutionGateApi } from './impl/operations/ProjectExecutionGate.js'
 export { projectExecutionGate } from './impl/operations/ProjectExecutionGate.js'
-export type { ProjectFileOperationsApi } from './impl/operations/ProjectFileOperations.js'
+export type {
+  ProjectFileOperationsApi,
+  ProjectFileOperationsCommitApi,
+} from './impl/operations/ProjectFileOperations.js'
 export { projectFileOperations } from './impl/operations/ProjectFileOperations.js'
 export type { ProjectObservationProviderApi } from './impl/operations/ProjectObservationProvider.js'
 export { createProjectObservationProvider } from './impl/operations/ProjectObservationProvider.js'
@@ -167,10 +170,15 @@ export type {
 export type {
   ProjectChangeInput,
   ProjectChangeInspection,
+  ProjectCommitBytes,
+  ProjectCommitChange,
+  ProjectCommitInput,
+  ProjectCommitResult,
   ProjectEditInput,
   ProjectEditResult,
   ProjectEditStep,
   ProjectEntry,
+  ProjectInspectInput,
   ProjectLineRange,
   ProjectListInput,
   ProjectListResult,

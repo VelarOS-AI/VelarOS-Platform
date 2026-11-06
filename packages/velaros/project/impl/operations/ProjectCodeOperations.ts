@@ -20,7 +20,7 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
  * @AgentView
  * 问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错。
  * 路径都相对项目根。结果里 `degraded` 不为空时只是候选——按名字找到的符号与引用不等于精确绑定，空诊断也不等于没问题。
- * 找文本用 `velaros:project` 的 search，读正文用它的 read；这里只回答「代码之间的关系」。
+ * 字面内容用 ripgrep，文件路径用 rg --files 或 globby，需要更多正文时用 node:fs/promises。
  */
 export interface ProjectCodeOperationsApi {
   /**

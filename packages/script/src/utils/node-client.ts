@@ -37,11 +37,32 @@ export const invoke = async (namespace, operation, input) => {
 
 /** 能力客户端只有普通导出，模型读取文件时不必重复接收传输实现。 */
 export function nodeCapabilityClient(namespace: string, operations: readonly string[]): string {
-  return `import {invoke} from './bridge.mjs';\n${operations
-    .map(
-      (operation, index) =>
-        `const op${index} = input => invoke(${JSON.stringify(namespace)}, ${JSON.stringify(operation)}, input);\nexport {op${index} as ${JSON.stringify(operation)}};`
-    )
+  // Node 的 Buffer 在 JSON 里默认展开为逐字节整数。事务只需原始摘要，新字节用 base64 一次传输。
+  const projectCommit = namespace === 'velaros:project' && operations.includes('commit')
+  const prepare = projectCommit
+    ? `import {createHash, randomUUID} from 'node:crypto';
+const commitFiles = async input => {
+  const request = {...input, requestId:input.requestId ?? randomUUID(), changes:input.changes.map(change => {
+  const result = {...change};
+  if (change.before instanceof Uint8Array) result.before = {sha256:createHash('sha256').update(change.before).digest('hex')};
+  if (change.after instanceof Uint8Array) result.after = {base64:Buffer.from(change.after).toString('base64')};
+  return result;
+  })};
+  try { return await invoke('velaros:project', 'commit', request); }
+  catch (error) {
+    if (error.code !== 'ECONNRESET' && error.code !== 'EPIPE') throw error;
+    return invoke('velaros:project', 'commit', request);
+  }
+};\n`
+    : ''
+  return `import {invoke} from './bridge.mjs';\n${prepare}${operations
+    .map((operation, index) => {
+      const call =
+        projectCommit && operation === 'commit'
+          ? 'commitFiles'
+          : `input => invoke(${JSON.stringify(namespace)}, ${JSON.stringify(operation)}, input)`
+      return `const op${index} = ${call};\nexport {op${index} as ${JSON.stringify(operation)}};`
+    })
     .join('\n')}\n`
 }
 

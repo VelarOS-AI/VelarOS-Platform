@@ -1355,7 +1355,12 @@ test('runtime delivers native output to the next model turn with a small standar
   const policy = executionPolicy(undefined, 'main')
   assert.ok(policy.length <= 800, `execution policy: ${policy.length}`)
   assert.equal(requests[0].instructions.split(policy).length, 2)
-  const baseInstructions = requests[0].instructions.replace(policy, '')
+  // 临时工作目录由测试宿主决定，测量常驻说明时统一路径长度。
+  const cwdEntry = `cwd:${JSON.stringify(f.cwd)}`
+  assert.ok(requests[0].instructions.includes(cwdEntry))
+  const baseInstructions = requests[0].instructions
+    .replace(policy, '')
+    .replace(cwdEntry, 'cwd:"<workspace>"')
   assert.ok(baseInstructions.length <= instructionReview.maxChars, baseInstructions)
   const originalFrame = JSON.parse(
     requests[0].materials.find((item) => item.origin === 'runtime-view').text
@@ -2052,12 +2057,53 @@ test('default npm packages work in entrypoints, saved files and child Node proce
   assert.match(result.process.stdout, /"exitCode":7,"stderr":"diagnostic"/)
 })
 
+test('prettier is not a global fallback and a project can provide its own version', async (t) => {
+  const f = await fixture(t)
+  const absent = await createNodeCodeRunner(f.node).run(
+    request(`
+      import assert from 'node:assert/strict';
+      import {readFile} from 'node:fs/promises';
+      const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8'));
+      assert.equal(catalog.packages.some(pkg=>pkg.name==='prettier'),false);
+      for (const name of ['prettier','velaros:npm/prettier']) {
+        let available=false;try {await import(name);available=true} catch {}
+        assert.equal(available,false,name);
+      }
+      export default 'no-global-prettier';
+    `),
+    noCalls,
+    () => {}
+  )
+  assert.equal(absent.ok, true, JSON.stringify(absent))
+  assert.equal(absent.value, 'no-global-prettier')
+  const directory = join(f.cwd, 'node_modules', 'prettier')
+  await mkdir(directory, { recursive: true })
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({
+      name: 'prettier',
+      version: '1.0.0-project',
+      type: 'module',
+      exports: './index.js',
+    })
+  )
+  await writeFile(join(directory, 'index.js'), "export const version='1.0.0-project';")
+  const local = await createNodeCodeRunner(f.node).run(
+    request("import {version} from 'prettier';export default version;"),
+    noCalls,
+    () => {}
+  )
+  assert.equal(local.ok, true, JSON.stringify(local))
+  assert.equal(local.value, '1.0.0-project')
+})
+
 test('mature default libraries process files, source, HTML, CSV and archives without loading a Skill', async (t) => {
   const f = await fixture(t)
+  assert.equal(NodeDefaultPackages.includes('prettier'), false)
   const source = `
     import assert from 'node:assert/strict';
     import fs from 'fs-extra'; import {Project} from 'ts-morph';
-    import ts from 'typescript'; import {format} from 'prettier';
+    import ts from 'typescript';
     import {load} from 'cheerio'; import {parse} from 'csv-parse/sync';
     import {stringify} from 'csv-stringify/sync'; import {groupBy} from 'lodash-es';
     import {addDays,formatISO} from 'date-fns'; import pLimit from 'p-limit';
@@ -2068,7 +2114,7 @@ test('mature default libraries process files, source, HTML, CSV and archives wit
     const project=new Project({useInMemoryFileSystem:true});
     const file=project.createSourceFile('source.ts','export const answer = 1;');
     file.getVariableDeclarationOrThrow('answer').setInitializer('42');
-    const formatted=await format(file.getFullText(),{parser:'typescript'});
+    const formatted=file.getFullText();
     assert.match(formatted,/answer = 42/);
     assert.match(ts.transpileModule(formatted,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,/42/);
     assert.equal(load('<article><h1>中文</h1></article>')('h1').text(),'中文');
@@ -2083,13 +2129,13 @@ test('mature default libraries process files, source, HTML, CSV and archives wit
     const restored=await JSZip.loadAsync(await zip.generateAsync({type:'nodebuffer'}));
     assert.equal(await restored.file('data.txt').async('string'),'archive 中文');
     assert.equal(z.object({count:z.number().int()}).parse({count:42}).count,42);
-    await fs.outputFile('child.mjs',"import {parse} from 'csv-parse/sync';import {format} from 'prettier';console.log(parse('a,b')[0].join(':'),(await format('let x=1',{parser:'babel'})).trim());");
+    await fs.outputFile('child.mjs',"import {parse} from 'csv-parse/sync';import {z} from 'zod';console.log(parse('a,b')[0].join(':'),z.number().parse(42));");
     console.log((await execa(process.execPath,['child.mjs'],{stdin:'ignore',timeout:10000})).stdout);
     console.log('mature-default-libraries-passed');
   `
   const result = await createNodeCodeRunner(f.node).run(request(source), noCalls, () => {})
   assert.equal(result.ok, true, JSON.stringify(result))
-  assert.match(result.process.stdout, /a:b let x = 1/)
+  assert.match(result.process.stdout, /a:b 42/)
   assert.match(result.process.stdout, /mature-default-libraries-passed/)
 })
 
@@ -2563,10 +2609,10 @@ test('host project bindings compose independently with selected Skills', async (
       assert.equal(image.rawValue.files[1].error.code, 'PERMISSION')
       const read = await session.execute({
         source:
-          "import {read} from 'velaros:project';export default await read({files:[{path:'answer.ts'}]});",
+          "import {readFile} from 'node:fs/promises';export default await readFile('answer.ts','utf8');",
       })
       assert.equal(read.result.failed, undefined, JSON.stringify(read))
-      assert.match(read.rawValue.files[0].text, /export const answer/)
+      assert.match(read.rawValue, /export const answer/)
     }
     if (names.includes(BuiltinSkillNames.browser)) {
       const page = await session.execute({
@@ -2602,6 +2648,7 @@ test('host project bindings compose independently with selected Skills', async (
         '@ast-grep/napi',
         '@playwright/test',
         'jsonc-parser',
+        'prettier',
       ])
     }
   }

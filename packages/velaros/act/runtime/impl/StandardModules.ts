@@ -120,6 +120,7 @@ export function createProjectCapabilityModule(
     context: (call) => ({
       project: options.project,
       resolveProject: options.resolveProject,
+      invocationId: call.invocation.id,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
       recordProjectCommit: (fact) => {

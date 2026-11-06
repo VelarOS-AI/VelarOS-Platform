@@ -16,7 +16,6 @@ import {
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type {
-  ProjectChangeInput,
   ProjectEditInput,
   ProjectEditStep,
   ProjectLineRange,
@@ -227,10 +226,4 @@ export function editInput(input: unknown): ProjectEditInput {
   if (!isArray(value.steps) || isEmpty(value.steps) || value.steps.length > ProjectFileLimits.steps)
     throw invalid(`steps 要 1–${ProjectFileLimits.steps} 步的数组`)
   return { steps: value.steps.map(step) }
-}
-
-/** inspect、undo 的入参：一个 changeRef。 */
-export function changeInput(input: unknown): ProjectChangeInput {
-  const value = objectOf(input, 'inspect / undo')
-  return { changeRef: text(value.changeRef, 'changeRef') }
 }

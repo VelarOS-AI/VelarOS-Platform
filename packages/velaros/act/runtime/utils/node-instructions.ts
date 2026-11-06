@@ -22,7 +22,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     `cwd:${JSON.stringify(cwd)}；独立进程，跨轮状态存文件或 store。`,
     `默认 ${CodeSurfaceLimits.timeoutMs}ms；options.timeoutMs 为 1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数。I/O/子进程计时，宿主等待停表；父期限/取消优先，引用不继承时限。核终态，未知先查回执。`,
     '非交互命令设 stdin:"ignore"、timeout。rg 不在 PATH 时用预装 @vscode/ripgrep 的 rgPath。字面参数 ["-F","-e",pattern,"--",path]，多项重复 -e；正则 String.raw。退出 1 且无错误才是无匹配，其他查 stderr。',
-    '定位先窄后宽：先候选路径/命中数，再读命中附近窗口；输出注明范围、遗漏和续读位置，不整批倾倒文件或截前几千字冒充完整结果。无匹配沿 import/包导出定位依赖，不递归扫整个 node_modules；重复搜索无新证据时换查询或读取已有结果。',
+    '找路径用 rg --files 或 globby。少量命中给原文和邻近行，路径行号与正文分开；大量命中按文件汇总命中数和代表行，注明范围、遗漏和续读位置。已有片段足以编辑就直接复用完整原文，截短行只供定位。无匹配沿 import/包导出查依赖，不递归扫整个 node_modules；重复查询先复用已有结果。',
     ...(modules.includes('velaros:code')
       ? [
           '文案/字面片段用文本搜索；定义、引用、调用关系优先 velaros:code.query；不可用时定向文本回退并说明局限，不把文本命中当语义证明。',
@@ -30,7 +30,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     '输入用 execa(cmd,args,{input:text,timeout:10000}) 或写完关闭 child.stdin，勿同时 stdin:"ignore"。execFile 不支持 input；stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
-    '读写用 node:fs/promises 或 fs-extra；预装库按需 import，版本/README 查目录，勿重复安装。长文本用 velaros:program blobs；写入核回执差量，不重复读取全文。',
+    '读文件默认用 node:fs/promises；生成产物可用 fs-extra。预装库按需 import，版本/README 查目录。长文本用 velaros:program blobs；写入核回执差量，不重复读取全文。',
     ...(modules.includes('velaros:system-environment')
       ? [
           'velaros:system.environment 管 npm：list/search/describe 查询，apply 安装/换版/卸载，rollback 回退。跨会话持久，单次固定版本；核该版 README/类型并验证。',
@@ -47,8 +47,8 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
       : []),
     ...(modules.includes('velaros:project')
       ? [
-          '文本替换、行号和结构定位并列：文本用 {action:"replace",path,oldText,newText}；行号用 read({files:[{path,range:[startLine,endLine]}]}) 的 target + patch，op=replace/before/after；结构定位用 select + patch；整份生成或重写可用 write。冲突后重定位。大段或多行 oldText/newText 及 patch.text 放 options.blobs，使用 blobs.oldText/blobs.newText；旧文可用从文件读取并截取的原文值，短定位文本可内联。',
-          '提交后核回执 diff/changedFiles，再做必要测试，不重复写后全文校验。事务已提交后外层程序失败不能重放；回执丢失先查执行状态/差量。非原子批改失败先核差异，只改剩余部分。',
+          '项目修改用 commit({changes})：唯一片段给 {path,oldText,newText}，全文给 {path,before,after}。用 node:fs/promises 读一次，before 直接传原始 Buffer。新建 before:null，删除 after:null；相关文件一次提交。大段原文可用 blobs。',
+          '用回执 diff/changedFiles 核对本次写入，按需 inspect 展开。外层失败或回执丢失先 inspect({}) 查同一项目最近事务。冲突只重读有关文件，undo 指定 changeRef。',
           ...(SystemMembers.memory.some((module) => modules.includes(module))
             ? [
                 '保真变换：import {memory} from "velaros:system"；memory.read({ref:record.ref}) 按 text/offset/totalChars 读全快照。用原 text 生成输出/预期；事务核回执，直接写入核落盘，重抄不能证明保真。',

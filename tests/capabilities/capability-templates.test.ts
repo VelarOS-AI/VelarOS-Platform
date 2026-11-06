@@ -263,6 +263,8 @@ describe('项目空间里的模版', () => {
         '{\n  "compilerOptions": { "strict": true, "target": "es2022", "module": "esnext", "moduleResolution": "bundler" },\n  "include": ["src"]\n}\n',
       'src/user.ts':
         'export class UserService {\n  find(id: string) {\n    return { id }\n  }\n}\n',
+      'src/primary.ts': 'export function lookup() {}\n',
+      'src/secondary.ts': 'export function lookup() {}\n',
       'src/index.ts':
         "import { UserService } from './user.js'\n\nexport function loadSettings() {\n  return { debug: false }\n}\n\nexport const service = new UserService()\nexport const settings = loadSettings()\n",
       'src/app.ts':
@@ -328,6 +330,7 @@ describe('项目空间里的模版', () => {
       `${template('project/code-template.js')}
 export const shape = await outline('src/user.ts')
 export const users = await whoUses('UserService')
+export const ambiguous = await whoUses('lookup')
 export const counts = await referenceCounts('UserService')
 export const radius = await blastRadius('src/user.ts', 'UserService')
 export const errors = await errorsIn('src/broken.ts')
@@ -338,6 +341,12 @@ export const cycles = await dependencyCycles()
     expect(values.users.declaration).toMatchObject({ startLine: 1 })
     expect(values.users.candidates).toBe(1)
     expect(JSON.stringify(values.users.references)).toContain('src/index.ts')
+    expect(values.ambiguous.targets.map((item: { path: string }) => item.path).sort()).toEqual([
+      'src/primary.ts',
+      'src/secondary.ts',
+    ])
+    expect(values.ambiguous.references).toBeUndefined()
+    expect(values.ambiguous.degraded.length).toBeGreaterThan(0)
     expect(values.counts.total).toBeGreaterThanOrEqual(1)
     expect(values.counts.perFile['src/index.ts']).toBeGreaterThanOrEqual(1)
     expect(JSON.stringify(values.radius.importers)).toContain('src/index.ts')

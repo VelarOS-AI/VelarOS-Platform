@@ -113,6 +113,12 @@ export interface AgentProjectKernelPort {
    * `velaros:project` 的 edit 提交后凭它取最终补丁，inspect、undo 凭它核对回执。
    */
   getTransaction(transactionId: string): AgentProjectStoredTransaction | undefined
+  /** 在当前项目保留的事务中查本会话的请求，省略请求号取最近一笔。 */
+  findCommit?(
+    sessionId: string,
+    requestId?: string,
+    beforeTransactionId?: string
+  ): AgentProjectStoredTransaction | undefined
   /**
    * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再锁住改动的文件写盘；文件在准备之后被外部改过时先试着 rebase，
    * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision；提交后 hook 失败记入 notes，仍返回实际提交结果。signal 在准备完成、首个目标写入前核对，提交开始后保留实际结果。
@@ -417,6 +423,8 @@ export interface ProjectSpacePort {
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** Kernel 分配的本次调用身份，用作默认重试键。 */
+  invocationId?: string
   /** 提交事实独立于业务返回值，宿主写入已有调用诊断。 */
   recordProjectCommit?(fact: {
     root: string

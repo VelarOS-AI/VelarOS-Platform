@@ -4,7 +4,7 @@
  */
 
 /** 本单元的版本，写进内置插件；和 `@velaros-ai/velaros` 的 package.json 一致，check:project-arch 核对。 */
-export const ProjectPackageVersion = '0.6.34' as const
+export const ProjectPackageVersion = '0.6.35' as const
 
 /**
  * 项目的两件工具与内核对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
@@ -46,6 +46,10 @@ export type ProjectErrorCode = (typeof ProjectErrorCodes)[keyof typeof ProjectEr
  * maxChangedLinesPerFile、maxChangedLinesPerTransaction 约束，宿主可以调高。
  */
 export const ProjectFileLimits = Object.freeze({
+  /** 默认提交回执的差量字符预算，完整差量经 inspect 按需读取。 */
+  commitDiffChars: 8192,
+  /** 可重试请求号的字符上限。 */
+  commitRequestChars: 256,
   /** read 一次最多读几个文件。 */
   readFiles: 20,
   /**

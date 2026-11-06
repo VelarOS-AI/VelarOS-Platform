@@ -63,7 +63,7 @@ describe('九个 intent 的代码查询', () => {
       revisions: [{ revision: expect.any(String), scope: 'velaros.typescript.ast' }],
     })
     expect(detail.sources).toEqual([{ backend: 'velaros.typescript.ast' }])
-    // 正文不在这里给，要看那几行用 velaros:project 的 read。
+    // 回执提供范围，由调用方按需读取对应正文。
     expect(JSON.stringify(detail)).not.toContain('return')
   })
 
@@ -99,6 +99,7 @@ describe('九个 intent 的代码查询', () => {
         : {}
     )
     const detail = await single.query({ intent: 'definition', target: { symbol: 'Service' } })
+    expect(single.calls).toHaveLength(1)
     expect(single.calls[0]).toMatchObject({ action: 'find_symbols', query: 'Service', exact: true })
     expect(detail.declaration).toMatchObject({ startLine: 1, endLine: 3 })
 
@@ -151,7 +152,7 @@ describe('九个 intent 的代码查询', () => {
       none.query({ intent: 'definition', target: { symbol: 'Missing' } })
     )
     expect(missing.code).toBe('TARGET_NOT_FOUND')
-    expect(missing.message).toContain('velaros:project')
+    expect(missing.message).toContain('ripgrep')
 
     const two = await fixture(() => ({
       source: 'language-service',

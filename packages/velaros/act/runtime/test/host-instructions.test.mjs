@@ -33,30 +33,22 @@ const InstructionReviewBudgets = {
   // 从宿主迁入的分档执行策略单独预算；基础协议预算不放宽。
   policyChars: 1100,
 }
-test('编辑提示并列提供文本行号与结构路径，保留冲突保护且不重放', () => {
+test('编辑提示提供唯一提交入口和回执查询', () => {
   const text = nodeRuntimeInstructions('/workspace', ['velaros:project'])
-  assert.match(text, /文本替换、行号和结构定位并列/)
-  assert.match(text, /range:\[startLine,endLine\]/)
-  assert.match(text, /replace\/before\/after/)
-  assert.match(text, /action:"replace",path,oldText,newText/)
-  assert.match(text, /大段或多行 oldText\/newText 及 patch\.text 放 options\.blobs/)
-  assert.match(text, /blobs\.oldText\/blobs\.newText/)
-  assert.match(text, /从文件读取并截取的原文值/)
-  assert.match(text, /短定位文本可内联/)
-  assert.match(text, /结构定位用 select \+ patch/)
-  assert.match(text, /整份生成或重写可用 write/)
-  assert.match(text, /不重复写后全文校验/)
-  assert.match(text, /事务已提交后外层程序失败不能重放/)
-  assert.match(text, /回执丢失先查执行状态/)
-  assert.doesNotMatch(text, /action:"write"/)
-  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /文本替换、行号和结构定位并列/)
+  assert.match(text, /commit\(\{changes\}\)/)
+  assert.match(text, /原始 Buffer/)
+  assert.match(text, /diff\/changedFiles/)
+  assert.match(text, /inspect\(\{\}\)/)
+  assert.doesNotMatch(nodeRuntimeInstructions('/workspace'), /commit\(\{changes\}\)/)
 })
 
 test('定位提示按授权选择语义工具，限制输出而非调查深度', () => {
   const text = nodeRuntimeInstructions('/workspace', ['velaros:project', 'velaros:code'])
-  assert.match(text, /定位先窄后宽/)
-  assert.match(text, /候选路径\/命中数/)
-  assert.match(text, /输出注明范围、遗漏和续读位置/)
+  assert.match(text, /rg --files 或 globby/)
+  assert.match(text, /少量命中给原文和邻近行，路径行号与正文分开/)
+  assert.match(text, /大量命中按文件汇总命中数和代表行/)
+  assert.match(text, /注明范围、遗漏和续读位置/)
+  assert.match(text, /直接复用完整原文，截短行只供定位/)
   assert.match(text, /不递归扫整个 node_modules/)
   assert.match(text, /@vscode\/ripgrep 的 rgPath/)
   assert.match(text, /velaros:code.query/)
@@ -507,17 +499,15 @@ test('project batch transformations reuse actual read targets and preserve sourc
   const frames = []
   const f = await fixture(t, {
     workspace,
-    residentModules: [{ module: 'velaros:project', exports: ['read', 'patch'] }],
+    residentModules: [{ module: 'velaros:project', exports: ['inspect', 'commit'] }],
     model: driver(async function* (request) {
       frames.push(request)
       if (frames.length === 1) {
         yield turn(request, {
           execute: {
-            source: `import {read,patch} from 'velaros:project';import {output} from 'velaros';
-const files=${JSON.stringify(paths)}.map(path=>({path}));
-const current=await read({files});
-if(current.issues?.length||current.files.some(file=>!file.target))throw Error('Incomplete source targets');
-const change=await patch({edits:current.files.map(file=>({target:file.target,text:file.text.replaceAll('pending','ready')}))});
+            source: `import {commit} from 'velaros:project';import {readFile} from 'node:fs/promises';import {output} from 'velaros';
+const changes=await Promise.all(${JSON.stringify(paths)}.map(async path=>{const before=await readFile(path);return {path,before,after:before.toString('utf8').replaceAll('pending','ready')};}));
+const change=await commit({changes});
 if(change.status!=='applied')throw Error(JSON.stringify(change));
 output({status:change.status,changeRef:change.changeRef,files:change.changedFiles});`,
           },
@@ -530,7 +520,7 @@ output({status:change.status,changeRef:change.changeRef,files:change.changedFile
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   assert.equal(frames.length, 2)
   assert.match(frames[0].instructions, /index.json/)
-  assert.doesNotMatch(frames[0].instructions, /export function patch/)
+  assert.doesNotMatch(frames[0].instructions, /export function commit/)
   for (const [name, original] of originals)
     assert.equal(
       await readFile(join(workspace, name), 'utf8'),
@@ -663,9 +653,9 @@ test('INV-85 packages execute by name and templates remain discoverable with a s
       if (frames.length === 1) {
         yield turn(request, {
           execute: {
-            source: `import {read,edit} from 'velaros:project';import {show} from 'velaros:widget';import {output} from 'velaros';
-output(await edit({steps:[{action:'replace',path:'sample.txt',oldText:'before',newText:'after'}]}));
-output(await read({files:[{path:'sample.txt'}]}));
+            source: `import {inspect,commit} from 'velaros:project';import {show} from 'velaros:widget';import {output} from 'velaros';
+output(await commit({changes:[{path:'sample.txt',oldText:'before',newText:'after'}]}));
+output(await inspect({}));
 await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>after</text></svg>'});`,
           },
         })
@@ -676,7 +666,7 @@ await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>a
         yield turn(request, {
           execute: {
             source:
-              "import {modules} from 'velaros:system';import {output} from 'velaros';output((await modules.describe({module:'velaros:project',exports:['edit'],template:true})).template,{type:'code'});",
+              "import {modules} from 'velaros:system';import {output} from 'velaros';output((await modules.describe({module:'velaros:project',exports:['commit'],template:true})).template,{type:'code'});",
           },
         })
         yield { type: 'finish', reason: 'stop' }
@@ -710,10 +700,10 @@ test('INV-85 template hints keep instructions small for whole and selected packa
     [{ module: 'velaros:project', template: false }],
     [
       { module: 'velaros:project', template: false },
-      { module: 'velaros:project', exports: ['edit'], template: true },
+      { module: 'velaros:project', exports: ['commit'], template: true },
       { module: 'velaros:project', template: true },
     ],
-    [{ module: 'velaros:project', exports: ['edit'], template: true }],
+    [{ module: 'velaros:project', exports: ['commit'], template: true }],
   ]) {
     let instructions
     const f = await fixture(t, {
@@ -781,9 +771,9 @@ test('INV-67 selected package hints allow execution on the first response withou
   const f = await fixture(t, {
     workspace,
     residentModules: [
-      { module: 'velaros:project', exports: ['read'] },
-      { module: 'velaros:project', exports: ['edit'] },
-      { module: 'velaros:project', exports: ['edit'] },
+      { module: 'velaros:project', exports: ['inspect'] },
+      { module: 'velaros:project', exports: ['commit'] },
+      { module: 'velaros:project', exports: ['commit'] },
       { module: 'velaros:not-mounted', exports: ['anything'] },
     ],
     model: driver(async function* (request) {
@@ -791,9 +781,9 @@ test('INV-67 selected package hints allow execution on the first response withou
       if (frames.length === 1) {
         yield turn(request, {
           execute: {
-            source: `import {read,edit} from 'velaros:project';import {output} from 'velaros';
-const change=await edit({steps:[{action:'replace',path:'sample.txt',oldText:'before',newText:'after'}]});
-output(change);output(await read({files:[{path:'sample.txt'}]}));`,
+            source: `import {inspect,commit} from 'velaros:project';import {output} from 'velaros';
+const change=await commit({changes:[{path:'sample.txt',oldText:'before',newText:'after'}]});
+output(change);output(await inspect({}));`,
           },
         })
         yield { type: 'finish', reason: 'stop' }
@@ -808,7 +798,7 @@ output(change);output(await read({files:[{path:'sample.txt'}]}));`,
   assert.equal(await readFile(join(workspace, 'sample.txt'), 'utf8'), 'after\n')
   assert.match(modelText(frames[1]), /after/)
   assert.match(frames[0].instructions, /index.json/)
-  assert.doesNotMatch(frames[0].instructions, /export function (read|edit)/)
+  assert.doesNotMatch(frames[0].instructions, /export function (inspect|commit)/)
   assert.equal(frames[1].instructions, frames[0].instructions)
 })
 
@@ -819,7 +809,7 @@ test('INV-67 duplicate legacy package hints do not duplicate instructions or res
   const f = await fixture(t, {
     workspace,
     residentModules: [
-      { module: 'velaros:project', exports: ['edit'] },
+      { module: 'velaros:project', exports: ['commit'] },
       { module: 'velaros:project' },
       { module: 'velaros:project' },
     ],
@@ -864,7 +854,7 @@ test('INV-67 invalid selected resident configuration is rejected before activati
     3,
     {},
     'velaros:project',
-    { module: '', exports: ['edit'] },
+    { module: '', exports: ['commit'] },
     { module: 'velaros:project', exports: [''] },
     { module: 'velaros:project', exports: 'edit' },
     { module: 'velaros:project', exports: [] },
@@ -881,7 +871,7 @@ test('INV-67 on-demand package declarations leave the default request capacity a
   const estimates = []
   const f = await fixture(t, {
     workspace,
-    residentModules: [{ module: 'velaros:project', exports: ['edit'] }],
+    residentModules: [{ module: 'velaros:project', exports: ['commit'] }],
     model: {
       ...driver(async function* (request) {
         calls++
@@ -890,7 +880,7 @@ test('INV-67 on-demand package declarations leave the default request capacity a
       estimate: async (request) => {
         estimates.push(request.instructions)
         return {
-          tokens: request.instructions.includes('export function edit(') ? 200000 : 1000,
+          tokens: request.instructions.includes('export function commit(') ? 200000 : 1000,
           precision: 'exact',
           basis: 'resident-sensitive',
         }
@@ -900,7 +890,7 @@ test('INV-67 on-demand package declarations leave the default request capacity a
   const events = []
   for await (const event of f.session.submit('small user input')) events.push(event)
   assert.equal(calls, 1)
-  assert(estimates.every((text) => !text.includes('export function edit(')))
+  assert(estimates.every((text) => !text.includes('export function commit(')))
   assert.equal(events.at(-1).status, 'completed')
 })
 

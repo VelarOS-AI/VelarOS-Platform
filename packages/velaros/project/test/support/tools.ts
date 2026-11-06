@@ -19,6 +19,7 @@ import { projectFileOperations } from '../../impl/operations/ProjectFileOperatio
 import type { CodeAnalysisInput, CodeQueryInput } from '../../types/code'
 import type {
   ProjectChangeInput,
+  ProjectCommitInput,
   ProjectEditInput,
   ProjectListInput,
   ProjectReadInput,
@@ -61,6 +62,7 @@ export async function projectToolFixture(options: {
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const port = createCapabilityPort({
     project: {
+      commit: (input) => projectFileOperations.commit(input as ProjectCommitInput, context),
       read: (input) => projectFileOperations.read(input as ProjectReadInput, context),
       list: (input) => projectFileOperations.list(input as ProjectListInput, context),
       search: (input) => projectFileOperations.search(input as ProjectSearchInput, context),

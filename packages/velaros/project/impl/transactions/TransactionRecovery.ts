@@ -86,7 +86,7 @@ export interface TransactionRecoveryApi {
   prepareBytePlan(
     transaction: StoredTransaction,
     restore: ReadonlyMap<string, ApplyRestoreState>
-  ): void
+  ): TransactionBytePlan
   /**
    * 为 apply 或 rollback 建落盘的恢复计划：每个改动路径的原状态，以及本事务写下后可能留下的各个状态（带字节计划里的字节）。
    * 有路径捕获不到可还原的原文、或找不到本事务留下的状态，抛 PATCH_APPLY_ERROR。
@@ -164,19 +164,18 @@ export class TransactionRecovery implements TransactionRecoveryApi {
   public prepareBytePlan(
     transaction: StoredTransaction,
     restore: ReadonlyMap<string, ApplyRestoreState>
-  ): void {
-    this.bytePlans.set(
-      transaction.transactionId,
-      prepareTransactionBytePlan(
-        transaction,
-        new Map([...restore].map(([path, state]) => [path, decodeStoredBytes(state.bytes)])),
-        new Set(
-          [...restore]
-            .filter(([, state]) => state.existedBefore && !state.restorable)
-            .map(([path]) => path)
-        )
+  ): TransactionBytePlan {
+    const plan = prepareTransactionBytePlan(
+      transaction,
+      new Map([...restore].map(([path, state]) => [path, decodeStoredBytes(state.bytes)])),
+      new Set(
+        [...restore]
+          .filter(([, state]) => state.existedBefore && !state.restorable)
+          .map(([path]) => path)
       )
     )
+    this.bytePlans.set(transaction.transactionId, plan)
+    return plan
   }
 
   public durableRestorePlan(

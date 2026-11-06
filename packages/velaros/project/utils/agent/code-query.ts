@@ -178,11 +178,6 @@ function choose<T>(candidates: T[], target: CodeSymbolTarget): T {
   )
 }
 
-/** 目标只给了名字（没有 path）时返回这个名字，否则返回 undefined。 */
-function nameOnlyTarget(target: CodeTarget): Optional<{ symbol: string; container?: string }> {
-  return isString(target.path) ? undefined : target
-}
-
 /** 按名字在整个项目里找这个符号的声明：名字精确匹配，给了 container 再按 container 收窄。 */
 async function declarationsByName(
   scopeInput: ProjectCodeScope,
@@ -207,6 +202,16 @@ function nameMatchNote(symbol: string): string {
   return `这些是按名字在整个项目里找到的 ${symbol} 声明候选，不是绑定证明；挑一个的 target 再查一次。`
 }
 
+/** 将精确匹配的声明传给文件内定位，保留用于区分同名声明的容器与行号。 */
+function declarationTarget(item: RecordValue): CodeSymbolTarget {
+  return {
+    path: String(item.path),
+    symbol: String(item.name),
+    container: optionalWhen(isString, item.container),
+    line: toOptional(numberOrNull(item.line)),
+  }
+}
+
 /**
  * 把 target 定到一个符号：带 path 的原样用；只给名字时按名字找声明，
  * 恰好一处才定得下来，多处报 AMBIGUOUS_TARGET 并带上候选，一处没有报 TARGET_NOT_FOUND。
@@ -219,16 +224,11 @@ async function resolveCodeTarget(
   if (isString(target.path)) return { ...target, path: target.path }
   const named = target
   const { items } = await declarationsByName(scopeInput, named, context)
-  const found = choose(
-    items.map((item) => ({
-      path: String(item.path),
-      symbol: named.symbol,
-      container: optionalWhen(isString, item.container),
-      line: toOptional(numberOrNull(item.line)),
-    })),
-    { path: '', symbol: named.symbol, container: named.container }
-  )
-  return found
+  return choose(items.map(declarationTarget), {
+    path: '',
+    symbol: named.symbol,
+    container: named.container,
+  })
 }
 
 /** 在目标文件的符号表里找到目标符号的声明（按名字、容器，有行号时优先同一行的那个）；找不到或不唯一时抛错。 */
@@ -282,8 +282,7 @@ async function outline(
 }
 
 /**
- * definition：给出这个符号的声明位置与 body 范围。正文不在这里给——模型手上有 `velaros:project` 的 read，
- * 要看那几行自己去读，省得同一段源码在两条路上各截一次。
+ * definition：给出这个符号的声明位置与 body 范围，供程序按需读取附近正文。
  * 只给名字时按名字在整个项目里找：恰好一处就直接给详情，多处回候选列表；
  * 给了 path 但那个文件里没有这个声明时，同样退一步按名字找候选，回执说明这是候选不是定论。
  */
@@ -291,15 +290,18 @@ async function definition(
   input: Extract<CodeQueryInput, { intent: 'definition' }>,
   context: ProjectOperationContext
 ) {
-  const named = nameOnlyTarget(input.target)
-  if (named) {
+  let target: CodeSymbolTarget
+  if (isString(input.target.path)) {
+    target = { ...input.target, path: input.target.path }
+  } else {
+    const named = input.target
     const { result, items } = await declarationsByName(input, named, context)
     if (isEmpty(items))
       throw new ProjectError(
         'TARGET_NOT_FOUND',
         `整个项目里没有名叫 ${named.symbol} 的符号声明。`,
         { target: named },
-        '用 `velaros:project` 的 search 按文本找到它出现的地方，再对那个文件用 intent=outline。'
+        '用 ripgrep 按字面搜索符号名，再对命中文件用 intent=outline。'
       )
     // 多处同名：把候选连同各自的路径、种类一起给出去，让模型挑，而不是替它猜一个。
     if (items.length > 1)
@@ -307,8 +309,8 @@ async function definition(
         symbols: symbolRows(items),
         degraded: [nameMatchNote(named.symbol)],
       })
+    target = declarationTarget(items[0]!)
   }
-  const target = await resolveCodeTarget(input.target, input, context)
   const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
   let symbol: ProjectSymbol
   try {

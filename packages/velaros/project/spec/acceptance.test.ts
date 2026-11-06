@@ -23,7 +23,6 @@ import {
 import {
   ProjectCodeLimits,
   ProjectFileLimits,
-  ProjectPolicyDefaults,
   VelarCodeModule,
   VelarProjectModule,
 } from '../contracts'
@@ -85,7 +84,7 @@ afterEach(async () => {
 })
 
 describe('模型面', () => {
-  it('INV-42 Node 已读的多文件变换只用一次 edit，无须目标引用，撤回整批改动', async () => {
+  it('INV-42 Node 已读的多文件变换只用一次 commit，无须目标引用，撤回整批改动', async () => {
     await writeFile(join(root, 'a.txt'), 'oldName\n')
     await writeFile(join(root, 'b.txt'), 'oldName twice oldName\n')
     const harness = await createProjectHarness(root)
@@ -96,7 +95,7 @@ describe('模型面', () => {
       })
     )
     const changed = await runTemplate(harness, `commitFiles(${JSON.stringify(files)})`)
-    expect(changed.calls).toEqual(['edit'])
+    expect(changed.calls).toEqual(['commit'])
     expect(changed.value).toMatchObject({ changed: true, changedFiles: ['a.txt', 'b.txt'] })
     expect(changed.value.changeRef).toBeTruthy()
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
@@ -107,68 +106,27 @@ describe('模型面', () => {
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe(files[1].before)
   }, 60_000)
 
-  it('INV-43 结构改写模板精确绑定 Python 方法，INV-48 增量模板只修正问题项', async () => {
-    await writeFile(
-      join(root, 'cache.py'),
-      'class Cache:\n    def load(self, key):\n        return "old"\n\n# keep\n'
-    )
+  it('JS 生成的结构修改使用同一个全文提交模板', async () => {
+    const before = 'class Cache:\n    def load(self):\n        return "old"\n'
+    await writeFile(join(root, 'cache.py'), before)
     const harness = await createProjectHarness(root)
-    const rewritten = await runTemplate(
+    const after = before.replace('"old"', '"new"')
+    const changed = await runTemplate(
       harness,
-      `rewriteSymbol('cache.py', 'Cache.load', '    def load(self, key):\\n        return "new"')`
+      `commitFiles(${JSON.stringify([{ path: 'cache.py', before, after }])})`
     )
-    expect(rewritten.calls).toEqual(['select', 'patch'])
-    expect(rewritten.value.status).toBe('applied')
-    expect(await readFile(join(root, 'cache.py'), 'utf8')).toBe(
-      'class Cache:\n    def load(self, key):\n        return "new"\n\n# keep\n'
-    )
-
-    const amended = await runTemplate(
-      harness,
-      `(async () => {
-      const found = await select({ targets: [{ path: 'cache.py', match: '"new"' }] })
-      const blocked = await patch({ edits: [
-        { target: found.targets[0].target, text: '"final"' },
-        { target: found.targets[0].target, text: '"overlap"' }
-      ] })
-      if (blocked.status !== 'blocked') throw Error('Expected a blocked plan')
-      return amendPatch(blocked.planRef, 1, null)
-    })()`
-    )
-    expect(amended.calls).toEqual(['select', 'patch', 'patch'])
-    expect(amended.value.status).toBe('applied')
-    expect(await readFile(join(root, 'cache.py'), 'utf8')).toContain('return "final"')
+    expect(changed.calls).toEqual(['commit'])
+    expect(await readFile(join(root, 'cache.py'), 'utf8')).toBe(after)
   }, 60_000)
 
-  test('INV-1 velaros:project 的九个操作与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
+  test('INV-1 项目事务与只读快照与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
     const { operations } = await createProjectHarness(root)
-    expect(Object.keys(operations.project).sort()).toEqual([
-      'edit',
-      'inspect',
-      'list',
-      'patch',
-      'read',
-      'search',
-      'select',
-      'snapshot',
-      'undo',
-    ])
     expect(Object.keys(operations.code).sort()).toEqual(['analyze', 'query'])
     const project = await readFile(join(Baselines, 'project.d.ts'), 'utf8')
     const code = await readFile(join(Baselines, 'code.d.ts'), 'utf8')
     const functions = (text: string) =>
       [...text.matchAll(/export function (\w+)\(/g)].map((match) => match[1]).sort()
-    expect(functions(project)).toEqual([
-      'edit',
-      'inspect',
-      'list',
-      'patch',
-      'read',
-      'search',
-      'select',
-      'snapshot',
-      'undo',
-    ])
+    expect(functions(project)).toEqual(['commit', 'inspect', 'snapshot', 'undo'])
     expect(functions(code)).toEqual(['analyze', 'query'])
     // 调用上下文与空间端口不进模型面：它们的名字一个都不出现在声明里。
     for (const text of [project, code]) {
@@ -183,7 +141,7 @@ describe('模型面', () => {
       expect(surface.declarations).toBe(
         await readFile(join(Baselines, `${surface.namespace}.d.ts`), 'utf8')
       )
-      expect([...surface.methods].sort()).toEqual(Object.keys(table).sort())
+      expect(surface.methods.every((name) => name in table)).toBe(true)
     }
   })
 
@@ -516,20 +474,7 @@ describe('不折叠', () => {
 
   test('INV-25 声明里写给模型的上限就是常量表里的数', () => {
     const project = VelarProjectModule.declarations
-    for (const phrase of [
-      `一次最多 ${ProjectFileLimits.readFiles} 个`,
-      `不超过 ${ProjectFileLimits.readChars} 字符`,
-      `各最多 ${ProjectFileLimits.patterns} 条`,
-      `数字最多 ${ProjectFileLimits.listDepth}`,
-      `超过 ${ProjectFileLimits.listEntries} 条`,
-      `超过 ${ProjectFileLimits.searchHits} 处`,
-      `缺省 ${ProjectFileLimits.searchContextLinesDefault}，接受非负安全整数`,
-      `不超过 ${ProjectFileLimits.searchChars} 个 Unicode 字符`,
-      `一次最多 ${ProjectFileLimits.steps} 步`,
-      `展开后一次最多 ${ProjectFileLimits.recodePaths} 个`,
-      `缺省最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件`,
-    ])
-      expect(project, phrase).toContain(phrase)
+    expect(project).toContain(`一次提交 1–${ProjectFileLimits.steps} 项`)
     const code = VelarCodeModule.declarations
     for (const phrase of [
       `最多 ${ProjectCodeLimits.extensions} 个`,

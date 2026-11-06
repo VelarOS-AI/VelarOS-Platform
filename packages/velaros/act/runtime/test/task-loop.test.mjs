@@ -23,19 +23,18 @@ test('TASK_LOOP_NATIVE_ASSERTION', () => assert.equal(double(3), 6));
 `
 const expectedReport = '{"status":"repaired"}\n'
 
-async function workspace(t) {
+async function workspace() {
   const root = await mkdtemp(join(tmpdir(), 'scriptact-task-loop-'))
   const project = join(root, 'project')
   await mkdir(join(project, 'src'), { recursive: true })
   await mkdir(join(project, 'test'))
   await writeFile(join(project, 'src/double.mjs'), originalSource)
   await writeFile(join(project, 'test/double.test.mjs'), originalTest)
-  t.after(() => rm(root, { recursive: true, force: true }))
   return { root, project }
 }
 
 function writeStep(path, text) {
-  return { action: 'write', path, text }
+  return { path, after: text }
 }
 
 function program(source) {
@@ -52,7 +51,7 @@ function requestMessages(summary) {
 
 for (const defect of ['artifact', 'protection']) {
   test(`INV-28/30/61 real task loop repairs ${defect} after native tests pass`, async (t) => {
-    const { root, project } = await workspace(t)
+    const { root, project } = await workspace()
     const command = `${JSON.stringify(process.execPath)} --test test/double.test.mjs`
     const task = {
       goal: 'Repair double and publish the repair status',
@@ -79,6 +78,7 @@ for (const defect of ['artifact', 'protection']) {
       await runtime?.close()
       await host.dispose()
       await environment.dispose()
+      await rm(root, { recursive: true, force: true })
     })
     const run = async (...args) => {
       assert.equal(args[0], command)
@@ -187,7 +187,7 @@ for (const defect of ['artifact', 'protection']) {
             yield turn(
               request,
               program(
-                `import {read,edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';const current=(await read({files:[{path:'src/double.mjs'}]})).files[0];if(current.text!==${JSON.stringify(originalSource)})throw Error('unexpected current source');await edit({steps:${JSON.stringify(steps)}});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
+                `import {commit} from 'velaros:project';import {readFile} from 'node:fs/promises';import {execaCommand} from 'execa';import {output} from 'velaros';const changes=await Promise.all(${JSON.stringify(steps)}.map(async c=>({...c,before:await readFile(c.path).catch(e=>{if(e.code==='ENOENT')return null;throw e})})));if(changes[0].before.toString('utf8')!==${JSON.stringify(originalSource)})throw Error('unexpected current source');await commit({changes});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
               )
             )
           } else if (round === 3 || round === 5) {
@@ -206,7 +206,7 @@ for (const defect of ['artifact', 'protection']) {
             yield turn(
               request,
               program(
-                `import {edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';await edit({steps:${JSON.stringify([step])}});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
+                `import {commit} from 'velaros:project';import {readFile} from 'node:fs/promises';import {execaCommand} from 'execa';import {output} from 'velaros';const change=${JSON.stringify(step)};await commit({changes:[{...change,before:await readFile(change.path)}]});const {exitCode,stdout,stderr}=await execaCommand(${JSON.stringify(command)}, {shell:true,reject:false,timeout:5000,env:{NODE_TEST_CONTEXT:undefined}});console.log(JSON.stringify({exitCode,stdout,stderr}));`
               )
             )
           } else assert.fail(`unexpected round ${round}`)
@@ -259,7 +259,7 @@ for (const defect of ['artifact', 'protection']) {
 }
 
 test('task opt-in body delivery checks accepted request text, then repairs a reference-only delivery', async (t) => {
-  const { root, project } = await workspace(t)
+  const { root, project } = await workspace()
   const currentBody = 'CURRENT_TASK_ARTIFACT_57b2\nfirst line\nsecond line\n'
   await writeFile(join(project, 'delivery.txt'), currentBody)
   const submitted = JSON.stringify({
@@ -330,7 +330,7 @@ test('task opt-in body delivery checks accepted request text, then repairs a ref
           const mode = round === 1 ? 'reference' : 'full'
           yield turn(request, {
             observe: {
-              source: `import {read} from 'velaros:project';import {output} from 'velaros';const file=(await read({files:[{path:'delivery.txt'}]})).files[0];output(file.text,{key:'task-body',purpose:'Deliver current task artifact',view:{mode:${JSON.stringify(mode)}}});`,
+              source: `import {snapshot} from 'velaros:project';import {output} from 'velaros';const captured=await snapshot({files:[{path:'delivery.txt',key:'body',purpose:'delivery'}]});output(captured.value.files[0].text,{key:'task-body',purpose:'Deliver current task artifact',view:{mode:${JSON.stringify(mode)}}});`,
             },
           })
           yield { type: 'finish', reason: 'stop' }
@@ -339,7 +339,10 @@ test('task opt-in body delivery checks accepted request text, then repairs a ref
       },
     },
   })
-  t.after(() => runtime.close())
+  t.after(async () => {
+    await runtime.close()
+    await rm(root, { recursive: true, force: true })
+  })
   const session = await runtime.openSession('delivery')
   const events = []
   for await (const event of session.submit(submitted)) events.push(event)

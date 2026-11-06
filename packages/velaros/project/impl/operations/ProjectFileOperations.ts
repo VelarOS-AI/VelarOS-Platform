@@ -3,14 +3,17 @@
  * 读操作在项目资源门的读门里跑（彼此并行、与写互斥）；改动在写门里跑：规划 → 内核准备、校验、提交，撤销同样。不问用户。
  * 校验与撤销账本都在项目内核里，这里只负责把模型的步骤编成事务、把结果写成模型面的样子。
  */
-import { optionalWhen } from '@velaros-ai/core'
+import { isString, optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type {
   ProjectChangeInput,
   ProjectChangeInspection,
+  ProjectCommitInput,
+  ProjectCommitResult,
   ProjectEditInput,
   ProjectEditResult,
+  ProjectInspectInput,
   ProjectListInput,
   ProjectListResult,
   ProjectReadInput,
@@ -26,9 +29,9 @@ import type {
   ProjectSelectInput,
   ProjectSelectResult,
 } from '../../types/selection.js'
-import { changeRecordOf, changeTransactionOf } from '../../utils/agent/change-records.js'
+import { commitFiles, inspectedDiff, resolveCommit } from '../../utils/agent/commit.js'
 import { commitProjectEdit } from '../../utils/agent/edit-commit.js'
-import { changeInput, editInput } from '../../utils/agent/file-input.js'
+import { editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
 import { planPathSteps } from '../../utils/agent/path-steps.js'
 import { projectFailure } from '../../utils/agent/ports.js'
@@ -43,21 +46,16 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
 
 /**
  * @AgentView
- * 按需使用的项目事务、冲突保护与撤回。普通读写、遍历和搜索使用 Node 与成熟库，不必改走本模块。下面这些对每个方法都成立：
- * 路径相对当前项目根；可选 projectRoot 请求宿主授权的其他项目，未配置授权入口时拒绝。每次只操作一个项目，引用、inspect 和 undo 须使用签发时同一根。
- * 每个项目内核仍执行真实路径根内保护，符号链接不能逃出授权项目；projectRoot 不改变 Node 进程权限或会话 cwd。
- * 编辑方式按任务选：文本替换用 edit.replace，oldText 须唯一，删除用空 newText；行号用 read 的 range:[startLine,endLine]（从 1 起、含末行）取得 target 后 patch，replace 替换、空 text 删除、before/after 插入；结构用 select + patch。三者并列，不强制单一路径；已有 target 可复用，版本冲突重新定位。整份生成或重写用 write，expectedText 使用 Node 已读完整原文，null 只新建。大块正文放 options.blobs，程序只引用；相关修改尽量批量提交。
- * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
- * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
- * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
- * changeRef 只在本会话里有效，原样用，不能手写。提交后核对回执差量和 changedFiles，再做必要测试，不重复写后全文校验；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。
- * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
+ * 用 Node 读、找和转换文件。项目改动用一次 commit；路径相对同一个项目根，projectRoot 可请求宿主授权的其他根。
+ * 唯一片段直接提交；全文使用已读基线和新内容。检查此次写入先看回执，需要更多差量用 inspect；撤回用 undo。
+ * 外层程序失败时先 inspect 查询持久状态。snapshot 供固定的只读观察计划使用。
  */
-export interface ProjectFileOperationsApi {
-  /** @AgentView 读项目里的文本文件：交回连续的正文与它第一行的行号。批量读取的失败项在 issues；后续改动依赖全部文件时先处理这些缺口，不把返回的 files 当作全部请求都已读。看图用 `velaros:images`，目录用 list。
-   * @OperationEffect none
+export interface ProjectFileOperationsCommitApi {
+  /** @AgentView 以一次事务提交 changes。唯一片段无需预读；全文使用同一次读取的 before，after 给 JS 计算的新文本。回执返回紧凑差量，重试同一 requestId 可查原结果。
+   * @OperationEffect write
+   * @OperationModes execute
    */
-  read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
+  commit(input: ProjectCommitInput, ctx: ProjectOperationContext): Promise<ProjectCommitResult>
   /** @AgentView 捕获声明式 files 纯快照计划：最多 20 个文件、每次捕获 500000 个字符；在同一项目读门内前后完整读取，任何缺失、截断或前后变化都失败。快照只证明此次捕获值相同，不能证明读取期间没有 ABA，也不授予后续写入或跳过 IO。
    * @OperationEffect none
    */
@@ -65,40 +63,46 @@ export interface ProjectFileOperationsApi {
     input: ProjectSnapshotInput,
     ctx: ProjectOperationContext
   ): Promise<ProjectSnapshotCapture>
-  /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。
-   * @OperationEffect none
-   */
-  list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
-  /** @AgentView 按字面文本或正则搜项目源码；默认交回全部命中与连续正文，page 显式请求无正文的有界定位页。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
-   * @OperationEffect none
-   */
-  search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
-  /** @AgentView 精确定位函数/方法等结构或作用域中的字面片段；返回连续原文和工具绑定的目标。歧义明确选择候选，issues 未解决时不要提交成功子集。
-   * @OperationEffect none
-   */
-  select(input: ProjectSelectInput, ctx: ProjectOperationContext): Promise<ProjectSelectResult>
-  /** @AgentView 批量编辑 read/select 的目标：新块或片段一次拼接、整批事务提交。缺省摘要，完整 diff 用 inspect。blocked 明确未写入，并可用 planRef/amendments 只修正问题项；取消或写入状态不明仍抛错。
-   * @OperationEffect write
-   * @OperationModes execute
-   */
-  patch(input: ProjectPatchInput, ctx: ProjectOperationContext): Promise<ProjectPatchResult>
-  /** @AgentView 一次提交可撤回的文件事务，无需先 read/select：replace 用唯一 oldText 定位，write 可用 Node 已读的完整 expectedText 防止覆盖外部改动，expectedText:null 只允许新建。相关 steps 一起提交；省略 expectedText 的 write 按提交时内容覆盖。拆成多次调用时不能承诺跨调用原子性。
-   * @OperationEffect write
-   */
-  edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>
   /** @AgentView 看一次改动的差量与状态。
    * @OperationEffect none
    */
-  inspect(input: ProjectChangeInput, ctx: ProjectOperationContext): Promise<ProjectChangeInspection>
+  inspect(
+    input: ProjectInspectInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectChangeInspection>
   /** @AgentView 整次撤销一次改动：写回原文、删掉它新建的文件。
    * @OperationEffect write
    */
   undo(input: ProjectChangeInput, ctx: ProjectOperationContext): Promise<ProjectUndoResult>
 }
 
+/** 宿主文件浏览、历史编辑器与兼容调用仍可借这些服务；生成的模型合同只取事务和证据接口。 */
+export interface ProjectFileOperationsApi extends ProjectFileOperationsCommitApi {
+  /** 宿主读取有界文本窗口。 */
+  read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
+  /** 宿主列举符合策略的目录条目。 */
+  list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
+  /** 宿主搜索源码与上下文。 */
+  search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
+  /** 为宿主编辑器定位文本或结构目标。 */
+  select(input: ProjectSelectInput, ctx: ProjectOperationContext): Promise<ProjectSelectResult>
+  /** 提交宿主已定位的目标编辑。 */
+  patch(input: ProjectPatchInput, ctx: ProjectOperationContext): Promise<ProjectPatchResult>
+  /** 将旧宿主的有序编辑步骤交给事务内核。 */
+  edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>
+}
+
 export class ProjectFileOperations implements ProjectFileOperationsApi {
   private readonly snapshots = new ProjectSnapshotCollector()
   constructor(private readonly gate: ProjectExecutionGateApi) {}
+
+  public async commit(
+    input: ProjectCommitInput,
+    context: ProjectOperationContext
+  ): Promise<ProjectCommitResult> {
+    const ctx = await beforeWrite(() => resolveProjectContext(input, context, true))
+    return this.guarded(ctx, true, () => commitFiles(input, ctx))
+  }
 
   public async read(
     input: ProjectReadInput,
@@ -179,22 +183,28 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   }
 
   public async inspect(
-    input: ProjectChangeInput,
+    input: ProjectInspectInput,
     context: ProjectOperationContext
   ): Promise<ProjectChangeInspection> {
     const ctx = await resolveProjectContext(input, context, false)
 
     try {
       ctx.abortSignal.throwIfAborted()
-      const { changeRef } = changeInput(input)
-      const record = changeRecordOf(changeRef, ctx)
-      const transaction = await changeTransactionOf(ctx, record.transactionId, changeRef)
+      const { changeRef, record, transaction, kernel } = await resolveCommit(input, ctx, true)
       const inspected: ProjectChangeInspection = {
         changeRef,
+        previousChangeRef: kernel.findCommit?.(
+          ctx.sessionId ?? '',
+          undefined,
+          transaction.transactionId
+        )?.transactionId,
+        requestId: optionalWhen(
+          isString(transaction.metadata?.commitRequest),
+          transaction.metadata?.commitRequest as string
+        ),
         status: transaction.status,
         changedFiles: transaction.changedFiles,
-        diff: transaction.diff,
-        diffLines: transaction.changedLines,
+        ...inspectedDiff(input, transaction),
       }
       if (record.oldRevisions) inspected.oldRevisions = record.oldRevisions
       if (record.newRevisions) inspected.newRevisions = record.newRevisions
@@ -212,30 +222,32 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
 
     try {
       ctx.abortSignal.throwIfAborted()
-      const { changeRef, transactionId, transaction, kernel } = await beforeWrite(async () => {
-        const { changeRef } = changeInput(input)
-        const { transactionId } = changeRecordOf(changeRef, ctx)
-        const transaction = await changeTransactionOf(ctx, transactionId, changeRef)
-        return { changeRef, transactionId, transaction, kernel: await ctx.project.kernel() }
+      return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, async () => {
+        const { changeRef, transaction, kernel } = await beforeWrite(() =>
+          resolveCommit(input, ctx, false)
+        )
+        const transactionId = transaction.transactionId
+        // 撤销是幂等的：已经撤销过就如实回执，不报错。
+        if (transaction.status === 'rolled_back') {
+          ctx.recordWriteOutcome?.('not-applied')
+          return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
+        }
+        const rolled = await kernel.rollback({ transactionId }, ctx.abortSignal)
+        if (rolled.changedFiles.length) {
+          ctx.recordProjectCommit?.({
+            root: ctx.project.getRootPath(),
+            transactionId,
+            lifecycle: 'rolled_back',
+            changedFiles: rolled.changedFiles,
+          })
+        }
+        ctx.recordWriteOutcome?.(rolled.changedFiles.length ? 'applied' : 'not-applied')
+        return {
+          changeRef,
+          changedFiles: rolled.changedFiles,
+          notes: optionalWhen(rolled.notes?.length, rolled.notes),
+        }
       })
-      // 撤销是幂等的：已经撤销过就如实回执，不报错。
-      if (transaction.status === 'rolled_back')
-        return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
-      const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
-        kernel.rollback({ transactionId }, ctx.abortSignal)
-      )
-      ctx.recordProjectCommit?.({
-        root: ctx.project.getRootPath(),
-        transactionId,
-        lifecycle: 'rolled_back',
-        changedFiles: rolled.changedFiles,
-      })
-      ctx.recordWriteOutcome?.('applied')
-      return {
-        changeRef,
-        changedFiles: rolled.changedFiles,
-        notes: optionalWhen(rolled.notes?.length, rolled.notes),
-      }
     } catch (error) {
       throw projectFailure(error)
     }

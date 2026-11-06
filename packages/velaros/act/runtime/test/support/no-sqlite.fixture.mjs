@@ -32,11 +32,11 @@ try {
         yield turn(request, {
           execute: {
             source:
-              "import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'value.txt'}]})).files[0];if(file.text!=='one\\n')throw Error('unexpected');await edit({steps:[{action:'replace',path:'value.txt',oldText:'one',newText:'two'}]});output('saved');",
+              "import {output} from 'velaros';import {commit} from 'velaros:project';await commit({changes:[{path:'value.txt',oldText:'one',newText:'two'}]});output('saved');",
           },
           observe: {
             source:
-              "import {output} from 'velaros';import {read} from 'velaros:project';output(await read({files:[{path:'value.txt'}]}));",
+              "import {output} from 'velaros';import {inspect} from 'velaros:project';output(await inspect({}));",
           },
         })
         yield { type: 'finish', reason: 'stop' }

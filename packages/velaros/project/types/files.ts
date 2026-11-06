@@ -1,5 +1,5 @@
 /**
- * 项目文件能力（`velaros:project`）的入参与回执：模型面上是带 @AgentView 的那些。
+ * 项目文件能力（`velaros:project`）的入参与回执：模型面上是带 的那些。
  * 读出来的是连续的正文（带起始行号）；改动按路径写，一次 edit 的步骤是一个事务，全成或全不成，成了给一个 changeRef，凭它 inspect、undo。
  * 编辑规划内部仍凭 fileRef 核对版本与可见范围（`ProjectPlanStep`），模型不碰它：按路径的步骤在提交前由系统换成它。
  * 只放类型；怎么读、怎么改在 `impl/operations/ProjectFileOperations.ts`。
@@ -12,26 +12,24 @@ import type { ProjectSelection } from './selection.js'
 /** @AgentView 行号或连续闭区间：`51`、`[51]`、`[42, 45]`，末行不小于首行。 */
 export type ProjectLineRange = number | [number] | [number, number]
 
-/** @AgentView 要读的一个文件：range 只读这几行（末行超过文件行数就读到最后一行），不给就是整个文件。 */
+/** 要读的一个文件：range 只读这几行（末行超过文件行数就读到最后一行），不给就是整个文件。 */
 export interface ProjectReadItem {
   path: string
   range?: ProjectLineRange
 }
 
 /**
- * @AgentView
  * files 每项一个文件，一次最多 20 个；每个文件交回请求的整段，看多少、筛什么在程序里定。
  * 一次交回的正文总共不超过 20000000 字符（只为守住内存），装不下的文件在 issues 里：单独读，或者用 range 读一段。
  */
 export interface ProjectReadInput {
-  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
   projectRoot?: string
 
   files: ProjectReadItem[]
 }
 
 /**
- * @AgentView
  * 一个文件里连续的一段：read 是要的那一段，search 与 edit 回执是命中处、改动处（不相连的几段各是一个窗口）。
  * text 是逻辑正文，CRLF 统一为 LF，末尾是否有换行保持不变；不是物理原文，不能用于 write.expectedText 的逐字核对。
  * 保护性全文写入用 Node 读取原文件后一次 edit；纯项目操作可用 replace 或绑定 target 的 patch，不要猜测或改写原文件换行来凑 expectedText。
@@ -49,7 +47,7 @@ export interface ProjectWindow {
   target?: ProjectSelection
 }
 
-/** @AgentView 批量读时没读到的一个文件：code 是原因（TARGET_NOT_FOUND 不存在、NOT_SUPPORTED 是目录或二进制、PERMISSION_DENIED 不许读、SCOPE_VIOLATION 装不下……），next 是下一步。 */
+/** 批量读时没读到的一个文件：code 是原因（TARGET_NOT_FOUND 不存在、NOT_SUPPORTED 是目录或二进制、PERMISSION_DENIED 不许读、SCOPE_VIOLATION 装不下……），next 是下一步。 */
 export interface ProjectReadIssue {
   path: string
   code: string
@@ -58,7 +56,6 @@ export interface ProjectReadIssue {
 }
 
 /**
- * @AgentView
  * files 按请求的顺序排。批量里读不到或装不下的文件不在 files 里，在 issues 里各带一条原因；只读一个文件时读不到就整个调用失败。
  */
 export interface ProjectReadResult {
@@ -69,13 +66,12 @@ export interface ProjectReadResult {
 // ── 列、搜 ──────────────────────────────────────────────────────
 
 /**
- * @AgentView
  * 列目录。path 缺省是项目根；depth 往下列几层：1 只列当前目录，数字最多 30，不给就是整棵树。
  * include、exclude 是 glob，各最多 20 条：不带 / 的按文件名匹配、任意深度都算（`*.ts`、`*.test.ts`），带 / 的从 path 起算（`lib/*.ts`）；.gitignore 忽略的条目本来就不列。
  * 条目超过 100000 条时整个调用失败（只为守住内存），收窄 path、include 或 depth 再列。
  */
 export interface ProjectListInput {
-  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
   projectRoot?: string
 
   path?: string
@@ -84,19 +80,18 @@ export interface ProjectListInput {
   depth?: number
 }
 
-/** @AgentView 一个条目：文件或目录。 */
+/** 一个条目：文件或目录。 */
 export interface ProjectEntry {
   path: string
   type: 'file' | 'directory'
 }
 
-/** @AgentView entries 是全部条目，按深度优先的稳定顺序排。 */
+/** entries 是全部条目，按深度优先的稳定顺序排。 */
 export interface ProjectListResult {
   entries: ProjectEntry[]
 }
 
 /**
- * @AgentView
  * 搜源码。query 缺省按字面、不区分大小写匹配：regex 为真按正则，caseSensitive 为真区分大小写；字面模式下 `|` 没有「或」的意思。
  * path 可点名一个文件或目录（缺省是整个项目）；点名文件只搜该文件，include、exclude 相对其上级目录；目录的 glob 写法同 list（`*.ts` 是 path 下所有 .ts）。不存在的 path 明确报错。
  * contextLines 每处前后各带几行，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并，正文不重复。
@@ -104,7 +99,7 @@ export interface ProjectListResult {
  * 交回全部命中；超过 5000 处时整个调用失败（只为守住内存），收窄 query、path 或 include 再搜。
  */
 export interface ProjectSearchInput {
-  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
   projectRoot?: string
 
   query: string
@@ -114,11 +109,11 @@ export interface ProjectSearchInput {
   regex?: boolean
   caseSensitive?: boolean
   contextLines?: number
-  /** @AgentView 显式请求定位页，不返回源码正文或 snippet，files 为空；contextLines 不用于定位页。offset 缺省 0，limit 缺省 50、最大 200。每页重新搜索，不是快照；变动可能造成跨页重复或遗漏。仍保留 5000 命中护栏，没搜全则失败。 */
+  /** 显式请求定位页，不返回源码正文或 snippet，files 为空；contextLines 不用于定位页。offset 缺省 0，limit 缺省 50、最大 200。每页重新搜索，不是快照；变动可能造成跨页重复或遗漏。仍保留 5000 命中护栏，没搜全则失败。 */
   page?: { offset?: number; limit?: number }
 }
 
-/** @AgentView 命中的位置，行列从 1 起。 */
+/** 命中的位置，行列从 1 起。 */
 export interface ProjectSearchRange {
   startLine: number
   startColumn?: number
@@ -126,7 +121,7 @@ export interface ProjectSearchRange {
   endColumn?: number
 }
 
-/** @AgentView 一处命中。snippet 只在搜完之后文件又被改了、这处没进 files 的窗口时给。 */
+/** 一处命中。snippet 只在搜完之后文件又被改了、这处没进 files 的窗口时给。 */
 export interface ProjectSearchHit {
   path: string
   revision?: string
@@ -135,7 +130,6 @@ export interface ProjectSearchHit {
 }
 
 /**
- * @AgentView
  * 未给 page 时 hits 是全部命中的位置。files 是命中所在的那几段（连同前后 contextLines 行），连续的原文加起始行号。
  * 找定义、引用、调用方用 `velaros:code` 更准；文本命中只是候选。
  */
@@ -146,7 +140,7 @@ export interface ProjectSearchResult {
   note?: string
 }
 
-/** @AgentView 定位页元数据。total 是本次完整搜索的命中数（不是匹配子串数），totalFiles 是命中文件数；不保证整个项目的原子快照。groups 只列本页出现的文件，count 是该文件在本次搜索中的全部命中数，returned 是本页数量。用同一查询和 nextOffset 继续；需要正文时 read({files:[{path,range:[startLine,endLine]}]})，读取当前版本并核对 revision。 */
+/** 定位页元数据。total 是本次完整搜索的命中数（不是匹配子串数），totalFiles 是命中文件数；不保证整个项目的原子快照。groups 只列本页出现的文件，count 是该文件在本次搜索中的全部命中数，returned 是本页数量。用同一查询和 nextOffset 继续；需要正文时 read({files:[{path,range:[startLine,endLine]}]})，读取当前版本并核对 revision。 */
 export interface ProjectSearchPage {
   offset: number
   limit: number
@@ -160,14 +154,13 @@ export interface ProjectSearchPage {
 
 // ── 改 ──────────────────────────────────────────────────────────
 
-/** @AgentView recode 的目标磁盘编码。 */
+/** recode 的目标磁盘编码。 */
 export type ProjectRecodeEncoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'gb18030'
 
-/** @AgentView recode 统一成哪种物理换行。 */
+/** recode 统一成哪种物理换行。 */
 export type ProjectRecodeNewline = 'lf' | 'crlf'
 
 /**
- * @AgentView
  * edit 里的一步，都按路径指文件：
  * write 把 text 整份写进去（文件不存在就新建，缺的上级目录自动建）；
  * write 可带 expectedText：传已读的完整原文时逐字核对（仅忽略开头的编码 BOM，换行不折叠），null 表示只允许新建；不匹配整批拒绝。省略表示按提交时的内容写。
@@ -191,7 +184,6 @@ export type ProjectEditStep =
     }
 
 /**
- * @AgentView
  * steps 按顺序执行、合成一个事务：全成或全不成，成了给一个 changeRef。一次最多 1000 步，一个事务缺省最多改 100 个文件。
  * expectedText 核对该步骤之前的完整正文；同文件多步时以前一步结果为准。不匹配报 BASE_REVISION_MISMATCH，先重新读取和合并，不能去掉核对后盲重试。
  * 领域明确未写入的失败可按 error.code 处理；事务已提交后外层程序失败不能重放，回执丢失先查执行状态与差量。TARGET_NOT_FOUND 是文件不存在或 oldText 没找到（message 里有最接近的原文），
@@ -199,7 +191,7 @@ export type ProjectEditStep =
  * PERMISSION_DENIED 是不许写或用户没同意——除非用户改了主意，别重试。
  */
 export interface ProjectEditInput {
-  /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
+  /** 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
   projectRoot?: string
 
   steps: ProjectEditStep[]
@@ -257,14 +249,13 @@ export interface ProjectPlanInput {
   steps: ProjectPlanStep[]
 }
 
-/** @AgentView recode 的结果：哪些文件从什么格式转成了什么格式，哪些本来就是目标格式、没动。 */
+/** recode 的结果：哪些文件从什么格式转成了什么格式，哪些本来就是目标格式、没动。 */
 export interface ProjectRecodeReceipt {
   converted: Array<{ path: string; from: string; to: string }>
   unchanged: string[]
 }
 
 /**
- * @AgentView
  * 提交成功的回执。changeRef 交给 inspect 看差量、交给 undo 整次撤销。
  * files 是改动处连同前后几行（不相连的几处各一个窗口），核对改得对不对用；diff 是这次改动的完整差量。
  * oldRevisions 不含新建的文件。notes 是补充说明（比如什么都没改）。
@@ -285,22 +276,70 @@ export interface ProjectEditResult {
   recode?: ProjectRecodeReceipt
 }
 
-/** @AgentView 要看或要撤销的那次改动：edit 回执里的 changeRef，原样传。 */
+/** @AgentView 撤回需给同一会话同一项目的 changeRef 或 requestId。 */
 export interface ProjectChangeInput {
   /** @AgentView 可选目标项目绝对根；须经宿主授权，省略使用当前项目。引用和撤回须指定签发时的同一根。 */
   projectRoot?: string
 
+  changeRef?: string
+  requestId?: string
+}
+
+/** @AgentView Node 客户端接受原始 Uint8Array（包括 Buffer），按视图范围传输。 */
+export interface ProjectCommitBytes {
+  readonly byteOffset: number
+  readonly byteLength: number
+}
+
+/** @AgentView 片段按唯一原文定位。全文基线可用 UTF-8 原文或原始字节摘要；Node 客户端也接受 readFile 返回的 Buffer。新建和删除显式给 null。移动保留源属性，目标必须不存在。 */
+export type ProjectCommitChange =
+  | { path: string; oldText: string; newText: string }
+  | {
+      path: string
+      before: string | ProjectCommitBytes | { sha256: string } | null
+      after: string | ProjectCommitBytes | { base64: string } | null
+    }
+  | { from: string; to: string; before: string | ProjectCommitBytes | { sha256: string } }
+
+/** @AgentView 一个项目内一次提交 1–1000 项。正常调用自动取得请求身份；跨程序重试可复用同一个 requestId（最多 256 字符）。 */
+export interface ProjectCommitInput {
+  projectRoot?: string
+  requestId?: string
+  changes: ProjectCommitChange[]
+}
+
+/** @AgentView 事务实际改动与紧凑差量。diffTruncated 时用 inspect 展开。 */
+export interface ProjectCommitResult {
   changeRef: string
+  requestId: string
+  status: string
+  changed: boolean
+  changedFiles: string[]
+  diff: string
+  diffTruncated: boolean
+  oldRevisions?: Record<string, string>
+  newRevisions?: Record<string, string>
+}
+
+/** @AgentView 查指定事务或本会话在该根最近的提交；path 只展开指定文件的差量。 */
+export interface ProjectInspectInput extends ProjectChangeInput {
+  path?: string
+  /** 从上次 nextOffset 继续读取同一份事务差量。 */
+  offset?: number
 }
 
 /** @AgentView 一次改动的完整差量。status 是 applied（已提交）或 rolled_back（已撤销）等。 */
 export interface ProjectChangeInspection {
   changeRef: string
+  /** 同一会话同一项目的上一笔留存事务。 */
+  previousChangeRef?: string
+  requestId?: string
   status: string
   changedFiles: string[]
   oldRevisions?: Record<string, string>
   newRevisions?: Record<string, string>
   diff: string
+  nextOffset?: number
   diffLines: number
 }
 

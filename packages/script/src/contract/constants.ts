@@ -177,7 +177,6 @@ export const NodeDefaultPackages = Object.freeze([
   'fs-extra',
   'ts-morph',
   'typescript',
-  'prettier',
   'cheerio',
   'csv-parse',
   'csv-stringify',

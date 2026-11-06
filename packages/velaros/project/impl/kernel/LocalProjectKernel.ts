@@ -234,6 +234,12 @@ export interface ProjectKernel {
   diff(input?: { transactionId?: string }): Promise<DiffResult>
   /** 读取内存中已暂存/已应用事务；apply 前预检与 amend 路径使用。 */
   getTransaction(transactionId: string): StoredTransaction | undefined
+  /** 查本会话当前项目内仍保留的提交，可按请求号定位。 */
+  findCommit(
+    sessionId: string,
+    requestId?: string,
+    beforeTransactionId?: string
+  ): StoredTransaction | undefined
   /** 内核状态快照：事务数、目标数、审计事件数、锁、插件、适配器、校验器与批处理指标。 */
   status(): Promise<ProjectStatus>
   /** 按依赖图与并发上限跑一批内核操作；atomic 的批次失败时回滚本批已应用的事务。 */
@@ -690,6 +696,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
    * 已应用的事务不能用本方法（应走 rollback）。
    */
   public discardTransaction(transactionId: string): { discarded: boolean } {
+    if (this.durablePending.has(transactionId))
+      throw new ProjectError('TRANSACTION_RECOVERY_CONFLICT', '未完成的恢复记录必须保留。')
     if (this.transactionCoordinator.isBusy(transactionId)) {
       throw new ProjectError(
         'INVALID_INPUT',
@@ -1015,9 +1023,16 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
           tx.changedFiles,
           async (directory) => (await this.store.snapshot(directory, false)).exists
         )
-        this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
+        const bytePlan = this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
+        if (tx.metadata?.commitRequest) {
+          const changed = new Set(bytePlan.patches.map((patch) => patch.path))
+          tx.patches = tx.patches.filter((patch) => changed.has(patch.path))
+          for (const path of restoreByPath.keys())
+            if (!changed.has(path)) restoreByPath.delete(path)
+          this.refreshTransactionSummary(tx)
+        }
         signal?.throwIfAborted()
-        pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
+        if (tx.changedFiles.length) pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
       } catch (error) {
         this.transactionRepository.set(tx.transactionId, transactionBeforePreflight)
         this.transactionRecovery.restoreBytePlans(bytesBeforePreflight)
@@ -1062,6 +1077,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         before: oldRevisions[pathValue],
         after: newRevisions[pathValue],
       }))
+      if (tx.metadata?.commitRequest) Object.assign(tx.metadata, { oldRevisions, newRevisions })
       // 文件已经全部写完，恢复点不再需要；再落盘就不带它了。
       if (pending) this.endDurableOperation(tx.transactionId)
       try {
@@ -1411,7 +1427,26 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     }
   }
 
-  /** 读取实际稳定生命周期，包括已验证、已应用和已回滚的事务。 */
+  /** 在已有事务表中按插入顺序定位最近请求。 */
+  public findCommit(
+    sessionId: string,
+    requestId?: string,
+    beforeTransactionId?: string
+  ): StoredTransaction | undefined {
+    const owned = [...this.transactionRepository.values()].filter(
+      (tx) => tx.metadata?.commitSession === sessionId
+    )
+    const limit =
+      beforeTransactionId === undefined
+        ? owned.length
+        : owned.findIndex((tx) => tx.transactionId === beforeTransactionId)
+    for (let index = limit - 1; index >= 0; index--) {
+      const tx = owned[index]
+      if (!requestId || tx.metadata?.commitRequest === requestId) return tx
+    }
+    return undefined
+  }
+
   public getTransaction(idValue: string): StoredTransaction | undefined {
     return this.transactionRepository.get(idValue)
   }

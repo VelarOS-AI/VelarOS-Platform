@@ -131,8 +131,9 @@ test('INV-4 all 14 generated module surfaces / 102 operations use the same stric
       sessionId: 's',
       executionId: 'e',
       binding: other.bind('s', 'velaros:project'),
-      operation: 'read',
-      input: { files: [{ path: 'a.txt', range: [1, 'bad'] }] },
+      mode: 'execute',
+      operation: 'commit',
+      input: { changes: [{ path: 'a.txt', oldText: 'one', newText: 42 }] },
     }),
     { code: 'INPUT_SCHEMA', effect: 'none' }
   )
@@ -167,9 +168,11 @@ test('INV-1 real project transaction operations run through Node, shared receipt
       disposed++
     },
   })
+  const host = createLocalShellHost({ cwd: f.root })
+  f.cleanup.push(() => host.dispose())
   const runtime = await createRuntime({
     storage: f.storage,
-    runner: nodeSubprocessCodeRunner,
+    node: createNodeExecutionEnvironment({ cwd: f.root, directory: join(f.root, 'runs'), host }),
     context: { sources: [source] },
     modules: [module],
   })
@@ -177,24 +180,28 @@ test('INV-1 real project transaction operations run through Node, shared receipt
   const s = await open(runtime)
   ok(
     await s.execute({
-      source: `import { output } from 'velaros'; import {read,edit} from 'velaros:project'; const [file]=(await read({files:[{path:'a.txt'}]})).files; if(file.text!=='one\\n') throw Error('unexpected text'); await edit({steps:[{action:'replace',path:'a.txt',oldText:'one',newText:'two'}]}); output('changed');`,
+      source: `import { output } from 'velaros'; import {commit} from 'velaros:project'; await commit({changes:[{path:'a.txt',oldText:'one',newText:'two'}]}); output('changed');`,
     })
   )
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'two\n')
   let state = await s.view.inspect()
   assert(
-    state.mandatory.some((r) => r.operation === 'velaros:project.edit' && r.effect === 'committed')
+    state.mandatory.some(
+      (r) => r.operation === 'velaros:project.commit' && r.effect === 'committed'
+    )
   )
   assert.equal(state.view.progress.step, 1)
   ok(
     await s.execute({
-      source: `import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'a.txt'}]})).files[0];if('error' in file)throw Error(file.error.message);await edit({steps:[{action:'replace',path:'a.txt',oldText:file.text.trim(),newText:'three'}]});output('file changed');`,
+      source: `import {output} from 'velaros';import {commit} from 'velaros:project'; const before='two\\n'; await commit({changes:[{path:'a.txt',before,after:'three\\n'}]});output('file changed');`,
     })
   )
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'three\n')
   state = await s.view.inspect()
   assert(
-    state.mandatory.some((r) => r.operation === 'velaros:project.edit' && r.effect === 'committed')
+    state.mandatory.some(
+      (r) => r.operation === 'velaros:project.commit' && r.effect === 'committed'
+    )
   )
   await runtime.close()
   assert.equal(activated, 1)
@@ -229,10 +236,18 @@ test('INV-55 write failures marked as not applied are recorded without an effect
   await runtime.start()
   const binding = runtime.bind('s', 'velaros:project')
   const call = (id, operation, input) =>
-    runtime.invoke({ id, sessionId: 's', executionId: 'e', binding, operation, input })
+    runtime.invoke({
+      id,
+      sessionId: 's',
+      executionId: 'e',
+      mode: 'execute',
+      binding,
+      operation,
+      input,
+    })
   // 要换的原文在文件里没有：项目在写盘之前拒绝，标了没有写入，回执记成没有效果，不用等宿主核对
-  const refused = await call('replace', 'edit', {
-    steps: [{ action: 'replace', path: 'a.txt', oldText: 'four', newText: 'replaced' }],
+  const refused = await call('replace', 'commit', {
+    changes: [{ path: 'a.txt', oldText: 'four', newText: 'replaced' }],
   })
   assert.equal(refused.outcome, 'failed')
   assert.equal(refused.effect, 'none')
@@ -265,14 +280,15 @@ test('INV-55 write failures marked as not applied are recorded without an effect
     sessionId: 's',
     executionId: 'e2',
     binding: unmarked.bind('s', 'velaros:project'),
-    operation: 'edit',
-    input: { steps: [{ action: 'write', path: 'b.txt', text: 'b\n' }] },
+    mode: 'execute',
+    operation: 'commit',
+    input: { changes: [{ path: 'b.txt', before: null, after: 'b\n' }] },
   })
   assert.equal(lost.outcome, 'failed')
   assert.equal(lost.effect, 'unknown')
 })
 
-test('INV-55 bound patches record blocked and unchanged results as none, and real changes as committed', async (t) => {
+test('INV-55 commits record refused and unchanged results as none, and real changes as committed', async (t) => {
   const f = await storageFixture(t)
   await writeFile(join(f.root, 'a.txt'), 'one\n')
   const projectKernel = await createProjectKernel({ root: f.root })
@@ -298,33 +314,32 @@ test('INV-55 bound patches record blocked and unchanged results as none, and rea
       operation,
       input,
     })
-  const refused = await call('missing-patch', 'patch', {
-    edits: [{ target: 'target:00000000', text: 'bad' }],
+  const refused = await call('missing-fragment', 'commit', {
+    changes: [{ path: 'a.txt', oldText: 'missing', newText: 'bad' }],
   })
-  assert.equal(refused.outcome, 'succeeded')
-  assert.equal(refused.value.status, 'blocked')
+  assert.equal(refused.outcome, 'failed')
   assert.equal(refused.effect, 'none')
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\n')
-
-  const selected = await call('select', 'select', { targets: [{ path: 'a.txt', match: 'one' }] })
-  assert.equal(selected.effect, 'none')
-  const target = selected.value.targets[0].target
-  const unchanged = await call('unchanged-patch', 'patch', { edits: [{ target, text: 'one' }] })
+  const unchanged = await call('unchanged', 'commit', {
+    changes: [{ path: 'a.txt', before: 'one\n', after: 'one\n' }],
+  })
   assert.equal(unchanged.value.status, 'applied')
   assert.equal(unchanged.value.changed, false)
   assert.equal(unchanged.effect, 'none')
 
-  const applied = await call('real-patch', 'patch', { edits: [{ target, text: 'two' }] })
+  const applied = await call('real-commit', 'commit', {
+    changes: [{ path: 'a.txt', oldText: 'one', newText: 'two' }],
+  })
   assert.equal(applied.value.status, 'applied')
   assert.equal(applied.effect, 'committed')
-  assert.equal('diff' in applied.value, false)
+  assert.match(applied.value.diff, /\+two/)
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'two\n')
   const reverted = await call('undo-patch', 'undo', { changeRef: applied.value.changeRef })
   assert.equal(reverted.effect, 'committed')
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\n')
 })
 
-test('INV-56 bound Python editing, draft amendment, inspection and undo run through the actual workspace ScriptAct chain', async (t) => {
+test('INV-56 Python editing, idempotent retry, inspection and undo run through the actual workspace ScriptAct chain', async (t) => {
   const f = await storageFixture(t)
   const workspace = join(f.root, 'workspace')
   await mkdir(workspace)
@@ -336,36 +351,27 @@ test('INV-56 bound Python editing, draft amendment, inspection and undo run thro
   const session = await open(runtime)
   const receipt = await session.execute({
     source: `
-    import { select, patch, inspect, undo } from 'velaros:project';
-    const found = await select({ targets: [{ path: 'cache.py', symbol: 'Cache.load' }] });
-    if (found.issues?.length || !found.targets[0]) throw Error('Selection failed');
-    const target = found.targets[0].target;
-    const blocked = await patch({ edits: [
-      { target, text: '    def load(self, key):\\n        return "更新🙂"' },
-      { target, text: 'overlap' }
-    ] });
-    if (blocked.status !== 'blocked') throw Error('Overlap must not write');
-    const changed = await patch({ planRef: blocked.planRef, amendments: [{ index: 1, edit: null }] });
-    if (changed.status !== 'applied') throw Error('Amendment must apply');
+    import { commit, inspect, undo } from 'velaros:project';
+    const changed = await commit({ changes:[{path:'cache.py',oldText:'原文🙂',newText:'更新🙂'}] });
+    const repeated = await commit({ requestId:changed.requestId, changes:[{path:'cache.py',oldText:'原文🙂',newText:'更新🙂'}] });
     const full = await inspect({ changeRef: changed.changeRef });
     const reverted = await undo({ changeRef: changed.changeRef });
-    export default { target, blocked, changed, full, reverted };
+    export default { repeated, changed, full, reverted };
   `,
   })
   ok(receipt)
   const result = receipt.result.value
-  assert.match(result.target.ref, /^target:[a-f0-9]{8}$/)
-  assert.equal(result.blocked.executionOutcome, 'not-applied')
-  assert.equal('diff' in result.changed, false)
+  assert.deepEqual(result.repeated, result.changed)
+  assert.match(result.changed.diff, /更新🙂/)
   assert.match(result.full.diff, /更新🙂/)
   assert.deepEqual(result.reverted.changedFiles, ['cache.py'])
   assert.equal(await readFile(join(workspace, 'cache.py'), 'utf8'), original)
   const state = await session.view.inspect()
-  const patches = state.mandatory.filter((r) => r.operation === 'velaros:project.patch')
+  const patches = state.mandatory.filter((r) => r.operation === 'velaros:project.commit')
   assert.equal(patches.length, 2)
   assert.deepEqual(
     patches.map((r) => r.effect),
-    ['none', 'committed']
+    ['committed', 'none']
   )
 })
 
@@ -877,11 +883,11 @@ test('runtime project resolver authorizes cross-root transactions through the ge
   const session = await open(runtime)
   ok(
     await session.execute({
-      source: `import {read,edit,undo} from 'velaros:project';
+      source: `import {snapshot,commit,undo} from 'velaros:project';
 const projectRoot=${JSON.stringify(target)};
-const current=await read({projectRoot,files:[{path:'a.txt'}]});
-if(current.files[0].text!=='before')throw Error('wrong project');
-const change=await edit({projectRoot,steps:[{action:'write',path:'a.txt',text:'after',expectedText:'before'}]});
+const current=await snapshot({projectRoot,files:[{path:'a.txt',key:'current',purpose:'compare'}]});
+if(current.value.files[0].text!=='before')throw Error('wrong project');
+const change=await commit({projectRoot,changes:[{path:'a.txt',before:'before',after:'after'}]});
 await undo({projectRoot,changeRef:change.changeRef});`,
     })
   )

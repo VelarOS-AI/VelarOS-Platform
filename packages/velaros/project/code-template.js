@@ -8,9 +8,12 @@ async function outline(path = 'src/user.ts') {
   return { degraded, symbols: symbols.map((symbol) => `${symbol.line}: ${symbol.kind} ${symbol.name}`) }
 }
 
-// 定义在哪、谁在用它：只给名字就在整个项目里找；同名的有好几个时 symbols 里是候选，挑一个把它的 target 原样传回来。
+// 同名时先返回候选，由调用方选择 target；定位到唯一声明才继续查引用。
 async function whoUses(symbol = 'UserService') {
   const found = await query({ intent: 'definition', target: { symbol } })
+  if (!found.declaration || found.symbols.length !== 1) {
+    return { candidates: found.symbols.length, targets: found.symbols.map((item) => item.target), degraded: found.degraded }
+  }
   const [chosen] = found.symbols
   const refs = await query({ intent: 'references', target: chosen.target })
   return { declaration: found.declaration, candidates: found.symbols.length, references: refs.references, degraded: refs.degraded }

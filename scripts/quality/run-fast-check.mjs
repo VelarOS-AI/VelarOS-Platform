@@ -60,7 +60,7 @@ if (built) {
     'INV-52 current constraints',
     'task projection: lossless',
     'task projection: SQLite',
-    '编辑提示并列提供',
+    '编辑提示提供唯一提交入口',
     'Node 验收说明按实际改动',
     'Platform 执行策略',
     'base instructions stay small',
@@ -77,6 +77,11 @@ if (built) {
     'packages/velaros/act/runtime/test/host-instructions.test.mjs',
     'packages/velaros/act/runtime/test/node-runtime.test.mjs',
     'packages/velaros/act/runtime/test/text-runtime.test.mjs',
+  ])
+  run('project commit and recovery', bun, [
+    'test',
+    './packages/velaros/project/test/commit.test.ts',
+    './packages/script/test/project-commit-client.test.ts',
   ])
 } else skipped.push('typecheck（构建失败）', 'core runtime behavior（构建失败）')
 

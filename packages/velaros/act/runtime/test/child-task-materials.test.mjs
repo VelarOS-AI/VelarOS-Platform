@@ -318,7 +318,7 @@ test('parent and worker reuse the authorized default project port and kernel', a
   const kernels = []
   let childCalls = 0
   let parentCalls = 0
-  const read = `import {read} from 'velaros:project'; console.log(await read({projectRoot:${JSON.stringify(workspace)},files:[{path:'shared.txt'}]}));`
+  const read = `import {snapshot} from 'velaros:project'; console.log(await snapshot({projectRoot:${JSON.stringify(workspace)},files:[{path:'shared.txt',key:'shared',purpose:'read'}]}));`
   const child = model(async function* () {
     if (++childCalls === 1) yield call(read)
     else
@@ -353,7 +353,7 @@ test('parent and worker reuse the authorized default project port and kernel', a
     model: model(async function* () {
       if (++parentCalls === 1)
         yield call(
-          `import {edit,read,undo} from 'velaros:project'; import {start,wait} from 'velaros:agents'; const projectRoot=${JSON.stringify(workspace)}; const change=await edit({steps:[{action:'write',path:'shared.txt',text:'shared',expectedText:null}]}); await Promise.all([read({projectRoot,files:[{path:'shared.txt'}]}),read({projectRoot,files:[{path:'shared.txt'}]})]); const child=await start({task:'Read shared.txt through the explicit default root',profile:'worker'}); console.log(await wait({id:child.id})); await undo({projectRoot,changeRef:change.changeRef});`
+          `import {commit,inspect,undo} from 'velaros:project'; import {start,wait} from 'velaros:agents'; const projectRoot=${JSON.stringify(workspace)}; const change=await commit({changes:[{path:'shared.txt',before:null,after:'shared'}]}); await Promise.all([inspect({projectRoot,changeRef:change.changeRef}),inspect({projectRoot,changeRef:change.changeRef})]); const child=await start({task:'Read shared.txt through the explicit default root',profile:'worker'}); console.log(await wait({id:child.id})); await undo({projectRoot,changeRef:change.changeRef});`
         )
       else
         yield {

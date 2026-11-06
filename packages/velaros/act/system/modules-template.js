@@ -6,6 +6,6 @@ const { list, search, describe } = modules
 async function discover() { return list({offset:0,limit:20}) }
 async function find() { return search({query:'files',limit:10}) }
 // 查询多个真实导出一次返回去重的类型闭包；模板只在需要组合示例时请求。
-async function projectContracts() { const api = await describe({module:'velaros:project',exports:['read','edit']}); return api.declarations }
+async function projectContracts() { const api = await describe({module:'velaros:project',exports:['commit']}); return api.declarations }
 async function usage() { const api = await describe({module:'velaros:system',exports: ['memory'],template:true}); return api.template }
 async function types() { const api = await describe({module:'velaros:system',exports: ['memory']}); return api.declarations }
