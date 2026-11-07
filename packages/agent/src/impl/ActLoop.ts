@@ -529,7 +529,7 @@ export class ActLoop implements ActLoopApi {
               // 图片仍在投影授权集合内时沿用整份出线，下一帧仅追加新图片；过期后退回纯文本基线。
               // 两份基线都受逻辑历史核对与独立历史预算约束，不能通过保留前缀延长附件寿命。
               const sent = modelRequestEncoder.messages(compiled.request)
-              if (this.options.frames.delta) {
+              if (frame.retainFrames) {
                 const transcript = {
                   logical: frame.logical,
                   sent,
@@ -971,7 +971,7 @@ export class ActLoop implements ActLoopApi {
     // 同一会话每帧同一个缓存键：认它的供应商把这个会话的请求路由到同一处前缀缓存
     const cacheKey = await sessionCacheKey(this.options.sessionId)
     // 本次组帧只在第一次投影时决定是否沿用上次出线；放弃后同一次组帧里的重组不再沿用
-    let retain = Boolean(frames.delta) && this.policy.retainedFrameRatio > 0
+    let retain = this.policy.retainedFrameRatio > 0
     // 去掉插入帧，保留相同逻辑事件、当前正文、协议和不透明续接；两份同口径估算之差是历史帧开销。
     // 只在本地编译，不发送、不消费租约；固定开销不会被误算成重复状态。
     const historyTokens = async (
@@ -989,31 +989,28 @@ export class ActLoop implements ActLoopApi {
       signal.throwIfAborted()
       return Math.max(0, compiled.estimate.tokens - plain.estimate.tokens)
     }
-    let cycle: Awaited<ReturnType<NonNullable<typeof frames.beginFrame>>> | undefined
+    let cycle: Awaited<ReturnType<typeof frames.beginFrame>> | undefined
     const compose = async (maxChars: number) => {
-      cycle ??= await frames.beginFrame?.(evidence, signal, budget)
-      const projected = cycle
-        ? await cycle.project(maxChars)
-        : await frames.project(evidence, signal, maxChars)
+      cycle ??= await frames.beginFrame(evidence, signal, budget)
+      if (!cycle.retainFrames) retain = false
+      const projected = await cycle.project(maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
       const logical = projected.history ?? []
       const retained = retain ? this.retained(logical, projected.images) : undefined
       const history = retained ? retained.history : projected.history
-      const reconciled = await (cycle?.reconcile ?? frames.reconcile)?.(
+      const reconciled = await cycle.reconcile(
         projected.body,
         history ?? [],
         retained?.body,
         signal
       )
-      const body = reconciled?.body ?? projected.body
+      const body = reconciled.body
       const request = framedRequest(
         {
           history,
           instructions: this.options.instructions,
           images: retained?.images ?? projected.images,
-          compiledPrompt:
-            reconciled?.prompt ??
-            (retained ? frames.delta!(body, retained.body) : projected.prompt),
+          compiledPrompt: reconciled.prompt,
           materials: [
             {
               ref: evidence.id,
@@ -1376,7 +1373,7 @@ export class ActLoop implements ActLoopApi {
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
     signal.throwIfAborted()
-    await current.publication?.publish(current.body, signal)
+    await current.publication.publish(current.body, signal)
     signal.throwIfAborted()
     return {
       projection: {
@@ -1392,6 +1389,7 @@ export class ActLoop implements ActLoopApi {
       images: current.images,
       positions: current.positions,
       retained: current.retained,
+      retainFrames: current.publication.retainFrames,
       retention: {
         limitTokens: retainedFrameLimit,
         historyTokens: retainedTokens,

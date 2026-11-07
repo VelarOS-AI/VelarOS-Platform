@@ -99,44 +99,31 @@ export interface ActContextPort {
   prepare(signal: AbortSignal): Promise<void | { readonly sources: readonly ContextRef[] }>
   /** 本轮仍有可见租约的执行身份。 */
   visibleExecutions(): Promise<readonly string[]>
-  /** 单次组帧的稳定准备与本地候选；未提供时沿用 project/reconcile。事实变化须抛 STALE_VIEW，不跨周期复用。 */
-  beginFrame?(
+  /** 单次组帧共用稳定材料；只发布最终选中的正文，事实变化抛 STALE_VIEW。 */
+  beginFrame(
     view: ModelView,
     signal: AbortSignal,
     maxChars: number
   ): Promise<{
-    project(maxChars: number): ReturnType<ActContextPort['project']>
-    reconcile: NonNullable<ActContextPort['reconcile']>
-    /** 仅对容量通过的最终正文发布审计；不消费交付租约。 */
+    /** 本周期允许在实际请求历史中保留此前已接纳的帧。 */
+    retainFrames: boolean
+    /** 候选投影只在本地试算，不消费交付租约。 */
+    project(maxChars: number): Promise<{
+      body: string
+      images: readonly ModelImage[]
+      history?: readonly ModelHistoryMessage[]
+      segment?: ActFrameSegment
+    }>
+    /** 依本次实际历史核对正文覆盖，并生成最终请求中的完整正文或变化。 */
+    reconcile(
+      body: string,
+      history: readonly ModelHistoryMessage[],
+      previous: Optional<string>,
+      signal: AbortSignal
+    ): Promise<{ body: string; prompt: string }>
+    /** 只发布选中的最终正文与证明；租约仍在响应接纳后消费。 */
     publish(body: string, signal: AbortSignal): Promise<void>
   }>
-  /** 根据观察输出、租约和必要事实装配下一轮上下文。 */
-  project(
-    view: ModelView,
-    signal: AbortSignal,
-    maxChars: number
-  ): Promise<{
-    body: string
-    images: readonly ModelImage[]
-    prompt?: string
-    history?: readonly ModelHistoryMessage[]
-    /** 分段投影时的段状态。 */
-    segment?: ActFrameSegment
-  }>
-  /**
-   * 渲染本帧相对上一帧的变化，未列出的沿用上一帧。提供时循环把已发送的帧留在历史里、
-   * 在 policy.retainedFrameRatio 的历史帧预算内只在其后追加，供应商可复用完整前缀缓存；
-   * 超出历史帧或完整请求预算时，从权威投影重建并重新核对实际正文覆盖。
-   * 缺省时每帧完整重发。
-   */
-  delta?(body: string, previous: string): string
-  /** 按本次实际选择的历史核对正文覆盖；不改变逻辑历史，容量重组时重新核对。 */
-  reconcile?(
-    body: string,
-    history: readonly ModelHistoryMessage[],
-    previous: Optional<string>,
-    signal: AbortSignal
-  ): Promise<{ body: string; prompt: string }>
   /**
    * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。
    * `claim` 是本轮 done 声明附带的完成依据，没有附带时缺席。

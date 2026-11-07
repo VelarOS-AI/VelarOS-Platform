@@ -226,6 +226,8 @@ export type ActComposedFrame = {
   readonly positions: readonly number[]
   /** 出线历史是否保留了此前的帧；增长只在同一布局之间比较。 */
   readonly retained: boolean
+  /** 本周期允许接纳后保留实际出线，供后续帧核对。 */
+  readonly retainFrames: boolean
   /** 本地历史帧计量供请求审计；重建前的超额值另存，账单仍取真实 usage。 */
   readonly retention: {
     readonly limitTokens: number

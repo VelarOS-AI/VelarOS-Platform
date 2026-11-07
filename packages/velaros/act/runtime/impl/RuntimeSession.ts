@@ -871,10 +871,6 @@ export class RuntimeSession implements VelarosSession {
           },
           beginFrame: (view, signal, maxChars) =>
             this.beginFrame(view, signal, maxChars, nativeTools),
-          project: (view, signal, maxChars) => this.project(view, signal, maxChars, nativeTools),
-          delta: (body, previous) => memoryPrompt(body, previous),
-          reconcile: (body, history, previous, signal) =>
-            this.memory.reconcile(body, history, previous, signal),
           acknowledge: (request, signal) => this.acknowledge(request, signal),
           completion: async (request, signal, claim) => {
             const goal = dependencies.tool ? null : await this.goal.get(signal)
@@ -1141,7 +1137,8 @@ export class RuntimeSession implements VelarosSession {
       maxChars
     )
     return {
-      project: (budget: number) => this.project(view, signal, budget, nativeTools, stable, memory),
+      retainFrames: true,
+      project: (budget: number) => this.project(budget, stable, memory),
       reconcile: memory.reconcile,
       publish: async (body: string, currentSignal: AbortSignal) => {
         currentSignal.throwIfAborted()
@@ -1171,14 +1168,10 @@ export class RuntimeSession implements VelarosSession {
   }
 
   private async project(
-    view: ModelView,
-    signal: AbortSignal,
     maxChars: number,
-    nativeTools: boolean,
-    prepared?: Awaited<ReturnType<RuntimeSession['prepareFrame']>>,
-    memory?: Awaited<ReturnType<ContextMemoryApi['beginFrame']>>
+    stable: Awaited<ReturnType<RuntimeSession['prepareFrame']>>,
+    memory: Awaited<ReturnType<ContextMemoryApi['beginFrame']>>
   ) {
-    const stable = prepared ?? (await this.prepareFrame(signal, maxChars, nativeTools))
     const { stores, tool, goal, goalControl, environment } = stable
     const inventory = boundedInventory(
       stable.inventory,
@@ -1206,15 +1199,7 @@ export class RuntimeSession implements VelarosSession {
       (goalControl ? JSON.stringify(goalControl).length : 0) +
       (stores ? JSON.stringify(stores).length : 0) +
       (tool ? JSON.stringify(tool).length : 0)
-    const projected = memory
-      ? await memory.project(Math.max(1, maxChars - extra))
-      : await this.memory.project(
-          view,
-          this.observationResult,
-          this.observationImages,
-          signal,
-          Math.max(1, maxChars - extra)
-        )
+    const projected = await memory.project(Math.max(1, maxChars - extra))
     const frame = JSON.parse(projected.body)
     if (this.executionRunner.environment === 'node') frame.presentation = 'node'
     frame.partitions.runtime = {
@@ -1234,7 +1219,7 @@ export class RuntimeSession implements VelarosSession {
     if (tool) frame.partitions.runtime.modelTool = tool
     frame.memoryStatus.footprint.runtime = JSON.stringify(frame.partitions.runtime).length
     const body = JSON.stringify(frame)
-    return { ...projected, body, prompt: memoryPrompt(body) }
+    return { ...projected, body }
   }
 
   private async waitExecution(signal: AbortSignal): Promise<void> {

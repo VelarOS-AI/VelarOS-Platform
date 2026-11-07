@@ -260,6 +260,12 @@ function runFixture() {
   const store = storage()
   const context = createContextRuntime({ storage: store, sessionId: 'fault' })
   const view = createContextView({ storage: store, sessionId: 'fault', context, sources: [] })
+  type Frame = Awaited<ReturnType<ActRunServiceOptions['frames']['beginFrame']>>
+  const frame: {
+    project(maxChars: number): Promise<Awaited<ReturnType<Frame['project']>> & { prompt?: string }>
+    delta?: (body: string, previous: string) => string
+    reconcile?: Frame['reconcile']
+  } = { project: async () => ({ body: '{}', images: [] }) }
   const options: { -readonly [Key in keyof ActRunServiceOptions]: ActRunServiceOptions[Key] } = {
     storage: store,
     context,
@@ -302,8 +308,24 @@ function runFixture() {
       async visibleExecutions() {
         return []
       },
-      async project() {
-        return { body: '{}', images: [] }
+      async beginFrame() {
+        let projected: Awaited<ReturnType<typeof frame.project>>
+        return {
+          retainFrames: Boolean(frame.delta),
+          async project(maxChars) {
+            projected = await frame.project(maxChars)
+            return projected
+          },
+          async reconcile(body, history, previous, signal) {
+            if (frame.reconcile) return frame.reconcile(body, history, previous, signal)
+            return {
+              body,
+              prompt:
+                previous && frame.delta ? frame.delta(body, previous) : (projected.prompt ?? body),
+            }
+          },
+          async publish() {},
+        }
       },
       async needsRefresh() {
         return false
@@ -312,7 +334,7 @@ function runFixture() {
     },
     execution: { pending: () => false, async wait() {}, async invoke() {}, async stop() {} },
   }
-  return { store, context, view, options }
+  return { store, context, view, options, frame }
 }
 
 for (const phase of ['model', 'refresh'] as const)
@@ -323,7 +345,7 @@ for (const phase of ['model', 'refresh'] as const)
     let listeners = 0
     let wake: (() => void) | undefined
     const waitingAgain = Promise.withResolvers<void>()
-    f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+    f.frame.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
     f.options.frames.needsRefresh = async (request) => {
       const observed = JSON.parse(
         request.materials.find((item) => item.origin === 'runtime-view')!.text
@@ -398,7 +420,7 @@ test('a text-only waiting response refreshes a completed result even when no exe
   const f = runFixture()
   let revision = 0
   let calls = 0
-  f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+  f.frame.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
   f.options.frames.needsRefresh = async (request) =>
     JSON.parse(request.materials.find((item) => item.origin === 'runtime-view')!.text).revision !==
     revision
@@ -622,8 +644,8 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
   const requests: ModelTurnRequest[] = []
   let logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
   let revision = 0
-  f.options.frames.delta = (body) => `current state ${body}`
-  f.options.frames.project = async () => ({
+  f.frame.delta = (body) => `current state ${body}`
+  f.frame.project = async () => ({
     body: JSON.stringify({ revision }),
     history: structuredClone(logical),
     images: [],
@@ -667,7 +689,7 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
 test('INV-40 accepted provider usage drives growth while calibrated admission remains independent', async () => {
   const f = runFixture()
   const requests: ModelTurnRequest[] = []
-  f.options.frames.project = async () => ({
+  f.frame.project = async () => ({
     body: '{}',
     images: [],
     segment: { id: 'one-segment', index: 1, revision: 0, volumes: 0, turns: requests.length },
@@ -720,7 +742,7 @@ test.each(['overflow', 'forecast', 'irreducible'] as const)(
     let executed = 0
     let pressure = 0
     f.options.frames.policy = { windowTokens: 2000 }
-    f.options.frames.project = async () => ({
+    f.frame.project = async () => ({
       body: '{}',
       images: [],
       segment: { id: `segment-${folds}`, index: folds, revision: 0, volumes: folds, turns: 3 },
@@ -874,7 +896,7 @@ test('INV-51 adding final context status retries a smaller projection before blo
   const f = runFixture()
   let calls = 0
   const budgets: number[] = []
-  f.options.frames.project = async (_view, _signal, maxChars) => {
+  f.frame.project = async (maxChars) => {
     budgets.push(maxChars)
     return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
   }
@@ -1018,7 +1040,7 @@ test.each(['fits', 'needs-finalization'] as const)(
       finalizing = true
     }
     f.options.frames.phase = () => ({ phase: finalizing ? 'finalizing' : 'work', instructions: '' })
-    f.options.frames.project = async (_view, _signal, maxChars) => ({
+    f.frame.project = async (maxChars) => ({
       body: JSON.stringify({ size: maxChars <= 1000 ? 'small' : 'large' }),
       images: [],
     })
@@ -1057,7 +1079,7 @@ test('INV-53 a fitting current projection preserves the history before overflow 
   let folds = 0
   let acknowledged = 0
   f.options.frames.policy = { windowTokens: 3000 }
-  f.options.frames.project = async (_view, _signal, maxChars) => ({
+  f.frame.project = async (maxChars) => ({
     body: JSON.stringify({ required: 'Keep original evidence', optional: 'x'.repeat(maxChars) }),
     history,
     images: [],
@@ -1119,7 +1141,7 @@ test.each([
     let acknowledged = 0
     let finalizing = false
     f.options.frames.policy = { windowTokens: 3000 }
-    f.options.frames.project = async (_view, _signal, maxChars) => {
+    f.frame.project = async (maxChars) => {
       projections.push(maxChars)
       return {
         body: JSON.stringify({
@@ -1210,22 +1232,29 @@ test.each(['default', 0, 0.125, 1] as const)(
       ...f.options.model,
       limits: { contextTokens: 20000, inputTokens: 18000, outputTokens: 100 },
     }
-    f.options.frames = {
-      ...f.options.frames,
-      policy: configuredRatio === 'default' ? undefined : { retainedFrameRatio: configuredRatio },
+    Object.assign(f.frame, {
       async project() {
         return { body: JSON.stringify({ evidence, turn }), images: [], history: [...logical] }
       },
+
       delta: (body) => body,
+
       async reconcile(body, history, previous) {
         const covered =
           previous && history.some((entry) => JSON.stringify(entry).includes(evidence))
         return { body, prompt: `${covered ? 'delta' : 'full'} ${body}` }
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
+      policy: configuredRatio === 'default' ? undefined : { retainedFrameRatio: configuredRatio },
+
       async acknowledge() {
         acknowledged++
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens:
         100 +
@@ -1334,24 +1363,31 @@ test.each(['effective', 'weak', 'repeated', 'unavailable', 'failed', 'noop', 'ca
     let acknowledged = 0
     const cost = mode === 'weak' || mode === 'cancel' ? 2500 : 2000
     f.options.model.limits = { contextTokens: 12000, inputTokens: 10000, outputTokens: 100 }
-    f.options.frames = {
-      ...f.options.frames,
-      policy: { windowTokens: 10000 },
+    Object.assign(f.frame, {
       project: async () => ({
         body: JSON.stringify({ evidence: 'exact protected source', turn, organized }),
         images: [],
         history: [...logical],
         segment: { id: 'same-work-set', index: 1, revision: 1, turns: turn + 1, faults: 0 },
       }),
+
       delta: (body) => body,
+
       reconcile: async (body, _history, previous) => ({
         body,
         prompt: `${previous ? 'delta' : 'full'} ${body}`,
       }),
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
+      policy: { windowTokens: 10000 },
+
       acknowledge: async () => {
         acknowledged++
       },
     }
+
     f.options.model.estimate = async (request) => {
       const states = (request.history ?? []).filter(
         (m) => typeof m.content === 'string' && /^(full|delta) /u.test(m.content)
@@ -1432,8 +1468,7 @@ test('INV-48 visual turns preserve an accepted text prefix without accumulating 
   const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
   const requests: ModelTurnRequest[] = []
   let turn = 0
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     project: async () => ({
       body: JSON.stringify({ turn, stable: 'persistent text evidence' }),
       images: turn
@@ -1449,8 +1484,13 @@ test('INV-48 visual turns preserve an accepted text prefix without accumulating 
         : [],
       history: [...logical],
     }),
+
     delta: (body) => body,
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.model.stream = async function* (request) {
     requests.push(request)
     yield { type: 'text', text: 'accepted' }
@@ -1532,15 +1572,19 @@ test.each(
         precision: 'exact',
         basis: 'fixture',
       })
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       project: async () => ({
         body: JSON.stringify({ turn }),
         images: structuredClone(frames[turn]!),
         history: [...logical],
       }),
+
       delta: (body, previous) => `delta ${JSON.parse(previous).turn} -> ${JSON.parse(body).turn}`,
+    })
+    f.options.frames = {
+      ...f.options.frames,
     }
+
     f.options.model.stream = async function* (request) {
       requests.push(request)
       yield { type: 'text', text: 'accepted' }
@@ -1630,14 +1674,19 @@ test('INV-48 cancellation during local frame accounting cannot dispatch or ackno
   let calls = 0
   let acknowledgements = 0
   let executed = 0
+  Object.assign(f.frame, {
+    project: async () => ({ body: '{}', images: [], history: [] }),
+
+    delta: () => 'delta',
+  })
   f.options.frames = {
     ...f.options.frames,
-    project: async () => ({ body: '{}', images: [], history: [] }),
-    delta: () => 'delta',
+
     acknowledge: async () => {
       acknowledgements++
     },
   }
+
   f.options.model.estimate = async (request) => {
     if (executed && !request.history?.length) {
       cancel.abort()
@@ -1686,8 +1735,7 @@ test.each([
   ]
   let turn = 0
   const requests: ModelHistoryMessage[][] = []
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     async project() {
       return {
         body: JSON.stringify({ turn }),
@@ -1696,10 +1744,15 @@ test.each([
         history: logical.map((item) => ({ ...item })),
       }
     },
+
     delta() {
       return `delta frame ${turn}`
     },
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.protocol = {
     open: () => ({
       instructions: 'fixture',
@@ -1758,8 +1811,7 @@ test.each([
     let acknowledgements = 0
     const requests: Array<Parameters<NonNullable<typeof f.options.frames.acknowledge>>[0]> = []
     const calls: Array<{ previous?: string; retained: boolean; body: string }> = []
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       async project() {
         return {
           body: JSON.stringify({ turn }),
@@ -1768,20 +1820,27 @@ test.each([
           history: logical,
         }
       },
+
       delta() {
         return 'old delta'
       },
+
       async reconcile(body, history, previous) {
         const retained = history.length > logical.length
         const resolved = JSON.stringify({ ...JSON.parse(body), retained })
         calls.push({ previous, retained, body: resolved })
         return { body: resolved, prompt: `actual ${resolved}` }
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
       async acknowledge(request) {
         acknowledgements++
         expect(request.compiledPrompt).toContain(request.materials[0]!.text)
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens: fallback && turn === 1 && (request.history?.length ?? 0) > logical.length ? 9500 : 1,
       precision: 'exact',
@@ -1878,7 +1937,7 @@ test('INV-42 fitting requests expose repeated material gaps to the main model wi
   const f = runFixture()
   const reasons: string[] = []
   const overloads: Array<string | undefined> = []
-  f.options.frames.project = async () => ({
+  f.frame.project = async () => ({
     body: '{}',
     images: [],
     segment: { id: 'segment', index: 1, revision: 0, volumes: 0, turns: 4, faults: 3 },
@@ -3488,8 +3547,7 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
   const requests: Array<ReturnType<typeof modelRequestEncoder.messages>> = []
   const deltas: Array<{ body: string; previous: string }> = []
   f.options.limits = { ...f.options.limits, turns: 8 }
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     async project() {
       const body = JSON.stringify({ turn, stable: 'same' })
       return {
@@ -3501,11 +3559,16 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
         ),
       }
     },
+
     delta(body, previous) {
       deltas.push({ body, previous })
       return `delta frame ${JSON.parse(body).turn}`
     },
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.protocol = {
     open: () => ({
       instructions: 'fixture',
@@ -3568,8 +3631,7 @@ test.each(['available', 'forecast', 'capacity'] as const)(
     const requests: ModelTurnRequest[] = []
     let turn = 0
     let reclaimed = 0
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       async project() {
         return {
           body: JSON.stringify({ evidence, turn }),
@@ -3578,18 +3640,25 @@ test.each(['available', 'forecast', 'capacity'] as const)(
           history: [...logical],
         }
       },
+
       delta() {
         return `Current step ${turn}; evidence is in the retained history.`
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
       async retire() {
         reclaimed++
         return false
       },
+
       async fold() {
         reclaimed++
         return false
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens:
         mode === 'capacity' && turn === 1 && (request.history?.length ?? 0) > logical.length
@@ -3873,6 +3942,7 @@ test('frame cycle tries local budgets but publishes only its selected final body
   f.options.frames.beginFrame = async () => {
     preparations++
     return {
+      retainFrames: false,
       project: async (maxChars) => {
         budgets.push(maxChars)
         return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
@@ -3883,7 +3953,7 @@ test('frame cycle tries local budgets but publishes only its selected final body
       },
     }
   }
-  f.options.frames.project = async () => {
+  f.frame.project = async () => {
     throw Error('legacy projection must not run')
   }
   f.options.model.estimate = async (request) => ({
