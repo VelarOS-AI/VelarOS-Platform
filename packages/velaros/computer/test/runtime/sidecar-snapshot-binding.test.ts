@@ -55,7 +55,6 @@ function createManager(respond: (request: ComputerHelperRequest) => ComputerHelp
       runtimeDir: '/computer',
       packageRoot: '/computer',
       version: 'test',
-      bundledVenv: true,
     }),
     spawnProcess: () => {
       process = new FakeProcess(respond)

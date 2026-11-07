@@ -68,6 +68,8 @@ import { standardModules } from './StandardModules.js'
 export interface VelarosRuntime {
   /** 分页读取主线或持久归属下的支线原始上下文、响应、脚本与回执；不唤醒模型。 */
   trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage>
+  /** 只读根会话当前任务的支线目录，不重建历史追踪正文。 */
+  traceBranches(rootSessionId: string): Promise<ActTracePage['branches']>
   /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
   getSession(id: string): Optional<VelarosSession>
   /** 打开或恢复持久会话，先原子核对工作区绑定；同一实例内相同 id 复用句柄。 */
@@ -880,6 +882,11 @@ class ComposedRuntime implements VelarosRuntime {
   public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
+  }
+
+  public async traceBranches(rootSessionId: string): Promise<ActTracePage['branches']> {
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
+    return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).branches()
   }
 
   public getSession(id: string) {

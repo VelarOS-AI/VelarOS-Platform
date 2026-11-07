@@ -64,7 +64,7 @@ export function shutdown() {
 
 - 每个动作先查可用性：helper 没装、被停用、拉不起来或缺系统权限时在做事之前抛 `PERMISSION`，message 引导用户，并明说不要自己用 pip 装依赖；宿主不给 `attachImage` 时 `screenshot` 抛 `PLATFORM`。
 - 按截图量的坐标必须带同一次截图的 `snapshotId`，全局坐标写 `coordinateSpace: 'global'` 且不带它，缺了或混用抛 `VALIDATION`；主屏、分辨率、缩放或原点变了，helper 拒绝旧 `snapshotId`，要重新截图。
-- helper 只认按 `ComputerResourceLayout` 装好的平台包（`<资源根>/computer-use/computeruse-<平台>-<架构>/`）里的脚本加自包含 Python（兼容 `venv` 布局），缺一样就判资源未就绪，不回落系统 Python、不 `pip install`；开发时可用 `VELAROS_COMPUTER_PYTHON` 指定解释器，`VELAROS_COMPUTER_RESOURCE_ROOT` 一设就整组接管资源根。
+- helper 只认按 `ComputerResourceLayout` 装好的平台包（`<资源根>/computer-use/computeruse-<平台>-<架构>/`）里的脚本加自包含 Python，缺一样就判资源未就绪，不回落系统 Python、不 `pip install`；开发时可用 `VELAROS_COMPUTER_PYTHON` 指定解释器，`VELAROS_COMPUTER_RESOURCE_ROOT` 一设就整组接管资源根。
 - 宿主的安装器从 `bundledSourceRoot()` 取源（包里的 `computer/runtime/`，资产挪到别处时用 `VELAROS_COMPUTER_RUNTIME_SOURCE_ROOT` 指路）：把脚本复制进平台包、携带固定版本的 Python，并在构建时按本平台的 `requirements*.txt` 安装依赖，按 `ComputerHelperVersion` 判断要不要重装。
 - 定位不缓存，每次现查磁盘，用户停用立刻生效；`resolve()` 尊重停用开关，`resolveIgnoringDisabled()` 只答物理上装没装。
 - 运行时由宿主持有：helper 死了下一次调用重新拉起；`dispose()` 之后不能复用，直接调它报 `COMPUTER_SIDECAR_DISPOSED`，要用就重新造一份。helper 超时没回应抛 `TIMEOUT`，其余运行时失败的码见 `ComputerErrorCodes`。

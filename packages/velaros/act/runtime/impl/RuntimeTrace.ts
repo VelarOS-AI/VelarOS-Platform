@@ -52,6 +52,8 @@ import { ActRuntimeTuning } from '../utils/tuning.js'
 export interface RuntimeTraceApi {
   /** 按持久归属读取根会话或已关闭支线。 */
   page(input?: ActTraceQuery): Promise<ActTracePage>
+  /** 只读当前任务的支线目录，不加载模型请求与历史正文。 */
+  branches(): Promise<ActTracePage['branches']>
   /** 在当前会话内解析模型回合，并按总预算读取证据。 */
   read(turnId: string, maxChars?: number): Promise<ActTurnTrace>
 }
@@ -65,6 +67,31 @@ export class RuntimeTrace implements RuntimeTraceApi {
     private readonly storage: ContextStorage,
     private readonly journal: ContextInvocationJournalApi
   ) {}
+
+  public async branches(): Promise<ActTracePage['branches']> {
+    const root = await this.storage.selectSnapshot(this.sessionId, [
+      { titlePrefix: 'model-tool:node:', latestPerTitle: true },
+    ])
+    const bindings = await this.readBindings(root?.records ?? [])
+    return bindings.filter((item) => item.rootTaskId === root?.metadata.task?.id)
+  }
+
+  private async readBindings(records: readonly ContextRecord[]): Promise<ModelToolBinding[]> {
+    const nodes = [
+      ...new Map(
+        records
+          .filter((record) => record.title.startsWith('model-tool:node:'))
+          .map((record) => [record.title, record])
+      ).values(),
+    ]
+    const bindings: ModelToolBinding[] = []
+    for (const record of nodes) {
+      const body = await this.storage.get(this.sessionId, record.objectId)
+      if (isNull(body)) throw new AppError('NOT_FOUND', '模型工具归属记录原文缺失')
+      bindings.push(JSON.parse(body))
+    }
+    return bindings
+  }
 
   public async page(input: ActTraceQuery = {}): Promise<ActTracePage> {
     const {
@@ -102,19 +129,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       ])
       root = selected ? { ...selected.metadata, records: selected.records } : null
     } else root = await this.storage.load(this.sessionId)
-    const nodes = [
-      ...new Map(
-        (root?.records ?? [])
-          .filter((record) => record.title.startsWith('model-tool:node:'))
-          .map((record) => [record.title, record])
-      ).values(),
-    ]
-    const bindings: ModelToolBinding[] = []
-    for (const record of nodes) {
-      const body = await this.storage.get(this.sessionId, record.objectId)
-      if (isNull(body)) throw new AppError('NOT_FOUND', '模型工具归属记录原文缺失')
-      bindings.push(JSON.parse(body))
-    }
+    const bindings = await this.readBindings(root?.records ?? [])
     if (
       sessionId !== this.sessionId &&
       !bindings.some(

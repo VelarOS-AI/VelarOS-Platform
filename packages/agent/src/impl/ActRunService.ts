@@ -331,8 +331,7 @@ class ActRunService implements ActRunServiceApi {
     ) as ActRunSnapshot
     if (['thinking', 'executing'].includes(value.status) || !isEmpty(value.pending))
       return { ...value, status: 'interrupted', pending: [] }
-    // 旧版本记下的 needs_reconcile 已经没有这一态：那一轮没做完就停了
-    return (value.status as string) === 'needs_reconcile' ? { ...value, status: 'failed' } : value
+    return value
   }
   public async events(after = 0, limit = AgentTuning.eventPage): Promise<readonly ActEvent[]> {
     if (

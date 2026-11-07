@@ -36,7 +36,7 @@ export const ComputerResourceLayout = Object.freeze({
 export const ComputerErrorCodes = Object.freeze({
   /** sidecar 已释放，不再接受任何请求；宿主要重新创建一个运行时。 */
   sidecarDisposed: 'COMPUTER_SIDECAR_DISPOSED',
-  /** 当前平台上找不到已安装的桌面控制平台包（helper 脚本或自带 venv 缺失）。 */
+  /** 当前平台上找不到已安装的桌面控制平台包（helper 脚本或自包含 Python 缺失）。 */
   helperMissing: 'COMPUTER_HELPER_MISSING',
   /** 拉起 helper 子进程本身失败（解释器不存在、权限不足等）。 */
   sidecarSpawnFailed: 'COMPUTER_SIDECAR_SPAWN_FAILED',
@@ -92,7 +92,7 @@ export const ComputerEnvironmentVariables = Object.freeze({
   python: {
     name: 'VELAROS_COMPUTER_PYTHON',
     direction: 'input',
-    description: '显式指定 Python 解释器，绕开「只认平台包自带 venv」这道门；开发者自证用。',
+    description: '显式指定 Python 解释器，绕开「只认平台包自包含 Python」这道门；开发者自证用。',
   },
   runtimeSourceRoot: {
     name: 'VELAROS_COMPUTER_RUNTIME_SOURCE_ROOT',

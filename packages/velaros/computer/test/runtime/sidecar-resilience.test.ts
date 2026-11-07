@@ -14,7 +14,6 @@ const HelperSpec: ComputerHelperLaunchSpec = {
   runtimeDir: '/fake',
   packageRoot: '/fake',
   version: 'test',
-  bundledVenv: true,
 }
 
 const Handshake = String.raw`printf '{"id":0,"ok":true,"result":{"ready":true}}\n'`

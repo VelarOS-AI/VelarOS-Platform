@@ -25,27 +25,24 @@ afterEach(async () => {
   }
 })
 
-/** 在一个临时根里摆出一份「已安装」的平台包：helper 脚本 + 自带 venv + package.json。 */
+/** 在一个临时根里摆出一份「已安装」的平台包：helper 脚本 + 自包含 Python + package.json。 */
 async function installFakePackage(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'velaros-computer-resources-'))
   createdRoot = root
   const packageRoot = join(root, 'computer-use', `computeruse-${process.platform}-${process.arch}`)
-  const venvDirectory = process.platform === 'win32' ? 'Scripts' : 'bin'
-  const venvPython = join(
-    packageRoot,
-    'venv',
-    venvDirectory,
-    process.platform === 'win32' ? 'python.exe' : 'python'
-  )
-  await mkdir(join(packageRoot, 'venv', venvDirectory), { recursive: true })
-  await writeFile(venvPython, '')
+  const python =
+    process.platform === 'win32'
+      ? join(packageRoot, 'python', 'python.exe')
+      : join(packageRoot, 'python', 'bin', 'python3')
+  await mkdir(dirname(python), { recursive: true })
+  await writeFile(python, '')
   await writeFile(join(packageRoot, scriptName ?? ''), '')
   await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '9.9.9' }))
   return root
 }
 
 describe('helper 定位器的资源来源', () => {
-  supportedTest('优先使用应用自带的可迁移 Python', async () => {
+  supportedTest('使用当前平台包的自包含 Python', async () => {
     const root = await installFakePackage()
     const packageRoot = join(
       root,
@@ -56,8 +53,6 @@ describe('helper 定位器的资源来源', () => {
       process.platform === 'win32'
         ? join(packageRoot, 'python', 'python.exe')
         : join(packageRoot, 'python', 'bin', 'python3')
-    await mkdir(dirname(python), { recursive: true })
-    await writeFile(python, '')
     const locator = createComputerHelperLocator({ resourceRoots: [root] })
     expect(locator.resolve()?.pythonCommand).toBe(python)
   })
@@ -72,7 +67,6 @@ describe('helper 定位器的资源来源', () => {
     const locator = createComputerHelperLocator({ resourceRoots: [root], resources })
 
     expect(locator.resolve()?.version).toBe('9.9.9')
-    expect(locator.resolveIgnoringDisabled()?.bundledVenv).toBe(true)
   })
 
   supportedTest('用户停用时 resolve 返回 null，但「装了没有」仍答得出来', async () => {

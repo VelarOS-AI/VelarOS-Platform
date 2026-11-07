@@ -133,6 +133,7 @@ Node 基础提示词只提供运行环境、通用执行和能力发现说明；
 - `environment` 返回宿主环境条目（如 `{ os: 'macOS 26.3.1 (arm64)' }`），每帧和运行时自己读的当地时间一起放进 `runtime.environment`：`time` 是带时区偏移的 ISO 时间，`localTime` 带星期，`timezone` 是时区名，这三项宿主不能覆盖。它在帧尾，不影响前缀缓存；主会话、子任务和专项模型工具都会带上，回调抛错或返回的不是文本键值时这一帧只给时间。
 - `runtime.inventory` 从首帧开始提供当前授权能力的公共导入名与用途、基础包和环境已安装 npm 的实际版本、所选 Skill 的用途。详细接口、模板和包文档从运行时目录按需读取。清单每帧刷新，安装、升级、回滚和删除进入下一模型帧；工作区同名依赖以实际执行入口解析为准。清单计入动态上下文预算，`totals` 保留完整数量，超过展示数量时按目录补读；读取失败给诊断，其他能力照常可见。自定义 Node 宿主的 `acquireRuntime` 也用于读取清单，读取结束释放租约，此时不启动进程。
 - `createRuntime` 成功后接管注入的 `storage`，`runtime.close()` 时关闭，初始化失败时连接仍归调用方；`session.close()` 只关这个会话，同 id 再 `openSession` 恢复持久数据；`runtime.close()` 重复调用安全。
+- `runtime.traceBranches(rootSessionId)` 只读当前任务的支线目录，不读取模型请求或重建历史正文；计账轮询用这个入口。
 - `runtime.trace(rootSessionId, query)` 分页读原始请求、回复、脚本与回执，支线关闭后也能读，不唤醒模型；运行中的回合要重读。每个回合的 `executions` 按声明顺序列出这一回合派发的 execute：`position` 对应该回合第几个 execute 程序事件，`status` 与 `failure`（带出错行）由持久结果和调用回执推出，租约带进这一帧的旧结果不在里面。宿主画脚本卡直接用它，不要解析 `records` 里的内部记录。
 - Trace 的 `accounting.modelRequests` 只统计本页请求；`verificationScope: 'session'` 表示核查费用是该会话快照内持久 attempt 的累计总账，包含首请求前、运行终态后和无模型请求的 probe。回合关联只用于定位。同会话各页的总账不可相加，跨快照取最新总账或按 charge ID 去重；未知覆盖保持未知，参考报价与实际收费分开。
 - `onMetric` 只收不含正文的计量，回调要快速返回，抛错不影响业务结果。

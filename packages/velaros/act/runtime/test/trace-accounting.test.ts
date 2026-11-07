@@ -355,3 +355,42 @@ test('snapshot capture is a fresh journal fact even when its old derivation is r
   // 旧派生的回执只用于解释原结果状态，不被当成本轮调用交付。
   expect(f.lookups.filter((id) => id === oldId)).toHaveLength(1)
 })
+
+test('branch directory reads current-task ownership without loading request history', async () => {
+  const f = fixture()
+  f.state.task = { id: 'current-task' } as NonNullable<ContextState['task']>
+  const current = {
+    sessionId: 'current-child',
+    parentSessionId: 's',
+    rootSessionId: 's',
+    rootTaskId: 'current-task',
+    kind: 'agent' as const,
+    depth: 1,
+    activationId: 'current',
+    deadline: 1,
+    status: 'closed' as const,
+  }
+  const previous = { ...current, sessionId: 'previous-child', rootTaskId: 'previous-task' }
+  const bindings = [
+    f.add('model-tool:node:current', current),
+    f.add('model-tool:node:previous', previous),
+  ]
+  f.add('model-request', { request: 'history must not be loaded' })
+  const port = {
+    ...f.storage,
+    load: async () => {
+      throw new Error('directory query loaded full history')
+    },
+    selectSnapshot: async (id: string, selections: unknown) => {
+      expect(id).toBe('s')
+      expect(selections).toEqual([{ titlePrefix: 'model-tool:node:', latestPerTitle: true }])
+      const { records: _records, ...metadata } = f.state
+      return { metadata, records: bindings }
+    },
+    get: async (id: string, objectId: string) => {
+      expect(bindings.some((record) => record.objectId === objectId)).toBe(true)
+      return f.storage.get(id, objectId)
+    },
+  }
+  expect(await new RuntimeTrace('s', port, f.journal).branches()).toEqual([current])
+})

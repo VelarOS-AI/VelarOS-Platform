@@ -482,7 +482,7 @@ export const GovernedModules = [
       ['ComputerOperations.ts'],
       // 运行时：拉起 Python helper、JSON Lines 协议、按 id 关联请求
       ['ComputerSidecarManager.ts'],
-      // helper 定位：按平台与资源根找脚本与自带 venv
+      // helper 定位：按平台与资源根找脚本与自包含 Python
       ['ComputerHelperLocator.ts'],
     ],
     invariants: 'computer/spec/invariants.md',
