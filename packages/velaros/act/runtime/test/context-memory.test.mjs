@@ -491,72 +491,7 @@ test('generated material read hints satisfy the live memory contract and recall 
   }
 })
 
-test('INV-79 omitted verification details retain trusted current, historical and unknown counts', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Check current artifacts' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 12000 })
-  let token = '1'
-  let unknown = false
-  const spec = {
-    id: 'structure',
-    scope: 'whole-artifact/schema-1',
-    verifierId: 'schema',
-    verifierVersion: '1',
-    probe: async () =>
-      unknown
-        ? { status: 'unknown', cost: { coverage: 'complete', charges: [] } }
-        : {
-            status: 'versioned',
-            providerId: 'atomic-host',
-            token,
-            authorization: 'auth',
-            artifacts: [{ identity: 'artifact.json', contentHash: `content-${token}` }],
-            cost: { coverage: 'complete', charges: [] },
-          },
-  }
-  await f.session.view.complete({
-    verify: async (_view, _signal, checks) => ({
-      verified: false,
-      reason: 'Other delivery checks remain',
-      report: {
-        scope: 'Whole artifact',
-        checkedAt: new Date().toISOString(),
-        checks: [
-          await checks.check(spec, async () => ({
-            label: 'A long exact check label 😀 '.repeat(25),
-            status: 'passed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-        ],
-      },
-    }),
-  })
-  const original = await f.session.view.readCompletion()
-  for (const status of ['current', 'historical', 'unknown']) {
-    if (status === 'historical') token = '2'
-    if (status === 'unknown') unknown = true
-    const view = await f.session.view.build({ maxChars: 12000 })
-    const frame = await f.memory.project(view, undefined, [], signal, 12000)
-    const verification = JSON.parse(frame.body).partitions.runtime.verification
-    assert.deepEqual(verification.checks, [])
-    assert.equal(verification.omittedChecks, 1)
-    assert.deepEqual(verification.counts, { passed: 1, failed: 0, unknown: 0 })
-    assert.deepEqual(
-      verification.applicabilityCounts,
-      Object.fromEntries(
-        ['current', 'historical', 'unknown'].map((item) => [item, +(item === status)])
-      )
-    )
-    assert(verification.applicabilityCheckedAt)
-    assert(frame.prompt.includes('applicabilityCounts'))
-    assert.deepEqual(await f.session.view.readCompletion(), original)
-  }
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 verification diagnostics retain original indexes and applicability under a fixed budget', () => {
+test('INV-83 verification diagnostics retain original indexes under a fixed budget', () => {
   const report = {
     scope: 'Whole synthetic artifact',
     checkedAt: '2026-10-02T01:00:00.000Z',
@@ -575,12 +510,6 @@ test('INV-83 verification diagnostics retain original indexes and applicability 
       { id: 'unknown-last', label: 'Dependency check has no result', status: 'unknown' },
     ],
   }
-  const applicability = {
-    checkedAt: report.checkedAt,
-    checks: report.checks.map((_, index) => ({
-      status: index === 24 ? 'historical' : index === 25 ? 'unknown' : 'current',
-    })),
-  }
   const identity = {
     ref: { sessionId: 's', id: 'report-ref' },
     taskId: 'task',
@@ -588,15 +517,11 @@ test('INV-83 verification diagnostics retain original indexes and applicability 
     counts: { passed: 24, failed: 1, unknown: 1 },
   }
   const original = JSON.stringify(report)
-  const projected = memoryVerificationProjection(identity, report, applicability, 2048)
+  const projected = memoryVerificationProjection(identity, report, 2048)
   assert(JSON.stringify(projected).length <= 2048)
   assert.deepEqual(
     projected.checks.slice(0, 2).map((check) => check.index),
     [24, 25]
-  )
-  assert.deepEqual(
-    projected.checks.slice(0, 2).map((check) => check.applicability),
-    ['historical', 'unknown']
   )
   assert.equal(projected.checks[0].id, 'failed-last')
   assert.equal(projected.checks[0].artifact.revision, 'old')
@@ -628,7 +553,7 @@ test('INV-83 long diagnostics and tiny budgets retain omission facts without hid
     counts: { passed: 1, failed: 2, unknown: 1 },
   }
   const original = JSON.stringify(report)
-  const normal = memoryVerificationProjection(identity, report, undefined, 2048)
+  const normal = memoryVerificationProjection(identity, report, 2048)
   assert(JSON.stringify(normal).length <= 2048)
   assert.deepEqual(
     normal.checks.slice(0, 3).map((check) => check.index),
@@ -640,7 +565,7 @@ test('INV-83 long diagnostics and tiny budgets retain omission facts without hid
   assert.equal(normal.checks[0].id, undefined)
   assert(normal.checks.every((check) => JSON.stringify(check).length <= 512))
   for (const budget of [0, 80, 300, 700]) {
-    const projected = memoryVerificationProjection(identity, report, undefined, budget)
+    const projected = memoryVerificationProjection(identity, report, budget)
     assert.deepEqual(projected.ref, identity.ref)
     assert.deepEqual(projected.counts, identity.counts)
     assert.equal(projected.omittedChecks, report.checks.length - projected.checks.length)
@@ -701,72 +626,6 @@ test('INV-83 real completion reports remain immutable, readable and task-scoped 
     f.memory.readMaterial(verification.ref, 0, 60000, signal),
     (error) => error.code === 'SCOPE_MISMATCH'
   )
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 real applicability follows the original report index when failed checks move first', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Verify synthetic versions' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 24000 })
-  let failedToken = 'old'
-  const spec = (id) => ({
-    id,
-    scope: `synthetic/${id}`,
-    verifierId: 'synthetic-versioned',
-    verifierVersion: '1',
-    probe: async () => ({
-      status: 'versioned',
-      providerId: 'synthetic-provider',
-      token: id === 'failed-version' ? failedToken : 'unchanged',
-      authorization: 'synthetic-authority',
-      artifacts: [{ identity: id, contentHash: id === 'failed-version' ? failedToken : 'same' }],
-      cost: { coverage: 'complete', charges: [] },
-    }),
-  })
-  await f.session.view.complete({
-    verify: async (_view, _signal, checks) => ({
-      verified: false,
-      reason: 'Synthetic failures need repair',
-      report: {
-        scope: 'Synthetic versions',
-        checkedAt: new Date().toISOString(),
-        checks: [
-          await checks.check(spec('passed-version'), async () => ({
-            label: 'Unchanged successful check',
-            status: 'passed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-          ...Array.from({ length: 24 }, (_, index) => ({
-            label: `Earlier success ${index} ${'p'.repeat(80)}`,
-            status: 'passed',
-          })),
-          await checks.check(spec('failed-version'), async () => ({
-            label: 'Failed artifact was revised after checking',
-            status: 'failed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-          { label: 'Unavailable independent check', status: 'unknown' },
-        ],
-      },
-    }),
-  })
-  const original = await f.session.view.readCompletion()
-  failedToken = 'new'
-  const view = await f.session.view.build({ maxChars: 100000 })
-  const frame = await f.memory.project(view, undefined, [], signal, 100000)
-  const verification = JSON.parse(frame.body).partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => check.index),
-    [25, 26]
-  )
-  assert.equal(verification.checks[0].applicability, 'historical')
-  assert.equal(verification.checks[1].applicability, 'unknown')
-  assert.equal(verification.checks.find((check) => check.index === 0).applicability, 'current')
-  assert.deepEqual(verification.applicabilityCounts, { current: 1, historical: 1, unknown: 25 })
-  assert.deepEqual(await f.session.view.readCompletion(), original)
   assert.equal(f.requests.length, 0)
 })
 
@@ -2550,64 +2409,6 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.doesNotMatch(next.history.at(-1).content, /当次源码/)
   assert.equal(next.history.at(-1).cacheBreakpoint, true)
   assert.equal(await memory.fold('runway', 24000, signal), false)
-})
-
-test('INV-53 batched execution gets a volume narrative even when it uses few model turns', async (t) => {
-  for (const { label, results, reason, note, expected } of [
-    { label: 'many results in one response', results: 6, reason: 'runway', expected: true },
-    { label: 'small batch', results: 5, reason: 'runway', expected: false },
-    { label: 'explicit organization', results: 6, reason: 'organize', expected: false },
-    {
-      label: 'progress already recorded',
-      results: 6,
-      reason: 'runway',
-      note: true,
-      expected: false,
-    },
-  ])
-    await t.test(label, async (t) => {
-      const f = await fixture(t)
-      const programs = new ProgramContext('s', f.session.context, f.storage)
-      const recent = new RecentContext('s', f.session.context, f.storage)
-      const view = {
-        id: 'batch-frame',
-        scope: { sessionId: 's', revision: 0 },
-        goals: [],
-        capsule: {},
-        mandatory: [],
-        evidence: [],
-        gaps: [],
-        readSet: [],
-        progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
-      }
-      await f.memory.project(view, undefined, [], signal, 24000)
-      await f.session.context.append({
-        kind: 'assistant',
-        body: 'Read independent sources in one batch.',
-      })
-      for (let index = 0; index < results; index++)
-        await archiveResult(f, programs, `source-${index}`)
-      if (note)
-        await f.session.context.append({
-          kind: 'audit',
-          title: 'workspace:note:progress',
-          body: JSON.stringify({
-            key: 'progress',
-            revision: 1,
-            body: 'Current findings are recorded.',
-          }),
-        })
-      // 最近窗口留在下一段；批量执行整体进入将被压缩的那一卷。
-      for (let index = 0; index < 8; index++)
-        await f.session.context.append({ kind: 'assistant', body: `Recent progress ${index}` })
-      assert(await f.memory.fold(reason, 24000, signal))
-      const [sealed] = await recent.volumes(signal)
-      assert.equal(sealed.volume.turns, 1)
-      assert.equal(sealed.volume.results, results)
-      assert.deepEqual(await f.memory.narration(signal), expected ? sealed.ref : null)
-      assert.equal(await f.memory.narration(signal), null, 'the automatic intent is consumed once')
-      assert.equal(f.requests.length, 0, 'folding records an intent without invoking a model')
-    })
 })
 
 test('INV-52 current constraints and unresolved items remain separate from immutable history while task bodies stay chronological', async (t) => {

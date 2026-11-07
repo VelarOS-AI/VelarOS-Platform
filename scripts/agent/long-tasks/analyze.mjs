@@ -457,10 +457,6 @@ async function main() {
     scriptactCapabilities: manifest.scriptactCapabilities ?? 'on-demand',
     scriptactTaskMode: manifest.scriptactTaskMode ?? 'request',
     scriptactEditingStrategy: manifest.scriptactEditingStrategy ?? 'adaptive',
-    completionReview: {
-      configured: Boolean(manifest.desktop || manifest.runtimeCompletion),
-      artifactAdapter: manifest.runtimeCompletion ?? null,
-    },
     split: manifest.task.split,
     model: manifest.model,
     contextTokens: manifest.contextTokens,

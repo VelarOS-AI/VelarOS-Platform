@@ -32,8 +32,6 @@ import type {
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
-  ActVerificationAttemptSummary,
-  ActVerificationCostSummary,
   TraceChildPhase,
 } from '../types/trace.js'
 import type { TraceReadState } from '../types/trace-read.js'
@@ -42,11 +40,7 @@ import {
   executionOutcome,
   executionProcessOutput,
 } from '../utils/execution-outcome.js'
-import {
-  modelAccounting,
-  summarizeVerificationAttempt,
-  summarizeVerificationCosts,
-} from '../utils/trace-accounting.js'
+import { modelAccounting } from '../utils/trace-accounting.js'
 import {
   childAnswerText,
   summarizeInvocation,
@@ -101,7 +95,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 同步存储的 async 方法只产生微任务；每页先让 IO 和取消回调得到运行机会。
     await TimerScope.sleep(0)
     let root: Nullable<ContextState>
-    if (sessionId !== this.sessionId && this.storage.selectSnapshot) {
+    if (sessionId !== this.sessionId) {
       // 支线只需要根的当前归属目录，不能为每一页重复解析根的全部历史。
       const selected = await this.storage.selectSnapshot(this.sessionId, [
         { titlePrefix: 'model-tool:node:', latestPerTitle: true },
@@ -195,8 +189,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
           inflight: turns.filter((turn) => turn.modelAccounting.usage.coverage === 'inflight')
             .length,
         },
-        verificationScope: 'session',
-        verificationCost: await this.verificationCost(snapshot),
       },
       nextAfter: requests.some((record) => record.sequence > cursor) ? cursor : null,
       snapshotVersion: toNullable(snapshot?.version),
@@ -307,45 +299,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
     await TimerScope.sleep(0)
     const snapshot = await this.storage.load(this.sessionId)
     return this.readSnapshot(turnId, maxChars, snapshot)
-  }
-
-  private async verificationCost(
-    snapshot: Nullable<ContextState>
-  ): Promise<ActVerificationCostSummary> {
-    const attempts = new Map<string, Array<{ value: unknown; ref: ContextRecord['ref'] }>>()
-    let incomplete = false
-    for (const record of snapshot?.records ?? []) {
-      if (!record.title.startsWith('task:verification:')) continue
-      const identity = /^(task:verification:.+):(started|settled|late-result)$/u.exec(
-        record.title
-      )?.[1]
-      const body = await this.storage.get(record.ref.sessionId, record.objectId)
-      if (!identity || isNull(body)) {
-        incomplete = true
-        continue
-      }
-      let value: unknown
-      try {
-        value = JSON.parse(body)
-      } catch (error) {
-        incomplete = true
-        this.log.debug('核查总账事实正文无法解释', {
-          ref: record.ref,
-          error: AppError.getMessage(error),
-        })
-        continue
-      }
-      const events = attempts.get(identity) ?? []
-      events.push({ value, ref: record.ref })
-      attempts.set(identity, events)
-    }
-    const costs: ActVerificationCostSummary[] = []
-    for (const events of attempts.values()) {
-      const summary = summarizeVerificationAttempt(events)
-      if (!summary || summary.records.length !== events.length) incomplete = true
-      if (summary) costs.push(summary.cost)
-    }
-    return summarizeVerificationCosts(costs, incomplete)
   }
 
   private async readSnapshot(
@@ -597,32 +550,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
       }
     for (const record of records)
       if ([...executions].some((id) => record.title === `script:${id}:result`)) select(record)
-    // 核查 attempt 归最初 started 的请求窗口；迟到阶段始终回到原 attempt，不归到当前任务或当前请求。
-    const verification: ActVerificationAttemptSummary[] = []
-    const verificationStarts = records.filter(
-      (record) =>
-        record.title.startsWith('task:verification:') &&
-        record.title.endsWith(':started') &&
-        record.sequence > requestRecord.sequence &&
-        record.sequence < boundary
-    )
-    for (const start of verificationStarts) {
-      const prefix = start.title.slice(0, -'started'.length)
-      const events: Array<{ record: ContextRecord; value: unknown }> = []
-      for (const record of records.filter((item) => item.title.startsWith(prefix))) {
-        const body = await raw(record)
-        events.push({ record, value: isNull(body) ? undefined : JSON.parse(body) })
-      }
-      const summary = summarizeVerificationAttempt(
-        events.map(({ record, value }) => ({ ref: record.ref, value }))
-      )
-      if (!summary) {
-        gaps.push(`核查尝试无法解释：${start.ref.id}`)
-        continue
-      }
-      verification.push(summary)
-      for (const { record } of events) select(record)
-    }
     // 请求显式关联准备快照；旧请求没有来源时不猜测最近清单。
     for (const ref of requestRecord.sources)
       if (ref.sessionId === this.sessionId) select(byRef(ref.id))
@@ -661,9 +588,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
       // 正文预算耗尽后只核对存在性；不能为返回空字符串再加载整份历史租约。
       // 身份、状态等解析所需的 raw 仍完整读取，已有缓存也保留其缺失事实。
-      const presenceOnly = remaining === 0 && !cache.has(record.ref.id) && !!this.storage.has
+      const presenceOnly = remaining === 0 && !cache.has(record.ref.id)
       const body = presenceOnly
-        ? (await this.storage.has!(this.sessionId, record.objectId))
+        ? (await this.storage.has(this.sessionId, record.objectId))
           ? ''
           : null
         : await raw(record)
@@ -910,10 +837,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
         firstTextMs: toNullable(decoded?.timing?.firstTextMs),
       },
       modelAccounting: accounting,
-      verification: {
-        attempts: verification,
-        cost: summarizeVerificationCosts(verification.map((attempt) => attempt.cost)),
-      },
       request: requestTrace,
       requestSummary,
       response: responseTrace,

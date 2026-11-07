@@ -1,4 +1,4 @@
-// 同一正式 Runtime 上对照动作接口、模型辅助整理和独立复核；完整保留失败、用量及费用覆盖。
+// 同一正式 Runtime 上对照动作接口和模型辅助整理；完整保留失败、用量及费用覆盖。
 import assert from 'node:assert/strict'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
@@ -22,20 +22,17 @@ import { cases, development, suiteHash } from './cases.mjs'
 import { awaitGatewaySettlement } from './settlement.mjs'
 
 const execute = promisify(execFile)
-const [snapshotArg, artifactSourceArg, outputArg, credentialsPath, split = 'validation'] =
-  process.argv.slice(2)
-assert(snapshotArg && artifactSourceArg && outputArg && credentialsPath)
+const [snapshotArg, outputArg, credentialsPath, split = 'validation'] = process.argv.slice(2)
+assert(snapshotArg && outputArg && credentialsPath)
 assert(['development', 'validation'].includes(split))
 const snapshot = await realpath(resolve(snapshotArg)),
   output = resolve(outputArg)
-const artifactSourcePath = await realpath(resolve(artifactSourceArg))
 const imported = (path) => import(pathToFileURL(join(snapshot, 'packages', path)).href)
 const { createRuntime, createNodeExecutionEnvironment } = await imported(
   'velaros/dist/act/runtime/index.js'
 )
 const { createLocalShellHost } = await imported('velaros/dist/execution/local.js')
 const modelPackage = await imported('model/dist/index.js')
-const { WorkspaceCompletionArtifacts } = await import(pathToFileURL(artifactSourcePath).href)
 const credentials = JSON.parse(await readFile(credentialsPath, 'utf8')).chat
 assert(credentials.apiKey && credentials.baseURL)
 const redact = (error) => String(error).replaceAll(credentials.apiKey, '[redacted]')
@@ -52,10 +49,9 @@ const config = {
   providerCapabilities: { openaiExplicitCacheBreakpoints: false },
 }
 const arms = [
-  { id: 'script-full', action: 'script', maintenance: true, review: true },
-  { id: 'tools-full', action: 'tools', maintenance: true, review: true },
-  { id: 'script-no-model-maintenance', action: 'script', maintenance: false, review: true },
-  { id: 'script-no-review', action: 'script', maintenance: true, review: false },
+  { id: 'script-full', action: 'script', maintenance: true },
+  { id: 'tools-full', action: 'tools', maintenance: true },
+  { id: 'script-no-model-maintenance', action: 'script', maintenance: false },
 ]
 const selected = split === 'development' ? [development] : cases
 const repetitions = split === 'development' ? 1 : 2
@@ -87,7 +83,6 @@ const manifest = {
   arms,
   order,
   snapshotManifestSha256: hash(await readFile(join(snapshot, 'manifest.json'))),
-  artifactSourceSha256: hash(await readFile(artifactSourcePath)),
   cases: selected.map(({ control, ...item }) => item),
   scorePolicy: {
     primary: [
@@ -211,10 +206,8 @@ async function attempt(item, arm, repeat) {
     estimate: (request) => base.estimate(request),
     async *stream(request, requestSignal) {
       const phase =
-        request.materials.find(
-          (material) =>
-            material.origin.startsWith('completion-') || material.origin === 'context-narration'
-        )?.origin ?? 'business'
+        request.materials.find((material) => material.origin === 'context-maintenance')?.origin ??
+        'business'
       const row = { id: requests.length + 1, phase, startedAt: Date.now(), request, deltas: [] }
       requests.push(row)
       const path = join(directory, `request-${row.id}.json`)
@@ -259,14 +252,6 @@ async function attempt(item, arm, repeat) {
       context: {
         ...(arm.maintenance ? {} : { maintenance: false }),
         policy: { windowTokens: config.inputWindowTokens },
-        ...(arm.review
-          ? {
-              completion: {
-                kind: 'model-review',
-                artifacts: new WorkspaceCompletionArtifacts(workspace),
-              },
-            }
-          : {}),
       },
       limits: {
         turns: config.maxRequests,
@@ -382,7 +367,6 @@ async function attempt(item, arm, repeat) {
     wireRequests: wires.length,
     rejectedBeforeDispatch: ledger.summary(identity).rejectedRequests,
     businessRequests: requests.filter((row) => row.phase === 'business').length,
-    reviewRequests: requests.filter((row) => row.phase.startsWith('completion-')).length,
     maintenanceRequests: requests.filter((row) => row.phase === 'context-narration').length,
     unknownUsage: wires.length - usageRows.length,
     inputTokens,

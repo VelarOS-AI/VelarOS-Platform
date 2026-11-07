@@ -105,7 +105,6 @@ export const GovernedModules = [
     types: 'act/runtime/types',
     impl: 'act/runtime/impl',
     utils: 'act/runtime/utils',
-    surfaceFile: 'act/runtime/impl/CompletionEvidenceOperations.ts',
     layers: [
       [
         'CapabilityModules.ts',
@@ -117,12 +116,6 @@ export const GovernedModules = [
         'ModelToolActivation.ts',
         'MemoryConsolidation.ts',
         'ContextMaintenance.ts',
-        'CompletionReview.ts',
-        'CompletionEvidence.ts',
-        'CompletionEvidenceOperations.ts',
-        'CompletionValidation.ts',
-        'CompletionValidationOperations.ts',
-        'NodeCompletionValidationHost.ts',
         'ContextPatchStore.ts',
         'SessionGoal.ts',
         'RuntimeSession.ts',
@@ -253,7 +246,6 @@ export const GovernedModules = [
       ['ContextViewSession.ts', 'LocalContextStorage.ts', 'TurnContextSessionLedgers.ts'],
       [
         'ContextEvidenceBuilder.ts',
-        'ContextVerificationSession.ts',
         'SessionContext.ts',
         'ContextInvocationJournal.ts',
         'LocalStoreStorage.ts',

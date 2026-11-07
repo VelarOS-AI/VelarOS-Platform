@@ -214,47 +214,6 @@ export interface ActModelAccounting {
   }
 }
 
-/** 按 charge ID 去重的费用事实；不同币种、实际费用与参考报价分别累计。 */
-export interface ActVerificationCostSummary {
-  readonly coverage: 'complete' | 'partial' | 'unknown'
-  readonly charges: ReadonlyArray<{
-    readonly id: string
-    readonly kind: 'model' | 'external'
-    readonly currency: string
-    readonly basis: 'actual' | 'reference'
-    readonly amount: Nullable<number>
-  }>
-  readonly totals: ReadonlyArray<{
-    readonly kind: 'model' | 'external'
-    readonly currency: string
-    readonly basis: 'actual' | 'reference'
-    readonly amount: number
-  }>
-  /** 同 ID 费用依据互相冲突时，不任选一份作为完整账单。 */
-  readonly conflictingChargeIds: readonly string[]
-}
-
-/** 一次可信核查的阶段折叠；阶段时间是累计事实，不能相加。 */
-export interface ActVerificationAttemptSummary {
-  readonly attemptId: string
-  readonly taskId: string
-  readonly checkId: string
-  readonly scope: string
-  readonly verifierId: string
-  readonly verifierVersion: string
-  readonly mode: 'executed' | 'reused' | 'probed'
-  readonly status: 'pending' | 'passed' | 'failed' | 'unknown' | 'cancelled'
-  readonly applicability: 'current' | 'historical' | 'unknown'
-  readonly phases: ReadonlyArray<'started' | 'settled' | 'late-result'>
-  readonly startedAt: string
-  readonly settledAt: Nullable<string>
-  readonly durationMs: Nullable<number>
-  readonly probeMs: Nullable<number>
-  readonly runMs: Nullable<number>
-  readonly records: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
-  readonly cost: ActVerificationCostSummary
-}
-
 /** 一次实际模型请求及其执行证据；缺失部分明确列入 gaps。 */
 export interface ActTurnTrace {
   readonly sessionId: string
@@ -271,11 +230,6 @@ export interface ActTurnTrace {
   }
   /** usage 的覆盖独立于协议接受状态；已拒绝请求仍可能有实际计数。 */
   readonly modelAccounting: ActModelAccounting
-  /** started 所在请求序号窗口归属此回合；后来的 settled/late-result 仍连接原 attempt。 */
-  readonly verification: {
-    readonly attempts: readonly ActVerificationAttemptSummary[]
-    readonly cost: ActVerificationCostSummary
-  }
   /** 请求审计包含 ProviderRequestCompiler 封存的消息与指纹。 */
   readonly request: ActTraceRecord
   /** 从完整封存请求生成的有界展示；历史没有封存请求时为 null。 */
@@ -371,10 +325,6 @@ export interface ActTracePage {
       readonly unknown: number
       readonly inflight: number
     }
-    /** 核查总账独立于请求窗口，包含首请求前、终态后及无模型请求的持久事实。 */
-    readonly verificationScope: 'session'
-    /** 同会话按 charge ID 去重；跨快照应取最新总账或继续按 ID 去重，未知保持未知。 */
-    readonly verificationCost: ActVerificationCostSummary
   }
   /** 有后续请求时的分页游标，否则为 null。 */
   readonly nextAfter: Nullable<number>

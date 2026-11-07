@@ -33,7 +33,6 @@ import {
   runtimeContextPolicy,
   runtimeSubmissionOptions,
 } from './runtime-capabilities.mjs'
-import { runtimeCompletionOptions } from './runtime-completion.mjs'
 import { runtimeEventStatus } from './runtime-status.mjs'
 import {
   pythonTaskPath,
@@ -103,8 +102,9 @@ const recovery =
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const candidate = manifest.candidate
 const importAt = (file) => import(pathToFileURL(join(candidate, 'packages', file)))
-const { createRuntime, createNodeExecutionEnvironment, createNodeCompletionValidationHost } =
-  await importAt('velaros/dist/act/runtime/index.js')
+const { createRuntime, createNodeExecutionEnvironment } = await importAt(
+  'velaros/dist/act/runtime/index.js'
+)
 const { createLocalShellHost } = await importAt('velaros/dist/execution/local.js')
 const modelPackage = await importAt('model/dist/index.js')
 const credentials = JSON.parse(await readFile(manifest.credentials, 'utf8')).chat
@@ -414,11 +414,6 @@ async function scriptAct({
       modelTools: { concurrency: manifest.concurrency },
       context: {
         policy: runtimeContextPolicy(manifest),
-        completion: await runtimeCompletionOptions(manifest.runtimeCompletion, workspace, {
-          createValidationHost: createNodeCompletionValidationHost,
-          executable: node,
-          signal,
-        }),
       },
       environment: () => ({ cwd: workspace, ...(node ? { node } : { python }) }),
       limits: {

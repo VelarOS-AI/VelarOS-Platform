@@ -220,50 +220,20 @@ test('A03/A18/A21: huge artifacts stay persisted and task references cannot cros
 
 test('shared model budget: two roles consume one durable model budget, missing usage stays unknown', async (t) => {
   const f = await fixture(t, { modelCalls: 2, modelTokens: 100 })
-  await f.view.reserveModel('main', 60)
-  await f.view.recordUsage(10, 5)
-  await f.view.reserveModel('context', 40)
-  await assert.rejects(f.view.reserveModel('main', 1), { code: 'MODEL_BUDGET' })
+  const taskId = (await f.view.inspect()).id
+  const first = { taskId, requestId: 'first' }
+  await f.view.reserveModel('main', 60, first)
+  await f.view.dispatchModel(first)
+  await f.view.recordUsage(10, 5, first)
+  await f.view.reserveModel('context', 40, { taskId, requestId: 'second' })
+  await assert.rejects(f.view.reserveModel('main', 1, { taskId, requestId: 'third' }), {
+    code: 'MODEL_BUDGET',
+  })
   const usage = (await createContextView(f.options).inspect()).usage
   assert.equal(usage.mainCalls, 1)
   assert.equal(usage.contextCalls, 1)
   assert.equal(usage.unmeasuredCalls, 1)
   assert.equal(usage.inputTokens, 10)
-})
-
-test('INV-14 hourly model budget rolls by the hour, says when to retry and refuses a request larger than an hour', async (t) => {
-  const f = await fixture(t, { modelTokensPerHour: 100 })
-  t.mock.timers.enable({ apis: ['Date'], now: 0 })
-  // 运行中心跳会续租；这里按五分钟一步拨表并续租
-  const advance = async (ms) => {
-    for (let left = ms; left > 0; left -= 300_000) {
-      t.mock.timers.tick(Math.min(300_000, left))
-      await f.view.renew()
-    }
-  }
-  await f.view.reserveModel('main', 60)
-  await f.view.reserveModel('main', 30)
-  // 当前一小时已经不够：等到下一小时
-  await assert.rejects(
-    f.view.reserveModel('main', 20),
-    (error) => error.code === 'MODEL_RATE' && error.retryAfterMs === 3_600_000
-  )
-  // 单次就超过每小时上限，等多久都不行
-  await assert.rejects(f.view.reserveModel('main', 101), { code: 'MODEL_BUDGET' })
-  // 下一小时刚开始，上一小时的 90 还全额算着，要等它淡出到够用
-  await advance(3_600_000)
-  await assert.rejects(
-    f.view.reserveModel('main', 20),
-    (error) =>
-      error.code === 'MODEL_RATE' && error.retryAfterMs > 0 && error.retryAfterMs < 3_600_000
-  )
-  await advance(1_800_000)
-  await f.view.reserveModel('main', 50)
-  await f.view.releaseModel('main', 50)
-  await f.view.reserveModel('main', 50)
-  const usage = (await createContextView(f.options).inspect()).usage
-  assert.equal(usage.hourly.tokens, 50)
-  assert.equal(usage.hourly.previous, 90)
 })
 
 test('A16/A17: competing leases, stale build publication and cancellation fail closed', async (t) => {
@@ -293,9 +263,11 @@ test('INV-4: the unchanged owner renews after suspended time without changing ta
 test('INV-4: delayed usage and execution continuations renew the same owner before continuing', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 0 })
   const f = await fixture(t)
-  await f.view.reserveModel('main', 120)
+  const request = { taskId: (await f.view.inspect()).id, requestId: 'delayed' }
+  await f.view.reserveModel('main', 120, request)
+  await f.view.dispatchModel(request)
   t.mock.timers.tick(f.view.limits.leaseMs + 1)
-  await f.view.recordUsage(50, 10)
+  await f.view.recordUsage(50, 10, request)
   await f.view.startStep('continued')
   const before = await f.view.inspect()
   t.mock.timers.tick(f.view.limits.leaseMs + 1)
@@ -526,23 +498,12 @@ test('INV-15 domain reports preserve failed and unknown checks, original binding
 })
 
 test('INV-15 neutral completion records and report publish with the task in one CAS, retrying unrelated changes without repeating verification', async (t) => {
-  for (const fallback of [false, true]) {
+  {
     const f = await fixture(t)
-    if (fallback)
-      f.options.storage = new Proxy(f.storage, {
-        get(target, key) {
-          if (['loadMetadata', 'compareAndSwapMetadata', 'selectSnapshot'].includes(key))
-            return undefined
-          const value = target[key]
-          return typeof value === 'function' ? value.bind(target) : value
-        },
-      })
     await observe(f)
-    const original = f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'].bind(
-      f.storage
-    )
+    const original = f.storage.compareAndSwapMetadata.bind(f.storage)
     let raced = false
-    f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'] = async (...args) => {
+    f.storage.compareAndSwapMetadata = async (...args) => {
       if (!raced && args[2].task?.status === 'completed') {
         raced = true
         await f.context.append({ kind: 'tool', title: 'unrelated', body: 'new event' })

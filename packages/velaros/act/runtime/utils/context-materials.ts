@@ -37,3 +37,7 @@ export function contextMaterialInput(
   const definitions = schema.definitions as Readonly<Record<string, Record<string, unknown>>>
   return { ...definitions[(schema.$ref as string).split('/').at(-1)!], definitions }
 }
+
+/** 整理结果区分直接观察、模型归因和真实验证。 */
+export const contextEvidenceGuidance =
+  '区分直接观察、模型诊断和验证结论。模型声称的根因、因果或修复若缺少对应执行证据，应注明是未验证判断，保留矛盾现象与待验证项；代码改动或其他场景的测试通过，不能替代原故障复测。'

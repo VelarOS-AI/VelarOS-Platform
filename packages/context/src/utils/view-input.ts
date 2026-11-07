@@ -230,9 +230,6 @@ export function checkVerificationReport(
       'checkedAt',
       'complete',
       'artifacts',
-      'proofRef',
-      'reusedFrom',
-      'applicability',
     ])
     if (
       !text(check.label, ContextVerificationLimits.labelChars) ||
@@ -248,20 +245,6 @@ export function checkVerificationReport(
         fail()
     if (!isUndefined(check.checkedAt) && !Number.isFinite(Date.parse(check.checkedAt))) fail()
     if (!isUndefined(check.complete) && ![true, false].includes(check.complete)) fail()
-    if (
-      !isUndefined(check.applicability) &&
-      !['current', 'historical', 'unknown'].includes(check.applicability)
-    )
-      fail()
-    for (const key of ['proofRef', 'reusedFrom'] as const)
-      if (!isUndefined(check[key])) {
-        fields(check[key], ['sessionId', 'id'])
-        if (
-          !text(check[key]!.sessionId, ContextVerificationLimits.labelChars) ||
-          !text(check[key]!.id, ContextVerificationLimits.labelChars)
-        )
-          fail()
-      }
     if (!isUndefined(check.artifacts)) {
       if (
         !isArray(check.artifacts) ||

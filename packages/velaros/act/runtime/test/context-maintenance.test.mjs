@@ -285,8 +285,13 @@ test('a late invalid operation rolls back the entire context patch', async (t) =
 test('new user input invalidates maintenance while accounting and heartbeats do not', async (t) => {
   const f = await fixture(t)
   const snapshot = await f.state.snapshot(8000, signal)
-  await f.session.view.reserveModel('context', 2000)
-  await f.session.view.recordUsage(100, 30)
+  const request = {
+    taskId: (await f.session.view.inspect()).id,
+    requestId: 'maintenance-accounting',
+  }
+  await f.session.view.reserveModel('context', 2000, request)
+  await f.session.view.dispatchModel(request)
+  await f.session.view.recordUsage(100, 30, request)
   await f.session.view.renew(signal)
   const receipt = await f.state.apply(snapshot, patch(snapshot), signal)
   assert(receipt.id)
@@ -315,70 +320,68 @@ test('maintenance reads are paged and tied to the fixed parent snapshot', async 
   })
 })
 
-for (const indexed of [true, false])
-  test(`maintenance catalog fills pages with working materials across noisy internal history: indexed=${indexed}`, async (t) => {
-    const f = await fixture(t)
-    if (!indexed) f.storage.selectSnapshot = undefined
-    const expected = [f.input]
-    for (let batch = 0; batch < 3; batch++) {
-      for (let index = 0; index < 35; index++)
-        await f.session.context.append({
-          kind: 'audit',
-          title: [
-            'act:event',
-            'script:lease-state',
-            'context:frame:internal',
-            'model-continuation',
-            'runtime:frame-marker:internal',
-          ][index % 5],
-          body: '{}',
-        })
-      expected.push(
-        await f.session.context.append({ kind: 'assistant', body: `Observed batch ${batch}` })
-      )
-      expected.push(
-        await f.session.context.append({
-          kind: 'audit',
-          title: `script:execution-${batch}:result`,
-          body: `Result ${batch}`,
-        })
+test('maintenance catalog fills pages with working materials across noisy internal history', async (t) => {
+  const f = await fixture(t)
+  const expected = [f.input]
+  for (let batch = 0; batch < 3; batch++) {
+    for (let index = 0; index < 35; index++)
+      await f.session.context.append({
+        kind: 'audit',
+        title: [
+          'act:event',
+          'script:lease-state',
+          'context:frame:internal',
+          'model-continuation',
+          'runtime:frame-marker:internal',
+        ][index % 5],
+        body: '{}',
+      })
+    expected.push(
+      await f.session.context.append({ kind: 'assistant', body: `Observed batch ${batch}` })
+    )
+    expected.push(
+      await f.session.context.append({
+        kind: 'audit',
+        title: `script:execution-${batch}:result`,
+        body: `Result ${batch}`,
+      })
+    )
+  }
+  const note = await f.note()
+  const snapshot = await f.state.snapshot(8000, signal)
+  let after = 0
+  const ids = []
+  let pages = 0
+  for (;;) {
+    const page = await f.state.list(snapshot, after, 2, signal)
+    pages++
+    assert(page.items.length > 0, 'internal records cannot consume a visible page')
+    for (const record of page.items) {
+      assert(record.sequence > after)
+      assert(!/^(act:|runtime:|model-|context:frame:|script:lease-state$)/u.test(record.title))
+      ids.push(record.ref.id)
+      assert.equal(
+        (await f.state.read(snapshot, record.ref, 0, 100, signal)).record.ref.id,
+        record.ref.id
       )
     }
-    const note = await f.note()
-    const snapshot = await f.state.snapshot(8000, signal)
-    let after = 0
-    const ids = []
-    let pages = 0
-    for (;;) {
-      const page = await f.state.list(snapshot, after, 2, signal)
-      pages++
-      assert(page.items.length > 0, 'internal records cannot consume a visible page')
-      for (const record of page.items) {
-        assert(record.sequence > after)
-        assert(!/^(act:|runtime:|model-|context:frame:|script:lease-state$)/u.test(record.title))
-        ids.push(record.ref.id)
-        assert.equal(
-          (await f.state.read(snapshot, record.ref, 0, 100, signal)).record.ref.id,
-          record.ref.id
-        )
-      }
-      if (page.nextAfter === null) break
-      assert.equal(page.items.length, 2)
-      assert.equal(page.nextAfter, page.items.at(-1).sequence)
-      after = page.nextAfter
-    }
-    assert.deepEqual(ids, [...expected.map((record) => record.ref.id), note.ref.id])
-    assert.equal(pages, 4)
-    assert.deepEqual(await f.state.list(snapshot, snapshot.through, 2, signal), {
-      items: [],
-      nextAfter: null,
-    })
-    await f.session.context.append({
-      kind: 'user',
-      body: 'Changed authorization and task requirements',
-    })
-    await assert.rejects(f.state.list(snapshot, 0, 2, signal), { code: 'CONTEXT_CONFLICT' })
+    if (page.nextAfter === null) break
+    assert.equal(page.items.length, 2)
+    assert.equal(page.nextAfter, page.items.at(-1).sequence)
+    after = page.nextAfter
+  }
+  assert.deepEqual(ids, [...expected.map((record) => record.ref.id), note.ref.id])
+  assert.equal(pages, 4)
+  assert.deepEqual(await f.state.list(snapshot, snapshot.through, 2, signal), {
+    items: [],
+    nextAfter: null,
   })
+  await f.session.context.append({
+    kind: 'user',
+    body: 'Changed authorization and task requirements',
+  })
+  await assert.rejects(f.state.list(snapshot, 0, 2, signal), { code: 'CONTEXT_CONFLICT' })
+})
 
 test('maintenance catalog respects task resets and explicit reattachment of an old input', async (t) => {
   const f = await fixture(t)
@@ -696,7 +699,7 @@ test('maintenance facts include bounded recent original records with recall rang
   assert.deepEqual(f.state.material(fresh, 8000).recent, [])
 })
 
-test('automatic narration preloads the sealed interval and rejects evidence from later work', async (t) => {
+test('sealed volume maintenance preloads its interval and rejects evidence from later work', async (t) => {
   const f = await fixture(t)
   const first = await f.session.context.append({ kind: 'assistant', body: 'Inspect the adapter' })
   const last = await f.session.context.append({ kind: 'assistant', body: 'Inspection is complete' })

@@ -7,11 +7,7 @@ import { describe, test } from 'node:test'
 
 import { localContextStorage } from '../dist/node.js'
 
-import {
-  storageContract,
-  storeContract,
-  volatileStorageBackend,
-} from './support/storage-contract.mjs'
+import { storageContract, storeContract } from './support/storage-contract.mjs'
 
 async function sqliteFixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'storage-contract-'))
@@ -33,7 +29,6 @@ async function sqliteFixture(t) {
 describe('INV-12 storage adapters preserve persistence and lifecycle contracts', () => {
   storageContract('SQLite', sqliteFixture)
   storeContract('SQLite', sqliteFixture)
-  storageContract('opaque asynchronous test adapter', async () => volatileStorageBackend())
 })
 
 test('SQLite object presence preserves session isolation, empty bodies and IO failure semantics', async (t) => {

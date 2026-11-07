@@ -5,73 +5,12 @@ import { createContextRuntime } from '../../dist/index.js'
 
 const empty = () => ({ version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } })
 
-// 测试替身只验证端口可替换，不提供生产持久性；重开连接共享测试拥有的内存。
-export function volatileStorageBackend() {
-  const states = new Map()
-  const objects = new Map()
-  let next = 0
-  let closes = 0
-  return {
-    get closes() {
-      return closes
-    },
-    async open() {
-      let closed = false
-      const ready = async () => {
-        await Promise.resolve()
-        if (closed) throw Object.assign(Error('closed'), { code: 'STORAGE_CLOSED' })
-      }
-      return {
-        async load(id) {
-          await ready()
-          return structuredClone(states.get(id) ?? null)
-        },
-        async compareAndSwap(id, version, state) {
-          await ready()
-          if (state.version !== version + 1)
-            throw Object.assign(Error('version'), { code: 'INVALID_VERSION' })
-          if ((states.get(id)?.version ?? 0) !== version) return false
-          if (
-            state.records.some(
-              (record) => record.objectId && !objects.get(id)?.has(record.objectId)
-            )
-          )
-            throw Object.assign(Error('missing body'), { code: 'OBJECT_MISSING' })
-          states.set(id, structuredClone(state))
-          return true
-        },
-        async put(id, text) {
-          await ready()
-          const key = `opaque-object:${++next}`
-          if (!objects.has(id)) objects.set(id, new Map())
-          objects.get(id).set(key, text)
-          return key
-        },
-        async get(id, key) {
-          await ready()
-          return objects.get(id)?.get(key) ?? null
-        },
-        async close() {
-          if (!closed) {
-            closed = true
-            closes++
-          }
-        },
-      }
-    },
-  }
-}
-
 // 新适配器传入相同数据库的独立连接工厂，复用这些与 SQL 无关的验收。
 export function storageContract(name, fixture) {
   test(`${name}: grouped snapshots return filtered title heads, literal suffixes and bounded tails`, async (t) => {
     const { open } = await fixture(t)
     const storage = await open()
     t.after(() => storage.close())
-    if (!storage.selectSnapshot) {
-      t.skip('optional selected snapshot')
-      return
-    }
     const context = createContextRuntime({ sessionId: 's', storage })
     const records = []
     for (const [title, kind] of [
@@ -138,10 +77,6 @@ export function storageContract(name, fixture) {
     const { open } = await fixture(t)
     const storage = await open()
     t.after(() => storage.close())
-    if (!storage.selectSnapshot) {
-      t.skip('optional selected snapshot')
-      return
-    }
     assert.equal(await storage.selectSnapshot('absent', []), null)
     const context = createContextRuntime({ sessionId: 's', storage })
     const first = await context.append({ kind: 'audit', title: 'literal_%:one', body: 'first' })
@@ -363,7 +298,7 @@ export function storageContract(name, fixture) {
     assert.deepEqual(await a.load('s'), before)
     assert.equal((await c.read(record.ref)).text, 'original')
   })
-  test(`${name}: context uses opaque references with or without an index`, async (t) => {
+  test(`${name}: context uses opaque references through the required index`, async (t) => {
     const { open } = await fixture(t)
     const a = await open()
     t.after(() => a.close())
@@ -377,7 +312,7 @@ export function storageContract(name, fixture) {
       sources: [first.ref],
     })
     assert.equal((await c.read(note.ref)).text, 'use version 2')
-    if (a.records) {
+    {
       const page = await a.records('s', { limit: 1 })
       assert.equal(page.items[0].ref.id, first.ref.id)
       assert.equal(page.nextAfter, first.sequence)

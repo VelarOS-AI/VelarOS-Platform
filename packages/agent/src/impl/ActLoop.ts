@@ -31,7 +31,7 @@ import type { ActRequestPrefix } from '../types/runtime.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, remainingFrameImages, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
-import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
+import { ContextPlanTuning } from '../utils/tuning.js'
 
 import { ContextPlanner } from './ContextPlanner.js'
 
@@ -291,29 +291,15 @@ export class ActLoop implements ActLoopApi {
             request: { ...compiled.request, budgetRequestId: budgetRequest.requestId },
           }
           const reservedTokens = compiled.estimate.tokens + compiled.request.outputTokens
-          // 每小时用量到上限：等窗口释放后继续；用户总上限到了：暂停等用户，不算失败
-          for (;;)
-            try {
-              await this.options.view.reserveModel('main', reservedTokens, budgetRequest)
-              break
-            } catch (error) {
-              const code = (error as { code?: string }).code
-              if (code === 'MODEL_BUDGET') {
-                yield {
-                  type: 'error',
-                  runId,
-                  message: '任务的模型用量已到上限，已暂停；调高上限后发送任意内容即可继续。',
-                }
-                yielded = true
-                yield { type: 'state', runId, status: 'waiting' }
-                return
-              }
-              if (code !== 'MODEL_RATE') throw error
-              const retryAfterMs =
-                (error as { retryAfterMs?: number }).retryAfterMs ?? AgentTuning.rateRetryMs
-              yield { type: 'throttled', runId, retryAfterMs }
-              await modelProviderRetry.wait(retryAfterMs, controller.signal)
-            }
+          try {
+            await this.options.view.reserveModel('main', reservedTokens, budgetRequest)
+          } catch (error) {
+            if ((error as { code?: string }).code !== 'MODEL_BUDGET') throw error
+            yield { type: 'error', runId, message: '任务的模型用量已到上限，已暂停。' }
+            yielded = true
+            yield { type: 'state', runId, status: 'waiting' }
+            return
+          }
           let dispatched = false
           try {
             const auditPayload = {
@@ -458,6 +444,7 @@ export class ActLoop implements ActLoopApi {
                   yield {
                     type: 'usage',
                     runId,
+                    requestId: `${runId}:${audit.ref.id}`,
                     inputTokens: delta.inputTokens,
                     outputTokens: delta.outputTokens,
                     ...cache,

@@ -104,7 +104,7 @@ export interface SearchActivationDependencies {
   /** 父任务预算与当前空间。 */
   readonly parent: ModelBudgetPort
   /** 当前预留收尾轮的请求身份。 */
-  readonly finalizationRequestId?: string
+  readonly finalizationRequestId: string
   /** 实际来源授权作用域。 */
   readonly scope: ContextTaskScope
   /** 独立绝对截止时间。 */

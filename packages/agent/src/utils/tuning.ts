@@ -2,8 +2,6 @@
 export const AgentTuning = Object.freeze({
   /** 持久事件默认分页条数。 */
   eventPage: 100,
-  /** 限速错误没带等待时长时，等这么久再预留。 */
-  rateRetryMs: 60_000,
 })
 /** 上下文规划的缺省值；宿主经 frames.policy 覆盖容量与恢复策略。 */
 export const ContextPlanTuning = Object.freeze({

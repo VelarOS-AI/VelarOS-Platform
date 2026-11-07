@@ -52,7 +52,6 @@ export class ActiveContext implements ActiveContextApi {
     previous: StoredActiveContext,
     latest?: ContextRef
   ): Promise<Nullable<ContextState>> {
-    if (!this.storage.selectSnapshot) return this.storage.load(this.id)
     const selected = await this.storage.selectSnapshot(this.id, [
       { title: 'search:history-reset', latest: true },
       { title: 'context:active-state', latest: true },
@@ -66,7 +65,6 @@ export class ActiveContext implements ActiveContextApi {
   }
 
   private async head(): Promise<Nullable<ContextState>> {
-    if (!this.storage.selectSnapshot) return this.storage.load(this.id)
     const selected = await this.storage.selectSnapshot(this.id, [
       { title: 'search:history-reset', latest: true },
       { title: 'context:active-state', latest: true },
@@ -132,26 +130,12 @@ export class ActiveContext implements ActiveContextApi {
         createdAt: new Date().toISOString(),
       })
     const { records: _records, ...metadata } = state
-    if (this.storage.compareAndSwapMetadata)
-      return this.storage.compareAndSwapMetadata(
-        this.id,
-        state.version,
-        { ...metadata, version: state.version + 1 },
-        append
-      )
-    const full = await this.storage.load(this.id)
-    if (full?.version !== state.version) return false
-    return this.storage.compareAndSwap(this.id, state.version, {
-      ...full,
-      version: state.version + 1,
-      records: [
-        ...full.records,
-        ...append.map((item, index) => ({
-          ...item,
-          sequence: (full.records.at(-1)?.sequence ?? 0) + index + 1,
-        })),
-      ],
-    })
+    return this.storage.compareAndSwapMetadata(
+      this.id,
+      state.version,
+      { ...metadata, version: state.version + 1 },
+      append
+    )
   }
 
   private async current(signal: AbortSignal): Promise<{
@@ -189,13 +173,11 @@ export class ActiveContext implements ActiveContextApi {
         }
         if (kind === 'constraint') {
           const title = `context:active-reviewed-input:${original.id}`
-          const reviewedSource = this.storage.selectSnapshot
-            ? (
-                await this.storage.selectSnapshot(this.id, [
-                  { title, after: previous.reset, latest: true },
-                ])
-              )?.records.some((record) => record.title === title)
-            : state.records.some((item) => item.title === title && item.sequence > previous.reset)
+          const reviewedSource = (
+            await this.storage.selectSnapshot(this.id, [
+              { title, after: previous.reset, latest: true },
+            ])
+          )?.records.some((record) => record.title === title)
           if (reviewedSource) {
             through = record.sequence
             continue
@@ -209,16 +191,11 @@ export class ActiveContext implements ActiveContextApi {
             .update(`${kind}:${kind === 'constraint' ? original.id : ''}:${text}`)
             .digest('hex')
           const id = `${kind}:${hash}`
-          const retired = this.storage.selectSnapshot
-            ? (
-                await this.storage.selectSnapshot(this.id, [
-                  { title: `context:active-retired:${id}`, after: previous.reset, latest: true },
-                ])
-              )?.records.some((item) => item.sequence > previous.reset)
-            : state.records.some(
-                (item) =>
-                  item.sequence > previous.reset && item.title === `context:active-retired:${id}`
-              )
+          const retired = (
+            await this.storage.selectSnapshot(this.id, [
+              { title: `context:active-retired:${id}`, after: previous.reset, latest: true },
+            ])
+          )?.records.some((item) => item.sequence > previous.reset)
           if (retired) continue
           if (!items.has(id))
             items.set(id, {
@@ -288,12 +265,10 @@ export class ActiveContext implements ActiveContextApi {
         evidence.ref?.sessionId !== this.id
       )
         throw new AppError('VALIDATION', '当前状态证据引文无效')
-      const selected = this.storage.selectSnapshot
-        ? await this.storage.selectSnapshot(this.id, [
-            { refId: evidence.ref.id },
-            { title: 'search:history-reset', latest: true },
-          ])
-        : undefined
+      const selected = await this.storage.selectSnapshot(this.id, [
+        { refId: evidence.ref.id },
+        { title: 'search:history-reset', latest: true },
+      ])
       let authorization = selected
         ? { ...selected.metadata, records: selected.records }
         : await this.storage.load(this.id)
@@ -305,7 +280,7 @@ export class ActiveContext implements ActiveContextApi {
       if (
         selected?.records.some((item) => item.ref.id === evidence.ref.id && item.sequence <= reset)
       ) {
-        const attachments = await this.storage.selectSnapshot!(this.id, [
+        const attachments = await this.storage.selectSnapshot(this.id, [
           { kind: 'user', after: reset },
         ])
         if (!attachments || attachments.metadata.version !== selected.metadata.version)

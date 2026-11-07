@@ -80,7 +80,7 @@ export class BudgetedModelDriver implements BudgetedModelDriverApi {
     return this.closing
   }
   private async *dispatch(
-    request: ModelTurnRequest,
+    request: ModelTurnRequest & { budgetRequestId: string },
     combined: AbortSignal,
     beforeDispatch: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {

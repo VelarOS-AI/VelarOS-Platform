@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "@velaros-ai/skill-browser",
+  "name": "Browser",
+  "description": "通用网页操作、开发者工具与 CDP，适用于各类工作区。",
+  "version": "0.1.0",
+  "instructions": "SKILL.md",
+  "source": "native",
+  "implicit": true,
+  "prompt": "",
+  "diagnostics": [],
+  "toolDependencies": []
+}

@@ -165,8 +165,6 @@ export interface ContextMemoryApi {
   retire(signal: AbortSignal): Promise<boolean>
   /** 是否处在章节边界：有待处理的整理请求、段内来了新的用户输入，或计划的下一目标变了。 */
   boundary(signal: AbortSignal): Promise<boolean>
-  /** 取走自动封段留下的补写叙事标记，只取一次；没有时返回 null。 */
-  narration(signal: AbortSignal): Promise<Nullable<ContextRef>>
 }
 
 /** 同一可靠存储上的工作内存，分区只改变组装与驻留，不改变事实和权限。 */
@@ -198,16 +196,12 @@ export class ContextMemory implements ContextMemoryApi {
 
   private async snapshot(signal: AbortSignal, selections?: readonly ContextRecordSelection[]) {
     signal.throwIfAborted()
-    const selected =
-      selections && this.storage.selectSnapshot
-        ? await this.storage.selectSnapshot(this.id, selections)
-        : undefined
-    const snapshot =
-      selections && this.storage.selectSnapshot
-        ? selected
-          ? { ...selected.metadata, records: selected.records }
-          : null
-        : await this.storage.load(this.id)
+    const selected = selections ? await this.storage.selectSnapshot(this.id, selections) : undefined
+    const snapshot = selections
+      ? selected
+        ? { ...selected.metadata, records: selected.records }
+        : null
+      : await this.storage.load(this.id)
     signal.throwIfAborted()
     return snapshot
   }
@@ -288,10 +282,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (['body', 'title', 'sources', 'resident'].every((key) => !Object.hasOwn(input, key)))
       throw new AppError('MEMORY_INPUT', '笔记更新为空')
     for (let attempt = 0; attempt < 32; attempt++) {
-      const incremental = Boolean(
-        this.storage.selectSnapshot && this.storage.compareAndSwapMetadata
-      )
-      const { snapshot, notes } = await this.notes(signal, incremental)
+      const { snapshot, notes } = await this.notes(signal, true)
       if (!snapshot) throw new AppError('UNAVAILABLE', '会话尚未建立')
       const prior = notes.find((item) => item.note.key === input.key)
       if ((prior?.note.revision ?? 0) !== input.baseRevision)
@@ -303,8 +294,8 @@ export class ContextMemory implements ContextMemoryApi {
         throw new AppError('WORKSPACE_LIMIT', '工作区笔记目录已满，请复用已有键')
       const sources = input.sources ?? prior?.note.sources ?? []
       let authorization = snapshot
-      if (incremental && !isEmpty(sources)) {
-        const selected = await this.storage.selectSnapshot!(this.id, [
+      if (!isEmpty(sources)) {
+        const selected = await this.storage.selectSnapshot(this.id, [
           { title: 'search:history-reset', latest: true },
           { kind: 'user' },
           ...sources.map((ref) => ({ refId: ref.id })),
@@ -344,10 +335,10 @@ export class ContextMemory implements ContextMemoryApi {
         createdAt: new Date().toISOString(),
       }
       signal.throwIfAborted()
-      if (incremental) {
+      {
         const { records: _records, ...metadata } = snapshot
         if (
-          await this.storage.compareAndSwapMetadata!(
+          await this.storage.compareAndSwapMetadata(
             this.id,
             snapshot.version,
             { ...metadata, version: snapshot.version + 1 },
@@ -355,14 +346,7 @@ export class ContextMemory implements ContextMemoryApi {
           )
         )
           return noteEntry(note, record)
-      } else if (
-        await this.storage.compareAndSwap(this.id, snapshot.version, {
-          ...snapshot,
-          version: snapshot.version + 1,
-          records: [...snapshot.records, record],
-        })
-      )
-        return noteEntry(note, record)
+      }
     }
     throw new AppError('WORKSPACE_BUSY', '工作区持续发生并发变化')
   }
@@ -936,22 +920,11 @@ export class ContextMemory implements ContextMemoryApi {
           }
         : undefined
     if (verification && report) {
-      const applicability = await this.view.completionApplicability(completionRecord!.ref, signal)
-      verification.applicabilityCheckedAt = applicability?.checkedAt
-      // 原核查结果和当前适用性分别计数；细节预算不能把历史证明或未知依赖隐藏成当前成功。
-      verification.applicabilityCounts = Object.fromEntries(
-        ['current', 'historical', 'unknown'].map((status) => [
-          status,
-          report.checks.filter(
-            (_check, index) => (applicability?.checks[index]?.status ?? 'unknown') === status
-          ).length,
-        ])
-      )
       // 核查摘要只占帧预算的一小份；大范围和产物细节按报告引用回看，修复帧始终留给当前状态。
       const verificationBudget = Math.min(2048, Math.max(0, Math.floor(maxChars / 40)))
       Object.assign(
         verification,
-        memoryVerificationProjection(verification, report, applicability, verificationBudget)
+        memoryVerificationProjection(verification, report, verificationBudget)
       )
     }
     const workspace = cards.cards.map((card, index) => ({
@@ -1633,7 +1606,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (!segment) return false
     const cut = await this.recent.cut(segment, this.policy.recentRecords, signal)
     if (isUndefined(cut)) return false
-    const sealed = await this.recent.seal(segment.from, cut, signal)
+    await this.recent.seal(segment.from, cut, signal)
     // 封段释放 segment 期限的旧结果；显式轮数和 task 期限继续跨段交付。
     const leases = await this.programs.state()
     const visible = leases.leases
@@ -1653,19 +1626,6 @@ export class ContextMemory implements ContextMemoryApi {
       .filter((ref) => !retired.includes(ref))
       .filter((ref) => (sequence.get(ref) ?? Infinity) <= cut)
       .sort((a, b) => sequence.get(a)! - sequence.get(b)!)
-    // 自动封的一卷只有规则骨架；那一段做了很多事却没改笔记和计划时，留给整理支线补写叙事
-    const volume = (await this.recent.volumes(signal)).find(
-      (item) => item.ref.id === sealed.id
-    )?.volume
-    const narrate =
-      reason !== 'organize' &&
-      volume &&
-      (volume.turns >= ActRuntimeTuning.narrateTurns ||
-        volume.results >= ActRuntimeTuning.narrateResults) &&
-      isEmpty(volume.notes) &&
-      (selected?.task?.capsule?.nextObjective ?? '') === segment.objective
-        ? sealed
-        : null
     // 按上一段的缺页调整新段的笔记份额
     const prefix = `context:fault:${segment.id}:`
     const faults = (await this.snapshot(signal, [{ titlePrefix: prefix }]))?.records ?? []
@@ -1684,7 +1644,6 @@ export class ContextMemory implements ContextMemoryApi {
         carried,
         entries: [],
         reason,
-        narrate,
         workspaceShare,
       },
       maxChars,
@@ -1729,13 +1688,6 @@ export class ContextMemory implements ContextMemoryApi {
     }
     await this.recent.commit(next, signal)
     return next
-  }
-
-  public async narration(signal: AbortSignal): Promise<Nullable<ContextRef>> {
-    const segment = await this.recent.segment(signal)
-    if (!segment?.narrate) return null
-    await this.recent.commit({ ...segment, narrate: null }, signal)
-    return segment.narrate
   }
 
   public async boundary(signal: AbortSignal): Promise<boolean> {
@@ -1865,7 +1817,7 @@ export class ContextMemory implements ContextMemoryApi {
   /** 渲染并登记一段的底座；重建底座时沿用段号、起点、条目和章节基准。 */
   private async start(
     input: Pick<ContextSegment, 'index' | 'revision' | 'from' | 'carried' | 'entries' | 'reason'> &
-      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'narrate' | 'workspaceShare'>>,
+      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'workspaceShare'>>,
     maxChars: number,
     signal: AbortSignal
   ): Promise<ContextSegment> {
@@ -1955,7 +1907,6 @@ export class ContextMemory implements ContextMemoryApi {
       policy: presentation.id,
       volumes: volumes.length,
       reason: input.reason,
-      narrate: toNullable(input.narrate),
       workspaceShare,
     }
     await this.recent.commit(segment, signal)
@@ -2117,14 +2068,12 @@ export class ContextMemory implements ContextMemoryApi {
     signal: AbortSignal,
     request?: ModelTurnRequest
   ): Promise<Optional<ScriptDecisionBasis>> {
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [
-          { title: `context:frame:${frameId}`, latest: true },
-          { title: 'context:delivered', latest: true },
-          { title: `context:request-proof:${frameId}`, latest: true },
-        ])
-      : undefined
-    const snapshot = this.storage.selectSnapshot ? selected : await this.storage.load(this.id)
+    const selected = await this.storage.selectSnapshot(this.id, [
+      { title: `context:frame:${frameId}`, latest: true },
+      { title: 'context:delivered', latest: true },
+      { title: `context:request-proof:${frameId}`, latest: true },
+    ])
+    const snapshot = selected
     signal.throwIfAborted()
     const frame = snapshot?.records.findLast(
       (record) => record.title === `context:frame:${frameId}`

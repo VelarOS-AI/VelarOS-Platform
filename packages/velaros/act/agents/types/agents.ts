@@ -7,8 +7,8 @@ export interface AgentProfileInfo {
   readonly modules: readonly string[]
   readonly turns: number
   readonly timeoutMs: number
-  readonly modelCalls: number
-  readonly modelTokens: number
+  readonly modelCalls?: number
+  readonly modelTokens?: number
 }
 
 /** @AgentView 指定一个子任务：id 是 start 返回的 job.id。 */

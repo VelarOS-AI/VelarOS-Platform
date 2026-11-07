@@ -101,8 +101,6 @@ export interface ContextSegment {
   /** 底座目录里的卷数。 */
   readonly volumes: number
   readonly reason: SegmentReason
-  /** 自动封成、只有骨架的上一卷：那一段做了很多事却没改笔记和计划，保留按需补叙事的标记，不阻塞业务请求。 */
-  readonly narrate: Nullable<ContextRef>
   /** 本段笔记的份额上限，封段时按上一段的缺页调整；旧的段记录没有这一项，按宿主配置。 */
   readonly workspaceShare?: number
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { createContextRuntime } from '@velaros-ai/context'
+import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
@@ -268,16 +268,20 @@ test('business child discovery and script declarations omit delegation even if t
 async function coordinatorFixture(t, policy) {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
-  await createContextRuntime({ sessionId: 'root', storage }).append({
-    kind: 'user',
-    body: 'root task',
-  })
+  const context = createContextRuntime({ sessionId: 'root', storage })
+  const rootInput = await context.append({ kind: 'user', body: 'root task' })
+  const rootTaskId = await createContextView({
+    sessionId: 'root',
+    context,
+    storage,
+    sources: [],
+  }).begin(rootInput.ref)
   const accounts = new Map()
   const view = (id) => {
     if (!accounts.has(id)) accounts.set(id, { calls: 0, tokens: 0, input: 0, output: 0 })
     const value = accounts.get(id)
     return {
-      inspect: async () => ({ id: `task:${id}` }),
+      inspect: async () => ({ id: id === 'root' ? rootTaskId : `task:${id}` }),
       dispatchModel: async () => {},
       reserveModel: async (_role, tokens) => {
         value.calls++
@@ -353,7 +357,10 @@ test('ancestor reservation failure refunds earlier accounts without refunding di
         }
       : view(id)
   const child = await f.tools.begin('tool:b', 'tool:a', 'search', 10000, f.signal)
-  await assert.rejects(child.budget.reserveModel('context', 1000), /local budget/)
+  await assert.rejects(
+    child.budget.reserveModel('context', 1000, 'fixture-request'),
+    /local budget/
+  )
   assert.equal(f.accounts.get('root').calls, 0)
   assert.equal(f.accounts.get('root').tokens, 0)
   await child.close()
@@ -450,21 +457,19 @@ test('the coordinator rejects agent-to-agent delegation independently of module 
   await parent.close()
 })
 
-test('main defaults limit only the hourly rate while explicit host budgets remain authoritative', async (t) => {
+test('main defaults have no local quota while explicit host budgets remain authoritative', async (t) => {
   const f = await fixture(t, {
     model: model(async function* (request) {
       yield* done(request)
     }),
   })
-  assert.equal(f.session.view.limits.modelCalls, Number.MAX_SAFE_INTEGER)
-  assert.equal(f.session.view.limits.modelTokens, Number.MAX_SAFE_INTEGER)
-  assert.equal(f.session.view.limits.modelTokensPerHour, 30_000_000)
+  assert.equal(f.session.view.limits.modelCalls, undefined)
+  assert.equal(f.session.view.limits.modelTokens, undefined)
   const limited = await fixture(t, {
     context: { sources: [], limits: { modelCalls: 7, modelTokens: 10000 } },
   })
   assert.equal(limited.session.view.limits.modelCalls, 7)
   assert.equal(limited.session.view.limits.modelTokens, 10000)
-  assert.equal(limited.session.view.limits.modelTokensPerHour, 30_000_000)
 })
 
 test('search only discovers its evidence and local system members, including in the aggregate template', async (t) => {

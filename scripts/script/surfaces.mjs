@@ -20,20 +20,6 @@ export const CodeSurfaces = [
     templates: 'template.js',
   },
   {
-    namespace: 'completion-validation',
-    directory: 'velaros',
-    unit: 'act/runtime',
-    interfaces: ['CompletionValidationOperationsApi'],
-    templates: 'completion-validation-template.js',
-  },
-  {
-    namespace: 'completion-evidence',
-    directory: 'velaros',
-    unit: 'act/runtime',
-    interfaces: ['CompletionEvidenceOperationsApi'],
-    templates: 'completion-evidence-template.js',
-  },
-  {
     namespace: 'skills',
     directory: 'velaros',
     unit: 'skills',
@@ -341,8 +327,6 @@ export const HostContextTypes = new Set([
   'AgentsOperationContext',
   'SearchOperationContext',
   'EvidenceOperationContext',
-  'CompletionEvidenceOperationContext',
-  'CompletionValidationOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

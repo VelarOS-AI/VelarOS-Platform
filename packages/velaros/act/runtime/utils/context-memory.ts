@@ -1,5 +1,4 @@
 import type {
-  ContextCompletionApplicability,
   ContextContent,
   ContextFeedback,
   ContextRef,
@@ -38,7 +37,6 @@ import { ActRuntimeTuning } from './tuning.js'
 export function memoryVerificationProjection(
   identity: Readonly<Record<string, unknown>>,
   report: ContextVerificationReport,
-  applicability: Optional<Nullable<ContextCompletionApplicability>>,
   maxChars: number
 ): Record<string, unknown> {
   const ordered = report.checks
@@ -82,8 +80,6 @@ export function memoryVerificationProjection(
       status: check.status,
       artifact: check.artifact,
       checkedAt: check.checkedAt ?? report.checkedAt,
-      applicability: applicability?.checks[index]?.status ?? 'unknown',
-      reusedFrom: check.reusedFrom,
     }
     if (
       JSON.stringify(candidate).length <= ActRuntimeTuning.verificationCheckChars &&
@@ -97,7 +93,6 @@ export function memoryVerificationProjection(
       const compact = {
         index,
         status: candidate.status,
-        applicability: candidate.applicability,
         detailsInReport: true,
         ...(labelChars
           ? {

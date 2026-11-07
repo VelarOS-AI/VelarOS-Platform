@@ -118,6 +118,8 @@ export type ActRunEvent =
   | {
       readonly type: 'usage'
       readonly runId: string
+      /** 与持久模型请求账一致的单次身份。 */
+      readonly requestId: string
       /** 这一次请求的输入 token，含读自与写进前缀缓存的部分。 */
       readonly inputTokens: number
       readonly outputTokens: number
@@ -137,8 +139,6 @@ export type ActRunEvent =
       readonly report?: ContextVerificationReport
     }
   | { readonly type: 'error'; readonly runId: string; readonly message: string }
-  /** 任务到了每小时的模型用量上限：等 retryAfterMs 后自动继续。 */
-  | { readonly type: 'throttled'; readonly runId: string; readonly retryAfterMs: number }
   /** 主线到达回合或墙钟上限：已封段并延长截止时间，运行继续。 */
   | { readonly type: 'renewed'; readonly runId: string; readonly cause: 'turns' | 'clock' }
   /** 本次运行连续多步没有进展，已暂停；任务保留，用户的下一条输入继续同一个任务。 */

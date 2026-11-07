@@ -92,17 +92,11 @@ export class RecentContext implements RecentContextApi {
   private async snapshot(
     selections: Parameters<NonNullable<ContextStorage['selectSnapshot']>>[1]
   ): Promise<Nullable<ContextState>> {
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [
-          { title: 'search:history-reset', latest: true },
-          ...selections,
-        ])
-      : null
-    const state = this.storage.selectSnapshot
-      ? selected
-        ? { ...selected.metadata, records: selected.records }
-        : null
-      : await this.storage.load(this.id)
+    const selected = await this.storage.selectSnapshot(this.id, [
+      { title: 'search:history-reset', latest: true },
+      ...selections,
+    ])
+    const state = selected ? { ...selected.metadata, records: selected.records } : null
     if (state && state.objectReferencesVersion !== 1)
       throw new AppError(
         'CONTEXT_REFERENCES_UNVERIFIED',
@@ -283,7 +277,7 @@ export class RecentContext implements RecentContextApi {
         createdAt: new Date().toISOString(),
       }
       const { records: _records, ...metadata } = state
-      if (this.storage.compareAndSwapMetadata) {
+      {
         if (
           await this.storage.compareAndSwapMetadata(
             this.id,
@@ -291,20 +285,6 @@ export class RecentContext implements RecentContextApi {
             { ...metadata, version: state.version + 1 },
             [entry]
           )
-        )
-          return index
-      } else {
-        const full = await this.storage.load(this.id)
-        if (full?.version !== state.version) continue
-        if (
-          await this.storage.compareAndSwap(this.id, state.version, {
-            ...full,
-            version: state.version + 1,
-            records: [
-              ...full.records,
-              { ...entry, sequence: (full.records.at(-1)?.sequence ?? 0) + 1 },
-            ],
-          })
         )
           return index
       }

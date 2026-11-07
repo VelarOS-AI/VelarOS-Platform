@@ -388,16 +388,8 @@ export interface ContextTaskUsage {
   readonly inputTokens: number
   readonly outputTokens: number
   readonly unmeasuredCalls: number
-  /** 逐请求结算后的预算占用；已知实际加未知预留，旧任务底座保持保守。 */
+  /** 逐请求结算后的预算占用；已知实际加未知预留。 */
   readonly budgetTokens?: number
-  /** 用来限每小时用量。 */
-  readonly hourly?: ContextHourlyUsage
-}
-/** 按小时分桶的预留量：当前桶起点、当前桶与上一桶的 token。 */
-export interface ContextHourlyUsage {
-  readonly start: number
-  readonly tokens: number
-  readonly previous: number
 }
 /** 与原始记录同一次 CAS 提交的任务检查点。 */
 /** 模型材料携带其引用证据的版本，源失效会沿依赖传播。 */
@@ -452,10 +444,8 @@ export interface ContextViewLimits {
   readonly inspectBytes: number
   readonly evidenceChars: number
   readonly refreshes: number
-  readonly modelCalls: number
-  readonly modelTokens: number
-  /** 滚动一小时的模型 token 上限。 */
-  readonly modelTokensPerHour: number
+  readonly modelCalls?: number
+  readonly modelTokens?: number
   readonly materializationMs: number
   readonly leaseMs: number
 }
@@ -533,10 +523,6 @@ export interface ContextVerificationCheck {
   readonly checkedAt?: string
   readonly complete?: boolean
   readonly artifacts?: readonly ContextVerificationArtifact[]
-  readonly proofRef?: ContextRef
-  readonly reusedFrom?: ContextRef
-  /** 只表示该次可信探测时的适用性；当前适用性通过 completionApplicability 重新判断。 */
-  readonly applicability?: 'current' | 'historical' | 'unknown'
 }
 
 /** 精确产物集合的成员；contentHash 覆盖实际核查范围的全部字节。 */
@@ -544,66 +530,6 @@ export interface ContextVerificationArtifact {
   readonly identity: string
   readonly contentHash: string
   readonly revision?: string
-}
-
-/** 真实费用依据；同一 charge ID 在任务总账中只算一次。 */
-export interface ContextVerificationCost {
-  readonly coverage: 'complete' | 'partial' | 'unknown'
-  readonly charges: ReadonlyArray<{
-    readonly id: string
-    readonly kind: 'model' | 'external'
-    readonly currency: string
-    readonly basis: 'actual' | 'reference'
-    readonly amount?: number
-  }>
-}
-
-/** 可信宿主一次原子探测；token 必须覆盖全部依赖并识别 ABA。 */
-export type ContextVerificationFingerprint =
-  | { readonly status: 'unknown'; readonly cost?: ContextVerificationCost }
-  | {
-      readonly status: 'versioned'
-      readonly providerId: string
-      readonly token: string
-      readonly authorization: string
-      readonly artifacts: readonly ContextVerificationArtifact[]
-      readonly cost?: ContextVerificationCost
-    }
-
-/** 核查尝试的持久事件；started/settled/late-result 共享 attemptId，费用按 charge ID 去重。 */
-export interface ContextVerificationAttempt {
-  readonly attemptId: string
-  readonly taskId: string
-  readonly binding?: ContextCompletionBinding
-  readonly checkId: string
-  readonly scope: string
-  readonly verifierId: string
-  readonly verifierVersion: string
-  readonly authorizationBoundary: string
-  readonly phase: 'started' | 'settled' | 'late-result'
-  readonly mode: 'executed' | 'reused' | 'probed'
-  readonly status: 'pending' | 'passed' | 'failed' | 'unknown' | 'cancelled'
-  readonly startedAt: string
-  readonly settledAt?: string
-  readonly durationMs: number
-  readonly probeMs: number
-  readonly runMs: number
-  readonly check?: ContextVerificationCheck
-  readonly before?: ContextVerificationFingerprint
-  readonly after?: ContextVerificationFingerprint
-  readonly applicability: 'current' | 'historical' | 'unknown'
-  readonly cost: ContextVerificationCost
-}
-
-/** 当前探测对历史证明的解释；原始报告保持不可变。 */
-export interface ContextCompletionApplicability {
-  readonly ref: ContextRef
-  readonly checkedAt: string
-  readonly checks: ReadonlyArray<{
-    readonly id?: string
-    readonly proofRef?: ContextRef
-    readonly status: 'current' | 'historical' | 'unknown'
-  }>
 }
 
 /** 宿主收尾对象的中立身份；Context 不解释所属领域或状态迁移。 */

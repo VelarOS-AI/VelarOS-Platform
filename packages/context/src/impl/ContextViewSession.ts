@@ -10,7 +10,6 @@ import type {
 } from '../contract/requires.js'
 import type { ContextCompletionRecord, ContextCompletionResult } from '../types/context.js'
 import type {
-  ContextCompletionApplicability,
   ContextContent,
   ContextFeedback,
   ContextReadRange,
@@ -32,19 +31,13 @@ import type {
 } from '../types/model-budget.js'
 import type { ContextTaskMutation } from '../types/runtime.js'
 import { updateModelBudget } from '../utils/model-budget.js'
-import {
-  contextFailure,
-  emptyContextMetadata,
-  emptyContextState,
-  sameContextRef,
-} from '../utils/state.js'
+import { contextFailure, emptyContextMetadata, sameContextRef } from '../utils/state.js'
 import { completionVerification, verificationRequirements } from '../utils/verification.js'
 import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
 import { createContextReference } from './ContextReferenceAllocator.js'
-import { ContextVerificationSession } from './ContextVerificationSession.js'
 
 /** 绑定会话的任务检查点与证据视图，不另持有工具、模型或数据库。 */
 export interface ContextViewApi {
@@ -56,11 +49,6 @@ export interface ContextViewApi {
   inspect(): Promise<Nullable<ContextTaskState>>
   /** 读取有界不可变核查记录；省略引用读取当前任务的最近报告，可显式回看历史报告。 */
   readCompletion(ref?: ContextRef): Promise<Nullable<ContextCompletionRecord>>
-  /** 只由本生命周期登记的领域探测判断历史检查对当前产物是否适用。 */
-  completionApplicability(
-    ref?: ContextRef,
-    signal?: AbortSignal
-  ): Promise<Nullable<ContextCompletionApplicability>>
   /** 追加用户目标并取得一个有限租约，返回租约身份。 */
   begin(goal: ContextRef, signal?: AbortSignal, mode?: 'continue' | 'new'): Promise<string>
   /** 活动运行接收已归档的用户补充，保留总预算并使旧视图失效。 */
@@ -113,7 +101,7 @@ export interface ContextViewApi {
   reserveModel(
     role: 'main' | 'context',
     tokens: number,
-    request?: ContextModelRequestIdentity
+    request: ContextModelRequestIdentity
   ): Promise<void>
   /** 按请求身份确认进入实际驱动派发；重复确认幂等。 */
   dispatchModel(request: ContextModelRequestIdentity): Promise<void>
@@ -123,14 +111,14 @@ export interface ContextViewApi {
   releaseModel(
     role: 'main' | 'context',
     tokens: number,
-    request?: ContextModelRequestIdentity,
+    request: ContextModelRequestIdentity,
     confirmedNotDispatched?: boolean
   ): Promise<void>
   /** 保存供应商实际用量；缺少用量时保持未知计数。 */
   recordUsage(
     inputTokens: number,
     outputTokens: number,
-    request?: ContextModelRequestIdentity
+    request: ContextModelRequestIdentity
   ): Promise<void>
   /** 依照证据缺口、新鲜度和领域验收器判断交付；效果不明的操作不挡交付，照实留在结算事实里。 */
   complete(
@@ -153,12 +141,10 @@ export class ContextViewSession implements ContextViewApi {
   private recoveryId?: string
   private building = false
   private readonly builder: ContextEvidenceBuilder
-  private readonly verification: ContextVerificationSession
 
   public constructor(private readonly options: ContextViewOptions) {
     this.limits = resolveViewLimits(options.limits)
     this.builder = new ContextEvidenceBuilder(options)
-    this.verification = new ContextVerificationSession(options)
   }
 
   public sources(): readonly ContextSourceCard[] {
@@ -208,11 +194,7 @@ export class ContextViewSession implements ContextViewApi {
   }
 
   public async inspect(): Promise<Nullable<ContextTaskState>> {
-    const task = (
-      await (this.options.storage.loadMetadata
-        ? this.options.storage.loadMetadata(this.options.sessionId)
-        : this.options.storage.load(this.options.sessionId))
-    )?.task
+    const task = (await this.options.storage.loadMetadata(this.options.sessionId))?.task
     return task ? readContextTask(task) : null
   }
 
@@ -225,16 +207,6 @@ export class ContextViewSession implements ContextViewApi {
     if (content.text.length < content.totalChars)
       throw contextFailure('LIMIT', '领域核查记录超过完整读取上限')
     return JSON.parse(content.text) as ContextCompletionRecord
-  }
-
-  public async completionApplicability(
-    ref?: ContextRef,
-    signal: AbortSignal = new AbortController().signal
-  ): Promise<Nullable<ContextCompletionApplicability>> {
-    const target = ref ?? (await this.inspect())?.completionRef
-    if (!target) return null
-    const record = await this.readCompletion(target)
-    return record ? this.verification.applicability(target, record, signal) : null
   }
 
   public async begin(
@@ -625,7 +597,7 @@ export class ContextViewSession implements ContextViewApi {
   public async reserveModel(
     role: 'main' | 'context',
     tokens: number,
-    request?: ContextModelRequestIdentity
+    request: ContextModelRequestIdentity
   ): Promise<void> {
     await this.modelAccounting({ type: 'reserve', role, tokens, request }, true)
   }
@@ -644,21 +616,21 @@ export class ContextViewSession implements ContextViewApi {
   public async releaseModel(
     role: 'main' | 'context',
     tokens: number,
-    request?: ContextModelRequestIdentity,
+    request: ContextModelRequestIdentity,
     confirmedNotDispatched?: boolean
   ): Promise<void> {
     await this.modelAccounting(
       { type: 'release', role, tokens, request, confirmedNotDispatched },
-      !request
+      false
     )
   }
 
   public async recordUsage(
     inputTokens: number,
     outputTokens: number,
-    request?: ContextModelRequestIdentity
+    request: ContextModelRequestIdentity
   ): Promise<void> {
-    await this.modelAccounting({ type: 'usage', inputTokens, outputTokens, request }, !request)
+    await this.modelAccounting({ type: 'usage', inputTokens, outputTokens, request }, false)
   }
 
   private async modelAccounting(
@@ -670,7 +642,7 @@ export class ContextViewSession implements ContextViewApi {
         apply: (current) => {
           const task = requireOwner ? this.owned(current) : current
           if (!task) throw contextFailure('TASK_STATE', '模型预算任务不存在')
-          return updateModelBudget(task, update, this.limits, Date.now())
+          return updateModelBudget(task, update, this.limits)
         },
       },
       requireOwner
@@ -699,10 +671,6 @@ export class ContextViewSession implements ContextViewApi {
       }
     if (!(await this.validate(task.view, signal)))
       return { completed: false, verified: false, reason: 'STALE_VIEW', recovery: 'refresh' }
-    const checks =
-      verifier && task.id
-        ? await this.verification.open(task.id, commit?.binding, signal)
-        : undefined
     const requirements = verificationRequirements(
       await awaitContextOperation(
         Promise.resolve(verifier?.requirements?.(task.view, signal) ?? []),
@@ -720,7 +688,7 @@ export class ContextViewSession implements ContextViewApi {
       }
     let validation = completionVerification(
       verifier
-        ? await awaitContextOperation(verifier.verify(task.view, signal, checks), signal)
+        ? await awaitContextOperation(verifier.verify(task.view, signal), signal)
         : { verified: false, reason: '未配置领域验收器，结果为未验证交付' },
       requirements
     )
@@ -732,41 +700,6 @@ export class ContextViewSession implements ContextViewApi {
         for (const ref of check.evidenceRefs ?? [])
           await awaitContextOperation(this.options.context.read(ref, { limit: 1 }), signal)
       completionRef = await createContextReference(this.options.storage, this.options.sessionId)
-      // 全部核查结束后重新探测，后面的构建或安装不能沿用早先产物的当前证明。
-      if (
-        validation.verified &&
-        validation.report!.checks.some(
-          (check) => check.proofRef && check.applicability === 'current'
-        )
-      ) {
-        const applicability = await this.verification.applicability(
-          completionRef,
-          {
-            taskId: task.id ?? 'legacy',
-            taskRevision: task.revision,
-            viewId: task.view.id,
-            binding: commit?.binding,
-            result: { completed: false, ...validation },
-          },
-          signal
-        )
-        let stale = false
-        const finalChecks = validation.report!.checks.map((check, index) => {
-          const current = applicability.checks[index]!.status
-          if (!check.proofRef || check.applicability !== 'current' || current === 'current')
-            return check
-          stale = true
-          return { ...check, status: 'unknown' as const, complete: false, applicability: current }
-        })
-        if (stale)
-          validation = {
-            ...validation,
-            verified: false,
-            reason: 'VERIFICATION_ARTIFACT_CHANGED',
-            recovery: 'repair',
-            report: { ...validation.report!, checks: finalChecks },
-          }
-      }
     }
     if (!(await this.validate(task.view, signal)))
       return { completed: false, verified: false, reason: 'STALE_VIEW', recovery: 'refresh' }
@@ -777,7 +710,7 @@ export class ContextViewSession implements ContextViewApi {
     let record: Optional<Omit<ContextRecord, 'sequence'>>
     if (result.report) {
       const body: ContextCompletionRecord = {
-        taskId: task.id ?? 'legacy',
+        taskId: task.id!,
         taskRevision: task.revision,
         viewId: task.view.id,
         binding: commit?.binding,
@@ -791,7 +724,7 @@ export class ContextViewSession implements ContextViewApi {
       record = {
         ref: completionRef!,
         kind: 'audit',
-        title: `task:completion:${task.id ?? 'legacy'}`,
+        title: `task:completion:${task.id!}`,
         objectId,
         chars: text.length,
         sources: result.report.checks.flatMap((check) => check.evidenceRefs ?? []),
@@ -914,17 +847,13 @@ export class ContextViewSession implements ContextViewApi {
     }
   ): Promise<ContextTaskState> {
     const { storage, sessionId } = this.options
-    const incremental = Boolean(storage.loadMetadata && storage.compareAndSwapMetadata)
     const completionSignal = signal ?? new AbortController().signal
     for (let attempt = 0; attempt < 32; attempt++) {
       signal?.throwIfAborted()
       const prepared = completion?.commit
         ? await awaitContextOperation(completion.commit.prepare(completionSignal), completionSignal)
         : undefined
-      const full = incremental ? undefined : await storage.load(sessionId)
-      const state = incremental
-        ? ((await storage.loadMetadata!(sessionId)) ?? emptyContextMetadata())
-        : (full ?? emptyContextState())
+      const state = (await storage.loadMetadata(sessionId)) ?? emptyContextMetadata()
       if (prepared && prepared.version !== state.version) continue
       let task = mutation.apply(state.task ? readContextTask(state.task) : undefined)
       if (renew && task.lease)
@@ -940,7 +869,7 @@ export class ContextViewSession implements ContextViewApi {
         append.push({
           ref: await createContextReference(storage, sessionId),
           kind: 'audit',
-          title: `task:archive:${state.task.id ?? 'legacy'}`,
+          title: `task:archive:${state.task.id!}`,
           objectId,
           chars: body.length,
           sources: state.task.goals,
@@ -949,23 +878,8 @@ export class ContextViewSession implements ContextViewApi {
       }
       signal?.throwIfAborted()
       const next = { ...state, version: state.version + 1, task }
-      if (incremental) {
-        if (await storage.compareAndSwapMetadata!(sessionId, state.version, next, append))
-          return task
-      } else {
-        const records = full?.records ?? []
-        if (
-          await storage.compareAndSwap(sessionId, state.version, {
-            ...next,
-            records: [
-              ...records,
-              ...append.map((record, index) => ({
-                ...record,
-                sequence: (records.at(-1)?.sequence ?? 0) + index + 1,
-              })),
-            ],
-          })
-        )
+      {
+        if (await storage.compareAndSwapMetadata(sessionId, state.version, next, append))
           return task
       }
     }

@@ -231,7 +231,7 @@ export interface RuntimeSessionDependencies {
   readonly renewRuns?: boolean
   /** 在请求边界调用独立上下文工具。 */
   maintain?(
-    input: { reason: 'boundary' | 'pressure' | 'provider' | 'narrate'; targetChars: number },
+    input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
     signal: AbortSignal
   ): Promise<boolean>
   /** 当前装配的虚拟包，由声明与运行器共同使用。 */
@@ -389,12 +389,9 @@ export class RuntimeSession implements VelarosSession {
     if (task.sessionId !== this.id) throw new AppError('VALIDATION', '任务不属于当前会话')
     const storage = this.dependencies.storage
     const cursor = Math.max(after, task.after)
-    const records = storage.records
-      ? (await storage.records(this.id, { after: cursor, limit: TaskMaterialLimits.pageItems }))
-          .items
-      : ((await storage.load(this.id))?.records
-          .filter((record) => record.sequence > cursor)
-          .slice(0, TaskMaterialLimits.pageItems) ?? [])
+    const records = (
+      await storage.records(this.id, { after: cursor, limit: TaskMaterialLimits.pageItems })
+    ).items
     return records.filter((record) => record.sequence <= task.through)
   }
 
@@ -939,11 +936,9 @@ export class RuntimeSession implements VelarosSession {
   private async restoreFrameMarkers(signal: AbortSignal): Promise<void> {
     this.frameMarkersReady ??= (async () => {
       const storage = this.dependencies.storage
-      const snapshot = storage.selectSnapshot
-        ? await storage.selectSnapshot(this.id, [
-            { titlePrefix: RuntimeSession.frameMarkerRecordPrefix, kind: 'audit' },
-          ])
-        : await storage.load(this.id)
+      const snapshot = await storage.selectSnapshot(this.id, [
+        { titlePrefix: RuntimeSession.frameMarkerRecordPrefix, kind: 'audit' },
+      ])
       for (const record of snapshot?.records ?? [])
         if (
           record.kind === 'audit' &&
@@ -2024,11 +2019,9 @@ export class RuntimeSession implements VelarosSession {
       incarnation = crypto.randomUUID()
       this.snapshotProviders.set(provider, incarnation)
     }
-    const snapshot = this.dependencies.storage.selectSnapshot
-      ? await this.dependencies.storage.selectSnapshot(this.id, [
-          { title: 'search:history-reset', latest: true },
-        ])
-      : await this.dependencies.storage.load(this.id)
+    const snapshot = await this.dependencies.storage.selectSnapshot(this.id, [
+      { title: 'search:history-reset', latest: true },
+    ])
     const metadata = snapshot && ('metadata' in snapshot ? snapshot.metadata : snapshot)
     signal.throwIfAborted()
     return scriptOutputs.hash({
@@ -2291,11 +2284,9 @@ export class RuntimeSession implements VelarosSession {
         controller.signal.throwIfAborted()
         if (!isString(scope) || !scope || scope.length > ObservationReuseLimits.identityChars)
           return { kind: 'unknown', reason: 'scope-unknown' }
-        const snapshot = this.dependencies.storage.selectSnapshot
-          ? await this.dependencies.storage.selectSnapshot(this.id, [
-              { title: 'search:history-reset', latest: true },
-            ])
-          : await this.dependencies.storage.load(this.id)
+        const snapshot = await this.dependencies.storage.selectSnapshot(this.id, [
+          { title: 'search:history-reset', latest: true },
+        ])
         controller.signal.throwIfAborted()
         const metadata = snapshot && ('metadata' in snapshot ? snapshot.metadata : snapshot)
         const modules = [...this.dependencies.allowedModules()]

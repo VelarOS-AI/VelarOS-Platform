@@ -16,6 +16,7 @@ import { contextFailure } from './state.js'
 export function resolveViewLimits(input: Partial<ContextViewLimits> = {}): ContextViewLimits {
   const limits = { ...DefaultContextViewLimits, ...input }
   for (const [key, value] of Object.entries(limits)) {
+    if (value === undefined) continue
     if (!Number.isSafeInteger(value) || value < (key === 'refreshes' ? 0 : 1))
       throw contextFailure('VIEW_BUDGET', `预算必须为有限整数：${key}`)
   }
@@ -43,13 +44,9 @@ export function resourceTarget(
 
 /**
  * 读回任务检查点：结构不完整就拒，避免把损坏记录解释为新任务。
- * 旧版本写下的「待核对」（needs-reconcile）已经没有这一态，按 context-pending 读。
  */
 export function readContextTask(stored: ContextTaskState): ContextTaskState {
-  const value =
-    stored && (stored.status as string) === 'needs-reconcile'
-      ? { ...stored, status: 'context-pending' as const }
-      : stored
+  const value = stored
   if (
     !value ||
     !Number.isSafeInteger(value.revision) ||
@@ -72,9 +69,7 @@ export function readContextTask(stored: ContextTaskState): ContextTaskState {
     !value.usage
   )
     throw contextFailure('TASK_STATE', '任务检查点结构无效')
-  // 计数都是非负整数；每小时分桶的起点与两桶用量同样是非负整数
-  const { hourly, ...counts } = value.usage
-  for (const count of [...Object.values(counts), ...Object.values(hourly ?? {})])
+  for (const count of Object.values(value.usage))
     if (!Number.isSafeInteger(count) || count < 0)
       throw contextFailure('TASK_STATE', '任务用量无效')
   checkModelBudget(value)

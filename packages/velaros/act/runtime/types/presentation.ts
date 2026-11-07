@@ -31,9 +31,11 @@ export interface ActRunPresentation {
   /** 最后一次完成核查的完整结论；完成与领域验证分别呈现。 */
   readonly completion?: ContextCompletionResult
   /** 运行当前的提示：限速等待中，或连续没有进展已暂停；下一回合开始或运行结束时清除。 */
-  readonly notice?:
-    | { readonly kind: 'throttled'; readonly retryAfterMs: number }
-    | { readonly kind: 'stalled'; readonly repeatedSteps: number; readonly message: string }
+  readonly notice?: {
+    readonly kind: 'stalled'
+    readonly repeatedSteps: number
+    readonly message: string
+  }
 }
 
 /** 实时与持久事件共用的宿主展示；游标仅由持久事件推进。 */

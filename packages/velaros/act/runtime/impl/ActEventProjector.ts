@@ -76,9 +76,6 @@ class ActEventProjector implements ActEventProjectorApi {
       const { type: _type, runId: _runId, ...completion } = event
       run = { ...run, completion: structuredClone(completion) }
     }
-    // 限速等待与无进展暂停只给提示，状态仍以 state 事件为准
-    if (event.type === 'throttled')
-      run = { ...run, notice: { kind: 'throttled', retryAfterMs: event.retryAfterMs } }
     if (event.type === 'stalled')
       run = {
         ...run,

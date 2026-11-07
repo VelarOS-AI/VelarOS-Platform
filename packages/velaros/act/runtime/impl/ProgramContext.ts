@@ -376,17 +376,10 @@ export class ProgramContext implements ProgramContextApi {
       ])
     )
   }
-
   private async snapshot(
-    selections: readonly ContextRecordSelection[],
-    incremental = false
+    selections: readonly ContextRecordSelection[]
   ): Promise<Nullable<ContextRecordSnapshot>> {
-    if (this.storage.selectSnapshot && (!incremental || this.storage.compareAndSwapMetadata))
-      return this.storage.selectSnapshot(this.sessionId, selections)
-    const state = await this.storage.load(this.sessionId)
-    if (!state) return null
-    const { records, ...metadata } = state
-    return { metadata, records }
+    return this.storage.selectSnapshot(this.sessionId, selections)
   }
 
   /** 只接受宿主登记的原样页对象；读取回执自身不是已交付证明。 */
@@ -548,22 +541,16 @@ export class ProgramContext implements ProgramContextApi {
   ): Promise<void> {
     for (let attempt = 0; attempt < 64; attempt++) {
       signal?.throwIfAborted()
-      const incremental = Boolean(
-        this.storage.selectSnapshot && this.storage.compareAndSwapMetadata
-      )
       const refs = [
         ...new Set(
           additions.flatMap((item) => [item.ref.id, ...item.sources.map((ref) => ref.id)])
         ),
       ]
-      const snapshot = (await this.snapshot(
-        [
-          { title: 'script:lease-state', kind: 'audit', latest: true },
-          { title: 'search:history-reset', latest: true },
-          ...refs.map((refId) => ({ refId })),
-        ],
-        true
-      )) ?? {
+      const snapshot = (await this.snapshot([
+        { title: 'script:lease-state', kind: 'audit', latest: true },
+        { title: 'search:history-reset', latest: true },
+        ...refs.map((refId) => ({ refId })),
+      ])) ?? {
         metadata: {
           version: 0,
           objectReferencesVersion: 1,
@@ -598,29 +585,14 @@ export class ProgramContext implements ProgramContextApi {
       const record = await this.record('script:lease-state', JSON.stringify(state))
       const metadata = { ...snapshot.metadata, version: snapshot.metadata.version + 1 }
       signal?.throwIfAborted()
-      if (incremental) {
+      {
         if (
-          await this.storage.compareAndSwapMetadata!(
+          await this.storage.compareAndSwapMetadata(
             this.sessionId,
             snapshot.metadata.version,
             metadata,
             [...additions, record]
           )
-        )
-          return
-      } else {
-        const records = [
-          ...snapshot.records,
-          ...[...additions, record].map((item, index) => ({
-            ...item,
-            sequence: (snapshot.records.at(-1)?.sequence ?? 0) + index + 1,
-          })),
-        ]
-        if (
-          await this.storage.compareAndSwap(this.sessionId, snapshot.metadata.version, {
-            ...metadata,
-            records,
-          })
         )
           return
       }

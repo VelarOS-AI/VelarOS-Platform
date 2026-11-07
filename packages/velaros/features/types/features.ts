@@ -8,7 +8,7 @@ export interface FeatureDefinition {
   readonly prompt: string
   readonly instructions?: string
   readonly implicit: boolean
-  readonly source: 'native' | 'markdown' | 'codex' | 'legacy'
+  readonly source: 'native' | 'markdown' | 'codex'
   readonly diagnostics: readonly string[]
   readonly toolDependencies: readonly string[]
   readonly distributionId?: string
