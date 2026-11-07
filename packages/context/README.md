@@ -76,22 +76,7 @@ if (!result.completed) console.warn(result.reason, result.recovery)
 await view.end()
 ```
 
-宿主可在验收前固定本次必需交付范围，逐项核查仍接入真实领域判据：
-
-```ts
-
-declare const view: ContextViewApi
-// 领域验收器实际检查产物，并返回声明范围内的逐项结果。
-
-  requirements: (current) => [
-    { id: 'implementation', label: '实现与边界行为', artifacts: ['src/index.ts'], sourceRefs: [current.goals[0].record.ref] },
-    { id: 'example', label: '可运行示例', artifacts: ['examples/demo.ts'], sourceRefs: [current.goals[0].record.ref] },
-  ],
-  verify: verifyDeliveredArtifacts,
-}
-const result = await view.complete(completion)
-console.log(result.completed, result.verified, result.report?.checks)
-```
+`view.complete(signal, commit)` 核对未决执行、必需材料、源版本与当前任务。宿主需要联动领域收尾时，通过 `commit.prepare` 提供同版本记录，与任务完成状态在同一次 CAS 中发布。
 
 ## 入口
 
