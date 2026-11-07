@@ -18,9 +18,7 @@ import { ReasoningFallback, type ReasoningFallbackApi } from './ReasoningFallbac
  * 子类负责把统一的 `ModelAdapterConfig` 转换为 provider SDK/API 需要的参数。
  * 语言模型和 embedding 是分开的能力：不支持 embedding 的 provider 复用这里的默认错误。
  *
- * @deprecated 扩展点已经换成注入面的 `ModelProviderAdapter`：宿主自带适配器实现那个接口，
- * 从 `createModelRuntimeComposition({ adapters })` 传进来即可，不必继承本类。
- * 本类下一轮入口收口后不再出包。
+ * 内置适配器共用的实现；宿主扩展实现注入面的 `ModelProviderAdapter`，由 composition 装配。
  */
 abstract class ModelAdapter implements ModelProviderAdapter {
   /** 思考参数被拒时的退档记忆：适配器随运行时对象图各建一份，型号能用的档记在这里。 */

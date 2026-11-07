@@ -86,13 +86,7 @@ export interface ModelRequestObjectBaseInput<TSchemaOutput> {
 /**
  * 结构化输出请求。返回类型由 schema 的输出类型决定，调用方不能通过一个无关泛型改写它。
  */
-export type ModelRequestObjectInput<TOutput = unknown> = ModelRequestObjectBaseInput<TOutput> & {
-  /**
-   * @deprecated 需要改变输出类型时使用 ModelRequestClient.generateDecodedObject。
-   * 这里仅保留同类型归一化兼容能力。
-   */
-  mapOutput?: ModelRequestOutputDecoder<TOutput, TOutput>
-}
+export type ModelRequestObjectInput<TOutput = unknown> = ModelRequestObjectBaseInput<TOutput>
 
 export type ModelRequestOutputDecoder<TSchemaOutput, TOutput> = (
   output: TSchemaOutput

@@ -203,7 +203,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
 
   /** 删除工作区内的普通文件；拒绝目录、符号链接与越界路径。 */
   public async deleteFile(path: string): Promise<{ path: string; deleted: boolean }> {
-    // 历史根是只读兼容层；删除只允许命中主根，绝不能沿读回退删除旧资产。
     const target = await resolveExistingPathInRoot(this.workspaceRoot, path)
     const existing = await lstat(target.path).catch((error: any) => {
       if (isMissingFileError(error)) return null

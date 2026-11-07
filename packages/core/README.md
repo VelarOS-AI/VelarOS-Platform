@@ -58,7 +58,7 @@ Result.match(saved, {
 | `@velaros-ai/core/logger` | 任何进程 | 日志运行时 `Log`、分域日志 `Logger`、transport 合同与回调、内存 transport |
 | `@velaros-ai/core/logger/node` | Node | 文件 transport `createFileLogTransport`：有序 JSONL，按记录的本地日期分文件 |
 | `@velaros-ai/core/result` | 任何进程 | `Result` |
-| `@velaros-ai/core/utils/*` | 按文件 | 低频工具逐文件引：`TimerScope`、`KeyedSerialQueue`、`fetchWithTimeout`、`SqliteMigrations`、`ExclusiveSqliteLock` 等；`FilePersistence`、`FileSecretBox`、`RealPath` 只给 Node |
+| `@velaros-ai/core/utils/*` | 按文件 | 低频工具逐文件引：`TimerScope`、`KeyedSerialQueue`、`fetchWithTimeout`、`ExclusiveSqliteLock` 等；`FilePersistence`、`FileSecretBox`、`RealPath` 只给 Node |
 | [`@velaros-ai/core/platform`](src/platform/README.md) | 任何进程 | 跨平台约定：路径文本、shell 与进程命令规格、应用数据目录；另有 `/contracts`，以及只给 Node 的 `/shared-resources` |
 | [`@velaros-ai/core/text-files`](src/text-files/README.md) | Node | 磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读与流式读；另有 `/contracts` |
 | [`@velaros-ai/core/path-rules`](src/path-rules/README.md) | Node | glob 匹配、.gitignore 判定、遍历时的忽略策略；另有 `/contracts` |
