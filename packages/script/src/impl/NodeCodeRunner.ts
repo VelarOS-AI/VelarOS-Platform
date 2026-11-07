@@ -601,6 +601,17 @@ class NodeCodeRunner implements CodeRunnerApi {
       if (listener.listening) await new Promise<void>((resolve) => listener.close(() => resolve()))
       if (!isUndefined(log)) closeSync(log)
       if (socketDirectory) await rm(socketDirectory, { recursive: true, force: true })
+      // 能力目录和协议缓冲只服务本次进程；历史回看保留 output.log，正文已由运行时归档。
+      // 未能证明进程树退出时保留现场，避免后台子进程仍在使用导入目录。
+      if (directory && (!processStarted || processSettled)) {
+        try {
+          await rm(join(directory, 'host'), { recursive: true, force: true })
+          if (outputFile) await rm(outputFile, { force: true })
+          if (!processStarted) await rm(directory, { recursive: true, force: true })
+        } catch (error) {
+          Log.tag('NodeCodeRunner').caught('执行临时目录清理失败', error)
+        }
+      }
       if (runtimeLease) {
         try {
           if (!processStarted || processSettled) await runtimeLease.release()

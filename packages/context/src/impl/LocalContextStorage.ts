@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
 import { isAbsolute } from 'node:path'
 import { getBuiltinModule } from 'node:process'
@@ -23,6 +23,7 @@ import type {
 } from '../types/context.js'
 import { contextFailure, emptyContextState } from '../utils/state.js'
 
+import { LocalContextObjects } from './LocalContextObjects.js'
 import { LocalStoreStorage } from './LocalStoreStorage.js'
 
 /** SQLite 原子提交小状态及独立记录索引；正文保持内容寻址和原有会话边界。 */
@@ -59,6 +60,7 @@ export class LocalContextStorage implements ContextStorage {
   /** 同连接的独立持久对象空间。 */
   public readonly stores: StoreStorage
   private readonly db: DatabaseSync
+  private readonly objects: LocalContextObjects
   private readonly lifetime = new AbortController()
   public constructor(options: LocalContextStorageOptions) {
     if (!isAbsolute(options.path) && options.path !== ':memory:')
@@ -73,7 +75,7 @@ export class LocalContextStorage implements ContextStorage {
     this.db = new sqlite.DatabaseSync(options.path)
     try {
       this.db.exec(
-        'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, version INTEGER NOT NULL, state TEXT NOT NULL); CREATE TABLE IF NOT EXISTS objects (session TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, touched INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session,id)); CREATE TABLE IF NOT EXISTS context_records(session TEXT NOT NULL, id TEXT NOT NULL, sequence INTEGER NOT NULL, title TEXT NOT NULL, object_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(session,id)); CREATE INDEX IF NOT EXISTS context_records_sequence ON context_records(session,sequence); CREATE INDEX IF NOT EXISTS context_records_title ON context_records(session,title,sequence); CREATE INDEX IF NOT EXISTS context_records_object ON context_records(session,object_id);'
+        'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, version INTEGER NOT NULL, state TEXT NOT NULL); CREATE TABLE IF NOT EXISTS context_records(session TEXT NOT NULL, id TEXT NOT NULL, sequence INTEGER NOT NULL, title TEXT NOT NULL, object_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(session,id)); CREATE INDEX IF NOT EXISTS context_records_sequence ON context_records(session,sequence); CREATE INDEX IF NOT EXISTS context_records_title ON context_records(session,title,sequence); CREATE INDEX IF NOT EXISTS context_records_object ON context_records(session,object_id);'
       )
       this.db.exec(
         "CREATE INDEX IF NOT EXISTS context_records_kind ON context_records(session,json_extract(body,'$.kind'),sequence)"
@@ -81,6 +83,7 @@ export class LocalContextStorage implements ContextStorage {
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS context_reference_ids(session TEXT NOT NULL,id TEXT NOT NULL,PRIMARY KEY(session,id))'
       )
+      this.objects = new LocalContextObjects(this.db)
       this.stores = new LocalStoreStorage(this.db, this.lifetime.signal)
     } catch (error) {
       try {
@@ -438,19 +441,10 @@ export class LocalContextStorage implements ContextStorage {
     }
   }
   public async put(sessionId: string, text: string): Promise<string> {
-    const id = createHash('sha256').update(text).digest('hex')
-    this.db
-      .prepare(
-        'INSERT INTO objects(session,id,body,touched) VALUES (?,?,?,?) ON CONFLICT(session,id) DO UPDATE SET touched=excluded.touched'
-      )
-      .run(sessionId, id, text, Date.now())
-    return id
+    return this.objects.put(sessionId, text)
   }
   public async get(sessionId: string, objectId: string): Promise<Nullable<string>> {
-    const row = this.db
-      .prepare('SELECT body FROM objects WHERE session=? AND id=?')
-      .get(sessionId, objectId)
-    return row ? String(row.body) : null
+    return this.objects.get(sessionId, objectId)
   }
   public async has(sessionId: string, objectId: string): Promise<boolean> {
     return Boolean(
@@ -481,11 +475,13 @@ export class LocalContextStorage implements ContextStorage {
           'SELECT id FROM objects o WHERE session=? AND touched<? AND NOT EXISTS(SELECT 1 FROM context_records r WHERE r.session=o.session AND r.object_id=o.id)'
         )
         .all(sessionId, options.before)
-      if (isFalse(options.dryRun))
+      if (isFalse(options.dryRun)) {
         for (const object of candidates)
           this.db
             .prepare('DELETE FROM objects WHERE session=? AND id=?')
             .run(sessionId, String(object.id))
+        this.objects.collect(sessionId)
+      }
       this.db.exec('COMMIT')
       return {
         candidates: candidates.length,

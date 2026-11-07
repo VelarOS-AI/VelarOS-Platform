@@ -195,8 +195,7 @@ try {
         authorized: 0,
         launched: 0,
       })
-      const [run] = await readdir(directory)
-      expect(await readdir(join(directory, run!, 'host'))).toEqual(['bridge.mjs'])
+      expect(await readdir(directory)).toEqual([])
     })
   )
 
@@ -342,6 +341,24 @@ try {
       expect(result.ok).toBe(false)
       expect(result.error?.code).toBe('RUNNER_CRASHED')
       expect(result.process?.stdout).toBe('partial')
+      const [run] = await readdir(directory)
+      expect(await readdir(join(directory, run!, 'host'))).toContain('index.json')
+    }))
+  test('已退出的执行清理能力目录和协议缓冲，保留完整日志供历史回看', () =>
+    fixture(async (cwd, directory) => {
+      const runner = createNodeCodeRunner({
+        cwd,
+        directory,
+        execute: async (_request, output) => {
+          output('persistent log', 'stdout')
+          return { exitCode: 0, signal: null, stdout: 'persistent log', stderr: '' }
+        },
+      })
+      const result = await runner.run(request(''), noCalls, log)
+      expect(result.ok).toBe(true)
+      expect(await readFile(result.process!.logPath!, 'utf8')).toBe('persistent log')
+      const [run] = await readdir(directory)
+      expect(await readdir(join(directory, run!))).toEqual(['output.log'])
     }))
   it('真实 Node 同步失败、输出与 Execa heredoc 使用同一进程口', () =>
     fixture(async (cwd, directory) => {

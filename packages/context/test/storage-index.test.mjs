@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,6 +38,84 @@ async function fixture(t) {
   }
 }
 const empty = { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
+
+test('INV-20 SQLite chunks deduplicate growing snapshots and preserve exact text across connections and reopen', async (t) => {
+  const files = await fixture(t)
+  const storage = files.open()
+  const reader = files.open()
+  const payload = randomBytes(384 * 1024).toString('hex')
+  const originals = []
+  for (let turn = 0; turn < 32; turn++) {
+    const text = JSON.stringify({ turn, jobs: [{ output: payload }], history: payload, tail: turn })
+    const id = await storage.put('s', text)
+    originals.push({ id, text })
+    assert.equal(await reader.get('s', id), text)
+  }
+  const db = files.openDatabase()
+  const stored = Number(
+    db.prepare('SELECT sum(length(body)) AS bytes FROM object_chunks').get().bytes
+  )
+  const raw = originals.reduce((sum, item) => sum + Buffer.byteLength(item.text), 0)
+  assert(stored < raw / 16, `snapshots stored ${stored} bytes for ${raw} input bytes`)
+  assert.equal(Number(db.prepare('SELECT count(*) AS count FROM objects').get().count), 32)
+  await storage.close()
+  const reopened = files.open()
+  for (const { id, text } of originals) assert.equal(await reopened.get('s', id), text)
+  for (const text of ['', 'a\0b😀中文\ud800x\udfff', payload]) {
+    const id = await reopened.put('s', text)
+    assert.equal(await reader.get('s', id), text)
+    assert.equal(await reader.get('other', id), null)
+    assert.equal(await reopened.put('s', text), id)
+  }
+})
+
+test('SQLite chunk collection preserves shared chunks, live records and other sessions', async (t) => {
+  const files = await fixture(t)
+  const storage = files.open()
+  const context = createContextRuntime({ sessionId: 's', storage })
+  const body = randomBytes(32 * 1024).toString('hex')
+  const live = await context.append({ kind: 'user', body })
+  const orphan = await storage.put('s', `${body}orphan`)
+  const foreign = await storage.put('other', body)
+  const db = files.openDatabase()
+  db.prepare('UPDATE objects SET touched=1').run()
+  const options = {
+    expectedVersion: (await storage.load('s')).version,
+    before: Date.now() - ContextLimits.orphanGraceMs - 1,
+  }
+  assert.equal((await storage.collect('s', options)).candidates, 1)
+  assert.equal(await storage.get('s', orphan), `${body}orphan`)
+  assert.equal((await storage.collect('s', { ...options, dryRun: false })).deleted, 1)
+  assert.equal(await storage.get('s', orphan), null)
+  assert.equal(await storage.get('s', live.objectId), body)
+  assert.equal(await storage.get('other', foreign), body)
+  assert.equal(
+    Number(
+      db
+        .prepare('SELECT count(*) AS count FROM object_parts WHERE session=? AND object_id=?')
+        .get('s', orphan).count
+    ),
+    0
+  )
+})
+
+test('SQLite chunk writes roll back together and missing chunks cannot masquerade as original text', async (t) => {
+  const files = await fixture(t)
+  const storage = files.open()
+  const db = files.openDatabase()
+  db.exec(
+    "CREATE TRIGGER fail_part BEFORE INSERT ON object_parts WHEN NEW.position=1 BEGIN SELECT RAISE(ABORT,'part failed'); END"
+  )
+  const text = randomBytes(32 * 1024).toString('hex')
+  await assert.rejects(storage.put('s', text), /part failed/)
+  for (const table of ['objects', 'object_chunks', 'object_parts'])
+    assert.equal(Number(db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count), 0)
+  db.exec('DROP TRIGGER fail_part')
+  const id = await storage.put('s', text)
+  db.exec('DELETE FROM object_chunks WHERE rowid=(SELECT min(rowid) FROM object_chunks)')
+  await assert.rejects(storage.get('s', id), /分块缺失/)
+  assert.equal(await storage.get('s', 'missing'), null)
+})
 
 test('original input projection keeps its interpretation and tail when the read page is smaller than the caller budget', async (t) => {
   const files = await fixture(t)

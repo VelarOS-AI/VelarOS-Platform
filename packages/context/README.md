@@ -123,4 +123,5 @@ console.log(result.completed, result.verified, result.report?.checks)
 - `complete(verifier, signal, commit)` 的可选宿主提交口只准备同一存储版本上的不可变记录。领域验收通过后，任务完成、报告和这些记录在同次 CAS 发布；竞争只重新准备记录，不重跑验收或外部操作。取消、验收失败或宿主对象变更均不提前发布完成记录。
 - 独立使用时存储由宿主创建与 `close()`；交给 `createRuntime({ storage })` 并创建成功后由 Runtime 关闭；`close()` 幂等，只释放连接与等待，不删数据。
 - `localContextStorage` 在创建时才加载 `node:sqlite`；注入别的 `ContextStorage` 的进程不需要 SQLite。
+- SQLite 原文按内容分块并压缩，同会话的累计快照复用未变正文；读取核对完整指纹，恢复原文和历史请求，不丢审计信息。宿主直接使用新数据目录，不读取或迁移旧的整篇 TEXT 格式。
 - 自己实现存储时要保证跨实例 CAS、正文先落盘、调用回执幂等、对象与附带消息原子提交；需要共享对象与消息时同时实现 `stores: StoreStorage`，共享对象不随会话回收。完整规范见 [存储适配规范](../../docs/architecture/storage.md)。
