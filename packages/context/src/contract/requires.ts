@@ -43,8 +43,8 @@ export interface ContextStorage {
   readonly leaseOwner?: string
   /** 仅在同一宿主上能证明所有者已退出时返回 false；未知必须保留租约。 */
   leaseOwnerActive?(owner: string): Optional<boolean>
-  /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用。省略时由同存储实例的签发器防冲突。 */
-  allocateReferenceId?(sessionId: string): Promise<string>
+  /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用，不改变上下文 CAS 版本。 */
+  allocateReferenceId(sessionId: string): Promise<string>
   /** 同一持久命名空间内的共享对象与消息端口；省略时不发现 system.store，不能回退到另一份隐式存储。 */
   readonly stores?: StoreStorage
   /** 一致读取完整状态及有序记录；未建立时返回 null，返回值不与存储共享可变内存。 */

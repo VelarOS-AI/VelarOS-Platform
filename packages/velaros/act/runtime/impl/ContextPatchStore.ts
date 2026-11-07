@@ -42,6 +42,10 @@ export class ContextPatchStore implements ContextPatchStoreApi {
     if (this.closed || sessionId !== this.id)
       throw new AppError('CLOSED', '上下文提交缓冲已关闭或引用越界')
   }
+  public async allocateReferenceId(sessionId: string): Promise<string> {
+    this.check(sessionId)
+    return this.storage.allocateReferenceId(sessionId)
+  }
   public async load(sessionId: string) {
     this.check(sessionId)
     return structuredClone(this.state)

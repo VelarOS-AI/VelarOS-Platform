@@ -24,14 +24,14 @@ export class RuntimeDiagnostics implements RuntimeDiagnosticsApi {
           stores: storage.stores,
           leaseOwner: storage.leaseOwner,
           leaseOwnerActive: storage.leaseOwnerActive?.bind(storage),
+          allocateReferenceId: (id) =>
+            this.measure(id, 'allocateReferenceId', () => storage.allocateReferenceId(id)),
           load: (id) => this.measure(id, 'load', () => storage.load(id)),
-          selectSnapshot: (...args: Parameters<NonNullable<ContextStorage['selectSnapshot']>>) =>
+          selectSnapshot: (...args: Parameters<ContextStorage['selectSnapshot']>) =>
             this.measure(args[0], 'selectSnapshot', () => storage.selectSnapshot(...args)),
-          loadMetadata: (...args: Parameters<NonNullable<ContextStorage['loadMetadata']>>) =>
+          loadMetadata: (...args: Parameters<ContextStorage['loadMetadata']>) =>
             this.measure(args[0], 'loadMetadata', () => storage.loadMetadata(...args)),
-          compareAndSwapMetadata: (
-            ...args: Parameters<NonNullable<ContextStorage['compareAndSwapMetadata']>>
-          ) =>
+          compareAndSwapMetadata: (...args: Parameters<ContextStorage['compareAndSwapMetadata']>) =>
             this.measure(args[0], 'compareAndSwapMetadata', () =>
               storage.compareAndSwapMetadata(...args)
             ),
@@ -41,9 +41,9 @@ export class RuntimeDiagnostics implements RuntimeDiagnosticsApi {
           get: (id, objectId) => this.measure(id, 'get', () => storage.get(id, objectId)),
           has: (id: string, objectId: string) =>
             this.measure(id, 'has', () => storage.has(id, objectId)),
-          records: (...args: Parameters<NonNullable<ContextStorage['records']>>) =>
+          records: (...args: Parameters<ContextStorage['records']>) =>
             this.measure(args[0], 'records', () => storage.records(...args)),
-          appendRecord: (...args: Parameters<NonNullable<ContextStorage['appendRecord']>>) =>
+          appendRecord: (...args: Parameters<ContextStorage['appendRecord']>) =>
             this.measure(args[0], 'appendRecord', () => storage.appendRecord(...args)),
           collect: optionalWhen(
             Boolean(storage.collect),

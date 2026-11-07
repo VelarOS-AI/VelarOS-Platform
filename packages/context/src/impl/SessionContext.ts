@@ -2,7 +2,7 @@ import { isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 
 import { ContextLimits } from '../contract/constants.js'
-import type { ContextRuntimeOptions } from '../contract/requires.js'
+import type { ContextRuntimeOptions, ContextStorage } from '../contract/requires.js'
 import type {
   ContextAppend,
   ContextContent,
@@ -26,8 +26,6 @@ import {
   emptyContextState,
   sameContextRef,
 } from '../utils/state.js'
-
-import { createContextReference } from './ContextReferenceAllocator.js'
 
 /** 会话的上下文权威。 */
 export interface ContextRuntime {
@@ -204,7 +202,7 @@ export class SessionContext implements ContextRuntime {
     let cursor = 0
     for (const chunk of manifest.chunks) {
       if (text.length === expected) break
-      // 原始记录已有字符数；兼容固定宽度的旧分块，也支持避开代理对的新边界。
+      // 分块边界避开代理对，按各记录的实际字符数定位。
       const record = await this.reference(chunk)
       const end = cursor + record.chars
       if (end <= offset) {
@@ -490,4 +488,12 @@ export class SessionContext implements ContextRuntime {
 /** 创建绑定会话的上下文运行时。 */
 export function createContextRuntime(options: ContextRuntimeOptions): ContextRuntime {
   return new SessionContext(options)
+}
+
+/** 由存储原子保留身份，再绑定当前会话。 */
+export async function createContextReference(
+  storage: ContextStorage,
+  sessionId: string
+): Promise<ContextRef> {
+  return { sessionId, id: await storage.allocateReferenceId(sessionId) }
 }

@@ -34,7 +34,7 @@ import { awaitContextOperation, readContextTask, resolveViewLimits } from '../ut
 import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
-import { createContextReference } from './ContextReferenceAllocator.js'
+import { createContextReference } from './SessionContext.js'
 
 /** 绑定会话的任务检查点与证据视图，不另持有工具、模型或数据库。 */
 export interface ContextViewApi {

@@ -65,7 +65,7 @@ function dragMiss() {
   }
 }
 
-test('inspection refs are generation-scoped, fail closed, and keep stored targets authoritative', () => {
+test('INV-31 inspection refs are generation-scoped, fail closed, and keep stored targets authoritative', () => {
   const store = new BrowserTargetRefStore()
   const save = target({ ref: '@e1', css: '#save', role: 'button', text: 'Save' })
   const cancel = target({ ref: '@e2', css: '#cancel', role: 'button', text: 'Cancel' })
@@ -93,7 +93,11 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
     '- button "Cancel" (ref=@e2:g1)',
     'custom ref=@e10:g1; state=ready',
   ])
-  assert.equal(store.hydrateTarget('session', target({ ref: '@e1' })).css, '#save')
+  assert.equal(store.hydrateTarget('session', target({ ref: '@e1:g1' })).css, '#save')
+  assert.throws(
+    () => store.hydrateTarget('session', target({ ref: '@e1' })),
+    (error) => error?.context?.reason === 'stale-ref'
+  )
 
   const removeAccount = target({
     ref: '@e1',

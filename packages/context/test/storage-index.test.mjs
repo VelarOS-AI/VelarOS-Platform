@@ -440,28 +440,7 @@ test('selected snapshots keep one version while another connection commits betwe
   )
 })
 
-test('input recall retains compatibility with archived fixed-width chunks', async (t) => {
-  const files = await fixture(t)
-  const storage = files.open()
-  const context = createContextRuntime({ sessionId: 'legacy', storage })
-  const a = await context.append({
-    kind: 'audit',
-    title: 'user:text-chunk',
-    body: 'x'.repeat(8000000),
-  })
-  const b = await context.append({ kind: 'audit', title: 'user:text-chunk', body: '旧😀尾' })
-  const chunks = [a.ref, b.ref]
-  const input = await context.append({
-    kind: 'user',
-    title: 'user:manifest',
-    body: JSON.stringify({ chars: a.chars + b.chars, chunks, files: [] }),
-    sources: chunks,
-  })
-  assert.equal(
-    (await context.readInput(input.ref, { offset: 7999998, limit: 30 })).text,
-    'xx旧😀尾'
-  )
-})
+
 test(`indexed: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
   const files = await fixture(t)
   const storage = files.open()

@@ -15,7 +15,6 @@ import {
   staleRefError,
 } from '../../utils/target-refs'
 import { scopeRef } from '../../utils/target-refs'
-import { resolveStoredRef } from '../../utils/target-refs'
 
 /**
  * 页面元素 ref 定位表（`@e1:g3` 风格短引用 → 完整定位线索）。
@@ -161,15 +160,14 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
     if (!normalizedRef) throw invalidRefError(sessionId, requestedRef, field)
 
     const session = this.refsBySession.get(sessionId)
-    const resolvedRef = session ? resolveStoredRef(normalizedRef, session) : null
-    const storedTarget = resolvedRef ? session?.refs.get(resolvedRef) : null
+    const storedTarget = session?.refs.get(normalizedRef)
     if (!storedTarget) {
       throw staleRefError(sessionId, normalizedRef, field, session?.generation)
     }
 
     return {
       ...storedTarget,
-      ref: resolvedRef,
+      ref: normalizedRef,
       attributes: { ...storedTarget.attributes },
     }
   }

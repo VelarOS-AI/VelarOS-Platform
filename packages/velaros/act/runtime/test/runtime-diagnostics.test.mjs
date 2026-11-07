@@ -52,15 +52,19 @@ test('INV-42 storage diagnostics preserve optional methods, detached results and
   assert.equal(metrics.at(-1).succeeded, false)
 })
 
-test('observers cannot change business results and optional capabilities remain optional', async () => {
-  const original = {
-    load: async () => null,
-    compareAndSwap: async () => false,
-    put: async () => '',
-    get: async () => null,
-    close: async () => {},
-  }
+test('observers cannot change business results and optional capabilities remain optional', async (t) => {
+  const underlying = localContextStorage({ path: ':memory:' })
+  t.after(() => underlying.close())
+  const optional = new Set(['stores', 'collect', 'leaseOwner', 'leaseOwnerActive'])
+  const original = new Proxy(underlying, {
+    get(target, key) {
+      if (optional.has(key)) return undefined
+      const value = Reflect.get(target, key)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
   assert.equal(new RuntimeDiagnostics(original, undefined).storage, original)
+  let id = 0
   for (const receiver of [
     () => {
       throw Error('observer')
@@ -70,14 +74,13 @@ test('observers cannot change business results and optional capabilities remain 
     },
   ]) {
     const diagnostics = new RuntimeDiagnostics(original, receiver)
-    assert.equal(await diagnostics.storage.load('s'), null)
-    assert.equal(diagnostics.storage.appendRecord, undefined)
-    assert.equal(diagnostics.storage.loadMetadata, undefined)
-    assert.equal(diagnostics.storage.selectSnapshot, undefined)
-    assert.equal(diagnostics.storage.compareAndSwapMetadata, undefined)
-    assert.equal(diagnostics.storage.records, undefined)
+    const sessionId = `s${id++}`
+    assert.equal(await diagnostics.storage.load(sessionId), null)
+    const context = createContextRuntime({ sessionId, storage: diagnostics.storage })
+    const record = await context.append({ kind: 'user', body: 'private input' })
+    assert.equal((await context.read(record.ref)).text, 'private input')
+    assert.equal(diagnostics.storage.stores, undefined)
     assert.equal(diagnostics.storage.collect, undefined)
-    assert.equal(diagnostics.storage.has, undefined)
     assert.equal(diagnostics.storage.leaseOwner, undefined)
     assert.equal(diagnostics.storage.leaseOwnerActive, undefined)
   }

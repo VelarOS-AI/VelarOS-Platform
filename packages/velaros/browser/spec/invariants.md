@@ -49,5 +49,6 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-28 | 模型的 CDP 会话与宿主那条分开：模型开关的域、设的仿真与 Fetch 拦截只算在它自己身上，宿主的诊断、录屏与 mock 不受影响，宿主的事件监听不收子会话的事件；只认它自己挂出来的子会话（**未验证**：要真实 Electron，实现测试与真机探针在 `test/core/browser-protocol-sessions.test.ts` 与 ADR 0012 的验证里） | 文字 | |
 | INV-29 | 被模型的 Fetch 拦下、30000 毫秒没人放行的请求由宿主放行，并在事件里记一条 `Velar.requestAutoContinued`；事件序号只增，缓冲只为守住内存、挤掉的条数如实交回（实现测试在 `test/core/browser-protocol-sessions.test.ts`，经空间端口的那一段要真实浏览器） | 文字 | |
 | INV-30 | 整页截图与高过一屏的区域截图是真的页面：按一屏切块、每块经 captureBeyondViewport 截下再拼成一张，每处页面只出现一次；截图不滚动页面、不改版面，fixed 元素与元素标注只在它们此刻所在的位置出现一次；整张图守住像素上限，超了一起降清晰度（**未验证**：要真实 `<webview>`，切块与拼接的实现测试在 `test/runtime/screenshot-tiles.test.ts`，真机探针 `test/probes/electron-full-page-screenshot.probe.mjs`） | 文字 | |
+| INV-31 | 元素操作只接受当前观察实际签发的带代次引用，第一代也拒绝裸 ref；旧代次不能通过附带 selector 绕过，显式不带 ref 的独立定位仍可用 | 测试 | `test/core/browser-target-resolution.test.mjs` |
 
 2026-09-30 INV-16 明确调用超时与实际动作结算的区别。原放行普通动作可能与迟到动作重叠；当前以世代失效、排队取消及资源复用检查保证互斥。
