@@ -6,6 +6,12 @@
 /** 本单元的版本，写进内置插件；和 `@velaros-ai/velaros` 的 package.json 一致，check:project-arch 核对。 */
 export const ProjectPackageVersion = '0.8.0' as const
 
+/** 当前事务状态文件格式；其他版本直接拒绝。 */
+export const ProjectTransactionStateFormat = Object.freeze({
+  /** 事务状态文件的格式代号。 */
+  version: 3,
+} as const)
+
 /**
  * 项目的两件工具与内核对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
  * 新的失败形态先在这里加一项，不要拿 INVALID_INPUT 兜底。

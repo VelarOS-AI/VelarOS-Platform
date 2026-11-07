@@ -29,7 +29,7 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-5 | 地址栏判据只有一份：同一段输入，主进程与渲染进程经 `browserAddress` 得到同一个结论（是网址就导航，不是就按选定引擎搜） | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 偏好永远落在闭集里：读盘读到什么值，`browserPreferences` 都给出一个合法值，不抛也不返回未知值 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 动作策略按词表判定：拒绝名单命中即拒绝并说明命中了哪一条，没有策略表就是放行——判定只有 `browserActionPolicy.check` 这一处 | 测试 | `spec/acceptance.test.ts` |
-| INV-8 | 站点工作区是硬边界：读写只在当前根（读可回退到历史根），`..`、绝对路径与指向根外的路径一律拒绝 | 测试 | `spec/acceptance.test.ts` |
+| INV-8 | 站点工作区是硬边界：读写只在当前根，根外的相对/绝对路径和跨根链接一律拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 用户脚本的命中规则只有一份：`@match` 先过、`@exclude` 一票否决，启用与否不改变匹配判定；程序建的用户脚本一律先停用 | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 登录墙门控每个站点每会话最多问一次：问过就记账，之后无论批准还是拒绝都不再阻塞——死锁防护优先于反复征询 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | `./browser/contracts` 与 `./browser/renderer` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |

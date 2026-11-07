@@ -190,11 +190,9 @@ export async function collectRootEntries(input: {
   limit: number
   maxDepth: number
   entries: WorkspaceFileEntry[]
-  seenRelativePaths: Set<string>
 }): Promise<void> {
-  const { entries, limit, maxDepth, recursive, seenRelativePaths } = input
-  const target = await resolveExistingPathInRoot(input.workspaceRoot, input.path).catch(() => null)
-  if (!target) return
+  const { entries, limit, maxDepth, recursive } = input
+  const target = await resolveExistingPathInRoot(input.workspaceRoot, input.path)
 
   const targetStats = await stat(target.path).catch((error: any) => {
     if (isMissingFileError(error)) return null
@@ -204,8 +202,7 @@ export async function collectRootEntries(input: {
 
   const pushEntry = (entryPath: string, type: WorkspaceFileEntry['type']): boolean => {
     const relativePath = getRelativePathInsideRoot(target.root, entryPath)
-    if (!relativePath || seenRelativePaths.has(relativePath)) return false
-    seenRelativePaths.add(relativePath)
+    if (!relativePath) return false
     entries.push({ path: entryPath, type })
     return true
   }

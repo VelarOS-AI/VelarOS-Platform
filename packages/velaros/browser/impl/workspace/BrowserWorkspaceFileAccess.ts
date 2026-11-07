@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
+import { isNotNull, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserFileLimits } from '../../contract/constants'
@@ -74,23 +74,9 @@ export interface BrowserWorkspaceFileAccessApi {
 
 class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   private readonly workspaceRoot: string
-  /**
-   * 只读的历史根，按新→旧排列。
-   *
-   * 站点资产从「按会话」换成「按站点」时不能把用户攒下的东西弄丢，也不该在启动路径上跑
-   * 一次性搬迁（遍历全部会话目录、搬到一半失败比不搬更糟）。取而代之：**写只写主根，
-   * 读不到才依次回退**。回退是幂等的，用户每碰一次旧资产就自然继续可用。
-   */
-  private readonly legacyWorkspaceRoots: readonly string[]
 
-  constructor(workspaceRoot: string, legacyWorkspaceRoots: readonly string[] = []) {
+  constructor(workspaceRoot: string) {
     this.workspaceRoot = resolve(workspaceRoot)
-    this.legacyWorkspaceRoots = legacyWorkspaceRoots.map((root) => resolve(root))
-  }
-
-  /** 主根 + 历史根，读路径按此顺序探测。 */
-  private get readRoots(): readonly string[] {
-    return [this.workspaceRoot, ...this.legacyWorkspaceRoots]
   }
 
   public async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
@@ -108,20 +94,14 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
       recursive ? BrowserTuning.lists.workspaceDepth : 1
     )
     const entries: WorkspaceFileEntry[] = []
-    const seenRelativePaths = new Set<string>()
-
-    for (const workspaceRoot of this.readRoots) {
-      if (entries.length >= limit) break
-      await collectRootEntries({
-        workspaceRoot,
-        path: options.path ?? '.',
-        recursive,
-        limit,
-        maxDepth,
-        entries,
-        seenRelativePaths,
-      })
-    }
+    await collectRootEntries({
+      workspaceRoot: this.workspaceRoot,
+      path: options.path ?? '.',
+      recursive,
+      limit,
+      maxDepth,
+      entries,
+    })
 
     return entries
   }
@@ -132,7 +112,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     endLine?: number,
     maxChars?: number
   ): Promise<ProjectReadFileResult> {
-    const target = await this.resolveExistingPath(path)
+    const target = await resolveExistingPathInRoot(this.workspaceRoot, path)
     return readResolvedFile(target, path, startLine, endLine, maxChars)
   }
 
@@ -145,15 +125,11 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   ): Promise<ProjectReadFileResult> {
     if (!isAbsolute(path)) return this.readFile(path, startLine, endLine, maxChars)
 
-    // 历史根也算「当前网站工作区」：制品面板列出来的旧资产带的是旧绝对路径，
-    // 只认主根会让用户点开自己昨天存的快照时被判越权。
-    const owningRoot = this.readRoots.find((root) => getRelativePathInsideRoot(root, resolve(path)))
-    if (!owningRoot) {
+    if (!getRelativePathInsideRoot(this.workspaceRoot, resolve(path)))
       throw new AppError('PERMISSION', '只能预览当前网站浏览器工作区内的文件。', undefined, {
         path,
       })
-    }
-    const root = await ensureRoot(owningRoot)
+    const root = await ensureRoot(this.workspaceRoot)
     const existing = await realpath(path).catch((error: any) => {
       if (isMissingFileError(error)) {
         throw new AppError('NOT_FOUND', '找不到浏览器工作区文件。', error, {
@@ -242,32 +218,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return { path: target.path, deleted: true }
   }
 
-  /**
-   * 在主根与历史根里依次找一份**已存在**的文件；都没有时按主根解析（错误信息指向新位置）。
-   *
-   * 只有读路径走这里。写路径永远只认主根：回退读是为了不丢旧资产，不是为了让写入分叉。
-   */
-  private async resolveExistingPathAcrossRoots(
-    path: string
-  ): Promise<BrowserWorkspaceResolvedPath> {
-    for (const root of this.legacyWorkspaceRoots) {
-      const candidate = await resolveExistingPathInRoot(root, path).catch(() => null)
-      if (!candidate) continue
-      const stats = await lstat(candidate.path).catch(() => null)
-      if (stats) return candidate
-    }
-
-    return resolveExistingPathInRoot(this.workspaceRoot, path)
-  }
-
-  private async resolveExistingPath(path: string): Promise<BrowserWorkspaceResolvedPath> {
-    const primary = await resolveExistingPathInRoot(this.workspaceRoot, path)
-    const primaryStats = await lstat(primary.path).catch(() => null)
-    if (primaryStats || isEmpty(this.legacyWorkspaceRoots)) return primary
-
-    return this.resolveExistingPathAcrossRoots(path)
-  }
-
   private async resolveWritablePath(path: string): Promise<BrowserWorkspaceResolvedPath> {
     const root = await ensureRoot(this.workspaceRoot)
     const relativePath = normalizeRelativePath(path)
@@ -288,19 +238,16 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   }
 }
 
-/** 按一个工作区根建文件访问器；历史根只读，写一律落在当前根。 */
-function createBrowserWorkspaceFileAccess(
-  workspaceRoot: string,
-  legacyWorkspaceRoots: readonly string[] = []
-): BrowserWorkspaceFileAccessApi {
-  return new BrowserWorkspaceFileAccess(workspaceRoot, legacyWorkspaceRoots)
+/** 按一个工作区根建文件访问器。 */
+function createBrowserWorkspaceFileAccess(workspaceRoot: string): BrowserWorkspaceFileAccessApi {
+  return new BrowserWorkspaceFileAccess(workspaceRoot)
 }
 
-/** 直接按站点上下文建文件访问器；历史根的挂接口径只有这一处，免得每个调用点各记一遍。 */
+/** 直接按当前站点上下文建文件访问器。 */
 function createBrowserSiteWorkspaceFileAccess(
-  context: Pick<BrowserSiteContext, 'workspaceRoot' | 'legacyWorkspaceRoots'>
+  context: Pick<BrowserSiteContext, 'workspaceRoot'>
 ): BrowserWorkspaceFileAccessApi {
-  return new BrowserWorkspaceFileAccess(context.workspaceRoot, context.legacyWorkspaceRoots ?? [])
+  return new BrowserWorkspaceFileAccess(context.workspaceRoot)
 }
 
 export { createBrowserSiteWorkspaceFileAccess, createBrowserWorkspaceFileAccess }

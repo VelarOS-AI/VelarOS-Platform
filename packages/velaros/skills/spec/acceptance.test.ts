@@ -824,20 +824,21 @@ test('INV-6 内置规范、示例和管理操作按需加载，校验只读，�
   await Promise.all([lease.release(), selected.release()])
 })
 
-test('INV-6 v1 安装索引迁移保留包内容，默认环境为空', async () => {
+test('INV-6 旧安装索引明确拒绝，不转换或覆盖原文件', async () => {
   const f = await fixture()
   const record = await f.registry.install(
-    { directory: await source(f.root, 'legacy') },
+    { directory: await source(f.root, 'old-index') },
     new AbortController().signal
   )
-  await writeFile(
-    join(f.store, 'index.json'),
-    JSON.stringify({ version: 1, revision: 1, skills: [{ ...record, enabled: true, grants: [] }] })
-  )
-  expect(await f.registry.list()).toEqual([record])
-  const empty = await f.registry.acquire()
-  expect(empty.environment.skills).toEqual([])
-  await empty.release()
+  const bytes = JSON.stringify({
+    version: 1,
+    revision: 1,
+    skills: [{ ...record, enabled: true, grants: [] }],
+  })
+  const path = join(f.store, 'index.json')
+  await writeFile(path, bytes)
+  await expect(f.registry.list()).rejects.toMatchObject({ code: 'VALIDATION' })
+  expect(await readFile(path, 'utf8')).toBe(bytes)
 })
 
 test('INV-7 内置 Skill 与安装包共用选择和租约，JS/TS 包按需公开', async () => {

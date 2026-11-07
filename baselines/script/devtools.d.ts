@@ -517,16 +517,11 @@ declare module 'velaros:devtools' {
     failedOnly: boolean
   }
 
-  /** 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里），legacyWorkspaceRoots 是只读的旧工作区（读不到时依次往回找）。 */
+  /** 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里）。 */
   interface BrowserSiteContext {
     url: string
     /** 站点工作区根：写入的唯一落点（粒度由宿主定）。 */
     workspaceRoot: string
-    /**
-     * 只读的历史工作区根（换粒度前留下的资产），按新到旧排列：写只写 workspaceRoot，读不到才依次回退。
-     * 不做一次性搬迁——回退读是幂等的，用户每碰一次旧资产就自然继续可用，新写入自动落到新位置。
-     */
-    legacyWorkspaceRoots?: readonly string[]
   }
 
   /** 用户脚本是谁建的：agent（你建的）、user、user-import。 */

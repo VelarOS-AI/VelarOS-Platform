@@ -181,18 +181,18 @@ test('undo rejects external same-Unicode byte changes before touching any file',
   expect(await readFile(join(root, 'b.txt'))).toEqual(modified)
 })
 
-test('version 1 state loads and upgrades on the next durable commit', async () => {
+test('older transaction state formats are rejected without rewriting their bytes', async () => {
   const { kernel, transactionStatePath } = await fixture(true)
   await kernel.prepareEdit({ operations: [replace()] })
   const state = JSON.parse(await readFile(transactionStatePath!, 'utf8'))
-  state.formatVersion = 1
-  delete state.bytePlans
-  await writeFile(transactionStatePath!, JSON.stringify(state))
-  const reopened = await createProjectKernel({ root, transactionStatePath })
-  await reopened.applyEdit({
-    transactionId: state.transactions[0].transactionId,
-  })
-  expect(JSON.parse(await readFile(transactionStatePath!, 'utf8')).formatVersion).toBe(3)
+  for (const formatVersion of [1, 2]) {
+    const bytes = JSON.stringify({ ...state, formatVersion })
+    await writeFile(transactionStatePath!, bytes)
+    await expect(createProjectKernel({ root, transactionStatePath })).rejects.toMatchObject({
+      reason: 'TRANSACTION_RECOVERY_CONFLICT',
+    })
+    expect(await readFile(transactionStatePath!, 'utf8')).toBe(bytes)
+  }
 })
 
 test('interrupted apply restores raw backups from the private write-ahead state', async () => {
