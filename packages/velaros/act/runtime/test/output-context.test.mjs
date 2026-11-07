@@ -221,7 +221,7 @@ test('INV-58 uncapped full demand keeps capacity and explicit caps authoritative
       for await (const event of f.session.submit('Continue observing')) events.push(event)
       assert.equal(events.at(-1).status, 'failed')
       assert(
-        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+        events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
       )
       assert(f.requests.length > 0, 'the bounded projection must reach a real model request')
       for (const request of f.requests) {
@@ -300,7 +300,7 @@ test('INV-58 ordinary JSON text fit reaches sealed provider messages with matchi
     )
     if (cap === 9000)
       assert(
-        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+        events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
       )
     const request = f.requests[0]
     const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)

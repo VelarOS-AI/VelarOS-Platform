@@ -401,13 +401,11 @@ export interface ContextArtifactProvenance {
 export interface ContextTaskState {
   /** 宿主的持久请求账本，与任务检查点在同一次 CAS 中更新。 */
   readonly modelBudget?: ContextModelBudgetState
-  /** 最近一次领域核查的不可变记录；正文注明原任务、视图和宿主完成对象的版本。 */
-  readonly completionRef?: ContextRef
   /** 当前逻辑任务使用的持久 store ID；由 Runtime 维护，展示时重新核验权限。 */
   readonly storeRefs?: readonly string[]
   /** 已退出自动展示的授权空间；实际访问会重新激活。 */
   readonly releasedStoreRefs?: readonly string[]
-  /** 逻辑任务身份，跨多次 submit 继续使用；旧存储在下次 begin 时补齐。 */
+  /** 逻辑任务身份，跨多次 submit 继续使用。 */
   readonly id?: string
   /** 当前任务的材料边界，原始会话记录仍可按引用归档读取。 */
   readonly startedSequence?: number
@@ -434,7 +432,6 @@ export interface ContextTaskState {
   readonly artifacts: readonly ContextRef[]
   readonly view: Nullable<ModelView>
   readonly usage: ContextTaskUsage
-  readonly verification: 'unverified' | 'verified'
 }
 /** 宿主配置的有限预算；模型调用与 token 预算由主模型和搜索、整理会话共用。 */
 export interface ContextViewLimits {
@@ -475,77 +472,14 @@ export interface ContextInputSummary {
   readonly baseRevision: number
 }
 
-/** 完成验证的后续动作；由事实或领域验收器给出，不自动重跑脚本。 */
+/** 完成任务的结果；前置条件未满足时给出具体原因，不自动重跑脚本。 */
 export interface ContextCompletionResult {
   /** 任务是否已正式完成。 */
   readonly completed: boolean
-  /** 是否经过领域验收。 */
-  readonly verified: boolean
   /** 可供下一轮或宿主处理的具体原因。 */
   readonly reason: string
   /** 未完成时应修复、刷新、等待真实输入、处理容量或因基础设施错误终止。 */
   readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity' | 'failed'
-  /** 领域实际检查的有界范围与原始依据，不把模型的完成主张当作证明。 */
-  readonly report?: ContextVerificationReport
-}
-
-/** 领域检查产生的事实；每项只证明其声明范围，产物再次变化后仍是历史记录。 */
-export interface ContextVerificationReport {
-  readonly scope: string
-  readonly checkedAt: string
-  readonly checks: readonly ContextVerificationCheck[]
-}
-
-/** 宿主从当前要求确定的必需项，关联预期产物身份与原始用户依据。 */
-export interface ContextDeliveryRequirement {
-  readonly id: string
-  readonly label: string
-  readonly artifacts: readonly string[]
-  readonly sourceRefs: readonly ContextRef[]
-}
-
-/** 单项核查的原始事实；适用性由宿主再次探测，不从历史 passed 推断。 */
-export interface ContextVerificationCheck {
-  readonly label: string
-  readonly status: 'passed' | 'failed' | 'unknown'
-  /** 验收开始前固定的必需项；宿主报告不能在检查中缩小这份范围。 */
-  readonly requirement?: ContextDeliveryRequirement
-  readonly evidenceRefs?: readonly ContextRef[]
-  readonly artifact?: {
-    readonly identity: string
-    readonly revision?: string
-    readonly contentHash?: string
-  }
-  readonly id?: string
-  readonly scope?: string
-  readonly verifierId?: string
-  readonly verifierVersion?: string
-  readonly checkedAt?: string
-  readonly complete?: boolean
-  readonly artifacts?: readonly ContextVerificationArtifact[]
-}
-
-/** 精确产物集合的成员；contentHash 覆盖实际核查范围的全部字节。 */
-export interface ContextVerificationArtifact {
-  readonly identity: string
-  readonly contentHash: string
-  readonly revision?: string
-}
-
-/** 宿主收尾对象的中立身份；Context 不解释所属领域或状态迁移。 */
-export interface ContextCompletionBinding {
-  readonly kind: string
-  readonly id: string
-  readonly revision: number
-}
-
-/** completionRef 指向的不可变核查结果，明确绑定核查开始时的任务与宿主对象。 */
-export interface ContextCompletionRecord {
-  readonly taskId: string
-  readonly taskRevision: number
-  readonly viewId: string
-  readonly binding?: ContextCompletionBinding
-  readonly result: ContextCompletionResult
 }
 
 /** 同一快照内的记录选择；字段取交集，各选择结果取并集。 */

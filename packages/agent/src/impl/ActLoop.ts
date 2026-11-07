@@ -819,8 +819,7 @@ export class ActLoop implements ActLoopApi {
               compiled.request,
               completionSignal,
               decoded.completion
-            )) ??
-            (await this.options.view.complete(this.options.completionVerifier, completionSignal))
+            )) ?? (await this.options.view.complete(completionSignal))
         } catch (error) {
           if (
             !controller.signal.aborted &&
@@ -830,7 +829,7 @@ export class ActLoop implements ActLoopApi {
             continue turns
           throw error
         }
-        yield { type: 'verification', runId, ...completion }
+        yield { type: 'completion', runId, ...completion }
         if (!completion.completed) {
           await this.options.context.append(
             { kind: 'event', title: 'completion-blocked', body: JSON.stringify(completion) },
@@ -954,10 +953,8 @@ export class ActLoop implements ActLoopApi {
     const completionStatus = this.completionFeedback
       ? {
           completed: this.completionFeedback.completed,
-          verified: this.completionFeedback.verified,
           reason: this.completionFeedback.reason,
           recovery: this.completionFeedback.recovery,
-          reportAvailable: Boolean(this.completionFeedback.report),
         }
       : undefined
     const completionRecovery = completionStatus

@@ -1,10 +1,4 @@
-import type {
-  ContextContent,
-  ContextFeedback,
-  ContextRef,
-  ContextState,
-  ContextVerificationReport,
-} from '@velaros-ai/context'
+import type { ContextContent, ContextFeedback, ContextRef, ContextState } from '@velaros-ai/context'
 import type { ContextRecord } from '@velaros-ai/context'
 import {
   isArray,
@@ -32,93 +26,6 @@ import type { SegmentFeedback, SegmentHistory, SegmentOutputProof } from '../typ
 import { decisionStateProjection } from './decision-state.js'
 import { nodeFrameState, nodeGoalState } from './node-context.js'
 import { ActRuntimeTuning } from './tuning.js'
-
-/** 核查细节优先展示失败和未知；原索引绑定适用性与归档，长项不阻断后续诊断。 */
-export function memoryVerificationProjection(
-  identity: Readonly<Record<string, unknown>>,
-  report: ContextVerificationReport,
-  maxChars: number
-): Record<string, unknown> {
-  const ordered = report.checks
-    .map((check, index) => ({ check, index }))
-    .sort(
-      (left, right) =>
-        ['failed', 'unknown', 'passed'].indexOf(left.check.status) -
-          ['failed', 'unknown', 'passed'].indexOf(right.check.status) || left.index - right.index
-    )
-  const checks: Array<Record<string, unknown>> = []
-  const header = { ...identity }
-  const omissions = (selected: ReadonlyArray<Record<string, unknown>>) => {
-    const shown = new Set(selected.map((check) => check.index))
-    return Object.fromEntries(
-      ['passed', 'failed', 'unknown'].map((status) => [
-        status,
-        report.checks.filter((check, index) => check.status === status && !shown.has(index)).length,
-      ])
-    )
-  }
-  const summary = (selected: ReadonlyArray<Record<string, unknown>>) => {
-    const projected: Record<string, unknown> = {
-      ...header,
-      checks: selected,
-      omittedChecks: report.checks.length - selected.length,
-    }
-    if (header.omittedByStatus) projected.omittedByStatus = omissions(selected)
-    return projected
-  }
-  if (JSON.stringify({ ...summary([]), omittedByStatus: omissions([]) }).length <= maxChars)
-    header.omittedByStatus = omissions([])
-  const read = { ref: identity.ref, offset: 0, limit: ActRuntimeTuning.readChars }
-  if (JSON.stringify({ ...summary([]), read }).length <= maxChars) header.read = read
-  const fits = (selected: ReadonlyArray<Record<string, unknown>>) =>
-    JSON.stringify(summary(selected)).length <= maxChars
-  for (const { check, index } of ordered) {
-    const candidate = {
-      index,
-      id: check.id,
-      label: check.label,
-      status: check.status,
-      artifact: check.artifact,
-      checkedAt: check.checkedAt ?? report.checkedAt,
-    }
-    if (
-      JSON.stringify(candidate).length <= ActRuntimeTuning.verificationCheckChars &&
-      fits([...checks, candidate])
-    ) {
-      checks.push(candidate)
-      continue
-    }
-    let labelChars = Math.min(check.label.length, ActRuntimeTuning.verificationLabelChars)
-    while (true) {
-      const compact = {
-        index,
-        status: candidate.status,
-        detailsInReport: true,
-        ...(labelChars
-          ? {
-              label: check.label.slice(0, labelChars),
-              ...(labelChars < check.label.length
-                ? { labelChars: check.label.length, labelTruncated: true }
-                : {}),
-            }
-          : { labelInReport: true }),
-      }
-      if (
-        JSON.stringify(compact).length <= ActRuntimeTuning.verificationCheckChars &&
-        fits([...checks, compact])
-      ) {
-        checks.push(compact)
-        break
-      }
-      if (!labelChars) break
-      labelChars = Math.floor(labelChars / 2)
-    }
-  }
-  const projected: Record<string, unknown> = summary(checks)
-  if (JSON.stringify({ ...projected, scope: report.scope }).length <= maxChars)
-    projected.scope = report.scope
-  return projected
-}
 
 /** 固定宿主分区配置并验证所有配额，防止 NaN 或超额正文绕过预算。 */
 export function memoryPolicy(input: ContextMemoryPolicy = {}): Required<ContextMemoryPolicy> {

@@ -1,4 +1,4 @@
-import type { ContextCompletionResult, ContextVerificationReport } from '@velaros-ai/context'
+import type { ContextCompletionResult } from '@velaros-ai/context'
 
 /** 单次运行的事件展示状态；只反映已收到的事实，不授予执行或交互权限。 */
 export interface ActRunPresentation {
@@ -24,11 +24,7 @@ export interface ActRunPresentation {
   readonly queuedInputIds: readonly string[]
   /** input-retained 明确确认的保留身份；结束或断流不自行推断保留。 */
   readonly retainedInputIds: readonly string[]
-  /** 最近一次没通过的完成检查：reason 以原因码开头（如 GOAL_ACTIVE、STALE_VIEW），后面可能跟着写给模型的说明；之后的检查通过时清除。 */
-  readonly verification?: { readonly reason: string; readonly recovery?: string }
-  /** 最近一次真实领域报告，成功后与终态一起保留，不能证明之后变化的产物。 */
-  readonly verificationReport?: ContextVerificationReport
-  /** 最后一次完成核查的完整结论；完成与领域验证分别呈现。 */
+  /** 最近一次任务完成的结果；失败时保留具体原因与恢复动作。 */
   readonly completion?: ContextCompletionResult
   /** 运行当前的提示：限速等待中，或连续没有进展已暂停；下一回合开始或运行结束时清除。 */
   readonly notice?: {

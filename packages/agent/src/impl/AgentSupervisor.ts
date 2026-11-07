@@ -298,7 +298,7 @@ class AgentSupervisor implements AgentSupervisorApi {
           // 停止原因独立于有界事件正文保留；后续已接受回合或成功核查清除已恢复的诊断。
           if (event.type === 'error' || event.type === 'stalled') diagnostic = event.message
           else if (event.type === 'accepted') diagnostic = undefined
-          else if (event.type === 'verification')
+          else if (event.type === 'completion')
             diagnostic = event.completed ? undefined : event.reason
           if (event.type === 'interaction') {
             live.job = {
@@ -320,7 +320,7 @@ class AgentSupervisor implements AgentSupervisorApi {
           // 正文与最终验收进入摘要引用；完整逐事件历史已由子 ActRunService 持久化。
           if (
             event.type === 'accepted' ||
-            event.type === 'verification' ||
+            event.type === 'completion' ||
             event.type === 'error' ||
             event.type === 'stalled' ||
             event.type === 'state'

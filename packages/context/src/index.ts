@@ -16,7 +16,6 @@ export type {
 export type {
   ContextBuildOptions,
   ContextCompletionCommitPort,
-  ContextCompletionPort,
   ContextSourcePort,
   ContextViewOptions,
 } from './contract/requires.js'
@@ -45,11 +44,8 @@ export type { ContextInputFile, ContextInputSummary, ContextUserInput } from './
 export type {
   ContextAppend,
   ContextArtifactProvenance,
-  ContextCompletionBinding,
-  ContextCompletionRecord,
   ContextCompletionResult,
   ContextContent,
-  ContextDeliveryRequirement,
   ContextEvidence,
   ContextFeedback,
   ContextGap,
@@ -86,9 +82,6 @@ export type {
   ContextTaskUsage,
   ContextTextChange,
   ContextTime,
-  ContextVerificationArtifact,
-  ContextVerificationCheck,
-  ContextVerificationReport,
   ContextViewForm,
   ContextViewLimits,
   ContextViewMetrics,

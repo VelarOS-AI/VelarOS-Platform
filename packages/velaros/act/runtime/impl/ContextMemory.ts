@@ -1,5 +1,4 @@
 import type {
-  ContextCompletionRecord,
   ContextContent,
   ContextFeedback,
   ContextInvocationJournalApi,
@@ -64,7 +63,6 @@ import {
   memoryProofCarriers,
   memoryReference,
   memoryTaskHistory,
-  memoryVerificationProjection,
   noteEntry,
 } from '../utils/context-memory.js'
 import { decisionStateProjection } from '../utils/decision-state.js'
@@ -892,41 +890,6 @@ export class ContextMemory implements ContextMemoryApi {
       })),
       omitted: Math.max(0, residents.length - directoryLimit),
     }
-    const completionRecord = snapshot?.task?.completionRef
-      ? memoryReference(snapshot, snapshot.task.completionRef)
-      : undefined
-    const completion: Optional<ContextCompletionRecord> = completionRecord
-      ? JSON.parse((await this.storage.get(this.id, completionRecord.objectId))!)
-      : undefined
-    const report = completion?.result.report
-    const verification: Optional<Record<string, unknown>> =
-      completion && completion.taskId === snapshot?.task?.id
-        ? {
-            ref: completionRecord!.ref,
-            taskId: completion.taskId,
-            taskRevision: completion.taskRevision,
-            binding: completion.binding,
-            completed: completion.result.completed,
-            verified: completion.result.verified,
-            counts: Object.fromEntries(
-              ['passed', 'failed', 'unknown'].map((status) => [
-                status,
-                report?.checks.filter((check) => check.status === status).length ?? 0,
-              ])
-            ),
-            checkedAt: report?.checkedAt,
-            checks: [],
-            omittedChecks: report?.checks.length ?? 0,
-          }
-        : undefined
-    if (verification && report) {
-      // 核查摘要只占帧预算的一小份；大范围和产物细节按报告引用回看，修复帧始终留给当前状态。
-      const verificationBudget = Math.min(2048, Math.max(0, Math.floor(maxChars / 40)))
-      Object.assign(
-        verification,
-        memoryVerificationProjection(verification, report, verificationBudget)
-      )
-    }
     const workspace = cards.cards.map((card, index) => ({
       ...card,
       supersedes: toNullable(snapshotNotes.get(card.key)?.revision),
@@ -1427,7 +1390,6 @@ export class ContextMemory implements ContextMemoryApi {
       },
       runtime: {
         taskId: snapshot?.task?.id,
-        verification,
         decision,
         scope: material.scope,
         children: material.children,

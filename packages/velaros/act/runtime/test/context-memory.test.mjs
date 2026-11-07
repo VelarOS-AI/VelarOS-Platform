@@ -18,7 +18,6 @@ import {
   memoryOutput,
   memoryPrompt,
   memoryTaskHistory,
-  memoryVerificationProjection,
 } from '../../../dist/act/runtime/utils/context-memory.js'
 import { decisionStateProjection } from '../../../dist/act/runtime/utils/decision-state.js'
 import {
@@ -489,200 +488,6 @@ test('generated material read hints satisfy the live memory contract and recall 
     )
     assert.equal(recalled.totalChars, full.length)
   }
-})
-
-test('INV-83 verification diagnostics retain original indexes under a fixed budget', () => {
-  const report = {
-    scope: 'Whole synthetic artifact',
-    checkedAt: '2026-10-02T01:00:00.000Z',
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        id: `passed-${index}`,
-        label: `Earlier successful check ${index} ${'p'.repeat(80)}`,
-        status: 'passed',
-      })),
-      {
-        id: 'failed-last',
-        label: 'Repair the missing relation',
-        status: 'failed',
-        artifact: { identity: 'synthetic.json', revision: 'old' },
-      },
-      { id: 'unknown-last', label: 'Dependency check has no result', status: 'unknown' },
-    ],
-  }
-  const identity = {
-    ref: { sessionId: 's', id: 'report-ref' },
-    taskId: 'task',
-    taskRevision: 2,
-    counts: { passed: 24, failed: 1, unknown: 1 },
-  }
-  const original = JSON.stringify(report)
-  const projected = memoryVerificationProjection(identity, report, 2048)
-  assert(JSON.stringify(projected).length <= 2048)
-  assert.deepEqual(
-    projected.checks.slice(0, 2).map((check) => check.index),
-    [24, 25]
-  )
-  assert.equal(projected.checks[0].id, 'failed-last')
-  assert.equal(projected.checks[0].artifact.revision, 'old')
-  assert.equal(projected.omittedChecks, report.checks.length - projected.checks.length)
-  assert.equal(projected.omittedByStatus.failed, 0)
-  assert.equal(projected.omittedByStatus.unknown, 0)
-  assert.deepEqual(projected.read, { ref: identity.ref, offset: 0, limit: 60000 })
-  assert.equal(JSON.stringify(report), original)
-})
-
-test('INV-83 long diagnostics and tiny budgets retain omission facts without hiding later failures', () => {
-  const report = {
-    scope: 'Synthetic bounded diagnostics',
-    checkedAt: '2026-10-02T01:00:00.000Z',
-    checks: [
-      {
-        id: 'x'.repeat(1000),
-        label: 'A long failed check 😀 '.repeat(30),
-        status: 'failed',
-        artifact: { identity: 'a'.repeat(1000), revision: 'v1' },
-      },
-      { id: 'second', label: 'Second failure needs repair', status: 'failed' },
-      { id: 'unknown', label: 'Still unknown', status: 'unknown' },
-      { id: 'pass', label: 'A successful check', status: 'passed' },
-    ],
-  }
-  const identity = {
-    ref: { sessionId: 's', id: 'report-ref' },
-    counts: { passed: 1, failed: 2, unknown: 1 },
-  }
-  const original = JSON.stringify(report)
-  const normal = memoryVerificationProjection(identity, report, 2048)
-  assert(JSON.stringify(normal).length <= 2048)
-  assert.deepEqual(
-    normal.checks.slice(0, 3).map((check) => check.index),
-    [0, 1, 2]
-  )
-  assert.equal(normal.checks[0].detailsInReport, true)
-  assert.equal(normal.checks[0].labelTruncated, true)
-  assert.equal(normal.checks[0].labelChars, report.checks[0].label.length)
-  assert.equal(normal.checks[0].id, undefined)
-  assert(normal.checks.every((check) => JSON.stringify(check).length <= 512))
-  for (const budget of [0, 80, 300, 700]) {
-    const projected = memoryVerificationProjection(identity, report, budget)
-    assert.deepEqual(projected.ref, identity.ref)
-    assert.deepEqual(projected.counts, identity.counts)
-    assert.equal(projected.omittedChecks, report.checks.length - projected.checks.length)
-    if (JSON.stringify({ ...identity, checks: [], omittedChecks: 4 }).length <= budget)
-      assert(JSON.stringify(projected).length <= budget)
-    else assert.deepEqual(projected.checks, [])
-  }
-  assert.equal(JSON.stringify(report), original)
-})
-
-test('INV-83 real completion reports remain immutable, readable and task-scoped after prioritized projection', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Check synthetic relations' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 12000 })
-  const report = {
-    scope: 'Synthetic relation checks',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        label: `Succeeded earlier ${index} ${'p'.repeat(100)}`,
-        status: 'passed',
-      })),
-      { label: 'Repair the final relation', status: 'failed' },
-      { label: 'An independent check is unknown', status: 'unknown' },
-    ],
-  }
-  await f.session.view.complete({
-    verify: async () => ({ verified: false, reason: 'Repair remains', report }),
-  })
-  const original = await f.session.view.readCompletion()
-  const view = await f.session.view.build({ maxChars: 48000 })
-  const frame = await f.memory.project(view, undefined, [], signal, 48000)
-  const verification = JSON.parse(frame.body).partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => check.index),
-    [24, 25]
-  )
-  assert(verification.read)
-  const recalled = await f.memory.readMaterial(
-    verification.read.ref,
-    verification.read.offset,
-    verification.read.limit,
-    signal
-  )
-  assert.equal(recalled.text.length, recalled.totalChars)
-  assert.deepEqual(JSON.parse(recalled.text), original)
-  assert.deepEqual(await f.session.view.readCompletion(), original)
-  const beforeCancel = (await f.storage.loadMetadata('s')).version
-  const cancelled = new AbortController()
-  cancelled.abort()
-  await assert.rejects(f.memory.project(view, undefined, [], cancelled.signal, 48000))
-  assert.equal((await f.storage.loadMetadata('s')).version, beforeCancel)
-  const next = await f.session.context.append({ kind: 'user', body: 'Start a different task' })
-  await f.session.view.end()
-  await f.session.view.begin(next.ref, signal, 'new')
-  await assert.rejects(
-    f.memory.readMaterial(verification.ref, 0, 60000, signal),
-    (error) => error.code === 'SCOPE_MISMATCH'
-  )
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 late failed and unknown diagnostics reach the next accepted model request', async (t) => {
-  const report = {
-    scope: 'Synthetic completion checks',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        label: `Earlier successful check ${index} ${'p'.repeat(100)}`,
-        status: 'passed',
-      })),
-      { label: 'Repair the final synthetic relation', status: 'failed' },
-      { label: 'Independent synthetic dependency is unknown', status: 'unknown' },
-    ],
-  }
-  let verifications = 0
-  const f = await fixture(t, undefined, {
-    limits: { projectionChars: 80000 },
-    context: {
-      maintenance: false,
-      completion: {
-        verify: async () =>
-          ++verifications === 1
-            ? { verified: false, reason: 'Synthetic relations need repair', report }
-            : { verified: true, reason: 'Synthetic relations pass' },
-      },
-    },
-  })
-  const events = []
-  for await (const event of f.session.submit('Finish the synthetic task')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed')
-  assert.equal(f.requests.length, 2)
-  const request = f.requests[1]
-  const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
-  const verification = frame.partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => [check.index, check.status]),
-    [
-      [24, 'failed'],
-      [25, 'unknown'],
-    ]
-  )
-  const wire = modelRequestEncoder
-    .messages(request)
-    .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
-    .join('\n')
-  assert(wire.includes(report.checks[24].label))
-  assert(wire.includes(report.checks[25].label))
-  const recalled = await f.memory.readMaterial(
-    verification.read.ref,
-    verification.read.offset,
-    verification.read.limit,
-    signal
-  )
-  assert.equal(recalled.text.length, recalled.totalChars)
-  assert.deepEqual(JSON.parse(recalled.text).result.report, report)
 })
 
 test('selection units recover missing array items and both sides of text through memory.read', async (t) => {
@@ -2793,7 +2598,7 @@ test('INV-75 authenticated page lineage preserves original debt only when delive
           f.requests[0].materials.find((material) => material.origin === 'runtime-view').text
         )
         assert(!accepted.partitions.runtime.decision.missing.some((item) => item.ref === source.id))
-        assert(events.some((event) => event.type === 'verification' && event.completed))
+        assert(events.some((event) => event.type === 'completion' && event.completed))
       }
     })
   }
@@ -2951,7 +2756,7 @@ test('INV-75 full recalled carriers beyond the logical entry cap reach actual ac
         )
         assert(!frame.partitions.runtime.decision.missing.some((gap) => gap.ref === source.id))
       }
-      assert(events.some((event) => event.type === 'verification' && event.completed))
+      assert(events.some((event) => event.type === 'completion' && event.completed))
     })
   }
 })
@@ -3098,12 +2903,10 @@ test('INV-69 required recall through a real script reaches the next model reques
               entry.text.includes('verified synthetic source')
           )
         )
-        assert(events.some((event) => event.type === 'verification' && event.completed))
+        assert(events.some((event) => event.type === 'completion' && event.completed))
       } else {
         assert(
-          events.some(
-            (event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED'
-          )
+          events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
         )
         const missing = frame.partitions.runtime.decision.missing.find(
           (gap) => gap.ref === source.id

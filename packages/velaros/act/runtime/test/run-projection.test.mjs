@@ -46,11 +46,9 @@ test('INV-44 live and durable run projections agree on turns, queued inputs and 
   assert.equal(replay.snapshot().cursor, 23)
 })
 
-test('throttle and stall notices show while they apply and clear on the next turn or a terminal state', () => {
+test('stall notices persist while waiting and clear on a later turn or terminal state', () => {
   const p = createActEventProjector()
   p.applyLive({ type: 'turn', runId: 'run', turnId: 'turn-one' })
-  p.applyLive({ type: 'throttled', runId: 'run', retryAfterMs: 1200 })
-  assert.deepEqual(p.snapshot().runs.run.notice, { kind: 'throttled', retryAfterMs: 1200 })
   p.applyLive({ type: 'turn', runId: 'run', turnId: 'turn-two' })
   assert.equal('notice' in p.snapshot().runs.run, false)
   const stall = { type: 'stalled', runId: 'run', repeatedSteps: 9, message: 'paused' }
@@ -63,7 +61,7 @@ test('throttle and stall notices show while they apply and clear on the next tur
     message: 'paused',
   })
   const other = createActEventProjector()
-  other.applyLive({ type: 'throttled', runId: 'run', retryAfterMs: 5 })
+  other.applyLive(stall)
   other.applyLive({ type: 'state', runId: 'run', status: 'cancelled' })
   assert.equal('notice' in other.snapshot().runs.run, false)
 })
@@ -71,87 +69,23 @@ test('throttle and stall notices show while they apply and clear on the next tur
 test('the last failed completion check stays on the run so hosts can explain how it ended', () => {
   const p = createActEventProjector()
   const check = (completed, reason, recovery) => ({
-    type: 'verification',
+    type: 'completion',
     runId: 'run',
     completed,
-    verified: false,
     reason,
     ...(recovery ? { recovery } : {}),
   })
   p.applyLive(check(false, 'GOAL_ACTIVE: 目标仍在推进', 'repair'))
-  assert.deepEqual(p.snapshot().runs.run.verification, {
+  assert.deepEqual(p.snapshot().runs.run.completion, {
+    completed: false,
     reason: 'GOAL_ACTIVE: 目标仍在推进',
     recovery: 'repair',
   })
   p.applyLive(check(true, 'ok'))
-  assert.equal(p.snapshot().runs.run.verification, undefined)
+  assert.equal(p.snapshot().runs.run.completion.completed, true)
   p.applyLive(check(false, 'STALE_VIEW', 'refresh'))
   p.applyLive({ type: 'state', runId: 'run', status: 'failed' })
-  assert.equal(p.snapshot().runs.run.verification.reason, 'STALE_VIEW')
-})
-
-test('INV-78 successful domain reports survive terminal states, replay and mutable caller inputs', () => {
-  const report = {
-    scope: '能打开指定产物',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      {
-        label: '打开文件',
-        status: 'passed',
-        artifact: { identity: 'result.docx', revision: 'v2' },
-      },
-    ],
-  }
-  const verification = {
-    type: 'verification',
-    runId: 'run',
-    completed: true,
-    verified: true,
-    reason: '可打开',
-    report,
-  }
-  const live = createActEventProjector()
-  const replay = createActEventProjector()
-  live.applyLive(verification)
-  replay.apply({ sessionId: 'session', runId: 'run', sequence: 1, event: verification })
-  report.checks[0].label = 'changed by caller'
-  const terminal = { type: 'state', runId: 'run', status: 'completed' }
-  live.applyLive(terminal)
-  replay.apply({ sessionId: 'session', runId: 'run', sequence: 2, event: terminal })
-  assert.deepEqual(live.snapshot().runs, replay.snapshot().runs)
-  assert.equal(live.snapshot().runs.run.verificationReport.checks[0].label, '打开文件')
-  assert.equal(live.snapshot().runs.run.verification, undefined)
-  assert.equal(live.snapshot().runs.run.completion.verified, true)
-  assert.equal(live.snapshot().runs.run.completion.report.checks[0].label, '打开文件')
-  live.snapshot().runs.run.verificationReport.checks.length = 0
-  assert.equal(live.snapshot().runs.run.verificationReport.checks.length, 1)
-})
-
-test('a newer completion decision clears an older report while retaining its own status', () => {
-  const projector = createActEventProjector()
-  projector.applyLive({
-    type: 'verification',
-    runId: 'run',
-    completed: false,
-    verified: false,
-    reason: 'incomplete',
-    report: {
-      scope: 'example',
-      checkedAt: new Date().toISOString(),
-      checks: [{ label: 'example', status: 'failed' }],
-    },
-  })
-  projector.applyLive({
-    type: 'verification',
-    runId: 'run',
-    completed: false,
-    verified: false,
-    reason: 'STALE_VIEW',
-    recovery: 'refresh',
-  })
-  const current = projector.snapshot().runs.run
-  assert.equal(current.verificationReport, undefined)
-  assert.equal(current.completion.reason, 'STALE_VIEW')
+  assert.equal(p.snapshot().runs.run.completion.reason, 'STALE_VIEW')
 })
 
 test('current terminal states keep their identity and ignore late events in live and durable projections', () => {

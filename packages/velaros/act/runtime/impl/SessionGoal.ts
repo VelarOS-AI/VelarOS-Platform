@@ -62,7 +62,6 @@ export class SessionGoal implements SessionGoalApi {
   }
   public completion(goal: GoalState, reason: string): ContextCompletionCommitPort {
     return {
-      binding: { kind: 'goal', id: goal.id, revision: goal.revision },
       prepare: async (signal) => {
         const { state, goal: current } = await this.snapshot(signal)
         if (
@@ -71,7 +70,7 @@ export class SessionGoal implements SessionGoalApi {
           current.revision !== goal.revision ||
           current.status !== 'active'
         )
-          throw new AppError('GOAL_CONFLICT', '核查期间目标已变化，请按最新目标状态决定是否收尾')
+          throw new AppError('GOAL_CONFLICT', '完成期间目标已变化，请按最新目标状态决定是否收尾')
         const next = goalChange(
           current,
           {

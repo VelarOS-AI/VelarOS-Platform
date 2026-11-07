@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 
-import { expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
 
-import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
+import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -902,7 +902,7 @@ test('INV-51 adding final context status retries a smaller projection before blo
   }
 })
 
-test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'pending'] as const)(
+test.each(['ready', 'not-ready', 'execution-failed', 'completion-blocked', 'pending'] as const)(
   'INV-52 native host delivery obeys execution and ordinary completion gates: %s',
   async (mode) => {
     const f = runFixture()
@@ -916,9 +916,9 @@ test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'p
     }
     f.options.frames.completion = async () => {
       checks++
-      return mode === 'verification-rejected'
-        ? { completed: false, verified: false, reason: 'not verified', recovery: 'input' }
-        : { completed: true, verified: true }
+      return mode === 'completion-blocked'
+        ? { completed: false, reason: 'NEEDS_INPUT', recovery: 'input' }
+        : { completed: true, reason: 'COMPLETED' }
     }
     f.options.protocol.open = () => ({
       instructions: 'native fixture',
@@ -960,12 +960,12 @@ test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'p
     const events = []
     try {
       for await (const event of service.submit('work')) events.push(event)
-      expect(calls).toBe(mode === 'ready' || mode === 'verification-rejected' ? 1 : 2)
+      expect(calls).toBe(mode === 'ready' || mode === 'completion-blocked' ? 1 : 2)
       expect(readyChecks).toBe(mode === 'execution-failed' ? 0 : 1)
       expect(checks).toBe(1)
       expect(events.at(-1)).toMatchObject({
         type: 'state',
-        status: mode === 'verification-rejected' ? 'waiting' : 'completed',
+        status: mode === 'completion-blocked' ? 'waiting' : 'completed',
       })
       const records = (await f.store.load('fault'))!.records
       expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
@@ -1874,41 +1874,6 @@ test('INV-35 accepted event persistence failure prevents execution and leaves a 
   await reopened.close()
 })
 
-test('INV-41 a run waits out the hourly model limit and continues; the total cap pauses it for the user', async () => {
-  const f = runFixture()
-  let refusals = 1
-  let exhausted = false
-  f.options.view = new Proxy(f.view, {
-    get(target, key) {
-      if (key === 'reserveModel')
-        return async (...args: Parameters<typeof target.reserveModel>) => {
-          if (exhausted) throw Object.assign(Error('budget'), { code: 'MODEL_BUDGET' })
-          if (refusals-- > 0)
-            throw Object.assign(Error('rate'), { code: 'MODEL_RATE', retryAfterMs: 5 })
-          return target.reserveModel(...args)
-        }
-      const value = Reflect.get(target, key)
-      return typeof value === 'function' ? value.bind(target) : value
-    },
-  })
-  const service = createActRunService(f.options)
-  const events = []
-  for await (const event of service.submit('work')) events.push(event)
-  expect(events).toContainEqual(expect.objectContaining({ type: 'throttled', retryAfterMs: 5 }))
-  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
-  exhausted = true
-  const paused = []
-  for await (const event of service.submit('more')) paused.push(event)
-  // 请求还没发出，输入保留给下一次运行；运行本身停在等待
-  expect(paused.some((event) => event.type === 'error')).toBe(true)
-  expect(paused.filter((event) => event.type === 'state').at(-1)).toMatchObject({
-    status: 'waiting',
-  })
-  expect(paused.at(-1)).toMatchObject({ type: 'input-retained' })
-  expect((await service.inspect()).status).toBe('waiting')
-  await service.close()
-})
-
 test('INV-42 fitting requests expose repeated material gaps to the main model without allocating paid maintenance', async () => {
   const f = runFixture()
   const reasons: string[] = []
@@ -2000,6 +1965,7 @@ test('INV-45 measured usage reaches the host and persisted response with reporte
     {
       type: 'usage',
       runId: expect.any(String),
+      requestId: expect.any(String),
       inputTokens: 900,
       outputTokens: 20,
       cacheReadTokens: 600,
@@ -2011,6 +1977,7 @@ test('INV-45 measured usage reaches the host and persisted response with reporte
   expect(plain).toEqual({
     type: 'usage',
     runId: expect.any(String),
+    requestId: expect.any(String),
     inputTokens: 900,
     outputTokens: 20,
   })
@@ -2570,31 +2537,28 @@ test('all cleanup stages are attempted when both execution and frame cleanup fai
   await service.close()
 })
 
-test('steering during completion verification invalidates the old completion and delivers the new goal', async () => {
+test('steering during completion invalidates the old decision and delivers the new goal', async () => {
   const f = runFixture()
   let entered!: () => void
   let release!: () => void
   let checks = 0
   const checking = new Promise<void>((r) => (entered = r))
   const gate = new Promise<void>((r) => (release = r))
-  const service = createActRunService({
-    ...f.options,
-    completionVerifier: {
-      async verify() {
-        if (++checks === 1) {
-          entered()
-          await gate
-        }
-        return { verified: true, reason: 'fixture' }
-      },
-    },
-  })
+  const complete = f.view.complete.bind(f.view)
+  f.view.complete = async (...args) => {
+    if (++checks === 1) {
+      entered()
+      await gate
+    }
+    return complete(...args)
+  }
+  const service = createActRunService(f.options)
   const events = []
   const running = (async () => {
     for await (const event of service.submit('first')) events.push(event)
   })()
   await checking
-  await service.steer('new goal during verification')
+  await service.steer('new goal during completion')
   release()
   await running
   expect(checks).toBe(2)
@@ -2606,29 +2570,20 @@ test('steering during completion verification invalidates the old completion and
   await service.close()
 })
 
+const fixtureStores = new Set<ContextStorage>()
+afterEach(async () => {
+  for (const store of fixtureStores) await store.close()
+  fixtureStores.clear()
+})
+
 function storage(): ContextStorage {
-  const states = new Map<string, ContextState>()
-  const objects = new Map<string, string>()
-  return {
-    async load(id) {
-      return structuredClone(states.get(id) ?? null)
-    },
-    async compareAndSwap(id, version, next) {
-      if ((states.get(id)?.version ?? 0) !== version) return false
-      states.set(id, structuredClone(next))
-      return true
-    },
-    async put(id, text) {
-      const key = crypto.randomUUID()
-      objects.set(id + key, text)
-      return key
-    },
-    async get(id, key) {
-      return objects.get(id + key) ?? null
-    },
-    async close() {},
-  }
+  const store = localContextStorage({ path: ':memory:' })
+  // 故障注入会先保存 put 再覆盖；固定实例接收者。
+  store.put = store.put.bind(store)
+  fixtureStores.add(store)
+  return store
 }
+
 function child(block = false): ActChildSession {
   return {
     async *submit(_input, signal) {
@@ -2695,11 +2650,10 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
     text: 'continued',
     ref: { sessionId: 'child', id: 'accepted' },
   }
-  const verification = {
-    type: 'verification' as const,
+  const completion = {
+    type: 'completion' as const,
     runId: 'child',
     completed: false,
-    verified: false,
     reason: 'required input is unavailable',
   }
   for (const scenario of [
@@ -2711,7 +2665,7 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
       terminal: 'waiting' as const,
       diagnostic: 'no progress',
     },
-    { events: [verification], terminal: 'failed' as const, diagnostic: verification.reason },
+    { events: [completion], terminal: 'failed' as const, diagnostic: completion.reason },
     {
       events: [
         error,
@@ -2726,7 +2680,7 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
     },
     { events: [error, accepted], terminal: 'waiting' as const, diagnostic: undefined },
     {
-      events: [verification, { ...verification, completed: true, verified: true }],
+      events: [completion, { ...completion, completed: true }],
       terminal: 'waiting' as const,
       diagnostic: undefined,
     },

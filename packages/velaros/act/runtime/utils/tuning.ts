@@ -20,10 +20,6 @@ export const ActRuntimeTuning = Object.freeze({
   statePatchChars: 160,
   /** 每条细节引用与裁剪标记的保守字符余量。 */
   stateRecallChars: 256,
-  /** 单项核查诊断的展示上限，避免长身份或产物元数据占满全部诊断配额。 */
-  verificationCheckChars: 512,
-  /** 长核查名称在紧凑诊断中的前段；完整名称按报告引用召回。 */
-  verificationLabelChars: 160,
   /** 宿主笔记正文每页字符上限。 */
   noteReadChars: 32000,
   /** 一次模型工具交付最多附带的已保存脚本数。 */

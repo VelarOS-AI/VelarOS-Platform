@@ -79,13 +79,10 @@ await view.end()
 宿主可在验收前固定本次必需交付范围，逐项核查仍接入真实领域判据：
 
 ```ts
-import type { ContextCompletionPort, ContextViewApi } from '@velaros-ai/context'
 
 declare const view: ContextViewApi
 // 领域验收器实际检查产物，并返回声明范围内的逐项结果。
-declare const verifyDeliveredArtifacts: ContextCompletionPort['verify']
 
-const completion: ContextCompletionPort = {
   requirements: (current) => [
     { id: 'implementation', label: '实现与边界行为', artifacts: ['src/index.ts'], sourceRefs: [current.goals[0].record.ref] },
     { id: 'example', label: '可运行示例', artifacts: ['examples/demo.ts'], sourceRefs: [current.goals[0].record.ref] },
@@ -114,9 +111,7 @@ console.log(result.completed, result.verified, result.report?.checks)
 - 当前用户输入的完整性按实际读取范围判断。正文受单页上限限制且已有摘要时，保留头尾摘录和标为模型解释的历史摘要；较大的调用方预算不等同于已读取完整正文，原文继续按引用分页召回。
 - 超长用户输入按完整 Unicode 字符分块归档，分页位置仍使用 UTF-16 字符数；读回依据归档记录的实际长度定位，也兼容固定宽度的既有分块。
 - 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`。宿主休眠使租约到期时，原所有者仍须在同一存储 CAS 中验证身份后续期；检查点更新可在同次提交续期，世界写入前先保证租约有效并重验执行身份。接管竞争由 CAS 决定，被替换、撤销或已结束的所有权不能续期；效果不明的操作照实留在结算事实里，不挡下一步也不挡交付。上次执行中断时 `begin` 抛 `TASK_INTERRUPTED`。跨进程恢复先用 `acquireRecovery()` 在同一 CAS 中取得独占租约，再核对持久回执、用 `recover` 合入结算事实，最后调用返回的释放函数；恢复期间其他调用方不能接管或结算。SQLite 本地适配器登记进程所有者，同一宿主能证明进程已经退出时可立即恢复；其他宿主、PID 重用和权限不足保持租约保护，未提供存活能力的适配器沿用到期机制。本地适配器的进程证明只适用于本机数据库。
-- `build` 只从 `ContextSourcePort` 真实读取，发布前核对版本与授权（不过抛 `STALE_VIEW`）；发送前还要 `validate`；没给 `ContextCompletionPort` 时 `complete` 的结果始终是未验证。
 - 领域验收器通过 `requirements(view, signal)` 声明当前原始用户要求和预期产物，`verify(view, signal)` 返回真实逐项结果。必需项须同身份、passed、complete 并覆盖全部产物；缺项、未知或失败不能被总体 verified 主张覆盖。
-- 领域验收器可返回有界 `report`，逐项声明核查范围、时间、通过/失败/未知、证据引用与实际产物版本；`ContextVerificationLimits` 规定上限。完整报告在绑定必需交付项后最多 262144 个 JSON 字符，模型视图仍按自己的投影额度呈现，不能为了缩短报告而丢弃失败项或证明。报告归档后由 `readCompletion()` 读取当前任务的最近 `ContextCompletionRecord`，`readCompletion(ref)` 按 `inspect().completionRef` 等引用回看历史报告；失败报告也保留原任务与宿主对象身份，不把模型的完成主张当作核查。产物变化后旧报告保持原时刻的事实。
 - 验收器报告成功时，完成发布前再次探测报告中由 helper 签发的 current 证明；后续构建使产物变化或探测失去覆盖时，该项成为 unknown，返回 `VERIFICATION_ARTIFACT_CHANGED` 并要求补验。原单项检查和费用仍保留，最终探测独立记账；宿主继续负责完整依赖范围、原子探测及发布期间的写入协调。
 - `complete(verifier, signal, commit)` 的可选宿主提交口只准备同一存储版本上的不可变记录。领域验收通过后，任务完成、报告和这些记录在同次 CAS 发布；竞争只重新准备记录，不重跑验收或外部操作。取消、验收失败或宿主对象变更均不提前发布完成记录。
 - 独立使用时存储由宿主创建与 `close()`；交给 `createRuntime({ storage })` 并创建成功后由 Runtime 关闭；`close()` 幂等，只释放连接与等待，不删数据。

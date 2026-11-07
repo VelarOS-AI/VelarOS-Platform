@@ -1,8 +1,4 @@
-import type {
-  ContextCompletionResult,
-  ContextProjection,
-  ContextVerificationReport,
-} from '@velaros-ai/context'
+import type { ContextCompletionResult, ContextProjection } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
@@ -129,14 +125,11 @@ export type ActRunEvent =
       readonly cacheWriteTokens?: number
     }
   | {
-      readonly type: 'verification'
+      readonly type: 'completion'
       readonly runId: string
       readonly completed: boolean
-      readonly verified: boolean
       readonly reason: string
       readonly recovery?: ContextCompletionResult['recovery']
-      /** 领域实际核查的范围与依据；成功、失败和未知项均按真实检查记录。 */
-      readonly report?: ContextVerificationReport
     }
   | { readonly type: 'error'; readonly runId: string; readonly message: string }
   /** 主线到达回合或墙钟上限：已封段并延长截止时间，运行继续。 */

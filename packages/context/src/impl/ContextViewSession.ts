@@ -1,14 +1,12 @@
 import { isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import { ContextLimits } from '../contract/constants.js'
 import type {
   ContextBuildOptions,
   ContextCompletionCommitPort,
-  ContextCompletionPort,
   ContextViewOptions,
 } from '../contract/requires.js'
-import type { ContextCompletionRecord, ContextCompletionResult } from '../types/context.js'
+import type { ContextCompletionResult } from '../types/context.js'
 import type {
   ContextContent,
   ContextFeedback,
@@ -32,9 +30,8 @@ import type {
 import type { ContextTaskMutation } from '../types/runtime.js'
 import { updateModelBudget } from '../utils/model-budget.js'
 import { contextFailure, emptyContextMetadata, sameContextRef } from '../utils/state.js'
-import { completionVerification, verificationRequirements } from '../utils/verification.js'
 import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
-import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
+import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
 import { createContextReference } from './ContextReferenceAllocator.js'
@@ -47,8 +44,6 @@ export interface ContextViewApi {
   readonly limits: ContextViewLimits
   /** 读取持久检查点，包含真实阶段和用量。 */
   inspect(): Promise<Nullable<ContextTaskState>>
-  /** 读取有界不可变核查记录；省略引用读取当前任务的最近报告，可显式回看历史报告。 */
-  readCompletion(ref?: ContextRef): Promise<Nullable<ContextCompletionRecord>>
   /** 追加用户目标并取得一个有限租约，返回租约身份。 */
   begin(goal: ContextRef, signal?: AbortSignal, mode?: 'continue' | 'new'): Promise<string>
   /** 活动运行接收已归档的用户补充，保留总预算并使旧视图失效。 */
@@ -120,12 +115,12 @@ export interface ContextViewApi {
     outputTokens: number,
     request: ContextModelRequestIdentity
   ): Promise<void>
-  /** 依照证据缺口、新鲜度和领域验收器判断交付；效果不明的操作不挡交付，照实留在结算事实里。 */
+  /** 核对执行、材料与视图版本后完成任务，并原子发布宿主收尾记录。 */
   complete(
-    verifier?: ContextCompletionPort,
     signal?: AbortSignal,
     commit?: ContextCompletionCommitPort
   ): Promise<ContextCompletionResult>
+
   /** 上次执行中断后，把按持久日志收拾出的结算事实合入检查点；不复活取消终态。 */
   recover(feedback: readonly ContextFeedback[]): Promise<void>
   /** 原子取得恢复租约；持有期间只有此调用方可以核对和结算旧回执。 */
@@ -198,17 +193,6 @@ export class ContextViewSession implements ContextViewApi {
     return task ? readContextTask(task) : null
   }
 
-  public async readCompletion(ref?: ContextRef): Promise<Nullable<ContextCompletionRecord>> {
-    const target = ref ?? (await this.inspect())?.completionRef
-    if (!target) return null
-    const content = await this.options.context.read(target, { limit: ContextLimits.readChars })
-    if (content.record.kind !== 'audit' || !content.record.title?.startsWith('task:completion:'))
-      throw contextFailure('VALIDATION', '引用不是领域核查记录')
-    if (content.text.length < content.totalChars)
-      throw contextFailure('LIMIT', '领域核查记录超过完整读取上限')
-    return JSON.parse(content.text) as ContextCompletionRecord
-  }
-
   public async begin(
     goal: ContextRef,
     signal?: AbortSignal,
@@ -270,7 +254,6 @@ export class ContextViewSession implements ContextViewApi {
                   outputTokens: 0,
                   unmeasuredCalls: 0,
                 },
-            verification: 'unverified',
           }
         },
       },
@@ -296,7 +279,6 @@ export class ContextViewSession implements ContextViewApi {
               ? task.goals
               : [...task.goals, goal],
             view: null,
-            verification: 'unverified',
           }
         },
       },
@@ -333,7 +315,6 @@ export class ContextViewSession implements ContextViewApi {
               [executionId]: { view: isUndefined(basis) ? task.view : basis, concurrent },
             },
             intents: concurrent ? task.intents : [],
-            verification: 'unverified',
           }
         },
       },
@@ -648,116 +629,32 @@ export class ContextViewSession implements ContextViewApi {
       requireOwner
     )
   }
-
   public async complete(
-    verifier?: ContextCompletionPort,
     signal: AbortSignal = new AbortController().signal,
     commit?: ContextCompletionCommitPort
   ): Promise<ContextCompletionResult> {
+    signal.throwIfAborted()
     const task = this.owned(toOptional(await this.inspect()))
     if (!isEmpty(Object.keys(task.activeExecutions ?? {})) || task.status === 'executing')
-      return {
-        completed: false,
-        verified: false,
-        reason: 'PENDING_EXECUTIONS',
-        recovery: 'refresh',
-      }
+      return { completed: false, reason: 'PENDING_EXECUTIONS', recovery: 'refresh' }
     if (!task.view || task.view.gaps.some((gap) => gap.required))
-      return {
-        completed: false,
-        verified: false,
-        reason: 'REQUIRED_EVIDENCE_MISSING',
-        recovery: 'repair',
-      }
+      return { completed: false, reason: 'REQUIRED_EVIDENCE_MISSING', recovery: 'repair' }
     if (!(await this.validate(task.view, signal)))
-      return { completed: false, verified: false, reason: 'STALE_VIEW', recovery: 'refresh' }
-    const requirements = verificationRequirements(
-      await awaitContextOperation(
-        Promise.resolve(verifier?.requirements?.(task.view, signal) ?? []),
-        signal
-      )
-    )
-    for (const requirement of requirements)
-      for (const ref of requirement.sourceRefs) {
-        const source = await awaitContextOperation(
-          this.options.context.read(ref, { limit: 1 }),
-          signal
-        )
-        if (source.record.kind !== 'user' || !task.goals.some((goal) => sameContextRef(goal, ref)))
-          throw contextFailure('VALIDATION', '必需交付项必须引用当前任务的原始用户要求')
-      }
-    let validation = completionVerification(
-      verifier
-        ? await awaitContextOperation(verifier.verify(task.view, signal), signal)
-        : { verified: false, reason: '未配置领域验收器，结果为未验证交付' },
-      requirements
-    )
-    let completionRef: Optional<ContextRef>
-    if (validation.report) {
-      checkVerificationReport(validation.report)
-      validation = { ...validation, report: JSON.parse(JSON.stringify(validation.report)) }
-      for (const check of validation.report!.checks)
-        for (const ref of check.evidenceRefs ?? [])
-          await awaitContextOperation(this.options.context.read(ref, { limit: 1 }), signal)
-      completionRef = await createContextReference(this.options.storage, this.options.sessionId)
-    }
-    if (!(await this.validate(task.view, signal)))
-      return { completed: false, verified: false, reason: 'STALE_VIEW', recovery: 'refresh' }
-    const result: ContextCompletionResult =
-      verifier && !validation.verified
-        ? { completed: false, recovery: 'repair', ...validation }
-        : { completed: true, ...validation }
-    let record: Optional<Omit<ContextRecord, 'sequence'>>
-    if (result.report) {
-      const body: ContextCompletionRecord = {
-        taskId: task.id!,
-        taskRevision: task.revision,
-        viewId: task.view.id,
-        binding: commit?.binding,
-        result,
-      }
-      const text = JSON.stringify(body)
-      const objectId = await awaitContextOperation(
-        this.options.storage.put(this.options.sessionId, text),
-        signal
-      )
-      record = {
-        ref: completionRef!,
-        kind: 'audit',
-        title: `task:completion:${task.id!}`,
-        objectId,
-        chars: text.length,
-        sources: result.report.checks.flatMap((check) => check.evidenceRefs ?? []),
-        createdAt: new Date().toISOString(),
-      }
-    }
-    if (!result.completed && !record) return result
+      return { completed: false, reason: 'STALE_VIEW', recovery: 'refresh' }
     await this.change(
       {
         apply: (current) => {
           const latest = this.owned(current)
           if (latest.id !== task.id || latest.revision !== task.revision)
-            throw contextFailure('STALE_VIEW', '验收期间任务发生变化')
-          const next = {
-            ...latest,
-            ...(result.completed
-              ? {
-                  status: 'completed' as const,
-                  verification: validation.verified
-                    ? ('verified' as const)
-                    : ('unverified' as const),
-                }
-              : {}),
-          }
-          if (record) next.completionRef = record.ref
-          return next
+            throw contextFailure('STALE_VIEW', '完成期间任务发生变化')
+          return { ...latest, status: 'completed' }
         },
       },
       true,
       signal,
-      { records: record ? [record] : [], commit: result.completed ? commit : undefined }
+      commit
     )
-    return result
+    return { completed: true, reason: 'COMPLETED' }
   }
 
   public async recover(feedback: readonly ContextFeedback[]): Promise<void> {
@@ -841,17 +738,14 @@ export class ContextViewSession implements ContextViewApi {
     mutation: ContextTaskMutation,
     renew = true,
     signal?: AbortSignal,
-    completion?: {
-      readonly records: ReadonlyArray<Omit<ContextRecord, 'sequence'>>
-      readonly commit?: ContextCompletionCommitPort
-    }
+    commit?: ContextCompletionCommitPort
   ): Promise<ContextTaskState> {
     const { storage, sessionId } = this.options
     const completionSignal = signal ?? new AbortController().signal
     for (let attempt = 0; attempt < 32; attempt++) {
       signal?.throwIfAborted()
-      const prepared = completion?.commit
-        ? await awaitContextOperation(completion.commit.prepare(completionSignal), completionSignal)
+      const prepared = commit
+        ? await awaitContextOperation(commit.prepare(completionSignal), completionSignal)
         : undefined
       const state = (await storage.loadMetadata(sessionId)) ?? emptyContextMetadata()
       if (prepared && prepared.version !== state.version) continue
@@ -859,10 +753,7 @@ export class ContextViewSession implements ContextViewApi {
       if (renew && task.lease)
         task = { ...task, lease: { ...task.lease, expiresAt: Date.now() + this.limits.leaseMs } }
       signal?.throwIfAborted()
-      const append: Array<Omit<ContextRecord, 'sequence'>> = [
-        ...(completion?.records ?? []),
-        ...(prepared?.records ?? []),
-      ]
+      const append: Array<Omit<ContextRecord, 'sequence'>> = [...(prepared?.records ?? [])]
       if (state.task && task.id && state.task.id !== task.id) {
         const body = JSON.stringify(state.task)
         const objectId = await storage.put(sessionId, body)

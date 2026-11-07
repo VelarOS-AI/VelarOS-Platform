@@ -1,12 +1,7 @@
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 
 import type { ActContextPolicy, ActRunEvent, ActRunLimits, AgentJob } from '@velaros-ai/agent'
-import type {
-  ContextCompletionPort,
-  ContextSourcePort,
-  ContextStorage,
-  ContextViewLimits,
-} from '@velaros-ai/context'
+import type { ContextSourcePort, ContextStorage, ContextViewLimits } from '@velaros-ai/context'
 import type {
   ModuleBinding,
   OperationContext,
@@ -111,8 +106,6 @@ export interface VelarosContextOptions {
   readonly sources?: readonly ContextSourcePort[]
   /** 共享任务预算与证据上限。 */
   readonly limits?: Partial<ContextViewLimits>
-  /** 领域完成验证；省略时明确标为未验证。 */
-  readonly completion?: ContextCompletionPort
 }
 
 /** 领域只登记固定纯计划及捕获操作；实际读取仍由授权 Kernel 派发。 */

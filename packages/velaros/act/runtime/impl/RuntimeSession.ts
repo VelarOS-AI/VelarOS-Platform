@@ -12,7 +12,6 @@ import type {
 } from '@velaros-ai/agent'
 import { createActRunService } from '@velaros-ai/agent'
 import type {
-  ContextCompletionPort,
   ContextCompletionResult,
   ContextContent,
   ContextFeedback,
@@ -253,10 +252,8 @@ export interface RuntimeSessionDependencies {
   inputs?(): Readonly<Record<string, unknown>>
   /** 统一调用日志，可按本步查询真实效果。 */
   readonly journal: ContextInvocationJournalApi
-  /** 上下文来源与验收的宿主配置。 */
-  readonly contextOptions?: Omit<VelarosContextOptions, 'completion'> & {
-    readonly completion?: ContextCompletionPort
-  }
+  /** 上下文来源、材料配额与维护的宿主配置。 */
+  readonly contextOptions?: VelarosContextOptions
   /** 注册本会话的源码与结果访问端口，装配层负责生命周期。 */
   register(access: RuntimeSessionAccess): void
   /** 可选的共享模型驱动。 */
@@ -766,7 +763,6 @@ export class RuntimeSession implements VelarosSession {
         sessionId: id,
         storage: dependencies.storage,
         view: this.view,
-        completionVerifier: dependencies.contextOptions?.completion,
         context: this.context,
         model: dependencies.model,
         limits: dependencies.limits,
@@ -886,7 +882,6 @@ export class RuntimeSession implements VelarosSession {
             if (active && !claim)
               return {
                 completed: false,
-                verified: false,
                 reason:
                   request.response.type === 'tools'
                     ? 'GOAL_ACTIVE: 目标仍在推进，请继续完成剩余工作；达成后调用 done，completion 写完成依据、message 写用户答复，运行时验收后一起完成任务与目标；确有阻碍时用 goal.update 记录依据。'
@@ -904,7 +899,6 @@ export class RuntimeSession implements VelarosSession {
             if (basis.missing?.length && !dependencies.tool)
               return {
                 completed: false,
-                verified: false,
                 reason: 'CONTEXT_REQUIRED',
                 recovery: 'repair',
               }
@@ -978,23 +972,18 @@ export class RuntimeSession implements VelarosSession {
       : false
   }
 
-  /** done 的领域核查与目标收尾一起提交；核查失败、取消或目标变化时保持原目标。 */
+  /** 任务与目标收尾一起提交；前置条件不满足、取消或目标变化时保持原目标。 */
   private async completeGoal(
     goal: GoalState,
     reason: string,
     signal: AbortSignal
   ): Promise<Optional<ContextCompletionResult>> {
     try {
-      return await this.view.complete(
-        this.dependencies.contextOptions?.completion,
-        signal,
-        this.goal.completion(goal, reason)
-      )
+      return await this.view.complete(signal, this.goal.completion(goal, reason))
     } catch (error) {
       if ((error as { code?: string }).code !== 'GOAL_CONFLICT') throw error
       return {
         completed: false,
-        verified: false,
         reason: 'GOAL_CHANGED: 目标刚被改动，请按最新目标状态决定是否收尾',
         recovery: 'refresh',
       }

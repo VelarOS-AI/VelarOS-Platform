@@ -1,5 +1,4 @@
 import type {
-  ContextCompletionPort,
   ContextCompletionResult,
   ContextRef,
   ContextRuntime,
@@ -166,8 +165,6 @@ export interface ActLoopOptions {
 
   /** 任务事实、未知效果与领域验收由现有视图维护。 */
   readonly view: ContextViewApi
-  /** 领域的真实完成校验。 */
-  readonly completionVerifier?: ContextCompletionPort
 
   /** 会话的唯一上下文权威。 */
   readonly context: ContextRuntime

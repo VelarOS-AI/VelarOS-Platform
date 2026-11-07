@@ -1,10 +1,5 @@
 import type { ContextRuntime } from '../impl/SessionContext.js'
 import type {
-  ContextCompletionBinding,
-  ContextCompletionResult,
-  ContextDeliveryRequirement,
-} from '../types/context.js'
-import type {
   ContextMetadata,
   ContextObjectCollection,
   ContextObjectCollectionResult,
@@ -25,7 +20,6 @@ import type {
   ContextTime,
   ContextViewForm,
   ContextViewLimits,
-  ModelView,
 } from '../types/context.js'
 import type {
   StoreChanges,
@@ -158,21 +152,8 @@ export interface ContextBuildOptions {
   readonly maxChars: number
 }
 
-/** 领域验收器只声明其实际检查的结果。 */
-export interface ContextCompletionPort {
-  /** 验收前固定必需交付项；同 id 的当前核查证明必须覆盖列出的全部产物。 */
-  requirements?(
-    view: ModelView,
-    signal: AbortSignal
-  ): readonly ContextDeliveryRequirement[] | Promise<readonly ContextDeliveryRequirement[]>
-  /** 校验当前证据对应的结果；没有此端口时交付保持 unverified。 */
-  verify(view: ModelView, signal: AbortSignal): Promise<Omit<ContextCompletionResult, 'completed'>>
-}
-
-/** 宿主准备同一存储上的收尾记录；只有领域验收通过后才调用，不产生外部效果。 */
+/** 宿主准备同一存储上的收尾记录，与任务完成一起原子发布，不产生外部效果。 */
 export interface ContextCompletionCommitPort {
-  /** 核查开始时的宿主对象身份，用于将失败报告也归到原对象。 */
-  readonly binding: ContextCompletionBinding
   /** 按一致快照核对宿主对象，正文先保存，记录与任务完成一起 CAS；竞争时可以再次调用。 */
   prepare(signal: AbortSignal): Promise<{
     readonly version: number
