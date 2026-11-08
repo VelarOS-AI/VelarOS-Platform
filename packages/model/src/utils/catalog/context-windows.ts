@@ -12,19 +12,12 @@ import { toPositiveInteger } from '../numbers'
 
 import {
   findSharedProviderCatalogDefinition,
-  listKnownModelContextWindowEntries,
   listOpenRouterCompatibleContextWindowEntries,
 } from './provider-catalogs'
 
-const KnownModelContextWindowEntries = listKnownModelContextWindowEntries()
 const OpenRouterCompatibleModelContextWindows = new Map(
   listOpenRouterCompatibleContextWindowEntries()
 )
-
-/** 全部静态目录里声明过窗口的模型条目，给对外的只读快照用。 */
-export function getKnownModelContextWindowEntries(): Array<readonly [string, number]> {
-  return KnownModelContextWindowEntries
-}
 
 /** 把模型名展开成一串查表候选：原名、去掉命名空间、去掉 `:` 与 `@` 后缀。 */
 export function buildModelLookupCandidates(model: string): string[] {

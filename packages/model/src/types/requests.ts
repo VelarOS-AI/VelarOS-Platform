@@ -47,18 +47,6 @@ export interface ModelRequestObjectOutputInput<TOutput = unknown> {
   schemaDescription: string
 }
 
-export interface ModelRequestTransport {
-  generateText<TOutput extends ModelRequestOutput = ModelRequestTextOutput>(
-    envelope: ModelRequestEnvelope<ModelRequestGenerateTextInput<TOutput>>
-  ): ModelRequestGenerateTextResult<TOutput>
-  streamText<TToolSet extends ToolSet = ToolSet>(
-    envelope: ModelRequestEnvelope<ModelRequestStreamTextInput<TToolSet>>
-  ): ModelRequestStreamTextResult<TToolSet>
-  createObjectOutput<TOutput>(
-    input: ModelRequestObjectOutputInput<TOutput>
-  ): ModelRequestObjectOutput<TOutput>
-}
-
 export type ModelRequestTextInput = ModelRequestGenerateTextInput & {
   endpoint: ModelRequestEndpoint
   modelRequestOptions?: ModelRequestOptions

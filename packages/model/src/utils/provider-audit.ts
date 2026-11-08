@@ -16,8 +16,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ProviderRequestAuditValue } from '../types/compiler.js'
 
 /**
- * 造一个带类型标签的审计值 `{ $velarosType, value }`，让 JSON 里表达不了的类型（bigint/bytes/date/url/undefined/非有限数）能落盘又能反解。
- * 两个键的形状是与 `decodeProviderRequestAuditValue` 的硬约定：解码端正是靠「恰好这两个键」认出标签值，不能随便加字段。
+ * 造一个带类型标签的审计值 `{ $velarosType, value }`，保存 JSON 不能直接表达的 bigint、bytes、date、url、undefined 与非有限数。
+ * 两个键的形状属于请求快照的编码约定，不能随便加字段。
  */
 function tagged(type: string, value: string): ProviderRequestAuditValue {
   return { $velarosType: type, value }
@@ -88,37 +88,6 @@ export function encodeProviderRequestAuditValue(
   } finally {
     seen.delete(value)
   }
-}
-
-/**
- * `encodeProviderRequestAuditValue` 的逆操作：把审计快照还原成真实的 provider 输入值。
- * 只有「恰好两个键、$velarosType 与 value 都是字符串」的对象才当标签值解（bigint/bytes/date/number/undefined/url），
- * 其余对象与数组递归还原；标签名不认识时不抛错，退化成按普通对象处理，保证老快照遇到新标签也读得下去。
- */
-export function decodeProviderRequestAuditValue(value: ProviderRequestAuditValue): unknown {
-  if (isNull(value) || !isObject(value)) return value
-  if (isArray(value)) return value.map(decodeProviderRequestAuditValue)
-  if (isString(value.$velarosType) && isString(value.value) && Object.keys(value).length === 2) {
-    switch (value.$velarosType) {
-      case 'bigint':
-        return BigInt(value.value)
-      case 'bytes':
-        return Uint8Array.from(atob(value.value), (character) => character.charCodeAt(0))
-      case 'date':
-        return new Date(value.value)
-      case 'number':
-        return Number(value.value)
-      case 'undefined':
-        return undefined
-      case 'url':
-        return new URL(value.value)
-      default:
-        break
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, decodeProviderRequestAuditValue(item)])
-  )
 }
 
 /** 使用标准 Web API 编码字节，避免宿主 Buffer 进入可移植请求图。 */
