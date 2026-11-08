@@ -5,9 +5,7 @@ import { join } from 'node:path'
 import { getBuiltinModule } from 'node:process'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { volatileStorageBackend } from '../../../../../context/test/support/storage-contract.mjs'
 import { createRuntime } from '../../../../dist/act/runtime/index.js'
 
 import { done, modelText, turn } from './model-turn.mjs'
@@ -17,9 +15,57 @@ assert.throws(() => localContextStorage({ path: ':memory:' }), { code: 'STORAGE_
 const root = await mkdtemp(join(tmpdir(), 'runtime-no-sqlite-'))
 const workspace = join(root, 'project')
 const dataDir = join(root, 'data')
-const backend = volatileStorageBackend()
+const pending = new Map()
+let requestId = 0
+let closes = 0
+function request(method, connection, args = []) {
+  return new Promise((resolve, reject) => {
+    if (!process.connected) return reject(new Error('ContextStorage host disconnected'))
+    const id = ++requestId
+    pending.set(id, { resolve, reject })
+    process.send({ channel: 'context-storage', id, connection, method, args }, (error) => {
+      if (!error) return
+      pending.delete(id)
+      reject(error)
+    })
+  })
+}
+function receive(reply) {
+  if (reply.channel !== 'context-storage') return
+  const waiter = pending.get(reply.id)
+  if (!waiter) return
+  pending.delete(reply.id)
+  if (reply.error) waiter.reject(Object.assign(new Error(reply.error.message), reply.error))
+  else waiter.resolve(reply.value)
+}
+function disconnected() {
+  for (const waiter of pending.values())
+    waiter.reject(new Error('ContextStorage host disconnected'))
+  pending.clear()
+}
+process.on('message', receive)
+process.on('disconnect', disconnected)
+const backend = {
+  get closes() {
+    return closes
+  },
+  async open() {
+    const { connection, methods } = await request('open')
+    return Object.fromEntries(
+      methods.map((method) => [
+        method,
+        async (...args) => {
+          const value = await request(method, connection, args)
+          if (method === 'close') closes++
+          return value
+        },
+      ])
+    )
+  },
+}
 let runtime
 let calls = 0
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 try {
   await mkdir(workspace)
   await writeFile(join(workspace, 'value.txt'), 'one\n')
@@ -47,15 +93,18 @@ try {
           modelText(request)
         )
         const observation = JSON.parse(request.materials[0].text).partitions.observation
-        assert.match(observation.text, /two/)
+        assert.match(
+          observation.text,
+          platformHasDefaultConfinement ? /two/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+        )
         yield* done(request, 'verified version two')
       }
     },
   }
   runtime = await createRuntime({
-    runner: nodeSubprocessCodeRunner,
     workspace,
     dataDir,
+    packageEnvironment: false,
     storage: await backend.open(),
     model,
     agents: false,
@@ -81,9 +130,9 @@ try {
   const persisted = await storage.load('main')
   assert(persisted.records.some((record) => record.kind === 'user'))
   runtime = await createRuntime({
-    runner: nodeSubprocessCodeRunner,
     workspace,
     dataDir,
+    packageEnvironment: false,
     storage,
     memory: false,
     agents: false,
@@ -95,9 +144,13 @@ try {
   await runtime.close()
   assert.equal(backend.closes, 2)
   console.info(
-    'SQLite disabled: real Act loop, Project edit, observe, trace and restored session passed'
+    'SQLite disabled: real Act loop, Project edit, observation contract, trace and restored session passed'
   )
 } finally {
   await runtime?.close()
   await rm(root, { recursive: true, force: true })
+  assert.equal(pending.size, 0, 'Storage requests must drain before the IPC connection closes')
+  process.off('message', receive)
+  process.off('disconnect', disconnected)
+  if (process.connected) process.disconnect()
 }

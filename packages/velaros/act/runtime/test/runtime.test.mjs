@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
+import { fork } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { createProjectKernel } from '../../../dist/project/index.js'
@@ -18,19 +16,112 @@ import { done, turn } from './support/model-turn.mjs'
 
 test('INV-37 injected storage runs the real runtime when SQLite is disabled', async () => {
   const fixture = fileURLToPath(new URL('./support/no-sqlite.fixture.mjs', import.meta.url))
-  const { stdout } = await promisify(execFile)(
-    process.execPath,
-    ['--no-experimental-sqlite', fixture],
-    { timeout: 60000, maxBuffer: 1024 * 1024 }
+  const root = await mkdtemp(join(tmpdir(), 'runtime-storage-host-'))
+  const path = join(root, 'context.sqlite')
+  const methods = [
+    'allocateReferenceId',
+    'load',
+    'loadMetadata',
+    'selectSnapshot',
+    'compareAndSwapMetadata',
+    'compareAndSwap',
+    'appendRecord',
+    'put',
+    'get',
+    'has',
+    'records',
+    'close',
+  ]
+  const connections = []
+  const child = fork(fixture, [], {
+    execArgv: ['--no-experimental-sqlite'],
+    serialization: 'advanced',
+    silent: true,
+    timeout: 60000,
+    killSignal: 'SIGKILL',
+  })
+  const closed = new Promise((resolve) =>
+    child.once('close', (code, signal) => resolve({ code, signal }))
   )
-  assert.match(stdout, /SQLite disabled: real Act loop/)
+  let stdout = ''
+  let stderr = ''
+  let failure
+  let serving = Promise.resolve()
+  const stop = (error) => {
+    if (failure) return
+    failure = error
+    child.kill('SIGKILL')
+  }
+  child.on('error', stop)
+  child.stdout.setEncoding('utf8').on('data', (text) => {
+    stdout += text
+    if (Buffer.byteLength(stdout) > 1024 * 1024)
+      stop(new Error('SQLite-disabled fixture stdout exceeded 1 MiB'))
+  })
+  child.stderr.setEncoding('utf8').on('data', (text) => {
+    stderr += text
+    if (Buffer.byteLength(stderr) > 1024 * 1024)
+      stop(new Error('SQLite-disabled fixture stderr exceeded 1 MiB'))
+  })
+  // SQLite 连接归父宿主；IPC 只转发正式 ContextStorage 方法，不解释记录或实现 CAS。
+  child.on('message', (request) => {
+    serving = serving.then(async () => {
+      const reply = { channel: 'context-storage', id: request.id }
+      try {
+        assert.equal(request.channel, 'context-storage')
+        assert(Number.isSafeInteger(request.id))
+        if (request.method === 'open') {
+          const connection = connections.length
+          connections.push({ storage: localContextStorage({ path }), closes: 0 })
+          reply.value = { connection, methods }
+        } else {
+          assert(methods.includes(request.method), 'Only public ContextStorage methods are exposed')
+          const owner = connections[request.connection]
+          assert(owner, 'Storage connection must have been opened')
+          assert(Array.isArray(request.args))
+          reply.value = await owner.storage[request.method](...request.args)
+          if (request.method === 'close') owner.closes++
+        }
+      } catch (error) {
+        reply.error = { name: error.name, message: error.message, code: error.code }
+      }
+      if (child.connected)
+        child.send(reply, (error) => {
+          if (error && child.connected) stop(error)
+        })
+    })
+    void serving.catch(stop)
+  })
+  try {
+    const result = await closed
+    await serving
+    if (failure) throw failure
+    assert.equal(result.code, 0, [stdout, stderr, result.signal].join('\n'))
+    assert.match(stdout, /SQLite disabled: real Act loop/)
+    assert.equal(connections.length, 2)
+    assert.deepEqual(
+      connections.map((owner) => owner.closes),
+      [1, 1]
+    )
+    const persisted = localContextStorage({ path })
+    try {
+      assert((await persisted.load('main')).records.some((record) => record.kind === 'user'))
+    } finally {
+      await persisted.close()
+    }
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    await closed
+    await serving.catch(() => {})
+    await Promise.all(connections.map((owner) => owner.storage.close()))
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('INV-2 runtime exposes one script-context contract and preserves paged source retrieval', async () => {
   const root = await mkdtemp(join(tmpdir(), 'velaros-contract-'))
   const runtime = await createRuntime({
     storage: localContextStorage({ path: join(root, 'state.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   try {
@@ -69,7 +160,6 @@ test('INV-3 基础契约放不进窗口时明确阻塞；截断响应不执行�
   let effects = 0
   const options = {
     storage: localContextStorage({ path: join(root, 'blocked.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: {
       id: 'tiny',
@@ -314,124 +404,159 @@ test('打开会话失败后清除半初始化资源，可以用同一 ID 重试'
   assert.equal((await runtime.openSession('main')).id, 'main')
 })
 
-test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，关闭后真实值可恢复', async (t) => {
-  // Assert the configured cap, including discovery metadata whose size varies by host path.
-  const frameChars = 48000
-  const root = await mkdtemp(join(tmpdir(), 'act-soak-'))
-  const path = join(root, 'context.sqlite')
-  let calls = 0
-  let spaceId
-  let previous = -1
-  const bodies = []
-  const statuses = []
-  let largestFrame
-  // 窗口较小，80 轮里会封几次段；观察到的计数跨段仍须逐轮正确
-  const driver = {
-    id: 'soak',
-    limits: { contextTokens: 40000, inputTokens: 30000, outputTokens: 4096 },
-    estimate: async (request) => ({
-      tokens: Math.ceil(JSON.stringify(request).length / 3),
-      precision: 'estimate',
-      basis: 'deterministic workload',
-    }),
-    async *stream(request) {
-      calls++
-      const frame = JSON.parse(request.materials[0].text)
-      const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
-      bodies.push(request.materials[0].text.length)
-      if (!largestFrame || request.materials[0].text.length > largestFrame.chars)
-        largestFrame = {
-          chars: request.materials[0].text.length,
-          partitions: Object.fromEntries(
-            Object.entries(frame.partitions).map(([key, value]) => [
-              key,
-              JSON.stringify(value).length,
-            ])
-          ),
-          recentResults: frame.partitions.recent.results.length,
-          historyBodies: frame.partitions.recent.results.filter((item) => item.bodyInHistory)
-            .length,
-        }
-      statuses.push(request.contextStatus)
-      const block = (name, source) => `${tag} ${name}()\n${source}\n${tag}\n`
-      if (calls === 1) {
-        yield {
-          type: 'text',
-          text: block(
-            'execute',
-            "import {store} from 'velaros:system';import {output} from 'velaros';const s=await store.create({name:'soak'});await store.set({store:s.id,key:'counter',baseRevision:0,value:0});output(s);"
-          ),
-        }
-      } else {
-        const id = frame.partitions.runtime.stores.active.items[0].id
-        spaceId ??= id
-        assert.equal(id, spaceId)
-        if (calls > 2) {
-          assert.equal(frame.partitions.observation.presentation.format, 'text')
-          const lines = frame.partitions.observation.text.split('\n')
-          assert.equal(JSON.parse(lines[1]).key, 'counter')
-          const value = JSON.parse(lines.slice(2).join('\n')).value
-          assert.equal(value, calls - 2)
-          previous = value
-        }
-        const expression = `await store.get({store:${JSON.stringify(id)},key:'counter'})`
-        if (calls === 2)
-          yield {
-            type: 'text',
-            text: block(
-              'observe',
-              `import {store} from 'velaros:system';import {output} from 'velaros';// 持续观察实际计数\noutput(${expression},{key:'counter',purpose:'Track actual progress'});`
+test(
+  'INV-32 长任务连续 80 次状态推进，观察和租约保持有界，关闭后真实值可恢复',
+  {
+    skip:
+      process.platform === 'darwin' || process.platform === 'linux'
+        ? false
+        : 'The 80-turn observation soak requires a default read-only process backend.',
+  },
+  async (t) => {
+    // Assert the configured cap, including discovery metadata whose size varies by host path.
+    const frameChars = 48000
+    const root = await mkdtemp(join(tmpdir(), 'act-soak-'))
+    const path = join(root, 'context.sqlite')
+    let calls = 0
+    let spaceId
+    let previous = -1
+    const bodies = []
+    const statuses = []
+    let largestFrame
+    // 窗口较小，80 轮里会封几次段；观察到的计数跨段仍须逐轮正确
+    const driver = {
+      id: 'soak',
+      limits: { contextTokens: 40000, inputTokens: 30000, outputTokens: 4096 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(JSON.stringify(request).length / 3),
+        precision: 'estimate',
+        basis: 'deterministic workload',
+      }),
+      async *stream(request) {
+        calls++
+        const frame = JSON.parse(request.materials[0].text)
+        const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+        bodies.push(request.materials[0].text.length)
+        if (!largestFrame || request.materials[0].text.length > largestFrame.chars)
+          largestFrame = {
+            chars: request.materials[0].text.length,
+            partitions: Object.fromEntries(
+              Object.entries(frame.partitions).map(([key, value]) => [
+                key,
+                JSON.stringify(value).length,
+              ])
             ),
+            recentResults: frame.partitions.recent.results.length,
+            historyBodies: frame.partitions.recent.results.filter((item) => item.bodyInHistory)
+              .length,
           }
-        if (calls <= 81)
+        statuses.push(request.contextStatus)
+        const block = (name, source) => `${tag} ${name}()\n${source}\n${tag}\n`
+        if (calls === 1) {
           yield {
             type: 'text',
             text: block(
               'execute',
-              `import {store} from 'velaros:system';import {output} from 'velaros';const current=${expression};if(!current)throw Error('missing');output(await store.set({store:${JSON.stringify(id)},key:'counter',baseRevision:current.revision,value:Number(current.value)+1}));`
+              "import {store} from 'velaros:system';import {output} from 'velaros';const s=await store.create({name:'soak'});await store.set({store:s.id,key:'counter',baseRevision:0,value:0});output(s);"
             ),
           }
-        else yield { type: 'text', text: `${tag} done` }
-      }
-      yield { type: 'finish', reason: 'stop' }
-    },
-  }
-  const runtime = await createRuntime({
-    dataDir: root,
-    runner: nodeSubprocessCodeRunner,
-    model: driver,
-    memory: false,
-    context: { maintenance: false },
-    limits: { turns: 100, timeoutMs: 180000, projectionChars: frameChars },
-  })
-  t.after(async () => {
+        } else {
+          const id = frame.partitions.runtime.stores.active.items[0].id
+          spaceId ??= id
+          assert.equal(id, spaceId)
+          if (calls > 2) {
+            assert.equal(frame.partitions.observation.presentation.format, 'text')
+            const lines = frame.partitions.observation.text.split('\n')
+            assert.equal(JSON.parse(lines[1]).key, 'counter')
+            const value = JSON.parse(lines.slice(2).join('\n')).value
+            assert.equal(value, calls - 2)
+            previous = value
+          }
+          const expression = `await store.get({store:${JSON.stringify(id)},key:'counter'})`
+          if (calls === 2)
+            yield {
+              type: 'text',
+              text: block(
+                'observe',
+                `import {store} from 'velaros:system';import {output} from 'velaros';// 持续观察实际计数\noutput(${expression},{key:'counter',purpose:'Track actual progress'});`
+              ),
+            }
+          if (calls <= 81)
+            yield {
+              type: 'text',
+              text: block(
+                'execute',
+                `import {store} from 'velaros:system';import {output} from 'velaros';const current=${expression};if(!current)throw Error('missing');output(await store.set({store:${JSON.stringify(id)},key:'counter',baseRevision:current.revision,value:Number(current.value)+1}));`
+              ),
+            }
+          else yield { type: 'text', text: `${tag} done` }
+        }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    }
+    const runtime = await createRuntime({
+      dataDir: root,
+      model: driver,
+      memory: false,
+      context: { maintenance: false },
+      limits: { turns: 100, timeoutMs: 180000, projectionChars: frameChars },
+    })
+    t.after(async () => {
+      await runtime.close()
+      await rm(root, { recursive: true, force: true })
+    })
+    const session = await runtime.openSession('main')
+    const events = []
+    for await (const event of session.submit(
+      'Advance the counter 80 times and verify the final observation'
+    ))
+      if (event.type === 'state') events.push(event)
+    assert.equal(events.at(-1).status, 'completed')
+    assert.equal(calls, 82)
+    assert.equal(previous, 80)
+    // 每帧都在窗口内；本帧尾不随轮数变长；中间确实封过段
+    assert(statuses.every((status) => status.inputTokens <= status.inputLimit))
+    assert(Math.max(...bodies) <= frameChars, JSON.stringify(largestFrame))
+    assert(
+      Math.max(...statuses.map((status) => status.segment.index)) >= 2,
+      JSON.stringify(statuses.map((status) => status.segment))
+    )
     await runtime.close()
-    await rm(root, { recursive: true, force: true })
-  })
-  const session = await runtime.openSession('main')
-  const events = []
-  for await (const event of session.submit(
-    'Advance the counter 80 times and verify the final observation'
-  ))
-    if (event.type === 'state') events.push(event)
-  assert.equal(events.at(-1).status, 'completed')
-  assert.equal(calls, 82)
-  assert.equal(previous, 80)
-  // 每帧都在窗口内；本帧尾不随轮数变长；中间确实封过段
-  assert(statuses.every((status) => status.inputTokens <= status.inputLimit))
-  assert(Math.max(...bodies) <= frameChars, JSON.stringify(largestFrame))
-  assert(
-    Math.max(...statuses.map((status) => status.segment.index)) >= 2,
-    JSON.stringify(statuses.map((status) => status.segment))
-  )
-  await runtime.close()
-  const storage = localContextStorage({ path })
-  try {
-    assert.equal((await storage.stores.get(spaceId, 'counter')).value, 80)
-  } finally {
-    await storage.close()
+    const storage = localContextStorage({ path })
+    try {
+      assert.equal((await storage.stores.get(spaceId, 'counter')).value, 80)
+      const snapshot = await storage.load('main')
+      const requests = snapshot.records.filter((record) => record.title === 'model-request')
+      assert.equal(requests.length, calls)
+      let requestChars = 0
+      for (const record of requests) {
+        const body = await storage.get('main', record.objectId)
+        assert.equal(record.chars, body.length)
+        assert(body.length < 2048, `request ${record.ref.id}: ${body.length} UTF-16 units`)
+        assert.equal(JSON.parse(body).requestAudit.schemaVersion, 3)
+        requestChars += body.length
+      }
+      assert(
+        requestChars < calls * 2048,
+        '80-step persistence is bounded per request, independently of historical prefix size'
+      )
+      let frameChars = 0
+      for (const record of snapshot.records.filter((record) =>
+        record.title.startsWith('context:frame:')
+      ))
+        frameChars += (await storage.get('main', record.objectId)).length
+      t.diagnostic(
+        JSON.stringify({
+          modelRequestUtf16: requestChars,
+          contextFrameUtf16: frameChars,
+          requests: calls,
+        })
+      )
+    } finally {
+      await storage.close()
+    }
   }
-})
+)
 
 test('INV-39 durable session workspace binding survives reopen, aliases and pure-chat capability changes', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-binding-'))
