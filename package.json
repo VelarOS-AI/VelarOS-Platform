@@ -51,7 +51,7 @@
     "//package-pack": "临时 tarball 核验必须走安全入口；它按包目录切换 cwd，并限制目标目录、运行时长与子进程组。",
     "check:package-pack": "node scripts/release/check-package-pack.mjs",
     "check:package-pack-boundary": "node scripts/release/check-package-pack-boundary.mjs",
-    "check:package-pack-safety": "bun run check:package-pack-boundary && node --test scripts/release/safe-package-pack.test.mjs",
+    "check:package-pack-safety": "bun run check:package-pack-boundary && node --test scripts/release/safe-package-pack.test.mjs scripts/build/buildPackageTopology.test.mjs",
     "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test && bun run test:act-eval",
