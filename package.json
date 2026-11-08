@@ -84,7 +84,7 @@
     "check:dependency-security": "node --test scripts/security/dependency-probes.test.mjs && node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w5hq-g745-h8pq --ignore GHSA-vfj7-8cjw-p6xm --ignore GHSA-g3hv-75wg-m249",
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:readme-examples": "node scripts/ownership/check-readme-examples.mjs",
-    "check:error-construction": "node scripts/quality/check-error-construction.mjs",
+    "check:error-construction": "node --test scripts/quality/check-error-construction.test.mjs && node scripts/quality/check-error-construction.mjs",
     "check:public-readiness": "node --test scripts/quality/check-public-readiness.test.mjs && node scripts/quality/check-public-readiness.mjs",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
     "check:gates": "bun run check:lockfile-consistency && bun run check:project-arch && bun run check:platform-generation && bun run check:package-catalog && bun run check:gates:remaining",

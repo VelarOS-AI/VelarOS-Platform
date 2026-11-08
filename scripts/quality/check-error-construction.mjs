@@ -42,6 +42,7 @@ const files = execFileSync(
   // 还没 git add 的新文件也要查（--others），被忽略的不查
   [
     'ls-files',
+    '-z',
     '--cached',
     '--others',
     '--exclude-standard',
@@ -52,7 +53,7 @@ const files = execFileSync(
   ],
   { cwd: repositoryRoot, encoding: 'utf8' }
 )
-  .split('\n')
+  .split('\0')
   .filter((file) => file && !NotProductCode.test(file) && existsSync(join(repositoryRoot, file)))
 
 const violations = []
