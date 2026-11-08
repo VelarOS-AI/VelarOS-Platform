@@ -429,6 +429,110 @@ test('observation summaries say what a turn registered and which run fed its req
   }
 })
 
+test('observation infrastructure failure has one structured result in the frame, archive and trace', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'trace-observation-rejection-'))
+  const storage = localContextStorage({ path: join(dataDir, 'context.sqlite') })
+  let runtime = null
+  t.after(async () => {
+    if (runtime) await runtime.close()
+    else await storage.close()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+  const watch = "import {output} from 'velaros'; output('observation');"
+  const failure = new Error('observation host cleanup failed: INFRASTRUCTURE_REJECTION_M12')
+  const frames = []
+  let runs = 0
+  runtime = await createRuntime({
+    dataDir,
+    storage,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    runner: {
+      environment: 'node',
+      cwd: dataDir,
+      async run(request) {
+        assert.equal(request.mode, 'observe')
+        runs++
+        throw failure
+      },
+    },
+    context: {
+      maintenance: false,
+      observation: {
+        scope: async () => 'observation-failure-scope',
+        reuse: {
+          coversNativeIO: true,
+          probe: async () => ({ kind: 'versioned', providerId: 'fixture', token: 'unchanged' }),
+        },
+      },
+    },
+    protocol: { allowed: ['execute', 'observe', 'done'] },
+    model: {
+      id: 'trace-observation-rejection',
+      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+      async *stream(request) {
+        const frame = JSON.parse(
+          request.materials.findLast((item) => item.origin === 'runtime-view').text
+        )
+        frames.push(frame.partitions.observation)
+        assert(frames.length <= 3, 'observer failure must not create an unbounded model loop')
+        if (frames.length <= 2) {
+          yield { type: 'text', text: `${marker(request)} observe\n${watch}\n${marker(request)}` }
+          yield { type: 'finish', reason: 'stop' }
+        } else yield* done(request, 'The observer host failed.')
+      },
+    },
+  })
+  const session = await runtime.openSession('s')
+  const turns = []
+  const events = []
+  for await (const event of session.submit('Register the observer and report its real failure.')) {
+    events.push(event)
+    if (event.type === 'turn') turns.push(event.turnId)
+  }
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(frames.length, 3)
+  assert.equal(runs, 2, 'failed collection cannot establish a reusable healthy baseline')
+  assert.notEqual(frames[1].resultRef, frames[2].resultRef)
+  for (const [index, frame] of frames.entries()) {
+    if (index === 0) continue
+    assert.equal(frame.freshness.status, 'collected')
+    assert.equal(frame.freshness.reason, 'collection-incomplete')
+    assert.notEqual(frame.health.status, 'healthy')
+    assert(frame.text.includes(failure.message))
+    const trace = await session.trace(turns[index])
+    const run = trace.observation.run
+    assert.equal(run.status, 'failed')
+    assert.deepEqual(run.failure, { code: 'PROGRAM_ERROR', message: String(failure), line: null })
+    assert.equal(run.source, watch)
+    assert.equal(run.collection.resultRef, frame.resultRef)
+    assert.equal(run.executionId, frame.freshness.executionId)
+    assert.deepEqual(trace.executions, [])
+    assert.deepEqual(
+      trace.invocations,
+      [],
+      'no Kernel failure may hide a misclassified script result'
+    )
+    const selected = await storage.selectSnapshot('s', [
+      { title: `script:${run.executionId}:result`, latest: true },
+    ])
+    assert.equal(selected.records.length, 1)
+    const record = selected.records[0]
+    const persisted = JSON.parse(await storage.get('s', record.objectId))
+    assert.equal(persisted.executionId, run.executionId)
+    assert.equal(persisted.mode, 'observe')
+    assert.equal(persisted.checked, true)
+    assert.deepEqual(persisted.result.failed, { code: 'PROGRAM_ERROR', message: String(failure) })
+    assert.equal('error' in persisted, false)
+    assert.equal(record.sources[0].id, frame.sourceRef)
+    assert.equal(run.durationMs, persisted.timing.durationMs)
+    assert(Number.isFinite(run.durationMs) && run.durationMs >= 0)
+  }
+})
+
 test('full-content pages retain bodies beyond the normal budget and keep pagination', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())

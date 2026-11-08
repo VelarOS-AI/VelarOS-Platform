@@ -3055,7 +3055,7 @@ export class RuntimeSession implements VelarosSession {
     } catch (error) {
       failure = error
       if (mode !== 'observe' || signal.aborted) throw error
-      return {
+      result = {
         checked: true,
         result: { failed: { code: 'PROGRAM_ERROR', message: String(error) } },
       }
