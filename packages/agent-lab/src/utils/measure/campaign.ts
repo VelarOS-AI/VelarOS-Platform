@@ -15,15 +15,16 @@ import type {
 } from '../../types/agent-lab.js'
 import { AgentLabTuning } from '../tuning.js'
 
-/** 失败账允许的状态流转；不在表里的一律拒绝。 */
-const FailureTransitions: Readonly<Record<CampaignFailureState, readonly CampaignFailureState[]>> =
-  {
-    open: ['diagnosed'],
-    diagnosed: ['fixed'],
-    fixed: ['fixed', 'proving'],
-    proving: ['fixed', 'closed'],
-    closed: ['open'],
-  }
+/** 普通失败账流转不能关账；closed 只能由证明路径产生，不在表里的流转一律拒绝。 */
+const FailureTransitions: Readonly<
+  Record<CampaignFailureState, ReadonlyArray<TransitionCampaignFailureInput['state']>>
+> = {
+  open: ['diagnosed'],
+  diagnosed: ['fixed'],
+  fixed: ['fixed', 'proving'],
+  proving: ['fixed'],
+  closed: ['open'],
+}
 
 /** 去重并保持顺序。 */
 function unique(values: readonly string[]): string[] {

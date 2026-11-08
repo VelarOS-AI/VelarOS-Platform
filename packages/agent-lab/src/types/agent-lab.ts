@@ -1069,10 +1069,10 @@ export interface RecordCampaignFailureInput {
   readonly now: number
 }
 
-/** 让一条失败账换状态要给的东西；状态机不允许的流转当场报错。 */
+/** 让一条失败账换状态要给的东西；closed 只由证明产生，状态机不允许的流转当场报错。 */
 export interface TransitionCampaignFailureInput {
   readonly failure: CampaignFailureRecord
-  readonly state: CampaignFailureState
+  readonly state: Exclude<CampaignFailureState, 'closed'>
   readonly classification?: CampaignRootCauseClass
   readonly rootCause?: string | null
   readonly fixReference?: string | null
