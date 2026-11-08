@@ -253,13 +253,6 @@ export interface ContextTaskFrame {
   readonly mandatory: readonly ContextFeedback[]
   readonly lastStep?: ContextStepView
 }
-/** 已校验的物理证据选择。 */
-export interface ContextPlan {
-  readonly id: string
-  readonly scope: ContextTaskScope
-  readonly selections: readonly ContextSelection[]
-  readonly degraded: readonly string[]
-}
 /** 缺口必须留在最终视图中。 */
 export interface ContextGap {
   readonly intentId: string

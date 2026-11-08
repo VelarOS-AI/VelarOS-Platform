@@ -105,8 +105,6 @@ export function storageContract(name, fixture) {
       await a.close()
       await b.close()
     })
-    if (!a.loadMetadata || !a.compareAndSwapMetadata)
-      return t.skip('adapter uses complete state CAS')
     assert.equal(await a.loadMetadata('s'), null)
     const c = createContextRuntime({ sessionId: 's', storage: a })
     const first = await c.append({ kind: 'user', body: 'goal' })
@@ -166,7 +164,7 @@ export function storageContract(name, fixture) {
     t.after(() => reopened.close())
     assert.deepEqual(await reopened.loadMetadata('s'), now)
   })
-  test(`${name}: optional atomic append preserves metadata, rejects bad sources and invalidates stale CAS`, async (t) => {
+  test(`${name}: atomic append preserves metadata, rejects bad sources and invalidates stale CAS`, async (t) => {
     const { open } = await fixture(t)
     const a = await open()
     const b = await open()
@@ -174,7 +172,6 @@ export function storageContract(name, fixture) {
       await a.close()
       await b.close()
     })
-    if (!a.appendRecord) return t.skip('adapter uses the complete CAS path')
     const c = createContextRuntime({ sessionId: 's', storage: a })
     const first = await c.append({ kind: 'user', body: 'goal' })
     const before = await a.load('s')

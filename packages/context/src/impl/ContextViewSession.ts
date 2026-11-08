@@ -499,10 +499,6 @@ export class ContextViewSession implements ContextViewApi {
       signal.throwIfAborted()
       if (!(await this.builder.validate(view, signal)))
         throw contextFailure('STALE_VIEW', '发布前资源版本或范围发生变化')
-      await this.options.context.append(
-        { kind: 'audit', title: 'context:model-view', body: JSON.stringify(view) },
-        signal
-      )
       await this.change(
         {
           apply: (current) => {

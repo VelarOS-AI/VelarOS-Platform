@@ -68,6 +68,12 @@ async function observe(f, intent = f.direct) {
 test('INV-3 A04: edits materialize the latest revision and preserve protected goals', async (t) => {
   const f = await fixture(t)
   const first = await observe(f)
+  assert.equal((await f.view.inspect()).view.id, first.id)
+  assert.equal((await f.context.read(first.evidence[0].recovery)).text, 'version one')
+  assert.equal(first.metrics.sourceReads, 1)
+  assert.equal(first.metrics.sourceBytes, Buffer.byteLength('version one'))
+  assert.deepEqual((await f.storage.records('s', { title: 'context:plan' })).items, [])
+  assert.deepEqual((await f.storage.records('s', { title: 'context:model-view' })).items, [])
   f.data.text = 'version two'
   f.data.revision = 'v2'
   assert.equal(await f.view.validate(first), false)
@@ -465,6 +471,14 @@ test('A13/A16/A17: hung and late source results cannot publish after cancellatio
   await g.view.request(g.direct)
   await g.view.settle([])
   await assert.rejects(g.view.build({ maxChars: 12000 }), { code: 'STALE_VIEW' })
+  const task = await g.view.inspect()
+  assert.equal(task.view, null)
+  assert.equal(task.metrics, undefined)
+  assert.equal(task.status, 'executing')
+  assert.deepEqual((await g.storage.records('s', { title: 'context:model-view' })).items, [])
+  const evidence = (await g.storage.records('s', { title: 'context:evidence' })).items
+  assert.equal(evidence.length, 1)
+  assert.equal((await g.context.read(evidence[0].ref)).text, 'version one')
 })
 
 test('journal namespaces cannot be opened as ordinary sessions', async (t) => {
