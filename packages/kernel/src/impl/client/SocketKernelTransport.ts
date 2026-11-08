@@ -12,6 +12,7 @@ import {
   isUndefined,
   Log,
 } from '@velaros-ai/core'
+import { createAbortError } from '@velaros-ai/core/error'
 
 import type { KernelRpcMethod } from '../../contract/constants'
 import { KernelClientErrorCodes, KernelRpcLimits } from '../../contract/constants'
@@ -58,7 +59,7 @@ const log = Log.tag('SocketKernelTransport')
  * `kernelDaemons.connect` 构造，交给 `KernelClient` 用。
  */
 export class SocketKernelTransport implements KernelClientTransport {
-  /** 中止一次请求时抛出的 DOMException 文案。 */
+  /** 中止一次请求时的失败文案。 */
   private static readonly AbortMessage = 'Kernel RPC 请求已中止'
 
   /** 传输被回收之后，一切请求的失败文案。 */
@@ -140,46 +141,91 @@ export class SocketKernelTransport implements KernelClientTransport {
     eventType: string,
     handler: KernelClientEventHandler
   ): Promise<KernelEventSubscription> {
-    const result = await this.request('events.subscribe', { eventType })
-    const record: KernelClientEventSubscriptionRecord = {
-      eventType,
-      handler,
-      subscriptionId: this.readSubscriptionId(result),
-      disposed: false,
-    }
-    this.subscriptions.add(record)
-    this.eventHandlers.set(record.subscriptionId, record)
+    if (this.disposed) throw this.closedError()
+    const socket = await this.connect()
+    const record: KernelClientEventSubscriptionRecord = { eventType, handler, disposed: false }
+    await this.bindSubscription(record, socket)
+    if (this.disposed) throw this.closedError()
+    if (socket.destroyed || this.socket !== socket || isUndefined(record.subscriptionId))
+      throw this.disconnectedError()
     return {
       dispose: async () => {
-        if (record.disposed) return
         record.disposed = true
         this.subscriptions.delete(record)
-        this.eventHandlers.delete(record.subscriptionId)
-        if (this.disposed) return
-        await this.request('events.unsubscribe', {
-          subscriptionId: record.subscriptionId,
-        })
+        if (
+          isNotUndefined(record.subscriptionId) &&
+          this.eventHandlers.get(record.subscriptionId) === record
+        )
+          this.eventHandlers.delete(record.subscriptionId)
+        await record.binding
+        await record.release?.()
       },
     }
   }
 
-  /**
-   * 重连之后把还活着的订阅重新建起来。
-   *
-   * 断线时服务端的订阅连同它的 id 一起没了，而 `request()` 会在下一次调用时自动重连——
-   * 结果就是「连接自己恢复了、订阅悄悄失效了，调用方一无所知」。这里跟着连接一起恢复；
-   * 某一条恢复不了就记错误日志，不影响别的订阅，也不拖累触发重连的那次请求。
-   */
-  private async restoreSubscriptions(): Promise<void> {
+  /** 绑定一次真实连接上的订阅；晚到回应由发起这次请求的记录和连接收尾。 */
+  private async bindSubscription(
+    record: KernelClientEventSubscriptionRecord,
+    socket: Socket
+  ): Promise<void> {
+    const binding: Promise<void> = this.requestOnSocket(
+      socket,
+      'events.subscribe',
+      { eventType: record.eventType },
+      undefined,
+      async (result) => {
+        const subscriptionId = this.readSubscriptionId(result)
+        let releasing: Promise<void> | undefined
+        const release = () => (releasing ??= this.unsubscribe(socket, subscriptionId))
+        if (record.binding === binding) record.release = release
+        if (
+          record.disposed ||
+          this.disposed ||
+          socket.destroyed ||
+          this.socket !== socket ||
+          record.binding !== binding
+        ) {
+          await release()
+          return
+        }
+        // ACK 后同一个 read 中就可能跟着事件；登记必须先于 Promise 的续体。
+        record.subscriptionId = subscriptionId
+        this.subscriptions.add(record)
+        this.eventHandlers.set(subscriptionId, record)
+      }
+    ).then(
+      () => undefined,
+      (error: unknown) => {
+        if (record.disposed && (this.disposed || socket.destroyed)) return
+        throw error
+      }
+    )
+    record.binding = binding
+    try {
+      await binding
+    } finally {
+      if (record.binding === binding) record.binding = undefined
+    }
+  }
+
+  /** 只释放原连接上的实际 id；断线已使它失效，清理本身绝不触发重连。 */
+  private async unsubscribe(socket: Socket, subscriptionId: string): Promise<void> {
+    if (socket.destroyed) return
+    try {
+      await this.requestOnSocket(socket, 'events.unsubscribe', { subscriptionId })
+    } catch (error) {
+      if (socket.destroyed) return
+      throw error
+    }
+  }
+
+  /** 某条订阅恢复失败只记日志；普通请求与其他订阅不受它的失败影响。 */
+  private async restoreSubscriptions(socket: Socket): Promise<void> {
     for (const record of [...this.subscriptions]) {
-      if (record.disposed || this.disposed) continue
+      if (this.disposed || socket.destroyed || this.socket !== socket) return
+      if (record.disposed) continue
       try {
-        const result = await this.request('events.subscribe', {
-          eventType: record.eventType,
-        })
-        if (record.disposed) continue
-        record.subscriptionId = this.readSubscriptionId(result)
-        this.eventHandlers.set(record.subscriptionId, record)
+        await this.bindSubscription(record, socket)
       } catch (error) {
         log.error('Kernel 事件订阅在重连后未能恢复', {
           error,
@@ -192,6 +238,7 @@ export class SocketKernelTransport implements KernelClientTransport {
   public async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    for (const record of this.subscriptions) record.disposed = true
     this.eventHandlers.clear()
     this.subscriptions.clear()
     const socket = this.socket
@@ -210,33 +257,72 @@ export class SocketKernelTransport implements KernelClientTransport {
     signal?: AbortSignal
   ): Promise<unknown> {
     if (this.disposed) throw this.closedError()
-    if (isTrue(signal?.aborted))
-      throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
+    if (isTrue(signal?.aborted)) throw createAbortError(SocketKernelTransport.AbortMessage)
     const socket = await this.connect()
-    if (this.disposed) throw this.closedError()
-    if (isTrue(signal?.aborted))
-      throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
-    const requestId = `${process.pid}-${++this.requestSequence}`
+    return this.requestOnSocket(socket, method, params, signal)
+  }
 
+  /** 向已经取得的那条连接发请求；accept 在接收成功帧时同步取得结果归属。 */
+  private async requestOnSocket(
+    socket: Socket,
+    method: KernelRpcMethod,
+    params: unknown,
+    signal?: AbortSignal,
+    accept?: (result: unknown) => unknown
+  ): Promise<unknown> {
+    this.assertRequestActive(socket, signal)
+    const requestId = `${process.pid}-${++this.requestSequence}`
+    let frame: string
+    try {
+      frame = `${JSON.stringify({
+        type: 'request',
+        requestId,
+        authToken: this.options.authToken,
+        method,
+        params,
+      })}\n`
+    } catch {
+      this.assertRequestActive(socket, signal)
+      throw this.localFailure(
+        KernelClientErrorCodes.transportWriteFailed,
+        'Kernel RPC 请求发不出去',
+        true
+      )
+    }
+    // unknown payload 的 toJSON/getter 可以重入取消或关闭；尚未发出就没有可取消的远端请求。
+    this.assertRequestActive(socket, signal)
     return new Promise((resolve, reject) => {
+      let sent = false
       const onAbort = () => {
         this.pending.delete(requestId)
-        reject(new DOMException(SocketKernelTransport.AbortMessage, 'AbortError'))
-        this.sendCancellation(requestId)
+        cleanup()
+        reject(createAbortError(SocketKernelTransport.AbortMessage))
+        if (sent) this.sendCancellation(socket, requestId)
       }
       const cleanup = () => signal?.removeEventListener('abort', onAbort)
-      this.pending.set(requestId, { resolve, reject, cleanup })
+      this.pending.set(requestId, {
+        resolve: (result) => {
+          try {
+            resolve(isUndefined(accept) ? result : accept(result))
+          } catch (error) {
+            reject(error)
+          }
+        },
+        reject,
+        cleanup,
+      })
       signal?.addEventListener('abort', onAbort, { once: true })
       try {
-        socket.write(
-          `${JSON.stringify({
-            type: 'request',
-            requestId,
-            authToken: this.options.authToken,
-            method,
-            params,
-          })}\n`
-        )
+        this.assertRequestActive(socket, signal)
+      } catch (error) {
+        this.pending.delete(requestId)
+        cleanup()
+        reject(error)
+        return
+      }
+      try {
+        socket.write(frame)
+        sent = true
       } catch {
         this.pending.delete(requestId)
         cleanup()
@@ -249,6 +335,13 @@ export class SocketKernelTransport implements KernelClientTransport {
         )
       }
     })
+  }
+
+  /** 序列化与真实写入之间也要核对同一个请求的取消、关闭和连接身份。 */
+  private assertRequestActive(socket: Socket, signal?: AbortSignal): void {
+    if (this.disposed) throw this.closedError()
+    if (isTrue(signal?.aborted)) throw createAbortError(SocketKernelTransport.AbortMessage)
+    if (socket.destroyed || this.socket !== socket) throw this.disconnectedError()
   }
 
   private connect(): Promise<Socket> {
@@ -291,8 +384,8 @@ export class SocketKernelTransport implements KernelClientTransport {
         this.socket = socket
         this.connecting = undefined
         resolve(socket)
-        // 连接已经就绪（socket 已挂上），恢复订阅走的是普通请求，不会再触发一次连接。
-        if (this.subscriptions.size > 0) void this.restoreSubscriptions()
+        // 恢复绑定在这条实际连接上；旧请求的迟到收尾不能进入下一条连接。
+        if (this.subscriptions.size > 0) void this.restoreSubscriptions(socket)
       })
     })
     return this.connecting
@@ -331,7 +424,7 @@ export class SocketKernelTransport implements KernelClientTransport {
       if (type === 'response') {
         this.handleResponse(this.decodeResponse(input))
       } else if (type === 'event') {
-        this.handleEvent(this.decodeEventFrame(input))
+        void this.handleEvent(this.decodeEventFrame(input))
       }
     } catch (error) {
       log.warn('Discarding invalid Kernel RPC frame', { error })
@@ -348,19 +441,21 @@ export class SocketKernelTransport implements KernelClientTransport {
     else pending.reject(fromKernelRpcError(response.error))
   }
 
-  private handleEvent(frame: KernelRpcEventFrame): void {
+  private async handleEvent(frame: KernelRpcEventFrame): Promise<void> {
     const record = this.eventHandlers.get(frame.subscriptionId)
     if (isUndefined(record) || record.disposed) return
-    void Promise.resolve(record.handler(frame.event)).catch((error) => {
+    try {
+      await record.handler(frame.event)
+    } catch (error) {
       log.warn('内核事件回调失败', { error, subscriptionId: frame.subscriptionId })
-    })
+    }
   }
 
-  private sendCancellation(targetRequestId: string): void {
-    if (isUndefined(this.socket) || this.socket.destroyed) return
+  private sendCancellation(socket: Socket, targetRequestId: string): void {
+    if (socket.destroyed || this.socket !== socket) return
     const requestId = `${process.pid}-${++this.requestSequence}`
     try {
-      this.socket.write(
+      socket.write(
         `${JSON.stringify({
           type: 'request',
           requestId,
@@ -380,13 +475,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.buffer = ''
     // 服务端订阅 id 随连接作废，但本地记录留着：下次连上时照原样重建（restoreSubscriptions）。
     this.eventHandlers.clear()
-    this.rejectPending(
-      this.localFailure(
-        KernelClientErrorCodes.transportDisconnected,
-        SocketKernelTransport.DisconnectedMessage,
-        true
-      )
-    )
+    this.rejectPending(this.disconnectedError())
   }
 
   private rejectPending(error: Error): void {
@@ -484,6 +573,15 @@ export class SocketKernelTransport implements KernelClientTransport {
     return this.localFailure(
       KernelClientErrorCodes.transportClosed,
       SocketKernelTransport.ClosedMessage,
+      true
+    )
+  }
+
+  /** 原连接已经失效；仅由后续业务请求决定是否重连。 */
+  private disconnectedError(): KernelClientError {
+    return this.localFailure(
+      KernelClientErrorCodes.transportDisconnected,
+      SocketKernelTransport.DisconnectedMessage,
       true
     )
   }

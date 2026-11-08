@@ -1,6 +1,6 @@
 // 域：瘦客户端的工作类型（能力会话入参、socket 传输的构造入参、在途请求与本地订阅记录）。
 //
-// 连接契约本身（`KernelClientTransport` 与它的事件回调）在 `client-transport.ts`；这里只放
+// 连接契约本身（`KernelClientTransport` 与它的事件回调）在 `contract/requires.ts`；这里只放
 // 客户端自己在用的数据形状。
 import type { KernelClientEventHandler } from '../contract/requires'
 
@@ -44,8 +44,12 @@ export interface KernelClientEventSubscriptionRecord {
   readonly eventType: string
   /** 事件到达时调用的回调。 */
   readonly handler: KernelClientEventHandler
-  /** 当前对应的服务端订阅 id；每次重连都会换。 */
-  subscriptionId: string
+  /** 最近一次确认的服务端订阅 id；初始绑定尚未回应时缺席。 */
+  subscriptionId?: string
+  /** 当前实际绑定请求及其晚到释放；dispose 等它收尾，不遗弃远端登记。 */
+  binding?: Promise<void>
+  /** 释放最近一次实际登记的闭包；连接身份留在实现里，重复释放复用同一结果。 */
+  release?: () => Promise<void>
   /** 这条订阅是不是已经被调用方关掉了；关掉之后不再重建、也不再回调。 */
   disposed: boolean
 }
