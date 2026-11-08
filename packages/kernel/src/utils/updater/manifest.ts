@@ -17,9 +17,10 @@ import type {
   KernelUpdateManifest,
 } from '../../types/updater'
 import { KernelUpdaterError } from '../errors'
+import { isSemanticVersion, matchesSemanticVersionRange } from '../semver'
 
 import { fetchKernelText, nodeKernelFetch } from './transport'
-import { compareKernelVersions, KernelVersionPattern, satisfiesKernelVersionRange } from './version'
+import { compareKernelVersions, parseKernelVersion, parseKernelVersionRange } from './version'
 
 export type {
   KernelArchitecture,
@@ -66,7 +67,7 @@ export const KernelArtifactFormatSchema = z.enum([
 
 export const KernelVersionSchema = z
   .string()
-  .regex(KernelVersionPattern, 'must be a semantic version')
+  .refine(isSemanticVersion, 'must be a semantic version')
 
 export const KernelArtifactSchema = z.strictObject({
   url: z.string().min(1),
@@ -194,9 +195,10 @@ export function listKernelManifestVersions(
   manifest: KernelUpdateManifest,
   query: KernelManifestQuery = {}
 ): readonly KernelManifestVersion[] {
+  const range = parseKernelVersionRange(query.range)
   const matches = manifest.versions.filter((entry) => {
     if (!query.includeYanked && entry.yanked) return false
-    if (!satisfiesKernelVersionRange(entry.version, query.range)) return false
+    if (!matchesSemanticVersionRange(parseKernelVersion(entry.version), range)) return false
     return isUndefined(query.target) || isNotUndefined(entry.artifacts[query.target])
   })
   return matches.sort((left, right) => compareKernelVersions(left.version, right.version))

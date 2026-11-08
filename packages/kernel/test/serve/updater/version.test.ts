@@ -17,9 +17,9 @@ describe('Kernel version matching', () => {
       patch: 3,
       prerelease: undefined,
     })
-    expect(parseKernelVersion('v2.0.0-rc.1').prerelease).toBe('rc.1')
+    expect(parseKernelVersion('2.0.0-rc.1').prerelease).toBe('rc.1')
 
-    for (const invalid of ['1.2', 'latest', '1.2.3.4', '', '../escape', '1.2.x']) {
+    for (const invalid of ['1.2', 'latest', '1.2.3.4', '', '../escape', '1.2.x', 'v2.0.0-rc.1']) {
       expect(isKernelVersion(invalid)).toBe(false)
       expect(() => assertKernelVersion(invalid)).toThrowError(KernelUpdaterError)
     }
@@ -60,8 +60,17 @@ describe('Kernel version matching', () => {
     } catch (error) {
       expect(error).toMatchObject({
         code: 'INVALID_VERSION_RANGE',
-        details: { versionRange: '1.x' },
+        details: { versionRange: '^1.x' },
       })
     }
+  })
+
+  test('comparison reports the actual invalid right operand', () => {
+    expect(() => compareKernelVersions('1.0.0', 'invalid-right')).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_VERSION',
+        details: { version: 'invalid-right' },
+      })
+    )
   })
 })

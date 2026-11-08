@@ -15,7 +15,6 @@ import type { ExternalKernelModuleIsolation } from '../../types/kernel'
 import type {
   CapabilityToken,
   KernelCompositionSnapshot,
-  KernelModuleHealth,
   KernelModulePermissionRequest,
   KernelModuleSnapshot,
   KernelPermissionDecision,
@@ -34,6 +33,7 @@ import {
   disposeModuleLifecycle,
   failModuleRecord,
   HealthyModuleHealth,
+  snapshotModuleHealth,
   toModuleSnapshot,
   UnknownModuleHealth,
 } from '../../utils/runtime/module-record'
@@ -130,11 +130,6 @@ export interface KernelModuleHostApi {
 }
 
 export class KernelModuleHost implements KernelModuleHostApi {
-  /** 还没问过健康度（刚注册、已挂起、已释放）时的占位值。 */
-  private static readonly unknownHealth: KernelModuleHealth = Object.freeze({ status: 'unknown' })
-  /** 模块就绪但自己没实现 `health()` 时的默认值。 */
-  private static readonly healthyHealth: KernelModuleHealth = Object.freeze({ status: 'healthy' })
-
   private readonly modules = new Map<string, ModuleRecord>()
   private readonly serviceStore = new KernelServiceStore()
   private readonly eventHub = new KernelEventHub()
@@ -613,16 +608,16 @@ export class KernelModuleHost implements KernelModuleHostApi {
       try {
         record.health = isUndefined(record.lifecycle?.health)
           ? HealthyModuleHealth
-          : await record.lifecycle.health()
+          : snapshotModuleHealth(await record.lifecycle.health())
       } catch (error) {
         log.warn('Kernel module health check failed', {
           error,
           moduleId: record.definition.manifest.id,
         })
-        record.health = {
+        record.health = snapshotModuleHealth({
           status: 'unhealthy',
           message: toError(error).message,
-        }
+        })
       }
     }
     return this.listModules()

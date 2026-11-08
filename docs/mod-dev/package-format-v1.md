@@ -21,6 +21,8 @@
 
 module 由 Kernel 校验：版本为三段版本号；apiVersion 为正整数；isolation 为 in-process、worker 或 remote；entry/exportName 可选，其实际寻址取决于装载方式。静态入口应导出 KernelModuleDefinition，由 manifest 和 activate 构成。provides/requires 使用能力身份及版本约束。
 
+module.version、provides 中的能力 version 与更新清单版本共用严格 SemVer：`major.minor.patch[-prerelease][+build]`，核心数字必须精确，数字预发布标识不带前导零；不接受前导 `v` 或版本外侧空白。预发布按标识逐段排序，build 不参与比较。requires/optionalRequires 的范围支持精确版本、`*`、`^`、`~`、比较符交集与 `||`；缺席表示任意，显式空值、空分句、`x` 或非法尾项拒绝。缺席提供方的可选依赖也会在登记时校验范围。能力裸字符串和单字符串数组简写继续是当前作者语法。
+
 agent、ui 为可选的不透明节，接入方负责其字段语义。agent.id 存在时必须与 module.id 一致。解析错误使用 mod.envelope-invalid，身份冲突使用 mod.envelope-id-mismatch。
 
 ## 仓库打包命令

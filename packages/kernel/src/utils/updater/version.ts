@@ -1,39 +1,34 @@
 // 更新器侧的语义化版本判定：口径来自 `utils/semver.ts`，这里只负责把带码的解析失败翻译成
 // 更新器自己的说法（`KernelUpdaterError`，带上更新器关心的 details）。
-import { isString } from '@velaros-ai/core'
-
 import { KernelErrorCodes, KernelUpdaterErrorCodes } from '../../contract/constants'
+import type { SemanticVersionRange } from '../../types/runtime'
 import type { KernelSemanticVersion } from '../../types/updater'
 import { KernelError, KernelUpdaterError } from '../errors'
 import {
   compareSemanticVersions,
   isSemanticVersion,
+  matchesSemanticVersionRange,
   parseSemanticVersion,
-  satisfiesSemanticVersionRange,
-  SemanticVersionPattern,
+  parseSemanticVersionRange,
 } from '../semver'
 
 export type { KernelSemanticVersion } from '../../types/updater'
-/** 更新清单校验用的版本号正则，与包内唯一口径同一份。 */
-export const KernelVersionPattern = SemanticVersionPattern
-
 /** 把 semver 的带码失败翻成更新器的说法；不是版本失败就原样抛回去。 */
 function toUpdaterError(error: unknown, source: string): unknown {
   if (!(error instanceof KernelError)) return error
+  const actualSource = error.details.source ?? source
   if (error.code === KernelErrorCodes.invalidVersion)
     return new KernelUpdaterError(
       KernelUpdaterErrorCodes.invalidVersion,
-      `内核版本号 "${source}" 不合法`,
-      { version: source }
+      `内核版本号 "${actualSource}" 不合法`,
+      { version: actualSource }
     )
-  if (error.code === KernelErrorCodes.invalidVersionRange) {
-    const range = isString(error.details.source) ? error.details.source : source
+  if (error.code === KernelErrorCodes.invalidVersionRange)
     return new KernelUpdaterError(
       KernelUpdaterErrorCodes.invalidVersionRange,
-      `内核版本范围 "${range}" 不合法`,
-      { versionRange: range }
+      `内核版本范围 "${actualSource}" 不合法`,
+      { versionRange: actualSource }
     )
-  }
   return error
 }
 
@@ -56,6 +51,15 @@ export function isKernelVersion(version: string): boolean {
   return isSemanticVersion(version)
 }
 
+/** 先完整解析更新查询的版本范围，失败保留更新器的领域错误。 */
+export function parseKernelVersionRange(source?: string): SemanticVersionRange {
+  try {
+    return parseSemanticVersionRange(source)
+  } catch (error) {
+    throw toUpdaterError(error, source ?? '')
+  }
+}
+
 /** 比较两个内核版本号；预发布排在同名正式版之前（SemVer §11）。 */
 export function compareKernelVersions(left: string, right: string): number {
   try {
@@ -72,9 +76,5 @@ export function compareKernelVersions(left: string, right: string): number {
  * 范围串在每台宿主上得到同一个结论，不引运行时依赖。
  */
 export function satisfiesKernelVersionRange(version: string, range?: string): boolean {
-  try {
-    return satisfiesSemanticVersionRange(version, range)
-  } catch (error) {
-    throw toUpdaterError(error, version)
-  }
+  return matchesSemanticVersionRange(parseKernelVersion(version), parseKernelVersionRange(range))
 }

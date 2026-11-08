@@ -44,6 +44,102 @@ function moduleDefinition(options: {
 }
 
 describe('KernelModuleHost', () => {
+  test('captures the registered activate function with its original definition receiver', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    const calls: string[] = []
+    const definition = {
+      ...moduleDefinition({ id: 'module.captured-entry' }),
+      activate(this: KernelModuleDefinition) {
+        expect(this).toBe(definition)
+        calls.push('registered')
+      },
+    }
+    host.registerModule(definition)
+    Reflect.set(definition, 'activate', () => calls.push('replacement'))
+
+    await host.start()
+    expect(calls).toEqual(['registered'])
+    await host.dispose()
+  })
+
+  test('rejects malformed required and absent optional ranges at registration', () => {
+    for (const field of ['requires', 'optionalRequires'] as const) {
+      for (const versionRange of ['', '* || nonsense', '<0.0.0 nonsense']) {
+        const host = new KernelModuleHost({ apiVersion: 1 })
+        expect(() =>
+          host.registerModule(
+            moduleDefinition({
+              id: 'module.invalid-range',
+              [field]: [{ id: 'absent.capability', versionRange }],
+            })
+          )
+        ).toThrow(
+          expect.objectContaining({
+            code: 'INVALID_VERSION_RANGE',
+            details: { source: versionRange },
+          })
+        )
+        expect(host.listModules()).toEqual([])
+      }
+    }
+  })
+
+  test('owns immutable health snapshots without freezing the module diagnostics', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    const health = {
+      status: 'degraded' as const,
+      message: 'waiting',
+      details: { queue: { depth: 3 }, attempts: [{ state: 'waiting' }] },
+    }
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.health-snapshot',
+        activate: () => ({ health: () => health }),
+      })
+    )
+    await host.start()
+    const first = (await host.checkHealth())[0]!
+    const firstValue = structuredClone(first.health)
+    expect(first.health).not.toBe(health)
+    expect(Object.isFrozen(health.details.queue)).toBe(false)
+    expect(Reflect.set(first.health, 'message', 'tampered')).toBe(false)
+    expect(Reflect.set(first.health.details!.queue as object, 'depth', 100)).toBe(false)
+    expect(Object.isFrozen(first.health.details!.attempts)).toBe(true)
+    expect(host.getModule('module.health-snapshot')!.health).toBe(first.health)
+    expect(host.describeComposition().modules[0]!.health).toBe(first.health)
+
+    health.message = 'running'
+    health.details.queue.depth = 4
+    health.details.attempts[0]!.state = 'running'
+    expect(first.health).toEqual(firstValue)
+    const second = (await host.checkHealth())[0]!
+    expect(second.health).toEqual(health)
+    expect(second.health).not.toBe(first.health)
+    expect(first.health).toEqual(firstValue)
+    await host.dispose()
+  })
+
+  test('invalid JSON health becomes a frozen failure without breaking composition diagnostics', async () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    for (const details of [{ value: Number.POSITIVE_INFINITY }, { value: () => 1 }, circular]) {
+      const host = new KernelModuleHost({ apiVersion: 1 })
+      host.registerModule(
+        moduleDefinition({
+          id: 'module.invalid-health',
+          activate: () => ({ health: () => ({ status: 'healthy', details }) }),
+        })
+      )
+      await host.start()
+      const snapshot = (await host.checkHealth())[0]!
+      expect(snapshot.status).toBe('ready')
+      expect(snapshot.health.status).toBe('unhealthy')
+      expect(Object.isFrozen(snapshot.health)).toBe(true)
+      expect(() => JSON.stringify(host.describeComposition())).not.toThrow()
+      await host.dispose()
+    }
+  })
+
   test('projects a deterministic read-only composition snapshot before and after activation', async () => {
     const host = new KernelModuleHost({ apiVersion: 1 })
     host.registerModules([

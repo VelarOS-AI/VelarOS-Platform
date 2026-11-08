@@ -9,22 +9,25 @@ import type {
 import type { ModuleRecord } from '../../types/runtime'
 import { KernelError, toError } from '../errors'
 
+import { immutableOperationJson } from './operation-schema'
+
 /** 还没问过健康度（刚注册、已挂起、已释放）时的占位值。 */
 export const UnknownModuleHealth: KernelModuleHealth = Object.freeze({ status: 'unknown' })
 
 /** 模块就绪但自己没实现 `health()` 时的默认值。 */
 export const HealthyModuleHealth: KernelModuleHealth = Object.freeze({ status: 'healthy' })
 
-/** 建一条新的模块记录；`activate` 包一层，免得模块事后换掉自己的入口。 */
+/** 建一条新的模块记录；捕获登记时的激活函数，并保留模块定义作为 this。 */
 export function createModuleRecord(
   definition: KernelModuleDefinition,
   manifest: KernelModuleManifest,
   generation: number
 ): ModuleRecord {
+  const activate = definition.activate.bind(definition)
   return {
     definition: {
       manifest,
-      activate: (context) => definition.activate(context),
+      activate,
     },
     generation,
     status: 'registered',
@@ -32,6 +35,15 @@ export function createModuleRecord(
     contextActive: false,
     lifecycleDisposed: false,
   }
+}
+
+/** 健康度是宿主持有的独立 JSON 诊断快照，不冻结模块原件或透传其可变引用。 */
+export function snapshotModuleHealth(health: KernelModuleHealth): KernelModuleHealth {
+  return immutableOperationJson({
+    status: health.status,
+    ...(health.message === undefined ? {} : { message: health.message }),
+    ...(health.details === undefined ? {} : { details: health.details }),
+  })
 }
 
 /** 这条记录的激活上下文还有效吗；失效了就抛 `MODULE_STATE`。 */
@@ -49,10 +61,10 @@ export function failModuleRecord(record: ModuleRecord, error: unknown): void {
   const normalized = toError(error)
   record.status = 'failed'
   record.error = normalized.message
-  record.health = {
+  record.health = snapshotModuleHealth({
     status: 'unhealthy',
     message: normalized.message,
-  }
+  })
   record.controller?.abort()
 }
 

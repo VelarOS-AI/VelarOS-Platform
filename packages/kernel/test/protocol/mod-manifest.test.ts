@@ -16,6 +16,55 @@ function baseModuleSection(overrides: Record<string, unknown> = {}) {
 }
 
 describe('single Mod manifest envelope', () => {
+  test('capability versions share strict module SemVer validation', () => {
+    for (const version of [
+      'v1.0.0',
+      '01.0.0',
+      '1.0.0-01',
+      '1.0.0-alpha..1',
+      '9007199254740992.0.0',
+      ' 1.0.0',
+    ]) {
+      const result = parseVelarosModEnvelope({
+        module: baseModuleSection({ provides: [{ id: 'probe.capability', version }] }),
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.diagnostics[0]?.path).toBe('module.provides.0.version')
+    }
+    expect(
+      parseVelarosModEnvelope({
+        module: baseModuleSection({
+          provides: [{ id: 'probe.capability', version: '1.0.0-rc.1+build.01' }],
+        }),
+      }).ok
+    ).toBe(true)
+  })
+
+  test('validates all explicit requirement ranges while preserving author shorthand', () => {
+    for (const field of ['requires', 'optionalRequires']) {
+      for (const versionRange of ['', 'x', '* || nonsense', '<0.0.0 nonsense']) {
+        const result = parseVelarosModEnvelope({
+          module: baseModuleSection({ [field]: [{ id: 'other.capability', versionRange }] }),
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.diagnostics[0]?.path).toBe(`module.${field}.0.versionRange`)
+      }
+    }
+    const shorthand = parseVelarosModEnvelope({
+      module: baseModuleSection({
+        provides: 'probe.capability',
+        requires: 'other.capability',
+        optionalRequires: [{ id: 'optional.capability', versionRange: '^1.0.0 || >=2.0.0 <3.0.0' }],
+      }),
+    })
+    expect(shorthand.ok).toBe(true)
+    if (!shorthand.ok) return
+    expect(shorthand.envelope.module.provides).toEqual([
+      { id: 'probe.capability', version: '1.0.0' },
+    ])
+    expect(shorthand.envelope.module.requires).toEqual([{ id: 'other.capability' }])
+  })
+
   test('validates module once and leaves domain sections opaque', () => {
     const agentSection = { id: 'probe.mod', contributes: { skills: [] } }
     const uiSection = { pages: [{ id: 'p1', kind: 'host-owned' }] }
