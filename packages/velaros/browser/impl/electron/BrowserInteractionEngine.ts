@@ -3,7 +3,6 @@ import electron from 'electron'
 import { isEmpty, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserClickCoordinatesOptions,
   BrowserClickCoordinatesResult,
@@ -28,7 +27,7 @@ import type {
   BrowserWheelInput,
 } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
-import type { BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
+import type { BrowserRuntimeKernel } from '../../types/electron.js'
 import type { BrowserPointerPoint } from '../../types/runtime.js'
 import {
   buildTargetActionEffect,
@@ -189,33 +188,6 @@ export class BrowserInteractionEngine
     this.pointerPositions.clear()
   }
 
-  // ---- webview 专属 kernel 桥接 ----
-  private getLivePageSessionUnlocked(
-    sessionId: string,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserSession> {
-    return this.electronKernel.getLivePageSession(sessionId, abortSignal)
-  }
-
-  private getLivePageDriverSessionUnlocked(
-    sessionId: string,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserRuntimePageDriverSession> {
-    return this.electronKernel.getLivePageDriverSession(sessionId, abortSignal)
-  }
-
-  private getPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver {
-    return this.electronKernel.wrapPageDriver(sessionId, session)
-  }
-
-  private resolveCurrentPageUrl(session: BrowserSession, fallbackUrl: string): string {
-    return this.electronKernel.resolveCurrentPageUrl(session, fallbackUrl)
-  }
-
-  private syncSessionSiteContext(sessionId: string, url: string): void {
-    this.electronKernel.syncSessionSiteContext(sessionId, url)
-  }
-
   public override async performTargetAction(
     sessionId: string,
     context: BrowserSiteContext,
@@ -223,12 +195,12 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserTargetActionResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.performTargetAction(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const hydratedOptions = this.targetRefs.hydrate(sessionId, options)
-    const driver = this.getPageDriver(sessionId, session)
+    const driver = this.electronKernel.wrapPageDriver(sessionId, session)
     const clickMode = resolveTargetActionClickMode(driver, hydratedOptions)
     const beforeEffectSnapshot = await this.captureTargetActionEffectSnapshot(driver)
     const initialActionResult = await driver.executeJavaScript<BrowserTargetActionResult>(
@@ -272,7 +244,7 @@ export class BrowserInteractionEngine
       })
     } finally {
       if (targetPointer && hydratedOptions.action === 'click') {
-        await this.delay(90)
+        await this.kernel.delay(90)
         await this.updateVirtualPointer(session, targetPointer.x, targetPointer.y, false)
       }
     }
@@ -300,7 +272,7 @@ export class BrowserInteractionEngine
     const effect = buildTargetActionEffect(beforeEffectSnapshot, afterEffectSnapshot)
     const finalUrl = driver.getURL() || actionResult.url || context.url
     session.url = finalUrl
-    this.syncSessionSiteContext(sessionId, finalUrl)
+    this.electronKernel.syncSessionSiteContext(sessionId, finalUrl)
 
     return {
       ...actionResult,
@@ -317,15 +289,15 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserInsertTextResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.insertText(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
 
     await session.webContents.insertText(options.text)
 
     return {
-      url: this.resolveCurrentPageUrl(session, context.url),
+      url: this.electronKernel.resolveCurrentPageUrl(session, context.url),
       textLength: options.text.length,
       capturedAt: Date.now(),
     }
@@ -338,13 +310,13 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserPressKeyResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.pressKey(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     this.focusWebContents(session)
     const repeat = await this.pressWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       options
     )
@@ -354,9 +326,9 @@ export class BrowserInteractionEngine
       await this.pageWaiter.waitForTargetActionToSettle(session.webContents, abortSignal)
     }
 
-    const finalUrl = this.resolveCurrentPageUrl(session, context.url)
+    const finalUrl = this.electronKernel.resolveCurrentPageUrl(session, context.url)
     session.url = finalUrl
-    this.syncSessionSiteContext(sessionId, finalUrl)
+    this.electronKernel.syncSessionSiteContext(sessionId, finalUrl)
 
     return {
       url: finalUrl,
@@ -373,10 +345,10 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserClickCoordinatesResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.clickCoordinates(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const point = await this.clampViewportPoint(session, options.x, options.y)
     const { x, y } = point
     const button = options.button ?? 'left'
@@ -386,7 +358,7 @@ export class BrowserInteractionEngine
     // 页面内虚拟指针完全受控；实际输入经 driver（CDP 优先）投递，不受外部遮挡影响。
     await this.animateVirtualPointer(session, pointerPath, false)
     this.focusWebContents(session)
-    await this.getPageDriver(sessionId, session).clickCoordinates?.({
+    await this.electronKernel.wrapPageDriver(sessionId, session).clickCoordinates?.({
       x,
       y,
       button,
@@ -396,16 +368,16 @@ export class BrowserInteractionEngine
     this.rememberPointer(sessionId, point)
 
     await this.updateVirtualPointer(session, x, y, true)
-    await this.delay(90)
+    await this.kernel.delay(90)
     await this.updateVirtualPointer(session, x, y, false)
 
     if (options.waitForNavigation ?? true) {
       await this.pageWaiter.waitForTargetActionToSettle(session.webContents, abortSignal)
     }
 
-    const finalUrl = this.resolveCurrentPageUrl(session, context.url)
+    const finalUrl = this.electronKernel.resolveCurrentPageUrl(session, context.url)
     session.url = finalUrl
-    this.syncSessionSiteContext(sessionId, finalUrl)
+    this.electronKernel.syncSessionSiteContext(sessionId, finalUrl)
 
     return {
       url: finalUrl,
@@ -425,12 +397,12 @@ export class BrowserInteractionEngine
   ): Promise<BrowserDragResult> {
     abortSignal?.throwIfAborted()
     const steps = clampInteger(options.steps, 1, 60, 10)
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.dragTargets(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const hydratedOptions = this.targetRefs.hydrateDrag(sessionId, options)
-    const driver = this.getPageDriver(sessionId, session)
+    const driver = this.electronKernel.wrapPageDriver(sessionId, session)
 
     if (!driver.dragCoordinates) {
       throw new AppError('VALIDATION', '当前浏览器 driver 不支持拖拽。')
@@ -496,7 +468,7 @@ export class BrowserInteractionEngine
 
     const finalUrl = driver.getURL() || resolved.url || context.url
     session.url = finalUrl
-    this.syncSessionSiteContext(sessionId, finalUrl)
+    this.electronKernel.syncSessionSiteContext(sessionId, finalUrl)
 
     return {
       ...resolved,
@@ -518,10 +490,10 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.moveMouse(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const point = await this.clampViewportPoint(session, options.x, options.y)
     const pressed = this.inputState(sessionId).buttons.size > 0
 
@@ -532,12 +504,15 @@ export class BrowserInteractionEngine
     )
     this.focusWebContents(session)
     await this.mouseMoveWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       point,
       clampInteger(options.steps, 1, 60, 1)
     )
-    return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
+    return this.mouseSnapshot(
+      sessionId,
+      this.electronKernel.resolveCurrentPageUrl(session, context.url)
+    )
   }
 
   public override async keyDown(
@@ -547,17 +522,21 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.keyDown(sessionId, context, input, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     this.focusWebContents(session)
     const held = await this.keyDownWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       input.key
     )
-    return { url: this.resolveCurrentPageUrl(session, context.url), key: input.key, held }
+    return {
+      url: this.electronKernel.resolveCurrentPageUrl(session, context.url),
+      key: input.key,
+      held,
+    }
   }
 
   public override async keyUp(
@@ -567,16 +546,20 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.keyUp(sessionId, context, input, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const held = await this.keyUpWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       input.key
     )
-    return { url: this.resolveCurrentPageUrl(session, context.url), key: input.key, held }
+    return {
+      url: this.electronKernel.resolveCurrentPageUrl(session, context.url),
+      key: input.key,
+      held,
+    }
   }
 
   public override async mouseDown(
@@ -586,20 +569,23 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.mouseDown(sessionId, context, input, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const state = this.inputState(sessionId)
     this.focusWebContents(session)
     await this.mouseButtonWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       'mousePressed',
       input
     )
     await this.updateVirtualPointer(session, state.x, state.y, true)
-    return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
+    return this.mouseSnapshot(
+      sessionId,
+      this.electronKernel.resolveCurrentPageUrl(session, context.url)
+    )
   }
 
   public override async mouseUp(
@@ -609,19 +595,22 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.mouseUp(sessionId, context, input, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const state = this.inputState(sessionId)
     await this.mouseButtonWithDriver(
-      this.getPageDriver(sessionId, session),
+      this.electronKernel.wrapPageDriver(sessionId, session),
       sessionId,
       'mouseReleased',
       input
     )
     await this.updateVirtualPointer(session, state.x, state.y, state.buttons.size > 0)
-    return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
+    return this.mouseSnapshot(
+      sessionId,
+      this.electronKernel.resolveCurrentPageUrl(session, context.url)
+    )
   }
 
   public override async mouseWheel(
@@ -631,13 +620,20 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.mouseWheel(sessionId, context, input, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     this.focusWebContents(session)
-    await this.mouseWheelWithDriver(this.getPageDriver(sessionId, session), sessionId, input)
-    return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
+    await this.mouseWheelWithDriver(
+      this.electronKernel.wrapPageDriver(sessionId, session),
+      sessionId,
+      input
+    )
+    return this.mouseSnapshot(
+      sessionId,
+      this.electronKernel.resolveCurrentPageUrl(session, context.url)
+    )
   }
 
   public async highlightTarget(
@@ -763,7 +759,7 @@ export class BrowserInteractionEngine
     abortSignal?: AbortSignal
   ): Promise<BrowserPageZoomResult> {
     abortSignal?.throwIfAborted()
-    const pageSession = await this.getLivePageDriverSessionUnlocked(sessionId, abortSignal)
+    const pageSession = await this.electronKernel.getLivePageDriverSession(sessionId, abortSignal)
     if (!pageSession.driver.setPageZoomFactor) {
       throw new AppError('VALIDATION', '当前浏览器 driver 不支持页面缩放。')
     }
@@ -774,7 +770,11 @@ export class BrowserInteractionEngine
     if (pageSession.browserSession) {
       await this.showPageZoomHud(pageSession.browserSession, zoomFactor)
     }
-    const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
 
     return {
       url: state.url || context.url,

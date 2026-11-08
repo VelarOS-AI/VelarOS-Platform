@@ -2,7 +2,6 @@
 
 import type { WebContents } from 'electron'
 
-import { isBlank, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { TimerLease } from '@velaros-ai/core/utils/TimerScope'
 
@@ -39,17 +38,6 @@ export function isNavigationAbort(errorCodeOrError: unknown): boolean {
     appError.context.errorCode === BrowserTuning.electron.navigationAbortErrorCode ||
     /\bERR_ABORTED\b|\(-3\)/.test(appError.message)
   )
-}
-
-/** 从 Electron 的请求回调里读出这条请求的 id。 */
-export function readWebRequestId(details: unknown): Nullable<string> {
-  if (!isPlainObject(details)) return null
-
-  const id = details.id
-  if (isString(id) && !isBlank(id)) return id
-  if (isNumber(id)) return String(id)
-
-  return null
 }
 
 /** 拼一段在页面里判 DOM 与布局是否稳定的脚本。 */

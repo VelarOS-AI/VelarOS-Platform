@@ -464,3 +464,14 @@ void test('caps blank popups and retries a failed destroy while still tracked', 
   assert.ok(windows.slice(1).every((window) => window.destroyCount === 1))
   harness.manager.dispose()
 })
+
+void test('dispose removes the shared Session download listener and subframe failures leave main navigation healthy', () => {
+  const harness = createHarness()
+  const session = harness.webContents.session
+  assert.equal(session.listenerCount('will-download'), 1)
+  harness.webContents.emit('did-fail-load', {}, -2, 'frame failed', 'https://frame.test/', false)
+  assert.equal(harness.manager.getSession('session-1').lastNavigationError, null)
+  harness.manager.dispose()
+  assert.equal(session.listenerCount('will-download'), 0)
+  assert.equal(session.listenerCount('select-webauthn-account'), 0)
+})

@@ -8,6 +8,8 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 const packagePath = new URL(
   '../../../dist/browser/impl/electron/BrowserPageWaiter.js',
   import.meta.url
@@ -78,4 +80,31 @@ test('loadUrl forwards POST and referrer options to Electron', async () => {
     url: 'https://destination.test/submit',
     options,
   })
+})
+
+test('all navigation wait entries reject a pre-cancelled signal before allocating resources', async () => {
+  const { BrowserPageWaiter } = await import(packagePath.href)
+  const waiter = new BrowserPageWaiter()
+  const page = new LoadableFakeWebContents()
+  const controller = new AbortController()
+  controller.abort()
+  const after = TimerScope.prototype.after
+  let allocated = 0
+  TimerScope.prototype.after = function (...args) {
+    allocated += 1
+    return after.apply(this, args)
+  }
+  try {
+    for (const waiting of [
+      () => waiter.loadUrl(page, 'https://must-not-load.test/', controller.signal),
+      () => waiter.waitForTargetActionToSettle(page, controller.signal),
+      () => waiter.waitForNavigationToSettle(page, controller.signal),
+    ])
+      await assert.rejects(waiting(), { name: 'AbortError' })
+    assert.equal(page.loaded, undefined)
+    assert.equal(page.eventNames().length, 0)
+    assert.equal(allocated, 0)
+  } finally {
+    TimerScope.prototype.after = after
+  }
 })

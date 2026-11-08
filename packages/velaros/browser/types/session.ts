@@ -1,3 +1,5 @@
+import type { TimerLease } from '@velaros-ai/core/utils/TimerScope'
+
 import type { BrowserPageDriverDownloadItem, BrowserProtocolChannel } from '../contract/requires.js'
 
 import type {
@@ -8,6 +10,7 @@ import type {
 
 /** 一条被模型的 Fetch 拦下、还没放行的请求：它在哪个子会话上（页面本身缺席）、什么时候拦下的、请求的地址。 */
 export interface BrowserProtocolPausedRequest {
+  requestId: string
   session: Optional<string>
   pausedAt: number
   url: string
@@ -76,6 +79,7 @@ export interface PendingDownloadEntry {
   item: BrowserPageDriverDownloadItem
   createdAt: number
   settled: boolean
+  timeout: Optional<TimerLease>
 }
 
 export interface PendingPermissionEntry {

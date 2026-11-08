@@ -116,7 +116,13 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
 
       const message: CdpJsonRpcMessage = { id, method, params }
       if (sessionId) message.sessionId = sessionId
-      this.options.socket.send(JSON.stringify(message))
+      try {
+        this.options.socket.send(JSON.stringify(message))
+      } catch (error) {
+        this.pending.delete(id)
+        timeout.cancel()
+        reject(error)
+      }
     })
   }
 

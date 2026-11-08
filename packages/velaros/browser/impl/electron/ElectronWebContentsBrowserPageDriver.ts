@@ -102,7 +102,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       this.webContents.debugger.attach('1.3')
     }
     const existing = electronDebuggerHolds.getNetwork(this.webContents)
-    if (existing) return existing
+    if (existing) {
+      await existing.ready
+      return existing
+    }
 
     const diagnostics: BrowserPageDiagnosticEntry[] = []
     const controller = new BrowserCdpNetworkController({
@@ -126,9 +129,28 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       controller.handleCdpEvent(method, params)
     }
     this.webContents.debugger.on('message', messageListener)
-    const hold = { controller, diagnostics, messageListener }
+    const debuggerFace = this.webContents.debugger
+    const clear = (): void => {
+      try {
+        debuggerFace.off('message', messageListener)
+        debuggerFace.off('detach', clear)
+      } catch (error) {
+        embeddedDriverLog.debug('页面销毁时网络监听清理未完成', {
+          error: AppError.from(error).message,
+        })
+      }
+      if (electronDebuggerHolds.getNetwork(this.webContents) === hold)
+        electronDebuggerHolds.deleteNetwork(this.webContents)
+      controller.reset()
+    }
+    this.webContents.debugger.on('detach', clear)
+    const hold = { controller, diagnostics, messageListener, ready: Promise.resolve() }
     electronDebuggerHolds.setNetwork(this.webContents, hold)
-    await controller.enableNetworkCapture()
+    hold.ready = controller.enableNetworkCapture().catch((error: unknown) => {
+      clear()
+      throw error
+    })
+    await hold.ready
     return hold
   }
 
@@ -165,12 +187,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
    * 那是一次「看看有什么」的读操作;把原因带回去,让回执说清楚为什么列不到网络事件。
    */
   public async ensureNetworkCapture(): Promise<BrowserPageDriverNetworkCaptureState> {
-    if (electronDebuggerHolds.hasNetwork(this.webContents))
-      return { startedNow: false, unavailableReason: null }
-
+    const alreadyStarted = electronDebuggerHolds.hasNetwork(this.webContents)
     try {
       await this.ensureNetworkHold()
-      return { startedNow: true, unavailableReason: null }
+      return { startedNow: !alreadyStarted, unavailableReason: null }
     } catch (error) {
       const reason = AppError.from(error).message
       embeddedDriverLog.debug('内嵌页面的网络采集未能建立', {

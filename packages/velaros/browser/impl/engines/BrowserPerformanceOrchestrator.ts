@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
+import { Log } from '@velaros-ai/core/logger'
 
 import type {
   BrowserHeapSnapshotOptions,
@@ -55,6 +56,8 @@ export interface BrowserPerformanceOrchestratorApi {
   ): Promise<BrowserHeapSnapshotResult>
   /** 应用退出/运行时重建时清理登记表；录制中的 collector 随 driver/webContents 销毁而终止。 */
   dispose(): void
+  /** 会话关闭时撤销 trace 登记并停止它自己的采集器。 */
+  closeSession(sessionId: string): Promise<void>
 }
 
 export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchestratorApi {
@@ -76,65 +79,80 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     if (existing?.running) {
       throw new AppError('VALIDATION', '性能 trace 已在录制中，请先 stop_trace。')
     }
-
-    const reload = options.reload ?? true
-    const autoStopMs = resolveAutoStopMs(options.autoStopMs)
-    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    const { driver } = pageSession
-    if (!driver.startTracing || !driver.stopTracing) {
-      throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持性能 trace。')
-    }
-
-    const pageState = await this.kernel.refreshPageDriverSessionState(
-      sessionId,
-      pageSession,
-      context.url
-    )
-    const originUrl = pageState.url || context.url
-    if (reload) {
-      await driver.navigateTo('about:blank')
-    }
-    await driver.startTracing()
-    this.traces.set(sessionId, {
+    const state: BrowserPerformanceTraceState = {
+      driver: null,
       running: true,
       startedAt: Date.now(),
-      url: originUrl,
-    })
-
-    if (reload) {
-      try {
-        await driver.navigateTo(originUrl)
-        await driver
-          .waitForNetworkIdle?.({
-            idleMs: BrowserTuning.performance.reloadNetworkIdleMs,
-            timeoutMs: BrowserTuning.performance.reloadNetworkIdleTimeoutMs,
-          })
-          ?.catch(() => {
-            // arch-guard:silent-catch-ok 网络空闲等待是 trace 质量提示，不改变导航已经成功的事实。
-          })
-      } catch (error) {
-        // 回跳失败时终止录制，避免 trace 状态悬挂。
-        this.traces.delete(sessionId)
-        await driver.stopTracing().catch(() => {
-          // arch-guard:silent-catch-ok 停止失败不能覆盖上方导航错误；trace 状态已从本地表移除。
-        })
-        throw error
+      url: context.url,
+    }
+    this.traces.set(sessionId, state)
+    try {
+      const reload = options.reload ?? true
+      const autoStopMs = resolveAutoStopMs(options.autoStopMs)
+      const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+      const { driver } = pageSession
+      if (!driver.startTracing || !driver.stopTracing) {
+        throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持性能 trace。')
       }
-    }
 
-    if (autoStopMs > 0) {
-      await this.kernel.delay(autoStopMs)
+      const pageState = await this.kernel.refreshPageDriverSessionState(
+        sessionId,
+        pageSession,
+        context.url
+      )
+      const originUrl = pageState.url || context.url
       abortSignal?.throwIfAborted()
-      const stopped = await this.stopTrace(sessionId, context, abortSignal)
-      return { status: 'completed' as const, ...stopped }
-    }
+      if (this.traces.get(sessionId) !== state)
+        throw new AppError('CLOSED', '性能采集启动期间会话已关闭。')
+      if (reload) {
+        await driver.navigateTo('about:blank')
+      }
+      state.driver = driver
+      await driver.startTracing()
+      if (this.traces.get(sessionId) !== state) {
+        await driver.stopTracing()
+        throw new AppError('CLOSED', '性能采集启动期间会话已关闭。')
+      }
+      state.startedAt = Date.now()
+      state.url = originUrl
 
-    const state = this.traces.get(sessionId)!
-    return {
-      status: 'recording' as const,
-      url: state.url,
-      startedAt: state.startedAt,
-      note: '录制中：执行需要分析的页面操作，然后调用 stop_trace 结束并获取分析结果。',
+      if (reload) {
+        try {
+          await driver.navigateTo(originUrl)
+          await driver
+            .waitForNetworkIdle?.({
+              idleMs: BrowserTuning.performance.reloadNetworkIdleMs,
+              timeoutMs: BrowserTuning.performance.reloadNetworkIdleTimeoutMs,
+            })
+            ?.catch(() => {
+              // arch-guard:silent-catch-ok 网络空闲等待是 trace 质量提示，不改变导航已经成功的事实。
+            })
+        } catch (error) {
+          // 回跳失败时终止录制，避免 trace 状态悬挂。
+          this.traces.delete(sessionId)
+          await driver.stopTracing().catch(() => {
+            // arch-guard:silent-catch-ok 停止失败不能覆盖上方导航错误；trace 状态已从本地表移除。
+          })
+          throw error
+        }
+      }
+
+      if (autoStopMs > 0) {
+        await this.kernel.delay(autoStopMs, abortSignal)
+        abortSignal?.throwIfAborted()
+        const stopped = await this.stopTrace(sessionId, context, abortSignal)
+        return { status: 'completed' as const, ...stopped }
+      }
+
+      return {
+        status: 'recording' as const,
+        url: state.url,
+        startedAt: state.startedAt,
+        note: '录制中：执行需要分析的页面操作，然后调用 stop_trace 结束并获取分析结果。',
+      }
+    } catch (error) {
+      if (this.traces.get(sessionId) === state) await this.closeSession(sessionId)
+      throw error
     }
   }
 
@@ -150,39 +168,49 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
       throw new AppError('VALIDATION', '当前没有正在录制的性能 trace。')
     }
 
-    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    if (!pageSession.driver.stopTracing) {
+    const driver = state.driver
+    if (!driver?.stopTracing) {
       this.traces.delete(sessionId)
       throw new AppError('EXECUTION_FAILED', '浏览器页面连接已断开，trace 录制丢失。')
     }
-    const events = await pageSession.driver.stopTracing()
-    const recording = await this.traceEngine.parse(events)
+    // stopTracing 无论成功失败都会释放 driver 的 collector；之后的解析/落盘失败也不能留下仍在录制的影子状态。
+    state.running = false
+    try {
+      const events = await driver.stopTracing()
+      const recording = await this.traceEngine.parse(events)
+      if (this.traces.get(sessionId) !== state)
+        throw new AppError('CLOSED', '性能采集处理期间会话已关闭。')
 
-    // 原始 trace 落盘：可直接拖进 DevTools Performance 面板复查。
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const relativePath = `artifacts/performance/trace-${stamp}.json.gz`
-    const resolvedRoot = resolve(context.workspaceRoot)
-    const tracePath = resolve(resolvedRoot, relativePath)
-    await mkdir(dirname(tracePath), { recursive: true })
-    await writeFile(tracePath, serializeBrowserTraceToGzip(recording))
+      // 原始 trace 落盘：可直接拖进 DevTools Performance 面板复查。
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const relativePath = `artifacts/performance/trace-${stamp}.json.gz`
+      const { path: tracePath } = await resolveBrowserWorkspacePath(
+        context.workspaceRoot,
+        relativePath,
+        '性能 trace 路径'
+      )
+      await mkdir(dirname(tracePath), { recursive: true })
+      await writeFile(tracePath, serializeBrowserTraceToGzip(recording))
 
-    const summary = await this.traceEngine.formatSummary(recording)
-    const durationMs = Date.now() - state.startedAt
-    this.traces.set(sessionId, {
-      ...state,
-      running: false,
-      recording,
-    })
+      const summary = await this.traceEngine.formatSummary(recording)
+      const durationMs = Date.now() - state.startedAt
+      if (this.traces.get(sessionId) !== state)
+        throw new AppError('CLOSED', '性能采集处理期间会话已关闭。')
+      state.recording = recording
 
-    return {
-      url: state.url,
-      keyMetrics: extractKeyMetricsFromSummary(summary),
-      summary,
-      insightSetIds: recording.insightSetIds,
-      rawTracePath: tracePath,
-      rawTraceRelativePath: relativePath,
-      durationMs,
-      capturedAt: Date.now(),
+      return {
+        url: state.url,
+        keyMetrics: extractKeyMetricsFromSummary(summary),
+        summary,
+        insightSetIds: recording.insightSetIds,
+        rawTracePath: tracePath,
+        rawTraceRelativePath: relativePath,
+        durationMs,
+        capturedAt: Date.now(),
+      }
+    } catch (error) {
+      if (this.traces.get(sessionId) === state) this.traces.delete(sessionId)
+      throw error
     }
   }
 
@@ -253,8 +281,24 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     }
   }
 
-  /** 应用退出/运行时重建时清理登记表；录制中的 collector 随 driver/webContents 销毁而终止。 */
+  /** 应用退出或运行时重建时撤销全部登记并停止实际采集器。 */
   public dispose(): void {
-    this.traces.clear()
+    for (const sessionId of [...this.traces.keys()]) void this.closeSession(sessionId)
+  }
+
+  public async closeSession(sessionId: string): Promise<void> {
+    const state = this.traces.get(sessionId)
+    this.traces.delete(sessionId)
+    if (!state?.running || !state.driver?.stopTracing) return
+    state.running = false
+    try {
+      await state.driver.stopTracing()
+    } catch (error) {
+      // 会话拆卸仍须继续，采集器的 finally 负责撤销订阅。
+      Log.tag('BrowserPerformanceOrchestrator').debug('关闭会话时停止性能采集失败', {
+        sessionId,
+        error: AppError.from(error).message,
+      })
+    }
   }
 }

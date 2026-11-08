@@ -72,6 +72,7 @@ export interface BrowserParsedTraceRecording {
 
 /** 每个 session 的性能 trace 状态：录制中 / 最近一次录制的解析产物。 */
 export interface BrowserPerformanceTraceState {
+  driver: Nullable<BrowserPageDriver>
   running: boolean
   startedAt: number
   url: string
@@ -137,7 +138,7 @@ export interface BrowserPageDriverKernel {
   /** 页面 URL 变化后同步 session 站点上下文。 */
   syncSessionSiteContext(sessionId: string, url: string): void
   /** 可测的延时（TimerScope 包装）。 */
-  delay(ms: number): Promise<void>
+  delay(ms: number, signal?: AbortSignal): Promise<void>
 }
 
 /**

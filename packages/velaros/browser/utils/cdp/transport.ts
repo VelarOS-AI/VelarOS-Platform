@@ -42,6 +42,7 @@ export function openCdpWebSocket(
   const timers = new TimerScope({ name: 'openCdpWebSocket' })
 
   return new Promise((resolve, reject) => {
+    let settled = false
     const cleanup = () => {
       socket.removeEventListener('open', handleOpen)
       socket.removeEventListener('error', handleError)
@@ -50,22 +51,32 @@ export function openCdpWebSocket(
       timers.dispose()
     }
     const handleOpen = () => {
+      if (settled) return
+      settled = true
       cleanup()
       resolve(socket)
     }
-    const handleError = () => {
+    const fail = (error: AppError) => {
+      if (settled) return
+      settled = true
       cleanup()
-      reject(new AppError('NETWORK', `无法连接浏览器 CDP WebSocket：${url}`))
+      try {
+        socket.close()
+      } catch {
+        // arch-guard:silent-catch-ok 握手已失败，关闭也失败时仍向调用方保留原始连接错误。
+      }
+      reject(error)
+    }
+    const handleError = () => {
+      fail(new AppError('NETWORK', `无法连接浏览器 CDP WebSocket：${url}`))
     }
     const handleClose = () => {
-      cleanup()
-      reject(new AppError('NETWORK', `浏览器 CDP WebSocket 连接已关闭：${url}`))
+      fail(new AppError('NETWORK', `浏览器 CDP WebSocket 连接已关闭：${url}`))
     }
     const timeout = timers.after(
       timeoutMs,
       () => {
-        cleanup()
-        reject(new AppError('TIMEOUT', `连接浏览器 CDP WebSocket 超时：${url}`))
+        fail(new AppError('TIMEOUT', `连接浏览器 CDP WebSocket 超时：${url}`))
       },
       { label: 'openCdpWebSocket' }
     )

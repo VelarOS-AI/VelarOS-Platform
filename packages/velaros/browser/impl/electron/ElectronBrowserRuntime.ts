@@ -632,7 +632,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       ),
     syncExternalPageStateFromScriptResult: (sessionId, session, result, fallbackUrl) =>
       this.syncExternalPageStateFromScriptResult(sessionId, session, result, fallbackUrl),
-    delay: (ms) => delay(ms),
+    delay: (ms, signal) => delay(ms, signal),
   }
   /** 最近一次页面检查或 annotated screenshot 产出的 ref 定位表（截图/交互域共享）。 */
   private readonly targetRefs = new BrowserTargetRefStore()
@@ -1130,6 +1130,16 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): ExternalBrowserPageSession {
     this.actionQueue.assertAvailable(sessionId)
     const previous = this.externalPageSessions.get(sessionId)
+    if (previous?.driver === driver) {
+      if (options.disposeHost) previous.disposeHost = options.disposeHost
+      return previous
+    }
+    if (previous || this.sessionManager.getSession(sessionId)) {
+      void this.screenshot.closeSession(sessionId)
+      void this.performance.closeSession(sessionId)
+      this.targetRefs.clear(sessionId)
+      this.interaction.clearInputState(sessionId)
+    }
     if (previous?.driver !== driver) {
       disposeExternalPageSession(previous, {
         disposeHost: options.disposePreviousHost ?? true,
@@ -1181,6 +1191,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   /** 拆卸绕过动作队列，先撤下并销毁页面；旧动作仍由队列追踪，同一身份在收束前不可重新挂接。 */
   public async closeSession(sessionId: string): Promise<void> {
     this.actionQueue.clear(sessionId)
+    const stoppedCapture = this.screenshot.closeSession(sessionId)
+    const stoppedTrace = this.performance.closeSession(sessionId)
     this.latestPresentationTargets.delete(sessionId)
     const externalSession = this.externalPageSessions.get(sessionId)
     this.externalPageSessions.delete(sessionId)
@@ -1192,6 +1204,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     this.activityCoordinator.clearSession(sessionId)
     this.targetRefs.clear(sessionId)
     await this.protocolSessions.close(sessionId)
+    await stoppedCapture
+    await stoppedTrace
   }
 
   /** 关闭当前窗口的全部页面会话，保留 runtime 供重开窗口后继续使用。 */
@@ -1202,6 +1216,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     this.targetRefs.clearAll()
     this.latestPresentationTargets.clear()
     this.performance.dispose()
+    this.screenshot.dispose()
     this.externalPageSessions.forEach((session) => disposeExternalPageSession(session))
     this.externalPageSessions.clear()
     this.activityCoordinator.clearAll()
@@ -2139,6 +2154,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     options: BrowserPageNavigationOptions
   ): Promise<BrowserPageNavigationResult> {
+    // 页面自己和模型的独立 CDP 通道都可能导航；显式 goto/reload 也必须先回读当前页面。
+    await this.refreshExternalPageState(sessionId, session)
     if (options.action === 'goto') {
       if (!options.url?.trim()) {
         throw new AppError('VALIDATION', 'goto 导航必须提供 URL。')

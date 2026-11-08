@@ -7,7 +7,6 @@ import { isFalse, isNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserFetchLimits } from '../../contract/constants'
-import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserEvaluateScriptOptions,
   BrowserExportPagePdfOptions,
@@ -26,7 +25,6 @@ import type {
   BrowserUploadFileOptions,
   BrowserUploadFileResult,
 } from '../../types/browser'
-import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel } from '../../types/electron.js'
 import {
   normalizeFetchResourceUrl,
@@ -134,22 +132,6 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     super(electronKernel, targetRefs, diagnosticsRecorder)
   }
 
-  // ---- webview 专属 kernel 桥接 ----
-  private getLivePageSessionUnlocked(
-    sessionId: string,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserSession> {
-    return this.electronKernel.getLivePageSession(sessionId, abortSignal)
-  }
-
-  private getPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver {
-    return this.electronKernel.wrapPageDriver(sessionId, session)
-  }
-
-  private resolveCurrentPageUrl(session: BrowserSession, fallbackUrl: string): string {
-    return this.electronKernel.resolveCurrentPageUrl(session, fallbackUrl)
-  }
-
   public override async inspectPage(
     sessionId: string,
     context: BrowserSiteContext,
@@ -157,10 +139,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserPageInspection> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.inspectPage(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     // E1: network idle 等待 — SPA 渲染完成后再抓取，避免拿到旧内容
     if (options.waitForNetworkIdle) {
       await this.pageWaiter.waitForNetworkIdle(
@@ -173,7 +155,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     const maxElements = options.maxElements ?? BrowserTuning.page.inspectElements
 
     // 检查脚本在页面上下文中执行，返回纯 JSON 结构。
-    const driver = this.getPageDriver(sessionId, session)
+    const driver = this.electronKernel.wrapPageDriver(sessionId, session)
     const inspection = await driver.executeJavaScript<BrowserPageInspection>(
       buildInspectionScript({
         includeHtml: !!options.includeHtml,
@@ -195,10 +177,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserScriptOutcome> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.evaluateScript(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const script = buildEvaluateScript(options)
     // 主进程上限 = 页内超时 + 注入/序列化余量。页内那道 `Promise.race` 只在渲染进程还肯
     // 回话时才有效；被脚本卡死或中途导航走时它永远不触发，兜底必须由这一侧拿着
@@ -224,9 +206,9 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserFrameInfo[]> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId))
+    if (this.kernel.getExternalPageSession(sessionId))
       return super.listFrames(sessionId, context, abortSignal)
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     return listWebContentsFrames(session.webContents)
   }
 
@@ -237,7 +219,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserFetchResourceResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     const targetUrl = normalizeFetchResourceUrl(options.url)
     const artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
@@ -246,9 +228,11 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     )
     if (externalSession) return super.fetchResource(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const referer =
-      options.referer?.trim() || this.resolveCurrentPageUrl(session, context.url) || context.url
+      options.referer?.trim() ||
+      this.electronKernel.resolveCurrentPageUrl(session, context.url) ||
+      context.url
 
     const fetchOptions: ElectronNetFetchOptions = {
       session: session.webContents.session,
@@ -310,10 +294,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserPageDiagnostics> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.getPageDiagnostics(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const limit = clampInteger(options.limit, 1, this.diagnosticsRecorder.maxEntries, 100)
     const kinds = options.kinds
     // 嵌入式:控制台诊断在 session.diagnostics,网络诊断在 driver 的网络采集缓冲。
@@ -339,7 +323,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     }
 
     const diagnostics: BrowserPageDiagnostics = {
-      url: this.resolveCurrentPageUrl(session, context.url),
+      url: this.electronKernel.resolveCurrentPageUrl(session, context.url),
       title: session.webContents.getTitle() || null,
       entries,
       summary: summarizePageDiagnostics(entries),
@@ -358,11 +342,11 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserUploadFileResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     const absolutePath = await resolveUploadFilePath(context.workspaceRoot, options.filePath)
     if (externalSession) return super.uploadFile(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const hydratedTarget = this.targetRefs.hydrateTarget(sessionId, options.target, 'target')
 
     const locator = (await evaluateInWebContents(
@@ -439,10 +423,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserExportPagePdfResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.exportPagePdf(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const pdfBuffer = await session.webContents.printToPDF({
       printBackground: !isFalse(options.printBackground),
     })
@@ -457,7 +441,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     await writeFile(artifactPath.path, pdfBuffer)
 
     return {
-      url: this.resolveCurrentPageUrl(session, context.url),
+      url: this.electronKernel.resolveCurrentPageUrl(session, context.url),
       path: artifactPath.path,
       relativePath: artifactPath.relativePath,
       bytes: pdfBuffer.byteLength,
@@ -472,10 +456,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWaitResult> {
     abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession) return super.waitForPage(sessionId, context, options, abortSignal)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
     const networkIdle =
       options.loadState === 'networkidle'
         ? await this.pageWaiter.waitForNetworkIdle(

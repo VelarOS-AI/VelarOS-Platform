@@ -17,7 +17,6 @@ import type { BrowserWorkspaceResolvedPath } from '../../types/workspace.js'
 import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { readResolvedFile } from '../../utils/workspace-paths'
-import {} from '../../utils/workspace-paths'
 import { isMissingFileError } from '../../utils/workspace-paths'
 import { ensureRoot } from '../../utils/workspace-paths'
 import { resolveExistingPathInRoot } from '../../utils/workspace-paths'
@@ -36,10 +35,7 @@ import {
  */
 export interface BrowserWorkspaceFileAccessApi {
   /**
-   * 列目录：主根与历史根**取并集**，同名相对路径以主根为准。
-   *
-   * 只列主根会让「换粒度」在界面上等价于「资产没了」——制品面板是用户确认自己东西还在的
-   * 唯一入口。上限按合并后的总数算，不给历史根额外配额。
+   * 列当前站点工作区内的文件，按条数与递归深度收口。
    */
   listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
   /** 读站点工作区里的一个文件；不给上限时最多读到约定的字符上限。 */
@@ -220,9 +216,9 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   private async resolveWritablePath(path: string): Promise<BrowserWorkspaceResolvedPath> {
     const root = await ensureRoot(this.workspaceRoot)
     const relativePath = normalizeRelativePath(path)
-    // 先建目录再判定：路径还不存在时 resolveRealPath 解到最近一个存在的祖先，
-    // 建完目录判出来的才是「写进去真正会落到哪」。
-    await mkdir(dirname(resolve(root, relativePath)), { recursive: true })
+    // 建目录本身也有副作用：先解开现有祖先的链接并核对边界，再创建已确认在根内的目录。
+    const candidate = await resolveBrowserWorkspacePath(root, relativePath, '浏览器工作区写入路径')
+    await mkdir(dirname(candidate.path), { recursive: true })
     const target = await resolveBrowserWorkspacePath(root, relativePath, '浏览器工作区写入路径')
 
     const existingStats = await lstat(target.literalPath).catch((error: any) => {

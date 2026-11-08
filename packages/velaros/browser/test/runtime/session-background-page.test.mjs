@@ -154,3 +154,13 @@ void test('宿主不给后台页面就照旧等界面挂载，超时报视图没
   assert.deepEqual(requested, ['rt-3'])
   manager.dispose()
 })
+
+void test('关闭尚未挂接页面的会话会立即拒绝等待者', async () => {
+  const { manager } = createManager(null)
+  const pending = manager.waitForSession('waiting', 30_000)
+  const rejected = assert.rejects(pending, /浏览器页面会话已关闭/)
+  manager.closeSession('waiting')
+  await rejected
+  assert.equal(manager.getSession('waiting'), undefined)
+  manager.dispose()
+})

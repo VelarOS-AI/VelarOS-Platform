@@ -16,7 +16,9 @@ import { createElectronBrowserRuntime } from '../../../dist/browser/electron.js'
 import { CdpBrowserConnection } from '../../../dist/browser/impl/cdp/CdpBrowserConnection.js'
 import { CdpBrowserPageDriver } from '../../../dist/browser/impl/cdp/CdpBrowserPageDriver.js'
 import { CdpExternalBrowserLauncher } from '../../../dist/browser/impl/cdp/CdpExternalBrowserLauncher.js'
+import { CdpWebSocketTransport } from '../../../dist/browser/impl/cdp/CdpWebSocketTransport.js'
 import { getDefaultUserDataDirCandidates } from '../../../dist/browser/utils/cdp/launcher.js'
+import { openCdpWebSocket } from '../../../dist/browser/utils/cdp/transport.js'
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5))
 
@@ -295,6 +297,47 @@ function createMachine() {
 }
 
 describe('浏览器级连接上的标签页会话', () => {
+  test('握手报错和超时都关闭尚未交给连接的socket，成功握手保持打开', async () => {
+    for (const failure of ['error', 'timeout']) {
+      const socket = new FakeSocket()
+      const opening = openCdpWebSocket('ws://test/', {
+        createSocket: () => socket,
+        timeoutMs: 5,
+      })
+      if (failure === 'error') socket.emit('error')
+      await assert.rejects(opening, { code: failure === 'error' ? 'NETWORK' : 'TIMEOUT' })
+      assert.equal(socket.closed, true)
+      assert.equal(
+        [...socket.listeners.values()].every((listeners) => listeners.size === 0),
+        true
+      )
+    }
+    const socket = new FakeSocket()
+    const opening = openCdpWebSocket('ws://test/', { createSocket: () => socket })
+    socket.emit('open')
+    assert.equal(await opening, socket)
+    assert.equal(socket.closed, false)
+    socket.close()
+  })
+
+  test('同步发送失败立即撤销在飞命令，后续响应仍按单调id归属', async () => {
+    const socket = new FakeSocket()
+    const transport = new CdpWebSocketTransport({ socket })
+    const failure = new Error('socket send failed')
+    socket.send = () => {
+      throw failure
+    }
+    await assert.rejects(transport.send('Test.fail'), (error) => error === failure)
+    assert.equal(transport.pending.size, 0)
+    socket.send = (data) => {
+      const message = JSON.parse(data)
+      assert.equal(message.id, 2)
+      queueMicrotask(() => socket.deliver({ id: message.id, result: 'ok' }))
+    }
+    assert.equal(await transport.send('Test.next'), 'ok')
+    transport.dispose()
+  })
+
   test('每页的事件只进自己的会话，子会话跟着页面转发，发给别人的会话发不过去', async () => {
     const network = new FakeNetwork()
     const browser = network.add(new FakeBrowser(9_222, 'b'))

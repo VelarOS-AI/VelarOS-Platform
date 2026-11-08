@@ -149,7 +149,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }>
   >()
   /** 已经在向宿主要后台页面的会话：同一个会话的多个等待者只要一次。 */
-  private readonly backgroundPageRequests = new Set<string>()
+  private readonly backgroundPageRequests = new Map<string, symbol>()
   /** Electron Session 是共享对象，下载/权限监听只安装一次。 */
   private readonly instrumentedElectronSessions = new WeakSet<electron.Session>()
   /** 权限 gateway 的反注册函数，runtime 终止时不得留下指向已释放 broker 的 handler。 */
@@ -286,13 +286,15 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   private requestBackgroundPage(sessionId: string): void {
     const provide = this.callbacks.provideBackgroundPage
     if (!provide || this.backgroundPageRequests.has(sessionId)) return
-    this.backgroundPageRequests.add(sessionId)
+    const generation = Symbol(sessionId)
+    this.backgroundPageRequests.set(sessionId, generation)
     this.timers.after(
       BrowserTuning.session.backgroundPageGraceMs,
       () => {
-        void this.adoptBackgroundPage(sessionId, provide).finally(() =>
-          this.backgroundPageRequests.delete(sessionId)
-        )
+        void this.adoptBackgroundPage(sessionId, provide, generation).finally(() => {
+          if (this.backgroundPageRequests.get(sessionId) === generation)
+            this.backgroundPageRequests.delete(sessionId)
+        })
       },
       { label: 'browser.session.backgroundPage' }
     )
@@ -304,8 +306,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
    */
   private async adoptBackgroundPage(
     sessionId: string,
-    provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>
+    provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>,
+    generation: symbol
   ): Promise<void> {
+    if (this.backgroundPageRequests.get(sessionId) !== generation) return
     if (this.getSession(sessionId) || isEmpty(this.attachWaiters.get(sessionId) ?? [])) return
     let page: Nullable<BrowserBackgroundPage>
     try {
@@ -317,7 +321,14 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       })
       return
     }
-    if (!page || page.webContents.isDestroyed() || this.getSession(sessionId)) return
+    if (
+      !page ||
+      page.webContents.isDestroyed() ||
+      this.getSession(sessionId) ||
+      this.backgroundPageRequests.get(sessionId) !== generation ||
+      isEmpty(this.attachWaiters.get(sessionId) ?? [])
+    )
+      return
 
     const waiters = this.attachWaiters.get(sessionId) ?? []
     this.attachWaiters.delete(sessionId)
@@ -382,12 +393,11 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   public closeSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     this.closePopupBootstraps(sessionId)
-    if (!session) return
-
+    this.backgroundPageRequests.delete(sessionId)
     this.sessions.delete(sessionId)
     this.failedMainFrameNavigations.delete(sessionId)
     this.pendingEvents.clearSession(sessionId)
-    void this.clearWebContents(session.webContents)
+    if (session) void this.clearWebContents(session.webContents)
     this.rejectAttachWaiters(sessionId, new AppError('VALIDATION', '浏览器页面会话已关闭。'))
     this.callbacks.onSessionClosed?.(sessionId)
   }
@@ -409,6 +419,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       })
     })
     this.attachWaiters.clear()
+    this.backgroundPageRequests.clear()
     this.pendingEvents.clearAll()
   }
 
@@ -1027,6 +1038,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       'did-fail-load',
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!isCurrentWebContents()) return
+        if (!isMainFrame) return
 
         // B3: did-fail-load (-3=ERR_ABORTED 用户取消，忽略)
         if (errorCode !== -3) {
@@ -1037,8 +1049,6 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
             failedAt: Date.now(),
           }
         }
-
-        if (!isMainFrame) return
 
         if (errorCode !== -3) {
           this.rememberFailedMainFrameNavigation(sessionId, validatedURL || session.url || '')
@@ -1121,6 +1131,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         this.sessions.delete(sessionId)
         this.failedMainFrameNavigations.delete(sessionId)
         this.closePopupBootstraps(sessionId)
+        this.pendingEvents.clearSession(sessionId)
       }
     })
   }
@@ -1138,7 +1149,11 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     this.electronSessionEventDisposers.add(() => {
       electronSession.off('select-webauthn-account', this.handleWebAuthnAccountSelection)
     })
-    electronSession.on('will-download', (_event, item, downloadWebContents) => {
+    const onDownload = (
+      _event: electron.Event,
+      item: electron.DownloadItem,
+      downloadWebContents: electron.WebContents
+    ): void => {
       const lookup = this.findSessionByWebContents(downloadWebContents)
       if (!lookup) {
         if (downloadWebContents && this.popupSessionOwners.has(downloadWebContents)) {
@@ -1199,7 +1214,9 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
           },
         })
       })
-    })
+    }
+    electronSession.on('will-download', onDownload)
+    this.electronSessionEventDisposers.add(() => electronSession.off('will-download', onDownload))
 
     const unregisterPermissionHandler = this.callbacks.registerPermissionRequestHandler?.(
       electronSession,
@@ -1318,26 +1335,6 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         callback(granted)
       },
     })
-  }
-
-  private resolvePermissionRequest(input: {
-    sessionId: string
-    permission: string
-    url: Nullable<string>
-    requestingUrl: Nullable<string>
-    embeddingOrigin: Nullable<string>
-  }): boolean {
-    try {
-      return isTrue(this.callbacks.resolvePermissionRequest?.(input))
-    } catch (error) {
-      this.log.warn('浏览器权限策略执行失败，默认拒绝权限请求', {
-        sessionId: input.sessionId,
-        permission: input.permission,
-        url: input.url,
-        error: AppError.from(error).message,
-      })
-      return false
-    }
   }
 
   private resolveUnmanagedPermissionRequest(input: BrowserUnmanagedPermissionRequest): boolean {

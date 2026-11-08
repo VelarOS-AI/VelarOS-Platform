@@ -30,7 +30,6 @@ import type {
   BrowserUploadFileOptions,
   BrowserUploadFileResult,
 } from '../../types/browser.js'
-import type { BrowserPageDriverState } from '../../types/driver'
 import type {
   BrowserDiagnosticsLimits,
   BrowserPageDriverKernel,
@@ -144,41 +143,8 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     protected readonly diagnosticsLimits: BrowserDiagnosticsLimits
   ) {}
 
-  // ---- kernel 桥接 ----
-  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
-  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
-  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
-  protected getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
-    return this.kernel.getExternalPageSession(sessionId)
-  }
-
-  protected refreshExternalPageState(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    fallbackUrl: string
-  ): Promise<BrowserPageDriverState> {
-    return this.kernel.refreshExternalPageState(sessionId, session, fallbackUrl)
-  }
-
-  protected updateExternalPageStateFromInspection(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    inspection: BrowserPageInspection
-  ): void {
-    this.kernel.updateExternalPageStateFromInspection(sessionId, session, inspection)
-  }
-
-  protected syncExternalPageStateFromScriptResult(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    result: unknown,
-    fallbackUrl: string
-  ): void {
-    this.kernel.syncExternalPageStateFromScriptResult(sessionId, session, result, fallbackUrl)
-  }
-
   private requireExternalPageSession(sessionId: string): ExternalBrowserPageSession {
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (!externalSession) {
       throw new AppError('NOT_FOUND', `外部浏览器会话不存在：${sessionId}`)
     }
@@ -204,7 +170,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       true
     )
     this.targetRefs.storeInspection(sessionId, inspection)
-    this.updateExternalPageStateFromInspection(sessionId, externalSession, inspection)
+    this.kernel.updateExternalPageStateFromInspection(sessionId, externalSession, inspection)
     return inspection
   }
 
@@ -224,7 +190,12 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       return driver.executeJavaScriptInFrame<BrowserScriptOutcome>(options.frame, script, true)
     }
     const result = await driver.executeJavaScript<BrowserScriptOutcome>(script, true)
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
+    this.kernel.syncExternalPageStateFromScriptResult(
+      sessionId,
+      externalSession,
+      result,
+      context.url
+    )
     return result
   }
 
@@ -318,7 +289,11 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
         kinds: options.kinds,
         clear: options.clear,
       }) ?? []
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       title: state.title || null,
@@ -345,7 +320,12 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       matched: boolean
       selector: Nullable<string>
     }>(buildResolveFileInputScript(hydratedTarget), true)
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, locator, context.url)
+    this.kernel.syncExternalPageStateFromScriptResult(
+      sessionId,
+      externalSession,
+      locator,
+      context.url
+    )
 
     if (!locator.matched || !locator.selector)
       return {
@@ -395,7 +375,11 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       options.savePath ?? defaultPath,
       'savePath'
     )
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
 
     await mkdir(dirname(artifactPath.path), { recursive: true })
     await writeFile(artifactPath.path, pdfBuffer)
@@ -521,7 +505,12 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       buildPageWaitScript(options),
       true
     )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
+    this.kernel.syncExternalPageStateFromScriptResult(
+      sessionId,
+      externalSession,
+      result,
+      context.url
+    )
     // 页面脚本只认 readyState：网络空闲没等到时如实回没到。
     return networkIdle ? result : { ...result, matched: false, timedOut: true }
   }

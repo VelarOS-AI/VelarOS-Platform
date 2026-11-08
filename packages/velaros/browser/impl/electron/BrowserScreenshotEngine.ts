@@ -96,6 +96,10 @@ import { electronDebuggerHolds } from './ElectronDebuggerHolds'
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
 export interface BrowserScreenshotEngineApi {
+  /** 退订并停止会话的预览与录屏，清掉截图比较状态。 */
+  closeSession(sessionId: string): Promise<void>
+  /** 回收全部会话留下的画面状态。 */
+  dispose(): void
   /**
    * 捕获仅供宿主 UI 短时展示的轻量页面帧。
    *
@@ -156,12 +160,15 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
   /** 记录上一次截图采样，用于返回轻量 diff 元数据。 */
   private readonly screenshotDiffFrames = new Map<string, BrowserScreenshotDiffFrame>()
   /** 录屏中的会话（sessionId → 开始信息）。 */
-  private readonly screencasts = new Map<string, { startedAt: number; url: string }>()
+  private readonly screencasts = new Map<
+    string,
+    { startedAt: number; url: string; driver: Nullable<BrowserPageDriver> }
+  >()
   /** UI 画中画实时流；页面帧与指针事件分开发送，不在主进程累计 JPEG。 */
   private readonly previewStreams = new Map<
     string,
     {
-      driver: BrowserPageDriver
+      driver: Nullable<BrowserPageDriver>
       onEvent: (event: BrowserPagePreviewStreamEvent) => void
     }
   >()
@@ -173,6 +180,38 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     private readonly pageWaiter: BrowserPageWaiter,
     private readonly targetRefs: BrowserTargetRefStore
   ) {}
+
+  public async closeSession(sessionId: string): Promise<void> {
+    const stream = this.previewStreams.get(sessionId)
+    const recording = this.screencasts.get(sessionId)
+    this.previewStreams.delete(sessionId)
+    this.screencasts.delete(sessionId)
+    this.screenshotDiffFrames.delete(sessionId)
+    this.capturingSessions.delete(sessionId)
+    const drivers = new Set([stream?.driver, recording?.driver])
+    await Promise.all(
+      [...drivers].map(async (driver) => {
+        try {
+          if (!driver?.stopScreencast || !driver.isScreencasting?.()) return
+          await driver.stopScreencast()
+        } catch (error) {
+          this.log.debug('关闭会话时停止画面采集失败', {
+            sessionId,
+            error: AppError.from(error).message,
+          })
+        }
+      })
+    )
+  }
+
+  public dispose(): void {
+    const sessionIds = new Set([
+      ...this.previewStreams.keys(),
+      ...this.screencasts.keys(),
+      ...this.screenshotDiffFrames.keys(),
+    ])
+    for (const sessionId of sessionIds) void this.closeSession(sessionId)
+  }
 
   /**
    * 捕获仅供宿主 UI 短时展示的轻量页面帧。
@@ -256,65 +295,93 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     if (this.previewStreams.has(sessionId)) {
       throw new AppError('VALIDATION', '该后台浏览器画中画已经在实时同步。')
     }
-
-    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    const driver = pageSession.driver
-    if (!driver.startScreencast || !driver.stopScreencast) {
-      throw new AppError('VALIDATION', '当前浏览器页面不支持实时画面同步。')
-    }
-    if (driver.isScreencasting?.()) {
-      throw new AppError('VALIDATION', '页面正在执行其他录屏任务，暂时无法启动画中画。')
-    }
-
-    const pageState = await this.kernel.refreshPageDriverSessionState(
-      sessionId,
-      pageSession,
-      context.url
-    )
-    const maxWidth = clampInteger(
-      options.maxWidth,
-      240,
-      1_280,
-      BrowserTuning.screenshot.previewStreamMaxWidth
-    )
-    const quality = clampInteger(options.quality, 35, 90, 62)
-
-    await driver.startScreencast(
-      {
-        maxWidth,
-        maxHeight: BrowserTuning.screenshot.previewStreamMaxHeight,
-        everyNthFrame: 1,
-        maxFrames: Number.MAX_SAFE_INTEGER,
-      },
-      {
-        retainFrames: false,
-        quality,
-        onFrame: (captured) => {
-          if (this.capturingSessions.has(sessionId)) return
-          const sourceWidth = Math.max(1, captured.width)
-          const sourceHeight = Math.max(1, captured.height)
-          const scale = Math.min(
-            1,
-            maxWidth / sourceWidth,
-            BrowserTuning.screenshot.previewStreamMaxHeight / sourceHeight
-          )
-          onEvent({
-            kind: 'frame',
-            frame: {
-              dataUrl: `data:image/jpeg;base64,${captured.bytes.toString('base64')}`,
-              width: Math.max(1, Math.round(sourceWidth * scale)),
-              height: Math.max(1, Math.round(sourceHeight * scale)),
-              url: driver.getURL() || pageState.url || context.url,
-              title: toNullable(driver.getTitle()),
-              capturedAt: Number.isFinite(captured.timestamp)
-                ? Math.round(captured.timestamp * 1_000)
-                : Date.now(),
-            },
-          })
-        },
+    const stream = { driver: null as Nullable<BrowserPageDriver>, onEvent }
+    this.previewStreams.set(sessionId, stream)
+    let started = false
+    try {
+      const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+      const driver = pageSession.driver
+      abortSignal?.throwIfAborted()
+      if (this.previewStreams.get(sessionId) !== stream)
+        throw new AppError('CLOSED', '画中画启动期间会话已关闭。')
+      if (!driver.startScreencast || !driver.stopScreencast) {
+        throw new AppError('VALIDATION', '当前浏览器页面不支持实时画面同步。')
       }
-    )
-    this.previewStreams.set(sessionId, { driver, onEvent })
+      if (driver.isScreencasting?.()) {
+        throw new AppError('VALIDATION', '页面正在执行其他录屏任务，暂时无法启动画中画。')
+      }
+
+      const pageState = await this.kernel.refreshPageDriverSessionState(
+        sessionId,
+        pageSession,
+        context.url
+      )
+      const maxWidth = clampInteger(
+        options.maxWidth,
+        240,
+        1_280,
+        BrowserTuning.screenshot.previewStreamMaxWidth
+      )
+      const quality = clampInteger(options.quality, 35, 90, 62)
+      abortSignal?.throwIfAborted()
+      if (this.previewStreams.get(sessionId) !== stream)
+        throw new AppError('CLOSED', '画中画启动期间会话已关闭。')
+      stream.driver = driver
+
+      await driver.startScreencast(
+        {
+          maxWidth,
+          maxHeight: BrowserTuning.screenshot.previewStreamMaxHeight,
+          everyNthFrame: 1,
+          maxFrames: Number.MAX_SAFE_INTEGER,
+        },
+        {
+          retainFrames: false,
+          quality,
+          onFrame: (captured) => {
+            if (this.previewStreams.get(sessionId) !== stream || abortSignal?.aborted) return
+            if (this.capturingSessions.has(sessionId)) return
+            const sourceWidth = Math.max(1, captured.width)
+            const sourceHeight = Math.max(1, captured.height)
+            const scale = Math.min(
+              1,
+              maxWidth / sourceWidth,
+              BrowserTuning.screenshot.previewStreamMaxHeight / sourceHeight
+            )
+            onEvent({
+              kind: 'frame',
+              frame: {
+                dataUrl: `data:image/jpeg;base64,${captured.bytes.toString('base64')}`,
+                width: Math.max(1, Math.round(sourceWidth * scale)),
+                height: Math.max(1, Math.round(sourceHeight * scale)),
+                url: driver.getURL() || pageState.url || context.url,
+                title: toNullable(driver.getTitle()),
+                capturedAt: Number.isFinite(captured.timestamp)
+                  ? Math.round(captured.timestamp * 1_000)
+                  : Date.now(),
+              },
+            })
+          },
+        }
+      )
+      started = true
+      abortSignal?.throwIfAborted()
+      if (this.previewStreams.get(sessionId) !== stream)
+        throw new AppError('CLOSED', '画中画启动期间会话已关闭。')
+    } catch (error) {
+      if (this.previewStreams.get(sessionId) === stream) this.previewStreams.delete(sessionId)
+      if (started && stream.driver?.isScreencasting?.()) {
+        try {
+          await stream.driver.stopScreencast?.()
+        } catch (cleanupError) {
+          this.log.debug('画中画启动失败后的采集清理失败', {
+            sessionId,
+            error: AppError.from(cleanupError).message,
+          })
+        }
+      }
+      throw error
+    }
   }
 
   /** 高频指针更新沿现有画中画通道发送，避免为了移动光标重复编码整张页面。 */
@@ -327,7 +394,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     const stream = this.previewStreams.get(sessionId)
     if (!stream) return
     this.previewStreams.delete(sessionId)
-    if (!stream.driver.stopScreencast || !stream.driver.isScreencasting?.()) return
+    if (!stream.driver?.stopScreencast || !stream.driver.isScreencasting?.()) return
     await stream.driver.stopScreencast().then(() => undefined)
   }
 
@@ -342,35 +409,67 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     if (this.screencasts.has(sessionId)) {
       throw new AppError('VALIDATION', '页面录屏已在进行中，请先 stop。')
     }
-
-    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    if (!pageSession.driver.startScreencast || !pageSession.driver.stopScreencast) {
-      throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持录屏。')
+    const state = {
+      startedAt: Date.now(),
+      url: context.url,
+      driver: null as Nullable<BrowserPageDriver>,
     }
+    this.screencasts.set(sessionId, state)
+    let started = false
+    try {
+      const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+      abortSignal?.throwIfAborted()
+      if (this.screencasts.get(sessionId) !== state)
+        throw new AppError('CLOSED', '录屏启动期间会话已关闭。')
+      if (!pageSession.driver.startScreencast || !pageSession.driver.stopScreencast) {
+        throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持录屏。')
+      }
 
-    const pageState = await this.kernel.refreshPageDriverSessionState(
-      sessionId,
-      pageSession,
-      context.url
-    )
-    await pageSession.driver.startScreencast({
-      ...DefaultScreencastStartOptions,
-      maxWidth: clampInteger(options.maxWidth, 240, 1600, DefaultScreencastStartOptions.maxWidth),
-      everyNthFrame: clampInteger(
-        options.everyNthFrame,
-        1,
-        10,
-        DefaultScreencastStartOptions.everyNthFrame
-      ),
-    })
+      const pageState = await this.kernel.refreshPageDriverSessionState(
+        sessionId,
+        pageSession,
+        context.url
+      )
+      state.driver = pageSession.driver
+      abortSignal?.throwIfAborted()
+      if (this.screencasts.get(sessionId) !== state)
+        throw new AppError('CLOSED', '录屏启动期间会话已关闭。')
+      await pageSession.driver.startScreencast({
+        ...DefaultScreencastStartOptions,
+        maxWidth: clampInteger(options.maxWidth, 240, 1600, DefaultScreencastStartOptions.maxWidth),
+        everyNthFrame: clampInteger(
+          options.everyNthFrame,
+          1,
+          10,
+          DefaultScreencastStartOptions.everyNthFrame
+        ),
+      })
 
-    const startedAt = Date.now()
-    this.screencasts.set(sessionId, { startedAt, url: pageState.url || context.url })
-    return {
-      url: pageState.url || context.url,
-      status: 'recording' as const,
-      startedAt,
-      note: '录屏中：执行需要演示的页面操作，然后调用 stop 合成 GIF。页面无变化时不产生新帧。',
+      started = true
+      abortSignal?.throwIfAborted()
+      if (this.screencasts.get(sessionId) !== state)
+        throw new AppError('CLOSED', '录屏启动期间会话已关闭。')
+      state.startedAt = Date.now()
+      state.url = pageState.url || context.url
+      return {
+        url: pageState.url || context.url,
+        status: 'recording' as const,
+        startedAt: state.startedAt,
+        note: '录屏中：执行需要演示的页面操作，然后调用 stop 合成 GIF。页面无变化时不产生新帧。',
+      }
+    } catch (error) {
+      if (this.screencasts.get(sessionId) === state) this.screencasts.delete(sessionId)
+      if (started && state.driver?.isScreencasting?.()) {
+        try {
+          await state.driver.stopScreencast?.()
+        } catch (cleanupError) {
+          this.log.debug('录屏启动失败后的采集清理失败', {
+            sessionId,
+            error: AppError.from(cleanupError).message,
+          })
+        }
+      }
+      throw error
     }
   }
 
@@ -430,21 +529,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  // ---- kernel 桥接 ----
-  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
-  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
-  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
-  private getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
-    return this.kernel.getExternalPageSession(sessionId)
-  }
-
-  private getLivePageSessionUnlocked(
-    sessionId: string,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserSession> {
-    return this.kernel.getLivePageSession(sessionId, abortSignal)
-  }
-
   /** 安全判断 WebContents 是否正在加载（webview 截图前的稳定性检查）。 */
   private isWebContentsLoading(webContents: Electron.WebContents): boolean {
     try {
@@ -455,10 +539,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       })
       return false
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return this.kernel.delay(ms)
   }
 
   public async captureScreenshot(
@@ -483,11 +563,11 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     options: BrowserCaptureScreenshotOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotArtifact> {
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (externalSession)
       return this.captureExternalScreenshot(sessionId, context, externalSession, options)
 
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const session = await this.kernel.getLivePageSession(sessionId, abortSignal)
     if (this.isWebContentsLoading(session.webContents)) {
       await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
     }
@@ -522,7 +602,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       if (labelOptions) {
         elementLabels = await this.installScreenshotElementLabels(session, labelOptions)
         shouldClearElementLabels = true
-        await this.delay(40)
+        await this.kernel.delay(40)
       }
 
       const metadata = await this.readScreenshotMetadata(session, elementLabels, stability)
@@ -578,7 +658,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       if (disturbsDisplay) {
         // 页面还原（去掉编号、回到原来的画面）的那一帧要先画出来，再拿掉定格图、放开画中画
         if (releaseFreeze || this.previewStreams.has(sessionId)) {
-          await this.delay(BrowserTuning.screenshot.captureFreezeReleaseDelayMs)
+          await this.kernel.delay(BrowserTuning.screenshot.captureFreezeReleaseDelayMs)
         }
         this.capturingSessions.delete(sessionId)
         releaseFreeze?.()
@@ -903,10 +983,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     try {
       return await run()
     } finally {
-      const heldElsewhere =
-        electronDebuggerHolds.hasPersistentHold(webContents) ||
-        !!electronDebuggerHolds.getScreencast(webContents) ||
-        !!electronDebuggerHolds.getTrace(webContents)
+      const heldElsewhere = electronDebuggerHolds.hasPersistentHold(webContents)
       if (
         !wasAttached &&
         !heldElsewhere &&

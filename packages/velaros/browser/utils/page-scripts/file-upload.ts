@@ -1,11 +1,14 @@
 import type { BrowserElementTargetHint } from '../../types/browser'
 
+import { browserElementSelector } from './selector'
+
 /** 构造定位 file input 元素的页面脚本。 */
 export function buildResolveFileInputScript(target: BrowserElementTargetHint): string {
   const payload = JSON.stringify({ target })
 
   return `(() => {
     const payload = ${payload}
+    const selectorFor = ${browserElementSelector.toString()}
     const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim()
     const escapeCss = (value) => {
       if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value))
@@ -52,10 +55,10 @@ export function buildResolveFileInputScript(target: BrowserElementTargetHint): s
         const targetText = normalize(target.text)
         return !!targetText && text.includes(targetText)
       }) || null
-      if (element) matchedSelector = 'input[type="file"]'
+      if (element) matchedSelector = selectorFor(element)
     }
 
-    if (!element) {
+    if (!element || !matchedSelector) {
       return { matched: false, selector: null, tagName: null }
     }
 

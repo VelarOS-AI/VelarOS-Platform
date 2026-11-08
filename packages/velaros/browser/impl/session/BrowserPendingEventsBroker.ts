@@ -227,6 +227,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
       item: input.item,
       createdAt: Date.now(),
       settled: false,
+      timeout: undefined,
     }
 
     try {
@@ -237,7 +238,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
 
     this.pendingDownloads.set(id, entry)
 
-    this.scheduleTimeout(BrowserTuning.session.downloadTimeoutMs, () => {
+    entry.timeout = this.scheduleTimeout(BrowserTuning.session.downloadTimeoutMs, () => {
       const pending = this.pendingDownloads.get(id)
       if (!pending || pending.settled) return
       this.cancelPendingDownload(pending, '下载超时取消失败')
@@ -322,7 +323,13 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
       throw new AppError('VALIDATION', '没有找到待处理的下载事件。')
     }
 
+    const savePath = input.savePath?.trim() ?? ''
+    if (input.action === 'accept' && !savePath) {
+      throw new AppError('VALIDATION', '接受下载必须提供 savePath。')
+    }
+
     entry.settled = true
+    entry.timeout?.cancel()
     this.pendingDownloads.delete(entry.id)
 
     if (input.action === 'cancel') {
@@ -334,11 +341,6 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
         savePath: null,
         state: 'cancelled',
       }
-    }
-
-    const savePath = input.savePath?.trim()
-    if (!savePath) {
-      throw new AppError('VALIDATION', '接受下载必须提供 savePath。')
     }
 
     entry.item.setSavePath(savePath)
@@ -392,6 +394,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     if (entry.settled) return
 
     entry.settled = true
+    entry.timeout?.cancel()
     this.pendingDownloads.delete(entry.id)
     try {
       entry.item.cancel()

@@ -10,7 +10,11 @@ import type {
   BrowserProtocolPausedRequest,
   BrowserProtocolSessionState,
 } from '../../types/session.js'
-import { pausedRequestUrl, protocolMethodMatches } from '../../utils/cdp/protocol.js'
+import {
+  pausedRequestKey,
+  pausedRequestUrl,
+  protocolMethodMatches,
+} from '../../utils/cdp/protocol.js'
 import { BrowserTuning } from '../../utils/tuning'
 
 /**
@@ -69,7 +73,7 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     const result = await state.channel.send(command.method, command.params, command.session)
     const requestId = command.params?.requestId
     if (BrowserProtocolSessions.ReleasingFetchMethods.has(command.method) && isString(requestId))
-      state.paused.delete(requestId)
+      state.paused.delete(pausedRequestKey(requestId, command.session))
     // 关掉 Fetch 时 Chromium 把这条会话拦着的请求一并放行：账上这一会话的都销掉。
     if (command.method === 'Fetch.disable') {
       for (const [id, paused] of state.paused)
@@ -190,7 +194,8 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
       state.dropped += 1
     }
     if (method === 'Fetch.requestPaused' && isPlainObject(params) && isString(params.requestId)) {
-      state.paused.set(params.requestId, {
+      state.paused.set(pausedRequestKey(params.requestId, session), {
+        requestId: params.requestId,
         session,
         pausedAt: Date.now(),
         url: pausedRequestUrl(params),
@@ -202,10 +207,10 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
   private sweep(): void {
     const now = Date.now()
     for (const state of this.sessions.values()) {
-      for (const [requestId, paused] of state.paused) {
+      for (const [key, paused] of state.paused) {
         if (now - paused.pausedAt < BrowserProtocolLimits.autoContinueMs) continue
-        state.paused.delete(requestId)
-        void this.autoContinue(state, requestId, paused, now)
+        state.paused.delete(key)
+        void this.autoContinue(state, paused.requestId, paused, now)
       }
     }
   }

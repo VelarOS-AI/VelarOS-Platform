@@ -1074,31 +1074,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private parseFrameOrigin(url: unknown): Nullable<string> {
-    if (!isNonBlankString(url)) return null
-
-    try {
-      const origin = new URL(url).origin
-      return origin && origin !== 'null' ? origin : null
-    } catch (error) {
-      this.appendDiagnostic({
-        kind: 'storage',
-        level: 'debug',
-        message: 'CDP frame URL origin 解析失败。',
-        url: toNullable(this.currentUrl),
-        line: null,
-        column: null,
-        code: null,
-        capturedAt: Date.now(),
-        details: {
-          frameUrl: url,
-          error: AppError.from(error).message,
-        },
-      })
-      return null
-    }
-  }
-
   private updateCachedPageState(value: unknown): void {
     if (!isObject(value)) return
 

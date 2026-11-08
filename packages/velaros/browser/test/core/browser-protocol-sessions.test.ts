@@ -119,6 +119,14 @@ void describe('模型的 CDP 会话', () => {
       requestId: 'released',
       request: { url: 'https://example.test/api/b' },
     })
+    fake.emit(
+      'Fetch.requestPaused',
+      {
+        requestId: 'released',
+        request: { url: 'https://example.test/api/child' },
+      },
+      'child'
+    )
     await sessions.send('s1', open, {
       method: 'Fetch.continueRequest',
       params: { requestId: 'released' },
@@ -132,9 +140,10 @@ void describe('模型的 CDP 会话', () => {
     const continued = fake.sent
       .filter((command) => command.method === 'Fetch.continueRequest')
       .map((command) => (command.params as { requestId: string }).requestId)
-    assert.deepEqual(continued, ['released', 'kept'])
+    assert.deepEqual(continued, ['released', 'kept', 'released'])
+    assert.equal(fake.sent.at(-1)?.sessionId, 'child')
     const note = (await sessions.read('s1', open, { method: 'Velar.requestAutoContinued' })).events
-    assert.equal(note.length, 1)
+    assert.equal(note.length, 2)
     assert.equal(note[0]!.params.url, 'https://example.test/api/a')
     await sessions.dispose()
   })

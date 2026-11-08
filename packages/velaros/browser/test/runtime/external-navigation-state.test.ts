@@ -70,7 +70,37 @@ test('show and state follow raw CDP navigation while explicit open still navigat
     expect((await runtime.getPageState('s', context)).url).toBe('https://example.net/new')
     await runtime.openPage('s', context)
     expect(navigations).toEqual([original])
+    actual = 'https://example.net/user-navigation'
+    await runtime.navigatePage('s', context, { action: 'goto', url: original })
+    expect(navigations).toEqual([original, original])
+    actual = 'https://example.net/current'
+    await runtime.navigatePage('s', context, { action: 'reload' })
+    expect(navigations.at(-1)).toBe('https://example.net/current')
   } finally {
     runtime.dispose()
   }
+})
+
+test('reattaching the same external driver keeps one download subscription', async () => {
+  let subscriptions = 0
+  let unsubscribed = 0
+  const driver = {
+    getURL: () => 'https://example.test/',
+    getTitle: () => '',
+    isDestroyed: () => false,
+    onDownload: () => {
+      subscriptions += 1
+      return () => {
+        unsubscribed += 1
+      }
+    },
+    dispose: () => undefined,
+  } as unknown as BrowserPageDriver
+  const runtime = new ElectronBrowserRuntime()
+  runtime.attachExternalPageDriver('s', driver)
+  runtime.attachExternalPageDriver('s', driver)
+  expect(subscriptions).toBe(1)
+  await runtime.closeSession('s')
+  expect(unsubscribed).toBe(1)
+  runtime.dispose()
 })

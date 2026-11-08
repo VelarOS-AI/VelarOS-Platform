@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -71,6 +71,27 @@ test('deletion affects only the current workspace and a missing target is explic
     assert.equal((await f.access.deleteFile('recipes/same.json')).deleted, true)
     assert.equal((await f.access.deleteFile('recipes/same.json')).deleted, false)
     assert.equal(await readFile(join(f.outside, 'same.json'), 'utf8'), 'outside')
+  } finally {
+    await f.dispose()
+  }
+})
+
+test('INV-33 rejected writes do not create directories outside the workspace', async () => {
+  const f = await fixture()
+  try {
+    await assert.rejects(f.access.writeFile('../outside/traversed/file.txt', 'x'), {
+      code: 'PERMISSION',
+    })
+    await assert.rejects(access(join(f.outside, 'traversed')), { code: 'ENOENT' })
+    await symlink(
+      f.outside,
+      join(f.root, 'linked'),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    )
+    await assert.rejects(f.access.writeBinaryFile('linked/created/file.bin', Buffer.from('x')), {
+      code: 'PERMISSION',
+    })
+    await assert.rejects(access(join(f.outside, 'created')), { code: 'ENOENT' })
   } finally {
     await f.dispose()
   }
