@@ -140,20 +140,57 @@ const BuiltinTypeNames = new Set([
  * 标记加在源码上、要等那个包重建才看得见（改一个标记要先 build 一圈，荒唐）；
  * 注释读的也是构建产物而不是权威源码。
  */
+// 同次调用只复用包内源码的读取与解析；每个命名空间独立创建 Program/checker。
+const sourceHosts = new Map()
 function createProgram(directory) {
   const packageRoot = resolve(RepoRoot, `packages/${directory}`)
   const config = ts.readConfigFile(resolve(packageRoot, 'tsconfig.json'), ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, packageRoot)
   const roots = [...parsed.fileNames, ...workspaceSourceFiles(packageRoot)]
-  return createSourceProgram(roots, { ...parsed.options, noEmit: true, skipLibCheck: true })
+  const options = { ...parsed.options, noEmit: true, skipLibCheck: true }
+  let host = sourceHosts.get(directory)
+  if (!host) {
+    host = createSourceHost(options)
+    sourceHosts.set(directory, host)
+  }
+  return ts.createProgram(roots, options, host)
 }
 
 /** 源码与模板使用统一换行，避免 Windows 检出改变模型合同与内容哈希。 */
 function createSourceProgram(roots, options) {
+  return ts.createProgram(roots, options, createSourceHost(options))
+}
+
+/** 同包固定编译选项下复用解析结果；缓存只活在本次命令，不复用类型检查状态。 */
+function createSourceHost(options) {
   const host = ts.createCompilerHost(options)
   const read = host.readFile
-  host.readFile = (file) => read(file)?.replace(/\r\n/g, '\n')
-  return ts.createProgram(roots, options, host)
+  const texts = new Map()
+  const files = new Map()
+  const canonical = (file) => host.getCanonicalFileName(resolve(file))
+  host.readFile = (file) => {
+    const key = canonical(file)
+    if (!texts.has(key)) texts.set(key, read(file)?.replace(/\r\n/g, '\n'))
+    return texts.get(key)
+  }
+  const getSourceFile = host.getSourceFile.bind(host)
+  host.getSourceFile = (file, languageVersionOrOptions, onError, shouldCreateNewSourceFile) => {
+    const parsing =
+      typeof languageVersionOrOptions === 'object'
+        ? languageVersionOrOptions
+        : { languageVersion: languageVersionOrOptions }
+    const key = JSON.stringify([
+      canonical(file),
+      parsing.languageVersion,
+      parsing.impliedNodeFormat,
+      parsing.jsDocParsingMode,
+    ])
+    if (!shouldCreateNewSourceFile && files.has(key)) return files.get(key)
+    const source = getSourceFile(file, languageVersionOrOptions, onError, shouldCreateNewSourceFile)
+    if (source) files.set(key, source)
+    return source
+  }
+  return host
 }
 
 /**
