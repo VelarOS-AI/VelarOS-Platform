@@ -12,6 +12,12 @@ describe('bounded process lifecycle', () => {
     const result = await owned.completion
     expect(result.exitCode).toBe(7)
     expect(result.cleanupIncomplete).toBe(true)
+    expect(child.stdout!.destroyed).toBe(false)
+    expect(child.stderr!.destroyed).toBe(false)
+    child.emit('close', 7, null)
+    expect(await owned.stop()).toBe(true)
+    expect(result.cleanupIncomplete).toBe(true)
+    expect(owned.result?.cleanupIncomplete).toBe(false)
   })
 
   test('deduplicates cancellation and timeout and settles once close arrives', async () => {
@@ -46,6 +52,8 @@ describe('bounded process lifecycle', () => {
     const error = new Error('fixture spawn failure')
     child.emit('error', error)
     await expect(spawned).rejects.toThrow('fixture spawn failure')
+    expect(owned.result).toBeNull()
+    child.emit('close', null, null)
     const result = await owned.completion
     expect(result.spawnError).toBe(error)
     expect(owned.exited).toBe(true)
@@ -92,7 +100,7 @@ test('status remains unconfirmed between root exit and the final close receipt',
 })
 
 for (const lateClose of [false, true]) {
-  test(`a termination retry cannot turn an incomplete receipt into success (late close=${lateClose})`, async () => {
+  test(`a termination retry needs real close and preserves the original incomplete receipt (late close=${lateClose})`, async () => {
     const child = fakeChild()
     let terminations = 0
     const owned = shellProcessManager.manage(child, {
@@ -111,11 +119,13 @@ for (const lateClose of [false, true]) {
     const incomplete = await owned.completion
     expect(incomplete.cleanupIncomplete).toBe(true)
     expect(owned.exited).toBe(false)
-    // 重试中观察到根进程退出，不足以撤销之前未确认的整棵树/继承管道回执。
-    expect(await owned.stop('SIGKILL')).toBe(false)
+    // 根进程退出不足以确认；保留真实双流后，迟到 close 才能确认当前 owner 已清理。
+    expect(await owned.stop('SIGKILL')).toBe(lateClose)
     expect(terminations).toBe(2)
     expect(owned.exited).toBe(true)
-    expect(owned.result).toBe(incomplete)
-    expect(await owned.stop('SIGKILL')).toBe(false)
+    expect(incomplete.cleanupIncomplete).toBe(true)
+    expect(owned.result?.cleanupIncomplete).toBe(!lateClose)
+    expect(await owned.stop('SIGKILL')).toBe(lateClose)
+    expect(terminations).toBe(2)
   })
 }

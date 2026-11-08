@@ -28,6 +28,7 @@ export interface ShellHostPort {
    * 跑一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；
    * 不能或不允许跑后台任务时以 `PERMISSION` 拒绝。`allowDangerous` 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问。
    * `options.shell` 挑定的 shell 本机没有时，在执行之前以 `VALIDATION` 拒绝、一个进程都不起，不许换默认 shell 照跑。
+   * `waitForClose: true` 仅供前台宿主资源所有者使用：无论兑现还是拒绝，必须未启动进程或已真实退出并排空输出；超时与取消不提前兑现。
    */
   runCommand: (
     command: string,
@@ -69,12 +70,6 @@ export interface ShellEnvironmentOptions {
   platform?: NodeJS.Platform
   /** 每个 POSIX 登录 shell 的读取超时，缺省 10 秒。 */
   captureTimeoutMs?: number
-}
-
-/** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */
-export interface LocalNodeValidationOptions {
-  /** 宿主已选择的 Node.js 可执行文件；模型不能替换。 */
-  readonly executable: string
 }
 
 /** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */

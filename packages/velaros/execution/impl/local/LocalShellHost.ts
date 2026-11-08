@@ -54,6 +54,7 @@ import {
   parseSwapStats,
   selectOpenPorts,
   selectProcesses,
+  selectTopProcesses,
 } from '../../utils/system-info.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
@@ -89,7 +90,7 @@ export interface LocalShellHostApi extends ShellHostPort {
    * 以及给定的每个命令在不在、在哪。宿主把 `shells` 与默认那个写进每回合给模型的环境报告，`run` 的 `shell` 字段就照着这份清单填。
    */
   inspectEnvironment(commands?: string[]): Promise<ShellEnvironmentInspection>
-  /** 系统指标快照：CPU、内存、交换区、系统盘、负载各自的用量和告警级别，外加占用最高的 5 个进程；读不到的项为 null。 */
+  /** 系统指标快照：用量与告警级别，另取已知 CPU 优先降序、未知按内存降序的 5 个进程；读不到的项为 null。 */
   getSystemMetrics(): Promise<SystemMetricsSnapshot>
   /** 列出本机进程（名称、命令行、用户、CPU、内存），可按 pid、名字、命令行片段、用户、资源占用筛选，最多 limit 条（默认 50）。 */
   listProcesses(options?: SystemProcessQueryOptions): Promise<SystemProcessInfo[]>
@@ -233,7 +234,9 @@ export class LocalShellHost implements LocalShellHostApi {
         parseSwapStats,
         'swap stats'
       ),
-      this.listProcesses({ limit: ShellTuning.systemInfo.topProcesses }),
+      this.listProcesses({ limit: Number.POSITIVE_INFINITY }).then((rows) =>
+        selectTopProcesses(rows)
+      ),
     ])
     const swapUsagePercent =
       swapStats && swapStats.totalBytes > 0
@@ -291,9 +294,7 @@ export class LocalShellHost implements LocalShellHostApi {
     const output = await runPlatformCommand(commandSpec, { tolerateLsofEmptyResult: true })
     const entries = parseOpenPortEntries(output.stdout, this.hostPlatform)
     const pids = collectPortPids(entries)
-    const owners = isEmpty(pids)
-      ? []
-      : await this.listProcesses({ pids, includeCwd: !!options.includeCwd, limit: pids.length })
+    const owners = isEmpty(pids) ? [] : await this.listProcesses({ pids, limit: pids.length })
     return selectOpenPorts(
       entries,
       new Map(owners.map((processInfo) => [processInfo.pid, processInfo])),
@@ -406,11 +407,7 @@ export class LocalShellHost implements LocalShellHostApi {
       outcome.status === 'rejected' ? [outcome.reason] : []
     )
     if (failures.length)
-      throw new AppError(
-        'PLATFORM',
-        '宿主进程尚未全部完整收尾。',
-        new AggregateError(failures, '宿主进程清理尚未完成')
-      )
+      throw new AppError('PLATFORM', '宿主进程尚未全部完整收尾。', failures[0], { failures })
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */

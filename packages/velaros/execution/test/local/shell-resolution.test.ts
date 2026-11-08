@@ -13,7 +13,12 @@ import {
   detectAvailableShells,
   toShellDescriptor,
 } from '../../utils/shells.js'
-import { parseOpenPortEntries, parseProcessRows } from '../../utils/system-info.js'
+import {
+  parseOpenPortEntries,
+  parseProcessRows,
+  selectProcesses,
+  selectTopProcesses,
+} from '../../utils/system-info.js'
 
 describe('platform command output parsing', () => {
   test('parses the native Windows netstat listener format', () => {
@@ -43,14 +48,41 @@ describe('platform command output parsing', () => {
         'win32'
       )
     ).toEqual([
-      expect.objectContaining({ pid: 4, ppid: 0, name: 'System', memoryBytes: 1024 * 1024 }),
+      expect.objectContaining({
+        pid: 4,
+        ppid: 0,
+        name: 'System',
+        cpuPercent: null,
+        memoryBytes: 1024 * 1024,
+      }),
       expect.objectContaining({
         pid: 2048,
         ppid: 0,
         name: 'worker, helper.exe',
+        cpuPercent: null,
         memoryBytes: 12_345 * 1024,
       }),
     ])
+  })
+
+  test('未知 CPU 不伪填零，完整快照先排序再取上限', () => {
+    const windows = parseProcessRows(
+      '"first","1","Console","1","1 K"\n"largest","2","Console","1","100 K"',
+      'win32'
+    )
+    expect(selectProcesses(windows, { minCpuPercent: 0 })).toEqual([])
+    const unknown = selectProcesses(windows, {})
+    expect(selectTopProcesses(unknown, 1).map((row) => row.pid)).toEqual([2])
+    const known = unknown.map((row, index) => ({
+      ...row,
+      pid: row.pid + 10,
+      cpuPercent: index ? 2 : 10,
+    }))
+    expect(selectTopProcesses([...unknown, ...known], 3).map((row) => row.pid)).toEqual([11, 12, 2])
+    expect(parseProcessRows('1\t2\tuser\ttime\trunning\t99\t100\told.exe\told', 'win32')).toEqual(
+      []
+    )
+    expect(parseOpenPortEntries('1\told.exe\t127.0.0.1\t3000\tLISTENING', 'win32')).toEqual([])
   })
 })
 

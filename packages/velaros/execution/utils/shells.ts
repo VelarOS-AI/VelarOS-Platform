@@ -387,10 +387,10 @@ export function toShellDescriptor(shell: ShellDescriptor): ShellDescriptor {
     kind: shell.kind,
     name: shell.name,
     shellPath: shell.shellPath,
-    args: shell.args,
+    args: shell.args ? [...shell.args] : shell.args,
     readiness: shell.readiness,
     version: shell.version,
-    recommendation: shell.recommendation,
+    recommendation: shell.recommendation ? { ...shell.recommendation } : shell.recommendation,
   }
 }
 

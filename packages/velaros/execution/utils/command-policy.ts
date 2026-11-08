@@ -491,26 +491,21 @@ function hasPowerShellRecurse(args: readonly string[]): boolean {
   return args.some((argument) => matchesPowerShellParameter(argument, '-recurse', 2))
 }
 
-/** 读出 `rm` 是否递归、是否强制：POSIX 选项簇、GNU 长选项、PowerShell 参数名三种写法都认。 */
-function readRemoveFlags(args: readonly string[]): { recursive: boolean; force: boolean } {
+/** 读出 `rm` 是否递归：POSIX 选项簇、GNU 长选项、PowerShell 参数名三种写法都认。 */
+function readRemoveFlags(args: readonly string[]): { recursive: boolean } {
   let recursive = false
-  let force = false
   for (const argument of args) {
     if (argument === '--') break
     if (argument.startsWith('--')) {
       const normalized = argument.toLowerCase()
       recursive ||= matchesLongOption(normalized, '--recursive')
-      force ||= matchesLongOption(normalized, '--force')
     } else if (PosixRemoveOptionCluster.test(argument)) {
       recursive ||= /[Rr]/.test(argument)
-      force ||= /f/i.test(argument)
     } else if (argument.length > 1 && argument.startsWith('-')) {
-      // `-f` 在 PowerShell 里有歧义（-Filter / -Force），至少写到 `-fo` 才是 -Force。
       recursive ||= matchesPowerShellParameter(argument, '-recurse', 2)
-      force ||= matchesPowerShellParameter(argument, '-force', 3)
     }
   }
-  return { recursive, force }
+  return { recursive }
 }
 
 /** 读出实参里的 cmd.exe 开关字母（小写），`/s /q` 与 `/s/q` 都拆成 s 与 q。 */

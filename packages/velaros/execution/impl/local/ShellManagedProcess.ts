@@ -7,7 +7,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
-import { isFalse, isNumber } from '@velaros-ai/core'
+import { isNumber } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ShellTerminalProcess } from '../../contract/requires.js'
@@ -25,6 +25,8 @@ export interface ManagedShellProcess {
   child: Nullable<ChildProcess>
   /** 进程彻底收尾时兑现，只兑现一次：退出且管道排空，或者期限到了放弃等待。 */
   completion: Promise<ShellProcessCompletion>
+  /** 真实退出且输出管道关闭时兑现；有界 completion 的 unknown 不会提前兑现它。 */
+  closing: Promise<ShellProcessCompletion>
   /** 收尾结果；还没收尾时是 null。 */
   result: Nullable<ShellProcessCompletion>
   /** 直接子进程是否已经退出。后代可能还占着管道，这时 result 仍可能是 null。 */
@@ -73,6 +75,10 @@ export class ShellManagedProcess implements ManagedShellProcess {
   private aborted = false
   private stopping = false
   private finished = false
+  private closeObserved = false
+  public readonly closing: Promise<ShellProcessCompletion>
+  private confirmClosed!: (result: ShellProcessCompletion) => void
+  private processError: Nullable<Error> = null
   private exitCode: Nullable<number> = null
   private signal: Nullable<string> = null
   private readonly terminal: Nullable<ShellTerminalProcess>
@@ -98,6 +104,9 @@ export class ShellManagedProcess implements ManagedShellProcess {
     this.completion = new Promise<ShellProcessCompletion>((resolve) => {
       this.complete = resolve
     })
+    this.closing = new Promise<ShellProcessCompletion>((resolve) => {
+      this.confirmClosed = resolve
+    })
     hooks.track(this)
     if (this.child) this.watchChild(this.child)
     if (this.terminal) this.watchTerminal(this.terminal)
@@ -115,28 +124,27 @@ export class ShellManagedProcess implements ManagedShellProcess {
   }
 
   public async stop(requestedSignal: NodeJS.Signals = 'SIGTERM'): Promise<boolean> {
-    // 根进程退出后，后代继承的管道与清理回执仍可能尚未结束。
-    if (this.exited) {
-      const result = this.result ?? (await this.completion)
-      return !result.cleanupIncomplete
-    }
+    if (this.closeObserved) return true
     if (this.finished) {
       const retryTimers = new TimerScope({ name: 'ShellProcessStopRetry' })
       try {
         await retryTimers.withTimeout(
           this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs,
-          () => this.terminate(requestedSignal)
+          async () => {
+            if (!this.exited) await this.terminate(requestedSignal)
+            await this.closing
+          }
         )
       } catch {
         // arch-guard:silent-catch-ok 重试结果只由已观察到的进程退出事实决定。
       } finally {
         retryTimers.dispose()
       }
-      return this.exited && isFalse(this.result?.cleanupIncomplete)
+      return this.closeObserved
     }
     this.requestStop(requestedSignal)
-    const result = await this.completion
-    return !result.cleanupIncomplete && this.exited
+    await this.completion
+    return this.closeObserved
   }
 
   /** 子进程：拉起来时补登记 pid；退出后等后代放开管道，stdio 都关了才算收尾。 */
@@ -151,7 +159,7 @@ export class ShellManagedProcess implements ManagedShellProcess {
         void terminateProcessTree(child.pid, 'SIGKILL', { platform: this.platform })
       // 后代进程可能在直接子进程退出后继续持有继承的管道句柄。
       this.later(
-        () => this.finish(null, true),
+        () => this.finish(this.processError, true),
         this.options.drainTimeoutMs ?? ShellTuning.process.drainTimeoutMs
       )
     })
@@ -159,11 +167,13 @@ export class ShellManagedProcess implements ManagedShellProcess {
       this.exited = true
       this.exitCode = code
       this.signal = exitSignal
-      this.finish()
+      this.close()
     })
     child.on('error', (error) => {
-      this.exited = true
-      this.finish(error)
+      if (this.closeObserved) return
+      this.processError = error
+      if (!child.pid) this.exited = true
+      this.requestStop()
     })
   }
 
@@ -176,20 +186,33 @@ export class ShellManagedProcess implements ManagedShellProcess {
       // 终端会话里的后台作业可能比会话首进程活得久，一并收掉。
       if (this.platform !== 'win32')
         void terminateProcessTree(terminal.pid, 'SIGKILL', { platform: this.platform })
-      this.finish()
+      this.close()
     })
   }
 
-  /** 收尾：只做一次。停掉计时器、放开管道，写下回执并兑现 completion。 */
-  private finish(spawnError: Nullable<Error> = null, cleanupIncomplete = false): void {
+  /** 真实 close 更新当前 owner 事实；已交付的有界 completion 保持当时的未知事实。 */
+  private close(): void {
+    this.closeObserved = true
+    if (this.finished && this.result?.cleanupIncomplete) {
+      this.result = {
+        ...this.result,
+        exitCode: this.exitCode,
+        signal: this.signal,
+        cleanupIncomplete: false,
+      }
+      this.hooks.onFinished()
+    } else this.finish()
+    this.confirmClosed(this.result!)
+  }
+
+  /** 有界收尾只兑现一次；未完成时保留输出管道，迟到的真实 close 才能确认资源已释放。 */
+  private finish(spawnError: Nullable<Error> = this.processError, cleanupIncomplete = false): void {
     if (this.finished) return
     this.finished = true
     this.timers.dispose()
     this.options.abortSignal?.removeEventListener('abort', this.onAbort)
     this.child?.stdin?.destroy()
     if (cleanupIncomplete && this.child) {
-      this.child.stdout?.destroy()
-      this.child.stderr?.destroy()
       this.child.unref()
     }
     const result: ShellProcessCompletion = {
@@ -210,7 +233,7 @@ export class ShellManagedProcess implements ManagedShellProcess {
     if (this.stopping || this.finished) return
     this.stopping = true
     this.later(
-      () => this.finish(null, true),
+      () => this.finish(this.processError, true),
       this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs
     )
     void this.kill(requestedSignal)

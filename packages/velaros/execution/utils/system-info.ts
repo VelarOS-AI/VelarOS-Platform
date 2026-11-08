@@ -66,9 +66,29 @@ export function selectProcesses(
         return false
       if (options.user && processInfo.user !== options.user) return false
       if (options.onlyCurrentUser && !isCurrentUser(processInfo.user, currentUser)) return false
-      if (options.minCpuPercent && processInfo.cpuPercent < options.minCpuPercent) return false
+      if (
+        isPresent(options.minCpuPercent) &&
+        (isNull(processInfo.cpuPercent) || processInfo.cpuPercent < options.minCpuPercent)
+      )
+        return false
       if (options.minMemoryBytes && processInfo.memoryBytes < options.minMemoryBytes) return false
       return true
+    })
+    .slice(0, limit)
+}
+
+/** 完整快照先按已知 CPU 降序，未知排后按内存降序，再取前列；未知 CPU 不用零代替。 */
+export function selectTopProcesses(
+  rows: readonly SystemProcessInfo[],
+  limit = ShellTuning.systemInfo.topProcesses
+): SystemProcessInfo[] {
+  return [...rows]
+    .sort((a, b) => {
+      if (isPresent(a.cpuPercent) && isPresent(b.cpuPercent))
+        return b.cpuPercent - a.cpuPercent || b.memoryBytes - a.memoryBytes || a.pid - b.pid
+      if (isPresent(a.cpuPercent)) return -1
+      if (isPresent(b.cpuPercent)) return 1
+      return b.memoryBytes - a.memoryBytes || a.pid - b.pid
     })
     .slice(0, limit)
 }
@@ -146,7 +166,7 @@ export function parseProcessRows(stdout: string, platform: NodeJS.Platform): Par
     .filter((row): row is ParsedProcessRow => isNotNull(row))
 }
 
-/** 把各平台监听端口命令的输出解析成端口条目：Windows 用 netstat 或制表符格式，其余平台用 lsof 格式。 */
+/** 把各平台监听端口命令的输出解析成端口条目：Windows 用 netstat，其余平台用 lsof 格式。 */
 export function parseOpenPortEntries(stdout: string, platform: NodeJS.Platform): RawPortEntry[] {
   return platform === 'win32'
     ? parseWindowsOpenPortEntries(stdout)
@@ -214,41 +234,21 @@ function parseProcessLine(line: string, platform: NodeJS.Platform): Nullable<Par
   if (!trimmed) return null
   if (platform === 'win32') {
     const tasklist = parseWindowsTasklistFields(trimmed)
-    if (tasklist) {
-      const [name, pidText, , , memoryText] = tasklist
-      const pid = positiveInteger(pidText ?? '')
-      const memoryKb = Number((memoryText ?? '').replace(/\D/gu, ''))
-      if (isNull(pid) || !Number.isFinite(memoryKb)) return null
-      return {
-        pid,
-        ppid: 0,
-        user: '',
-        startTime: '',
-        status: 'Running',
-        cpuPercent: 0,
-        memoryBytes: memoryKb * 1024,
-        name: name || String(pid),
-        command: name || String(pid),
-      }
-    }
-    const parts = trimmed.split('\t')
-    const pid = positiveInteger(parts[0] ?? '')
-    const ppid = positiveInteger(parts[1] ?? '')
-    const cpuPercent = Number(parts[5])
-    const memoryKb = Number(parts[6])
-    if (isNull(pid) || isNull(ppid) || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryKb))
-      return null
-    const name = parts[7]?.trim() || String(pid)
+    if (!tasklist) return null
+    const [name, pidText, , , memoryText] = tasklist
+    const pid = positiveInteger(pidText ?? '')
+    const memoryKb = Number((memoryText ?? '').replace(/\D/gu, ''))
+    if (isNull(pid) || !Number.isFinite(memoryKb)) return null
     return {
       pid,
-      ppid,
-      user: parts[2]?.trim() || '',
-      startTime: parts[3]?.trim() || '',
-      status: parts[4]?.trim() || 'Running',
-      cpuPercent,
+      ppid: 0,
+      user: '',
+      startTime: '',
+      status: 'Running',
+      cpuPercent: null,
       memoryBytes: memoryKb * 1024,
-      name,
-      command: parts.slice(8).join('\t').trim() || name,
+      name: name || String(pid),
+      command: name || String(pid),
     }
   }
   const match =
@@ -293,22 +293,11 @@ function parseLsofOpenPortEntries(stdout: string): RawPortEntry[] {
   return entries
 }
 
-/** 解析 Windows 上的监听端口输出：制表符分隔格式，或 netstat 的 LISTENING 行。 */
+/** 解析 Windows netstat 的 LISTENING 行。 */
 function parseWindowsOpenPortEntries(stdout: string): RawPortEntry[] {
   return stdout
     .split(/\r?\n/)
     .map((line): Nullable<RawPortEntry> => {
-      const parts = line.trimEnd().split('\t')
-      const port = positiveInteger(parts[3] ?? '')
-      if (parts.length >= 5 && isNotNull(port))
-        return {
-          pid: positiveInteger(parts[0] ?? ''),
-          processName: parts[1]?.trim() || null,
-          address: parts[2]?.trim() || '',
-          port,
-          state: parts[4]?.trim() || null,
-        }
-
       const netstat = /^\s*TCP\s+(\S+)\s+\S+\s+LISTENING\s+(\d+)\s*$/iu.exec(line)
       if (!netstat) return null
       const address = parseAddressAndPort(netstat[1]!)

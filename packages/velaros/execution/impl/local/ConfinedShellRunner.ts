@@ -40,15 +40,13 @@ export interface ConfinedShellRunnerApi {
     options: ShellRunCommandOptions,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult>
-  /** 停掉在这里起的、还没退出的全部进程：先中止还在跑的命令、等它们收敛，再释放执行器；之后可以放心删根目录。 */
+  /** 拒绝新命令并等待全部自有进程真实关闭；清理未完成抛错并保留 owner，重试成功后才可删根目录。 */
   dispose(): Promise<void>
 }
 
 export class ConfinedShellRunner implements ConfinedShellRunnerApi {
   public readonly root: string
   private readonly runner: ShellCommandRunnerApi
-  /** 还在跑的命令：各自的中止开关与结束时刻，释放时先中止、再等它们收敛。 */
-  private readonly running = new Set<{ controller: AbortController; settled: Promise<unknown> }>()
 
   constructor(options: ConfinedShellRunnerOptions) {
     const platform = options.platform ?? process.platform
@@ -81,36 +79,20 @@ export class ConfinedShellRunner implements ConfinedShellRunnerApi {
     })
   }
 
-  public async run(
+  public run(
     command: string,
     options: ShellRunCommandOptions,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {
-    // 每条命令一个自己的中止开关：调用方取消时跟着停，释放执行器时也能停下它（前台命令不进后台任务表，执行器自己的释放管不到）。
-    const controller = new AbortController()
-    const forward = () => controller.abort(abortSignal?.reason)
-    if (abortSignal?.aborted) forward()
-    else abortSignal?.addEventListener('abort', forward, { once: true })
-    const settled = this.runner.run(
+    return this.runner.run(
       command,
       this.root,
       { ...options, background: false, interactive: false },
-      controller.signal
+      abortSignal
     )
-    const entry = { controller, settled }
-    this.running.add(entry)
-    try {
-      return await settled
-    } finally {
-      abortSignal?.removeEventListener('abort', forward)
-      this.running.delete(entry)
-    }
   }
 
-  public async dispose(): Promise<void> {
-    const running = [...this.running]
-    for (const entry of running) entry.controller.abort()
-    await Promise.allSettled(running.map((entry) => entry.settled))
-    await this.runner.dispose()
+  public dispose(): Promise<void> {
+    return this.runner.dispose()
   }
 }

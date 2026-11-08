@@ -112,6 +112,7 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     this.controller.signal.throwIfAborted()
     return {
       ...shell,
+      args: shell.args ? [...shell.args] : shell.args,
       env: { ...shell.env },
       recommendation: shell.recommendation ? { ...shell.recommendation } : null,
     }

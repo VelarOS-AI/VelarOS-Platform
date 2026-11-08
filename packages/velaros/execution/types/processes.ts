@@ -8,7 +8,7 @@ export interface ParsedProcessRow {
   user: string
   startTime: string
   status: string
-  cpuPercent: number
+  cpuPercent: Nullable<number>
   memoryBytes: number
   name: string
   command: string

@@ -52,6 +52,7 @@ function delayedCloseRunner(drainTimeoutMs: number): {
         ...options,
         platform: 'win32',
         drainTimeoutMs,
+        terminationDeadlineMs: drainTimeoutMs,
         terminate: (signal) =>
           terminateProcessTree(child.pid!, signal, { platform: process.platform }),
       })
@@ -66,7 +67,6 @@ function delayedCloseRunner(drainTimeoutMs: number): {
     find: shellProcessManager.find.bind(shellProcessManager),
     captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
     resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
-    stopAll: shellProcessManager.stopAll.bind(shellProcessManager),
   }
   return {
     runner: new ShellCommandRunner({
@@ -78,7 +78,9 @@ function delayedCloseRunner(drainTimeoutMs: number): {
     }),
     closed: closed.promise,
     owned: () => managed,
-    release: () => observed.emit('close', exit.code, exit.signal),
+    release: () => {
+      if (exit) observed.emit('close', exit.code, exit.signal)
+    },
   }
 }
 
@@ -511,7 +513,7 @@ describe('本机宿主：命令输出', () => {
 })
 
 describe('本机宿主：进程生命周期', () => {
-  test('INV-15 终止信号无人响应、close 永不到达时，进程管理仍在期限内收敛，并如实标记清理未完成', async () => {
+  test('INV-15 终止信号无人响应、close 尚未到达时，有界回执标记清理未完成并保留真实关闭证据', async () => {
     const child = fakeChild()
     const signals: string[] = []
     const owned = shellProcessManager.manage(child, {
@@ -527,8 +529,12 @@ describe('本机宿主：进程生命周期', () => {
     expect(result.timedOut).toBe(true)
     expect(result.cleanupIncomplete).toBe(true)
     expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
-    expect(child.stdout!.destroyed).toBe(true)
+    expect(child.stdout!.destroyed).toBe(false)
+    expect(child.stderr!.destroyed).toBe(false)
     expect(await owned.stop('SIGKILL')).toBe(false)
+    child.emit('close', null, 'SIGKILL')
+    expect((await owned.closing).cleanupIncomplete).toBe(false)
+    expect(result.cleanupIncomplete).toBe(true)
   })
 
   for (const cleanupIncomplete of [false, true]) {
@@ -575,12 +581,12 @@ describe('本机宿主：进程生命周期', () => {
         ])
         if (cleanupIncomplete) {
           f.release()
-          expect(f.runner.listTasks({ taskId })[0]!.status).toBe('unknown')
+          await f.owned().closing
+          expect(f.runner.listTasks({ taskId })[0]!.status).toBe('exited')
+          expect(states.at(-1)!.status).toBe('exited')
         }
       } finally {
-        if (f.runner.listTasks().some((task) => task.cleanupIncomplete))
-          await expect(f.runner.dispose()).rejects.toMatchObject({ code: 'PLATFORM' })
-        else await f.runner.dispose()
+        await f.runner.dispose()
       }
     }, 15_000)
   }
@@ -609,6 +615,113 @@ describe('本机宿主：进程生命周期', () => {
       await f.runner.dispose()
     }
   }, 15_000)
+
+  test('前台命令也属于 runner：关闭等待真实管道收尾并拒绝新命令', async () => {
+    const f = delayedCloseRunner(5_000)
+    const pending = f.runner.run('foreground drain', process.cwd(), {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', 'setTimeout(() => process.exit(7), 100)'],
+      },
+    })
+    try {
+      await f.closed
+      let disposed = false
+      const disposing = f.runner.dispose().then(() => {
+        disposed = true
+      })
+      await Promise.resolve()
+      expect(disposed).toBe(false)
+      f.release()
+      await disposing
+      expect((await pending).cleanupIncomplete).toBe(false)
+      const failure = await f.runner.run('must not start', process.cwd(), {}).then(
+        () => null,
+        (error: unknown) => error
+      )
+      expect(failure).toMatchObject({ code: 'CLOSED' })
+    } finally {
+      f.release()
+      await f.runner.dispose()
+      await pending
+    }
+  }, 15_000)
+
+  test('前台有界回执未确认时保留 owner，真实 close 后可以重试释放', async () => {
+    const f = delayedCloseRunner(10)
+    const pending = f.runner.run('foreground incomplete', process.cwd(), {
+      nativeCommand: { file: process.execPath, args: ['-e', 'process.exit(7)'] },
+    })
+    try {
+      await f.closed
+      const result = await pending
+      expect(result.cleanupIncomplete).toBe(true)
+      const failure = await f.runner.dispose().then(
+        () => null,
+        (error: unknown) => error
+      )
+      expect(failure).toMatchObject({ code: 'PLATFORM' })
+      f.release()
+      await f.runner.dispose()
+      expect(result.cleanupIncomplete).toBe(true)
+    } finally {
+      f.release()
+      await f.runner.dispose()
+      await pending
+    }
+  }, 15_000)
+
+  test('关闭取消仍在选 shell 的调用，不启动进程且拒绝迟到准入', async () => {
+    const entered = Promise.withResolvers<void>()
+    let spawned = 0
+    const runner = new ShellCommandRunner({
+      platform: process.platform,
+      platformTools: createPlatform({ platform: process.platform, env: process.env }),
+      confinement: { mode: 'danger-full-access', workspaceRoot: process.cwd() },
+      processes: {
+        manage: (...args) => {
+          spawned++
+          return shellProcessManager.manage(...args)
+        },
+        manageTerminal: shellProcessManager.manageTerminal.bind(shellProcessManager),
+        find: shellProcessManager.find.bind(shellProcessManager),
+        captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
+        resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
+      },
+      shells: {
+        resolve: shellResolver.resolve.bind(shellResolver),
+        resolveReady: async (options) => {
+          entered.resolve()
+          return new Promise<never>((_resolve, reject) => {
+            const signal = options!.signal!
+            if (signal.aborted) reject(signal.reason)
+            else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+          })
+        },
+        resolveCommand: shellResolver.resolveCommand.bind(shellResolver),
+        inspectPath: shellResolver.inspectPath.bind(shellResolver),
+        refreshWindowsEnvironment: shellResolver.refreshWindowsEnvironment.bind(shellResolver),
+      },
+    })
+    const failure = runner.run('must not spawn', process.cwd(), {}).then(
+      () => null,
+      (error: unknown) => error
+    )
+    try {
+      await entered.promise
+      await runner.dispose()
+      expect(await failure).toMatchObject({ code: 'CLOSED' })
+      expect(spawned).toBe(0)
+      expect(
+        await runner.run('late', process.cwd(), {}).then(
+          () => null,
+          (error: unknown) => error
+        )
+      ).toMatchObject({ code: 'CLOSED' })
+    } finally {
+      await runner.dispose()
+    }
+  })
 
   test('INV-19 已结束历史达到保留上限也不能淘汰清理未确认的任务', async () => {
     // 本用例只验证任务回执；先真实选定一次 shell，批量假任务不重复启动 shell 自检进程。
@@ -651,6 +764,7 @@ describe('本机宿主：进程生命周期', () => {
           exited: true,
           result,
           completion: Promise.resolve(result),
+          closing: result.cleanupIncomplete ? new Promise(() => {}) : Promise.resolve(result),
           stop: async () => {
             if (result.cleanupIncomplete && ++stopAttempts === 1)
               throw new AppError('PLATFORM', 'fixture termination failed')
@@ -661,7 +775,6 @@ describe('本机宿主：进程生命周期', () => {
       find: shellProcessManager.find.bind(shellProcessManager),
       captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
       resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
-      stopAll: shellProcessManager.stopAll.bind(shellProcessManager),
     }
     const runner = new ShellCommandRunner({
       platform: process.platform,

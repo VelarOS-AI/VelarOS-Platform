@@ -55,8 +55,6 @@ export interface ShellProcessManagerApi {
     expectedIdentity: Nullable<string>,
     platform?: NodeJS.Platform
   ): Promise<'running' | 'exited' | 'unknown'>
-  /** 应用退出前调用：给所有还没结束的受管进程发 SIGKILL 并等它们收尾。父进程崩溃时的兜底由 Windows 原生宿主另外保证。 */
-  stopAll(): Promise<void>
 }
 
 class ShellProcessManager implements ShellProcessManagerApi {
@@ -138,14 +136,6 @@ class ShellProcessManager implements ShellProcessManagerApi {
     return current === expectedIdentity ? 'running' : 'exited'
   }
 
-  public async stopAll(): Promise<void> {
-    await Promise.allSettled(
-      [...this.processes.values()]
-        .filter((entry) => !entry.result || !entry.exited)
-        .map((entry) => entry.stop('SIGKILL'))
-    )
-  }
-
   /** 受管进程回报登记表的两个时刻：有了 pid 就按 pid 登记，收尾后清理过多的回执。 */
   private hooks(): ShellManagedProcessHooks {
     return {
@@ -159,10 +149,11 @@ class ShellProcessManager implements ShellProcessManagerApi {
   /** 已结束的回执超过上限时，从最早登记的开始删，直到回到上限。 */
   private pruneCompleted(): void {
     let completed = 0
-    for (const entry of this.processes.values()) if (entry.result && entry.exited) completed++
+    for (const entry of this.processes.values())
+      if (entry.result && entry.exited && !entry.result.cleanupIncomplete) completed++
     if (completed <= ShellTuning.process.completedProcesses) return
     for (const [pid, entry] of this.processes) {
-      if (entry.result && entry.exited) {
+      if (entry.result && entry.exited && !entry.result.cleanupIncomplete) {
         this.processes.delete(pid)
         if (--completed <= ShellTuning.process.completedProcesses) break
       }
