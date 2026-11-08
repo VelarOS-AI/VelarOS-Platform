@@ -660,6 +660,23 @@ test('capture refuses lossy JSON, getters, cycles and raw limit without claiming
   expect(collector.snapshot().blocks).toHaveLength(0)
 })
 
+test('INV-34 top-level undefined remains a capture issue while explicit null is valid', () => {
+  const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+  expect(() => collector.output(undefined)).toThrow('undefined')
+  expect(collector.snapshot().blocks).toHaveLength(0)
+  expect(collector.snapshot().issues).toHaveLength(1)
+  collector.output(null)
+  expect(collector.snapshot().blocks[0]?.value).toBeNull()
+})
+
+it('INV-34 the native output module cannot hide an undefined capture failure with catch', async () => {
+  const result = await run('try { output(undefined); } catch {}')
+  if (!result.checked) throw Error(JSON.stringify(result))
+  expect(result.result.failed?.code).toBe('PROGRAM_ERROR')
+  expect(result.output?.issues[0]).toContain('undefined')
+  expect(result.output?.blocks).toHaveLength(0)
+})
+
 it('configure applies once before output and metadata does not change program value', async () => {
   const result = await run(
     `output.configure({maxChars:900});output({value:42},{key:'value',view:{mode:'reference'}});`

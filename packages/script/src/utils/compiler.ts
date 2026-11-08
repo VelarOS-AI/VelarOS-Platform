@@ -12,7 +12,7 @@ import type { CodeProgramDiagnostic, ScriptModuleExportsSlice } from '../types/s
 
 import { renderDiagnosticFrame } from './diagnostics.js'
 import { readModuleReferences } from './module-form.js'
-import { programForCheck, readCapabilityNamespace } from './program.js'
+import { readCapabilityNamespace } from './program.js'
 import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
 import { CodeSurfaceTuning } from './tuning.js'
 
@@ -622,7 +622,7 @@ function readProgramFiles(
     problems.push({ file, node, code: CodeSurfaceDiagnosticCodes.unresolvedModule, message })
   }
   const seen = new Set(isUndefined(input.path) ? [] : [input.path])
-  const pending = [{ path: input.path, file: parseScript(mainFile, programForCheck(input.source)) }]
+  const pending = [{ path: input.path, file: parseScript(mainFile, input.source) }]
   for (let next = pending.shift(); next; next = pending.shift()) {
     const { path, file } = next
     files.push(file)

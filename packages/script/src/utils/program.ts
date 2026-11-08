@@ -22,16 +22,6 @@ export function readCapabilityNamespace(moduleSpecifier: string): Nullable<strin
     : null
 }
 
-/**
- * 检查时用的程序正文。
- *
- * 模块本来就能直接检查，不用包装——**这一点很重要**：不包装就没有行号偏移，
- * 诊断报的行号就是模型写的那一行，不需要任何换算。
- */
-export function programForCheck(source: string): string {
-  return source
-}
-
 /** 体量超限的说明；超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。 */
 export function describeOversized(what: 'source' | 'blobs', actual: number): string {
   const limit = what === 'source' ? CodeSurfaceLimits.sourceChars : CodeSurfaceLimits.blobChars

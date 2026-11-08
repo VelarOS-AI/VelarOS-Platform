@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/core/error'
 
 import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
@@ -324,6 +324,27 @@ try {
       )
       expect(launches).toBe(0)
     }))
+  for (const [cause, code, message] of [
+    [null, 'OPERATION_FAILED', 'null'],
+    [undefined, 'OPERATION_FAILED', 'undefined'],
+    ['host failed', 'OPERATION_FAILED', 'host failed'],
+    [new AppError('CONFLICT', 'host conflict'), 'CONFLICT', 'host conflict'],
+  ] as const)
+    test.skipIf(unsupportedBridge)(`进程口拒绝 ${message} 时仍返回失败回执`, () =>
+      fixture(async (cwd, directory) => {
+        const runner = createNodeCodeRunner({
+          cwd,
+          directory,
+          execute: async () => {
+            throw cause
+          },
+        })
+        const result = await runner.run(request(''), noCalls, log)
+        expect(result.ok).toBe(false)
+        expect(result.error?.code).toBe(code)
+        expect(result.error?.message).toContain(message)
+      })
+    )
   test('注入的进程收束失败不能报告成功', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({
