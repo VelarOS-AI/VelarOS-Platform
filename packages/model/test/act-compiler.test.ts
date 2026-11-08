@@ -70,19 +70,65 @@ test('response schema is sealed and fingerprinted independently of prompt text',
     10
   )
   expect(Object.isFrozen(a.request.response.schema)).toBe(true)
-  expect(a.providerRequest.tools).toEqual([])
-  expect(a.providerRequest.responseFormat).toEqual(base.response)
-  expect(a.providerRequest.requestFingerprint.messageHash).toBe(
-    b.providerRequest.requestFingerprint.messageHash
+  expect(a.requestAudit.toolCount).toBe(0)
+  expect(a.request.response).toEqual(base.response)
+  expect(a.requestAudit.requestFingerprint.messageHash).toBe(
+    b.requestAudit.requestFingerprint.messageHash
   )
-  expect(a.providerRequest.requestFingerprint.id).not.toBe(b.providerRequest.requestFingerprint.id)
-  expect(a.providerRequest.requestFingerprint.prefixHash).not.toBe(
-    b.providerRequest.requestFingerprint.prefixHash
+  expect(a.requestAudit.requestFingerprint.id).not.toBe(b.requestAudit.requestFingerprint.id)
+  expect(a.requestAudit.requestFingerprint.prefixHash).not.toBe(
+    b.requestAudit.requestFingerprint.prefixHash
   )
-  expect(a.providerRequest.requestFingerprint.responseFormatHash).not.toBe(
-    b.providerRequest.requestFingerprint.responseFormatHash
+  expect(a.requestAudit.requestFingerprint.responseFormatHash).not.toBe(
+    b.requestAudit.requestFingerprint.responseFormatHash
   )
   expect(b.estimate.tokens).toBeGreaterThan(a.estimate.tokens)
-  Object.assign(a.providerRequest, { responseFormat: { tampered: true } })
-  await expect(compiler.verify(a.providerRequest)).rejects.toThrow()
+})
+
+test('request audit stays bounded as live history grows and retains no request body', async () => {
+  const secret = 'PRIVATE_USER_MATERIAL_审计不得复制'
+  const driver = {
+    id: 'model-id'.repeat(100),
+    limits: { contextTokens: 1_000_000, inputTokens: 900_000, outputTokens: 1000 },
+    estimate: async () => ({
+      tokens: 200,
+      precision: 'estimate' as const,
+      basis: '计量'.repeat(1000),
+    }),
+    stream() {
+      throw Error('must not send')
+    },
+  }
+  const compiler = createProviderRequestCompiler()
+  const sizes = []
+  for (const count of [1, 64, 256]) {
+    const history = Array.from({ length: count }, () => ({
+      role: 'user' as const,
+      content: secret.repeat(100),
+    }))
+    const compiled = await compiler.compileModelTurn({ ...base, history }, driver, 10)
+    const audit = JSON.stringify(compiled.requestAudit)
+    sizes.push(audit.length)
+    expect(audit.length).toBeLessThan(2000)
+    expect(audit).not.toContain(secret)
+    expect(Object.keys(compiled.requestAudit).sort()).toEqual(
+      [
+        'basis',
+        'basisTruncated',
+        'inputTokens',
+        'messageCount',
+        'model',
+        'modelTruncated',
+        'outputTokens',
+        'precision',
+        'requestFingerprint',
+        'schemaVersion',
+        'toolCount',
+      ].sort()
+    )
+    expect(compiled.request.history?.at(-1)?.content).toBe(secret.repeat(100))
+    expect(compiled.requestAudit.modelTruncated).toBe(true)
+    expect(compiled.requestAudit.basisTruncated).toBe(true)
+  }
+  expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(8)
 })

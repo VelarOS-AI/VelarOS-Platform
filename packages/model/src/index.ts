@@ -72,13 +72,7 @@ export type {
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'
-export type {
-  CompiledModelRequest,
-  ModelEstimateCalibration,
-  ProviderRequestAuditValue,
-  ProviderRequestFingerprint,
-  ProviderRequestSnapshot,
-} from './types/compiler.js'
+export type { CompiledModelRequest, ModelEstimateCalibration } from './types/compiler.js'
 export type {
   ModelDriverLimits,
   ModelImage,

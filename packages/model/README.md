@@ -111,7 +111,8 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - Responses 原始失败终态独立保留错误码与文案，避免 SDK 因缺少序号等外围字段而只返回 `other`。只接受至多 128 字符的机器码和 2048 字符的诊断；无效或过长详情保持未知失败，不截断后推断重试，不接收失败响应里的产物，已报告用量照常保留。
 - 内置 OpenAI Responses 收齐 `response.completed`、`response.incomplete` 或 `response.failed` 的完整 SSE 事件后结束 SDK 输入，由 SDK 按原有规则生成 usage、continuation 和最终状态；不再等待连接的无关尾流。正文原字节保持，只在终端以 CR 结束时补 LF，形成等价 SSE 分隔符。半帧和普通文本完成事件不算响应终端，单个事件超过 16 MiB 时明确失败；取消清理失败或悬挂不能改变已完整交付的终端事实。
 
-- `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。请求快照与指纹包含工具定义。
+- `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。内容指纹包含实际工具定义。
+- `createProviderRequestCompiler` 返回的 `request` 只供当前 live 估算与发送；可持久化的 `requestAudit` 是 v3 固定元数据，保留真实内容指纹、准入计量、输出预算及消息/工具数量。模型名和计量依据按 `ModelRequestAuditLimits` 有界并显式标记截断，不保存完整指令、历史、材料、schema 或图片，也不提供历史请求重放。
 - 历史正文的 `toolResult` 标记将已展示文本直接绑定到前一条 assistant 的调用。标准驱动将原样正文放入对应工具回包，保留缓存断点并只发送一次；没有绑定正文的调用继续使用归档回执。逻辑历史、原文与容量编译仍由宿主维护。
 - 启用 OpenAI 显式缓存的线路按 SDK 的实际落点传递工具结果断点：Responses 放在 output 内容块，Chat 放在结果 part；文本及 JSON 编码正文保持原字节。调用方在工具输出中的显式断点计入共用额度，禁用显式断点时仍保留已支持的会话缓存键。实际命中由供应商 usage 确认。
 - 显式缓存断点的型号默认值仅适用于官方 HTTPS 端点。自定义 Base URL 默认保留会话缓存键，显式断点由宿主按该端点实际能力配置 `openaiExplicitCacheBreakpoints`；该配置优先于端点与型号默认值。

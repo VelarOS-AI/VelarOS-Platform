@@ -20,6 +20,14 @@ export const ModelWireLimits = Object.freeze({
   providerIdChars: 128,
 })
 
+/** 请求审计的展示元数据上限；完整请求只用于 live 编译和发送。 */
+export const ModelRequestAuditLimits = Object.freeze({
+  /** 模型展示身份的 UTF-16 字符上限，不作为完整计费身份使用。 */
+  modelChars: 512,
+  /** 估算依据的 UTF-16 字符上限，超出时由审计截断标记说明。 */
+  basisChars: 512,
+})
+
 /** 适配器种类：一个 provider 用哪一套 SDK/协议接入。 */
 export const ModelProviderAdapterKinds = Object.freeze([
   'openai-sdk',

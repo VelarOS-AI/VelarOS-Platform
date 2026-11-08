@@ -1,11 +1,11 @@
 import type { ModelInputEstimate, ModelTurnRequest } from '@velaros-ai/kernel'
-/** 可落盘的请求原始值，特殊值用显式类型标签保存。 */
-export type ProviderRequestAuditValue = Nullable<
+/** 指纹计算的稳定编码值；仅用于当前编译，不作为持久请求正文。 */
+export type ProviderFingerprintValue = Nullable<
   | boolean
   | number
   | string
-  | ProviderRequestAuditValue[]
-  | { [key: string]: ProviderRequestAuditValue }
+  | ProviderFingerprintValue[]
+  | { [key: string]: ProviderFingerprintValue }
 >
 /** 请求内容指纹，与模型可见消息和响应约束绑定。 */
 export interface ProviderRequestFingerprint {
@@ -16,15 +16,18 @@ export interface ProviderRequestFingerprint {
   readonly responseFormatHash?: string
   readonly toolsHash?: string
 }
-/** 实际模型请求的可重建审计快照。 */
-export interface ProviderRequestSnapshot {
-  readonly schemaVersion: 2
+/** 与完整 live 请求分离的有界审计元数据，不保存指令、消息、工具定义或图片。 */
+export interface ProviderRequestAudit {
+  readonly schemaVersion: 3
   readonly model: string
-  readonly system: string
-  readonly messages: ProviderRequestAuditValue
-  readonly tools: readonly ProviderRequestAuditValue[]
-  readonly responseFormat?: ProviderRequestAuditValue
+  readonly modelTruncated: boolean
+  readonly inputTokens: number
+  readonly precision: 'exact' | 'estimate'
+  readonly basis: string
+  readonly basisTruncated: boolean
   readonly outputTokens: number
+  readonly messageCount: number
+  readonly toolCount: number
   readonly requestFingerprint: ProviderRequestFingerprint
 }
 /** 用供应商实测用量得到的估算校准；图片和不透明状态部分不参与。 */
@@ -42,5 +45,5 @@ export interface CompiledModelRequest {
   /** 原始估算分开记录文本、图片和不透明状态；调用方用无图片实测校准文本。 */
   readonly measured: { readonly text: number; readonly images: number; readonly opaque?: number }
   readonly okToSend: boolean
-  readonly providerRequest: ProviderRequestSnapshot
+  readonly requestAudit: ProviderRequestAudit
 }
