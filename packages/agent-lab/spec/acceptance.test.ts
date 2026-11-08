@@ -32,7 +32,14 @@ import {
 } from '../src/index.js'
 import { canonicalJson } from '../src/utils/canonical-json.js'
 
-import { archive, FullCapabilities, journey, observation, trial } from './support.js'
+import {
+  archive,
+  assertSelfContainedReport,
+  FullCapabilities,
+  journey,
+  observation,
+  trial,
+} from './support.js'
 
 /** 一个总是收敛的假驱动；时钟按段推进，用来把「本段用时」与「整程用时」分开。 */
 function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
@@ -423,8 +430,7 @@ describe('报告自包含', () => {
     const html = labReports.renderRunReportHtml([model], { generatedAt: 1 })
 
     expect(html).toContain('data-value="null">—</span>')
-    expect(/<link\b|<script\b[^>]*\bsrc=|@import\b/i.test(html)).toBe(false)
-    expect(/https?:\/\//i.test(html)).toBe(false)
+    assertSelfContainedReport(html)
   })
 })
 

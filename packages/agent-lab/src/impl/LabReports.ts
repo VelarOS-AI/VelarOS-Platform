@@ -15,7 +15,7 @@ import { realTaskAssessmentSchema } from '../utils/wire/workload.js'
 
 /**
  * 当前运行报告与真实任务报告的出口。
- * HTML 自包含——不联网、不拉字体图片、不发请求；渲染完当场核对，不合格就抛错而不是写一份坏报告出去。
+ * HTML 由固定模板与转义文本构成，不联网、不拉字体图片、不发请求；未知保留，非法数值拒绝渲染。
  * 实例归本包，进程里只有一份。
  */
 export interface LabReportsApi {

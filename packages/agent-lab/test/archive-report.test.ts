@@ -5,13 +5,10 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { archive, observation } from '../spec/support.js'
+import { archive, assertSelfContainedReport, observation } from '../spec/support.js'
+import type { RunReportModel } from '../src/index.js'
 import { labArchives, labReports } from '../src/index.js'
 import { normalizeObservation } from '../src/utils/measure/normalize.js'
-import {
-  assertSelfContainedHtml,
-  findExternalResourceViolations,
-} from '../src/utils/render/html.js'
 
 async function withDirectory(verify: (root: string) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'agent-lab-archive-'))
@@ -154,10 +151,95 @@ describe('current archive boundaries and reports', () => {
     const first = labReports.renderRunReportHtml([model], { generatedAt: 1 })
     const second = labReports.renderRunReportHtml([model], { generatedAt: 1 })
     expect(first).toBe(second)
-    expect(findExternalResourceViolations(first)).toEqual([])
+    assertSelfContainedReport(first)
     expect(first).toContain('data-value="null">—</span>')
+  })
+
+  test('renders escaped prose unchanged without treating code words or URLs as resources', () => {
+    const prose =
+      'undefined NaN fetch( XMLHttpRequest import( url( @import https://example.invalid/report'
+    const payload = `${prose} <script src="https://bad.invalid/x.js">fetch('x')</script><img src=x onerror=alert(1)>`
+    const base = labReports.createRunReportModel(archive({ score: null }))
+    const model: RunReportModel = {
+      ...base,
+      journeyTitle: payload,
+      executorLabel: payload,
+      verdicts: [{ id: prose, level: 'information', title: payload, detail: payload }],
+      gaps: [{ face: 'history', title: payload, effect: payload }],
+      legs: base.legs.map((leg) => ({ ...leg, title: payload, settleKind: payload })),
+    }
+    const original = structuredClone(model)
+    const html = labReports.renderRunReportHtml([model], { title: payload })
+    assertSelfContainedReport(html)
+    expect(html).toContain(prose)
+    expect(html).toContain('&lt;script src=&quot;https://bad.invalid/x.js&quot;&gt;')
+    expect(html).not.toContain('<wbr>')
+    expect(html).toContain('overflow-wrap:anywhere')
+    expect(html).toContain('data-value="null">—</span>')
+    expect(model).toEqual(original)
+  })
+
+  test('checks actual executable, resource attribute and stylesheet contexts instead of report prose', () => {
+    const html = labReports.renderRunReportHtml([labReports.createRunReportModel(archive())])
+    assertSelfContainedReport(
+      `${html}<p>https://example.invalid fetch( url( @import undefined NaN</p><a href="#local">local</a>`
+    )
+    for (const resource of [
+      '<script>alert(1)</script>',
+      '<script src="https://bad.invalid/x.js"></script>',
+      '<img src="https://bad.invalid/x.png">',
+      '<source srcset="https://bad.invalid/x.png 2x">',
+      '<link rel="stylesheet" href="https://bad.invalid/x.css">',
+      '<a href="https://bad.invalid">external</a>',
+      '<svg><use xlink:href="https://bad.invalid/x.svg#id"></use></svg>',
+      '<iframe srcdoc="hello"></iframe>',
+      '<form action="https://bad.invalid"></form>',
+      '<div onclick="alert(1)">event</div>',
+      '<meta http-equiv="refresh" content="0;url=https://bad.invalid">',
+      '<style>@import "https://bad.invalid/x.css";</style>',
+      '<style>body{background:url(https://bad.invalid/x.png)}</style>',
+      '<style>@font-face{font-family:remote;src:local(remote)}</style>',
+      '<div style="background:url(https://bad.invalid/x.png)">style</div>',
+    ])
+      expect(() => assertSelfContainedReport(`${html}${resource}`)).toThrow()
+  })
+
+  test('rejects nonfinite numeric report values without confusing literal words, zero and unknown', () => {
+    const base = labReports.createRunReportModel(archive({ score: null }))
+    for (const value of [NaN, Infinity, -Infinity]) {
+      const models = [
+        ...[
+          'completion',
+          'passedLegs',
+          'totalLegs',
+          'journeyVersion',
+          'durationMs',
+          'toolCalls',
+          'totalTokens',
+          'costUsd',
+          'drops',
+        ].map((field) => ({ ...base, [field]: value })),
+        { ...base, failureCounts: { loop: value } },
+        ...['durationMs', 'score', 'toolCalls', 'contextPercent'].map((field) => ({
+          ...base,
+          legs: base.legs.map((leg) => ({ ...leg, [field]: value })),
+        })),
+      ]
+      for (const model of models)
+        expect(() => labReports.renderRunReportHtml([model])).toThrow('报告数值必须是有限数字')
+      expect(() => labReports.renderRunReportHtml([base], { generatedAt: value })).toThrow()
+    }
     expect(() =>
-      assertSelfContainedHtml(`${first}<script src="https://bad.invalid/x.js"></script>`)
-    ).toThrow()
+      labReports.renderRunReportHtml([
+        { ...base, toolCalls: undefined } as unknown as RunReportModel,
+      ])
+    ).toThrow('报告值必须是数字、文字或 null')
+    const html = labReports.renderRunReportHtml([
+      { ...base, journeyTitle: 'NaN undefined', toolCalls: 0, costUsd: null },
+    ])
+    assertSelfContainedReport(html)
+    expect(html).toContain('NaN undefined')
+    expect(html).toContain('data-value="0">0</span>')
+    expect(html).toContain('data-value="null">—</span>')
   })
 })

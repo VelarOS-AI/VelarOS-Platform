@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { archive } from '../spec/support.js'
+import { archive, assertSelfContainedReport } from '../spec/support.js'
 import type { PromoteRealTaskCaseInput, RealTaskAssessment } from '../src/index.js'
 import {
   labArchives,
@@ -14,7 +14,6 @@ import {
   RealTaskPrivacyClassifications,
   realTaskWorkload,
 } from '../src/index.js'
-import { findExternalResourceViolations } from '../src/utils/render/html.js'
 
 function record() {
   return labWire.parseRealTaskRecord({
@@ -177,7 +176,7 @@ describe('real workload evaluation', () => {
     expect(report).not.toContain(input.task.workspaceRoot!)
     expect(report).toContain('data-value="null">—</span>')
     expect(report).toContain('data-value="0">0</span>')
-    expect(findExternalResourceViolations(report)).toEqual([])
+    assertSelfContainedReport(report)
   })
 
   test('renders only closed summaries while preserving private record and finding facts in every bundle classification', async () => {
@@ -343,7 +342,7 @@ describe('real workload evaluation', () => {
         }
         expect(summarized).toBe(assessment.findings.length)
         expect(html.match(/<article class="finding /g)).toHaveLength(groups.length)
-        expect(findExternalResourceViolations(html)).toEqual([])
+        assertSelfContainedReport(html)
         const written = await labArchives.writeRealTaskBundle(
           join(root, classification),
           input,
@@ -368,6 +367,8 @@ describe('real workload evaluation', () => {
     for (const input of [
       { ...assessment, outcome: 'PRIVATE-invalid-outcome' },
       { ...assessment, metrics: { ...assessment.metrics, modelCalls: 'PRIVATE-invalid-count' } },
+      { ...assessment, metrics: { ...assessment.metrics, modelCalls: NaN } },
+      { ...assessment, metrics: { ...assessment.metrics, tokensIn: Infinity } },
       { ...assessment, findings: [{ ...assessment.findings[0]!, class: 'PRIVATE-invalid-class' }] },
     ])
       expect(() =>

@@ -1,5 +1,5 @@
 /**
- * 三份 HTML 报告共用的零件：转义、未知值的呈现、自包含核对。
+ * HTML 报告共用的零件：转义、有限数值与未知值的呈现。
  * 报告必须自包含：打开一个 HTML 文件就能看，不联网、不拉任何外部资源。
  * 纯渲染：不碰 Node 模块、不发请求。
  */
@@ -14,12 +14,10 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;')
 }
 
-/** 转义之后再给协议头插一个软换行点，长链接不会把表格撑破。 */
-export function visibleText(value: unknown): string {
-  return escapeHtml(value).replace(
-    /https?:\/\//gi,
-    (match) => `${match.slice(0, 4)}<wbr>${match.slice(4)}`
-  )
+/** 已知数值必须有限；坏数值不能变成正文，也不能冒充未知。 */
+export function finiteNumber(value: number): number {
+  if (!Number.isFinite(value)) throw new Error('报告数值必须是有限数字')
+  return value
 }
 
 /** 未知值渲染成破折号，并在 `data-value` 上标明它是 null——核对时据此判断有没有拿 0 冒充未知。 */
@@ -33,13 +31,15 @@ export function valueCell(
   formatter?: (value: number) => string
 ): string {
   if (value === null) return unknownCell()
+  if (typeof value === 'number') finiteNumber(value)
+  else if (typeof value !== 'string') throw new Error('报告值必须是数字、文字或 null')
   const display = typeof value === 'number' && formatter ? formatter(value) : String(value)
-  return `<span data-value="${visibleText(value)}">${visibleText(display)}</span>`
+  return `<span data-value="${escapeHtml(value)}">${escapeHtml(display)}</span>`
 }
 
 /** 把一个时间戳渲染成一格，未知就是破折号。 */
 export function timestampCell(generatedAt: number | null): string {
-  return generatedAt === null ? unknownCell() : visibleText(new Date(generatedAt).toISOString())
+  return generatedAt === null ? unknownCell() : escapeHtml(new Date(generatedAt).toISOString())
 }
 
 /** 比例渲染成百分数，保留一位小数。 */
@@ -52,27 +52,4 @@ export function duration(value: number): string {
   if (value < 1_000) return `${Math.round(value)}ms`
   if (value < 60_000) return `${(value / 1_000).toFixed(1)}s`
   return `${(value / 60_000).toFixed(1)}m`
-}
-
-/** 找出这份 HTML 里所有会去拉外部资源的地方；返回的是错误码，不是给人读的话。 */
-export function findExternalResourceViolations(html: string): readonly string[] {
-  const violations: string[] = []
-  if (/https?:\/\//i.test(html)) violations.push('external-url')
-  if (/<(?:img|script|source|video|audio|iframe)\b[^>]*\bsrc\s*=/i.test(html))
-    violations.push('external-src-attribute')
-  if (/<link\b/i.test(html)) violations.push('link-tag')
-  if (/<a\b[^>]*\bhref\s*=\s*["'](?!#)/i.test(html)) violations.push('external-href')
-  if (/@import\b|url\s*\(|@font-face\b/i.test(html)) violations.push('external-css-resource')
-  if (/\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s*\(/i.test(html))
-    violations.push('external-script-request')
-  return violations
-}
-
-/** 核对一份报告是不是自包含、有没有把未知渲染成具体值；不合格当场抛错，不把坏报告写出去。 */
-export function assertSelfContainedHtml(html: string): void {
-  const violations = findExternalResourceViolations(html)
-  if (violations.length > 0) throw new Error(`报告不是自包含的: ${violations.join(', ')}`)
-  if (/\b(?:NaN|undefined)\b/.test(html)) throw new Error('报告里出现了 NaN 或 undefined')
-  if (/data-value="null">(?:0|0\.0|false)</i.test(html))
-    throw new Error('报告把未知值渲染成了一个具体值')
 }
