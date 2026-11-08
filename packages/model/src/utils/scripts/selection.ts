@@ -11,11 +11,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { ReasoningLevels } from '../../contract/constants'
+import type { ModelAdapterConfig } from '../../types/adapters'
 import type {
   AgentProviderAdapterConfig,
   AgentProviderRuntimeConfig,
   ChatProviderId,
-  ModelProviderSelection,
   ModelRuntimeContext,
   ModelSelection,
   ProviderScriptManifest,
@@ -42,7 +42,7 @@ function optionalString(value: unknown): string {
 }
 
 /** 把 unknown 收窄成 provider selection；provider 必给，其余字段缺席按空处理。 */
-export function parseProviderSelection(value: unknown): ModelProviderSelection {
+export function parseProviderSelection(value: unknown): ModelAdapterConfig {
   const record = requireRecord(value, '模型 selection 必须是对象。')
   const provider = requireNonBlankString(record.provider, '模型 selection.provider 必须显式提供。')
 

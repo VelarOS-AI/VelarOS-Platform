@@ -1,4 +1,4 @@
-import { isBlank, toNullable } from '@velaros-ai/core'
+import { isBlank, isNonBlankString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes, ModelProviderOperationalManifests } from '../../contract/constants.js'
@@ -197,7 +197,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     selection: Pick<ModelSelection, 'apiKey' | 'provider'>,
     env: Readonly<Record<string, string | undefined>> = this.environment
   ): string {
-    if (!isBlank(selection.apiKey)) return selection.apiKey
+    if (isNonBlankString(selection.apiKey)) return selection.apiKey
 
     const envName = this.getApiKeyEnvironmentName(selection.provider)
     return envName ? (env[envName] ?? '') : ''
@@ -222,9 +222,9 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
   }
 
   public resolveBaseURL(selection: Pick<ModelSelection, 'baseURL' | 'provider'>): string {
-    const raw = isBlank(selection.baseURL)
-      ? this.requireOperationalManifest(selection.provider).defaultBaseURL
-      : selection.baseURL
+    const raw = isNonBlankString(selection.baseURL)
+      ? selection.baseURL
+      : this.requireOperationalManifest(selection.provider).defaultBaseURL
 
     return trimTrailingPathSeparators(raw)
   }

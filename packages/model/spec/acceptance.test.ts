@@ -22,6 +22,7 @@ import {
   ModelErrorCodes,
   ModelProviderOperationalManifests,
   type ModelRuntimeCapabilityService,
+  type ModelSelection,
   modelUsage,
 } from '../src/index'
 import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
@@ -75,6 +76,81 @@ async function activate(registry: ModelAdapterRegistryApi) {
 }
 
 describe('model 不变量验收', () => {
+  test('INV-23 typed and unknown selections resolve system credentials without copied fields', async () => {
+    const requests: Array<{ url: string; authorization: string | null }> = []
+    const composition = createModelRuntimeComposition({
+      environment: {},
+      providerScripts: { configPaths: [] },
+      providerCatalog: {
+        fetch: async (input, init) => {
+          requests.push({
+            url: String(input),
+            authorization: new Headers(init?.headers).get('authorization'),
+          })
+          return Response.json({ data: [{ id: 'fixture-model', context_length: 64000 }] })
+        },
+      },
+    })
+    const selection: ModelSelection = {
+      provider: 'openai-compatible-gateway',
+      model: 'fixture-model',
+    }
+    const context = {
+      providerRuntimeConfigs: [
+        {
+          provider: selection.provider,
+          defaultModel: selection.model,
+          enabled: true,
+          apiKey: 'system-key',
+          baseURL: 'https://system.example/v1',
+        },
+      ],
+      openRouter: { useFreeModelsForDebug: false },
+    }
+    for (const resolver of [
+      composition.agentModelResolver.resolve.bind(composition.agentModelResolver),
+      composition.agentModelRuntime.resolveRoleRuntime.bind(composition.agentModelRuntime),
+    ]) {
+      const resolved = await resolver(selection, context)
+      expect(resolved.providerId).toBe(selection.provider)
+      expect(resolved.model).toBe(selection.model)
+      await resolver(
+        { ...selection, apiKey: 'request-key', baseURL: 'https://request.example/v1' },
+        context
+      )
+      await expect(
+        resolver(selection, {
+          ...context,
+          providerRuntimeConfigs: context.providerRuntimeConfigs.map((row) => ({
+            ...row,
+            enabled: false,
+          })),
+        })
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+      await expect(
+        resolver(selection, { ...context, providerRuntimeConfigs: [] })
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+    }
+    expect(context.providerRuntimeConfigs[0]!.apiKey).toBe('system-key')
+    expect(context.providerRuntimeConfigs[0]!.baseURL).toBe('https://system.example/v1')
+    expect(requests).toEqual([
+      { url: 'https://system.example/v1/models', authorization: 'Bearer system-key' },
+      { url: 'https://request.example/v1/models', authorization: 'Bearer request-key' },
+    ])
+  })
+
+  test('INV-23 provider defaults and environment credentials accept an absent override', () => {
+    const composition = createModelRuntimeComposition({
+      environment: { OPENAI_API_KEY: 'environment-key' },
+      providerScripts: { configPaths: [] },
+    })
+    const providers = composition.providerCollection
+    expect(providers.requireApiKey({ provider: 'openai' })).toBe('environment-key')
+    expect(providers.resolveBaseURL({ provider: 'openai' })).toBe(
+      providers.requireOperationalManifest('openai').defaultBaseURL
+    )
+  })
+
   test('INV-1 只在同一个 provider 内回退模型，绝不换 provider', () => {
     // 逐个内置 provider 核对：拿别家的模型名来解析，结果要么是用户填的原名（目录只是建议的
     // 那几家），要么是**本家**目录里的模型，绝不会解析成别家目录独有的模型。

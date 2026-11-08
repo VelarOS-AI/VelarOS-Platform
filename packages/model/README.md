@@ -84,6 +84,8 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 
 ## 约定
 
+- `ModelSelection` 只必填 provider 与 model。未提供的 apiKey/baseURL 从当次 `ModelRuntimeContext.providerRuntimeConfigs` 解析；非空覆盖仅作用于该次请求，不回写供应商配置。直接解析器与 unknown 输入入口使用同一套规则，未启用、无适配器或缺凭据时仍报错。
+
 - 支持准确派发登记的驱动声明 `dispatchAware`，准备完成后在实际调用前等待 `stream` 的第三参数；登记失败不发请求且保留宿主错误。`modelRequestDispatcher` 在旧驱动入口保守登记；`budgetRequestId` 仅用于宿主记账，不进入供应商正文或缓存键。
 
 - 绝不换 provider：选中的 provider 没启用、缺凭据或没有适配器时 `resolveRoleRuntime` 抛 `ModelErrorCodes.providerUnavailable`；只在同一 provider 内回退模型，原因写在结果的 `fallbackReason` 与 `resolutionTrace`。
