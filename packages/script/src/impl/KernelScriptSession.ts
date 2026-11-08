@@ -5,6 +5,7 @@ import type { ModuleBinding } from '@velaros-ai/kernel'
 
 import { CodeProgramEditLimits, CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { KernelScriptSessionOptions } from '../contract/requires.js'
+import { ProgramModuleDeclarations } from '../contract/surface.js'
 import type { CodeSurfaceOutcome } from '../types/outcome.js'
 import type {
   CodeProgramCheckResult,
@@ -12,6 +13,8 @@ import type {
   CodeProgramRequest,
   CodeProgramTargetEdit,
 } from '../types/script.js'
+import { rejectWithDiagnostics } from '../utils/budget.js'
+import { diagnoseSyntax, joinGrantedDeclarations } from '../utils/compiler.js'
 import { applyProgramEdits } from '../utils/edit.js'
 import { readModuleSpecifiers, readProgramModuleSpecifiers } from '../utils/module-form.js'
 import { describeProgramOversize } from '../utils/result.js'
@@ -110,11 +113,7 @@ class KernelScriptSession implements KernelScriptSessionApi {
   public check(program: CodeProgramRequest): CodeProgramCheckResult {
     const oversized = describeProgramOversize(program.source, program.blobs, program.input)
     if (oversized) throw new AppError(CodeSurfaceErrorCodes.tooLarge, oversized)
-    if (this.options.runner.environment === 'node')
-      return nodeProgramChecker.check({ ...program, granted: [] })
-    const imported = new Set(
-      [program.source, ...Object.values(program.modules ?? {})].flatMap(readModuleSpecifiers)
-    )
+    const imported = new Set(readProgramModuleSpecifiers(program))
     for (const pkg of this.options.packages ?? [])
       if (imported.has(pkg.specifier))
         for (const target of Object.values(pkg.exports)) imported.add(target)
@@ -126,6 +125,17 @@ class KernelScriptSession implements KernelScriptSessionApi {
         declarations: this.options.runtime.describe(namespace).declarations,
       }))
     )
+    if (this.options.runner.environment === 'node') {
+      const diagnostics = diagnoseSyntax(
+        {
+          ...program,
+          declarations: joinGrantedDeclarations(ProgramModuleDeclarations, surface.granted),
+          nativeImports: true,
+        },
+        false
+      )
+      return diagnostics.length ? rejectWithDiagnostics(diagnostics) : { ok: true }
+    }
     return codeProgramChecker.check({ ...program, granted: surface.granted })
   }
 
