@@ -48,9 +48,25 @@ export class PollingDriver implements LabDriver {
 
   public async openSession(spec: SessionSpec): Promise<SessionHandle> {
     const session = await this.adapter.openSession(spec)
-    const initial = await this.adapter.readState(session)
-    this.fences.set(session.id, initial.revision)
-    return session
+    // 首次采样成功后才把句柄交给调用者；此前失败由这里释放。
+    try {
+      const initial = await this.adapter.readState(session)
+      this.fences.set(session.id, initial.revision)
+      return session
+    } catch (error) {
+      try {
+        await this.adapter.closeSession(session)
+      } catch (closeError) {
+        const readDetail = error instanceof Error ? error.message : String(error)
+        const closeDetail = closeError instanceof Error ? closeError.message : String(closeError)
+        throw new AggregateError(
+          [error, closeError],
+          `初次读取会话状态失败: ${readDetail}; 释放会话也失败: ${closeDetail}`,
+          { cause: error }
+        )
+      }
+      throw error
+    }
   }
 
   public prepare(session: SessionHandle, setup: JourneySetup | null): Promise<void> {
