@@ -53,6 +53,7 @@ import {
   ReadmeMaxLines,
   ReadmeSections,
 } from './governed-modules.mjs'
+import { testScriptRunsFile } from './test-entrypoints.mjs'
 
 // 登记表和 import 使用 /，文本检查使用 LF；先统一本机路径与检出换行。
 const join = (...parts) => nativeJoin(...parts).replaceAll('\\', '/')
@@ -1930,7 +1931,7 @@ for (const module of selectedModules) {
             if (
               !inside(target, verifierRoot) ||
               !existsSync(target) ||
-              !(manifest.scripts?.test ?? '').includes(relative(packageRoot, target))
+              !testScriptRunsFile(packageRoot, manifest.scripts?.test ?? '', target)
             ) {
               fail(`${label}: ${id} 的测试 ${file} 必须存在于模块内并由 package.json test 执行`)
               return ''
@@ -1969,7 +1970,7 @@ for (const module of selectedModules) {
       }
     }
   }
-  if (!(manifest.scripts?.test ?? '').includes(module.acceptance))
+  if (!testScriptRunsFile(packageRoot, manifest.scripts?.test ?? '', acceptancePath))
     fail(`${label}: package.json 的 test 脚本没有跑 ${module.acceptance}`)
 
   if (module.status === 'migrating') {
