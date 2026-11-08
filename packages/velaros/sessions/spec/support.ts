@@ -96,10 +96,14 @@ export function sessionsSpace(
     },
     ask: async (input, signal) => {
       record.asks.push({ input, signal })
+      if ((options.peers ?? DefaultPeers).some((peer) => peer.self && peer.id === input.to))
+        throw new AppError('VALIDATION', '同伴消息的目标是发起者自己，已拒绝。')
       return options.answer ? options.answer(input, signal) : doneAnswer(input)
     },
     tell: async (input, signal) => {
       record.tells.push({ input, signal })
+      if ((options.peers ?? DefaultPeers).some((peer) => peer.self && peer.id === input.to))
+        throw new AppError('VALIDATION', '同伴消息的目标是发起者自己，已拒绝。')
       return options.told ? options.told(input, signal) : { session: input.to, status: 'queued' }
     },
   }

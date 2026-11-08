@@ -1,5 +1,6 @@
 /** 磁盘上的几个小动作：原子写、新建但不覆盖、列目录与读小文件、删文件；「不存在」按正常结果交回，别的错照常抛。 */
 
+import { isUtf8 } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 
@@ -49,12 +50,16 @@ export async function readSubdirectoryNames(directory: string): Promise<string[]
   return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
 }
 
-/** 读一个小文本文件；不存在时交回 null。 */
+/** 严格读取 UTF-8 小文本，保留 BOM 供原始版本核验；非法字节拒绝，不存在才交回 null。 */
 export async function readTextIfExists(path: string): Promise<Nullable<string>> {
-  return readFile(path, 'utf8').catch((error: unknown) => {
+  try {
+    const bytes = await readFile(path)
+    if (!isUtf8(bytes)) throw new AppError('VALIDATION', `记忆文件不是有效 UTF-8：${path}`)
+    return bytes.toString('utf8')
+  } catch (error) {
     if (readErrnoCode(error) === 'ENOENT') return null
     throw error
-  })
+  }
 }
 
 /** 删一个文件，交回删没删：本来就不存在时是 false。 */

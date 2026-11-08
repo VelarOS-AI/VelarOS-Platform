@@ -16,6 +16,6 @@
 | INV-6 | 入参不对抛 `SessionsErrorCodes` 里的码，宿主一次都不调：不是对象、多给字段、字段不是字符串（`SESSIONS_INPUT_INVALID`）；task、message 去掉首尾空白后是空的（`SESSIONS_TASK_EMPTY`、`SESSIONS_MESSAGE_EMPTY`）；没说交给谁（`SESSIONS_TARGET_MISSING`）；to 与 workspace 都给了（`SESSIONS_TARGET_CONFLICT`）；workspace 不认得（`SESSIONS_WORKSPACE_UNKNOWN`）；开项目会话没给 root 或不是绝对路径（`SESSIONS_ROOT_INVALID`）；site 不是 http(s) 网址（`SESSIONS_SITE_INVALID`）；root、site 没配着 workspace 或跟错了工作区（`SESSIONS_OPTION_MISMATCH`）。message 点名字段、说怎么改 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 取消：调用之前就取消的，宿主一次都不调；调用上下文的取消信号原样交给宿主；宿主还没回时一取消就以取消原因失败，不陪宿主等 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 代码面的 `sessions` 命名空间是一条真路：模型写的程序 import 生成的 `baselines/script/sessions.d.ts` 里的操作、过语法检查，在隔离里调到真实操作；几件事可以 Promise.all 同时 ask；失败时程序接得住 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
-| INV-9 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布；每个函数照写法在假宿主上跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
+| INV-9 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布；compareProjects 只复用同 root 的非 self 项目同伴，只有自己或没有时按 `workspace: 'project'` 与 root 创建同组会话；每个函数照写法在真正拒绝 self 寻址的假宿主上跑通 | 测试 | `spec/acceptance.test.ts`、`test/template.test.ts` |
 | INV-10 | 模型面：三个操作都声明为没有效果（none）；list 不收入参、哪个入口都能调，ask 与 tell 只能在 execute 里调；声明里的三种工作区与 `SessionWorkspaces` 一致；端口与调用上下文不进模型面 | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，空间端口的每个方法都有操作在调；`./contracts` 入口整条引用链不碰 Node 内置模块 | 门禁 | `check:module-ownership` |

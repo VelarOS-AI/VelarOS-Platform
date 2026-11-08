@@ -8,8 +8,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { SessionAnswer, SessionAskInput, SessionPeer } from '../index'
-import { VelarSessionsModule } from '../index'
-import { DefaultPeers, runModelProgram, sessionsSpace } from '../spec/support'
+import { sessionsOperations, VelarSessionsModule } from '../index'
+import { DefaultPeers, failureOf, runModelProgram, sessionsSpace } from '../spec/support'
 
 const it = test.skipIf(process.platform === 'win32')
 
@@ -22,6 +22,14 @@ const BackendPeer: SessionPeer = {
   site: null,
   running: true,
   self: false,
+}
+
+/** 同一前端项目的另一个会话，不能把当前发问会话当成这个同伴。 */
+const FrontendPeer: SessionPeer = {
+  ...BackendPeer,
+  id: 'project-web-peer',
+  title: '前端同伴',
+  root: '/home/me/shop-web',
 }
 
 /** 假宿主的回答：下单停在付款前问一句，答复之后做完；项目里的活都做完了，回一张表。 */
@@ -43,10 +51,37 @@ export const notified = await notifyProjects()
 `
 
 describe('代码模版', () => {
-  it('已有合适会话时复用；通知只交给活动项目，跳过空闲项目与自己', async () => {
+  test('INV-9 假宿主按真实寻址边界拒绝 ask/tell 自己，不调用结果生产者', async () => {
+    let delivered = false
+    const space = sessionsSpace({
+      answer: async (input) => {
+        delivered = true
+        return answerOf(input)
+      },
+      told: async (input) => {
+        delivered = true
+        return { session: input.to, status: 'queued' }
+      },
+    })
+    expect(
+      (await failureOf(sessionsOperations.ask({ to: 'project-1', task: '查接口' }, space.context)))
+        .code
+    ).toBe('VALIDATION')
+    expect(
+      (
+        await failureOf(
+          sessionsOperations.tell({ to: 'project-1', message: '改方向' }, space.context)
+        )
+      ).code
+    ).toBe('VALIDATION')
+    expect(delivered).toBe(false)
+  })
+
+  it('INV-9 已有合适同伴时复用；通知只交给活动项目，跳过空闲项目与自己', async () => {
     const space = sessionsSpace({
       peers: [
         ...DefaultPeers,
+        FrontendPeer,
         BackendPeer,
         { ...BackendPeer, id: 'project-idle', root: '/home/me/idle', running: false },
       ],
@@ -58,18 +93,24 @@ describe('代码模版', () => {
     const values = outcome.value as Record<string, any>
     expect(values.order).toEqual({ session: 'browser-1', question: '到付款了，要付吗？' })
     expect(values.done).toEqual({ status: 'completed', answer: '订单号 JD123' })
-    expect(values.compared).toEqual({ web: 'project-1 的接口表', api: 'project-2 的接口表' })
-    expect(values.notified).toEqual([{ session: 'project-2', status: 'queued' }])
-    expect(space.record.tells.map(({ input }) => input.to)).toEqual(['project-2'])
+    expect(values.compared).toEqual({ web: 'project-web-peer 的接口表', api: 'project-2 的接口表' })
+    expect(values.notified).toEqual([
+      { session: 'project-web-peer', status: 'queued' },
+      { session: 'project-2', status: 'queued' },
+    ])
+    expect(space.record.tells.map(({ input }) => input.to)).toEqual([
+      'project-web-peer',
+      'project-2',
+    ])
     expect(space.record.asks.map(({ input }) => input.to)).toEqual([
       'browser-1',
       'browser-1',
-      'project-1',
+      'project-web-peer',
       'project-2',
     ])
   }, 90_000)
 
-  it('对话里只有自己：开一个浏览器会话去下单，后端项目开一个项目会话', async () => {
+  it('INV-9 对话里只有自己：开浏览器会话，前后端都按 project/root 创建同组同伴', async () => {
     const space = sessionsSpace({ peers: [DefaultPeers[0]!], answer: answerOf })
     const outcome = await runModelProgram(space, Program, 60_000)
     expect(outcome.failed).toBeUndefined()
@@ -79,10 +120,16 @@ describe('代码模版', () => {
       workspace: 'browser',
       site: 'https://www.jd.com/',
     })
+    expect(space.record.asks[2]!.input).toMatchObject({
+      workspace: 'project',
+      root: '/home/me/shop-web',
+    })
     expect(space.record.asks[3]!.input).toMatchObject({
       workspace: 'project',
       root: '/home/me/shop-api',
     })
+    expect(space.record.asks.some(({ input }) => input.to === 'project-1')).toBe(false)
+    expect(values.compared).toEqual({ web: 'project-new 的接口表', api: 'project-new 的接口表' })
     expect(values.notified).toEqual([])
   }, 90_000)
 })

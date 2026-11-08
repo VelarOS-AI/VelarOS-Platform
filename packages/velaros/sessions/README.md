@@ -55,4 +55,5 @@ export const sessionsModule = createCapabilityModule({
 - 交给宿主之前核对入参，不对抛 `SessionsErrorCodes` 里的码，宿主一次都不调：to 与 workspace 恰好一个；workspace 是 `SessionWorkspaces` 之一；project 必须带绝对路径的 root（`/` 开头、`C:\` 这样带盘符、`\\服务器\共享`，宿主跑在哪个平台都认）；site 只跟 browser、要是 http(s) 网址；task、message 不能是空白。
 - 交给宿主的入参是规范过的：to、workspace、root、site 去掉首尾空白（空白的当作没给），site 换成网址的规范写法，没给的字段不在对象上；task、message 原样。
 - 成员校验、两个会话互相等待、对方正忙都由宿主判断；宿主拒绝时抛的错误（带宿主自己的码）原样交给模型，这里不重复判断。
+- 模板选择项目同伴时排除 `self`；同一个 root 只有自己时，使用 `{ workspace: 'project', root, task }` 创建同组新会话，再把任务交给它。
 - 取消信号原样交给宿主；宿主还没回时一取消，本单元就以取消原因失败，不陪宿主等。结果（`SessionAnswer`、`SessionTold`）照宿主交回的原样。

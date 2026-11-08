@@ -9,8 +9,9 @@ import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryStoreOptions } from '../contract/requires.js'
-import type { MemoryScopeSummary } from '../types/memory.js'
+import type { MemoryIdInput, MemoryScopeSummary } from '../types/memory.js'
 import { readSubdirectoryNames, readTextIfExists } from '../utils/fs.js'
+import { removeInput } from '../utils/input.js'
 import {
   compareScopeSummaries,
   scopeDirectoryName,
@@ -22,6 +23,8 @@ import { MemoryScope } from './MemoryScope.js'
 
 /** 记忆库：按作用域取出一份记忆，列出有记忆的作用域。 */
 export interface MemoryStoreApi {
+  /** 同步核对删除输入并返回独立快照，供宿主在自己的写屏障前准入；不读磁盘，不承诺当前版本或删除已提交，remove 仍会重新核对。 */
+  prepareRemove(input: MemoryIdInput): MemoryIdInput
   /** 取一个作用域：之后的读写只落在它的目录里。作用域是产品层给的任意非空字符串，记忆不解释它，按字符串逐字区分。 */
   scope(scope: string): MemoryScopeApi
   /** 列出有记忆的作用域，给管理页用：作用域原串、条数、最近一次更新，最近更新的在前。 */
@@ -30,6 +33,10 @@ export interface MemoryStoreApi {
 
 export class MemoryStore implements MemoryStoreApi {
   constructor(private readonly root: string) {}
+
+  public prepareRemove(input: MemoryIdInput): MemoryIdInput {
+    return removeInput(input)
+  }
 
   public scope(scope: string): MemoryScopeApi {
     if (!scope.trim())

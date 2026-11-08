@@ -18,11 +18,11 @@ async function answerQuestion(session = 'browser-1', answer = '可以付款，�
   return { status: reply.status, answer: reply.answer }
 }
 
-// 两件互不相干的事同时交出去：两个项目里各查一件事，一起等。已经有那个项目的会话就交给它，没有就开一个。
+// 两件互不相干的事同时交出去：两个项目里各查一件事，一起等。已有那个项目的其他会话就交给它，只有自己或没有就按 root 开同组新会话。
 async function compareProjects(frontend = '/home/me/shop-web', backend = '/home/me/shop-api') {
   const peers = await list()
   const inProject = (root, task) => {
-    const peer = peers.find((candidate) => candidate.workspace === 'project' && candidate.root === root)
+    const peer = peers.find((candidate) => !candidate.self && candidate.workspace === 'project' && candidate.root === root)
     return peer ? ask({ to: peer.id, task }) : ask({ workspace: 'project', root, task })
   }
   const [web, api] = await Promise.all([

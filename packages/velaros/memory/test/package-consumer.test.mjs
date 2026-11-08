@@ -23,7 +23,13 @@ test('package root exposes the store factory and the three operations', async ()
   const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-memory-consumer-')))
   assert.ok(basename(root).startsWith('velaros-memory-consumer-'))
   try {
-    const scope = createMemoryStore({ root }).scope('project:/srv/consumer')
+    const store = createMemoryStore({ root })
+    const scope = store.scope('project:/srv/consumer')
+    assert.deepEqual(store.prepareRemove({ id: 'consumer' }), { id: 'consumer' })
+    assert.throws(() => store.prepareRemove({ id: 'con' }), { code: 'VALIDATION' })
+    assert.throws(() => store.prepareRemove({ id: 'consumer', expectedRevision: 'invalid' }), {
+      code: 'VALIDATION',
+    })
     const context = { abortSignal: new AbortController().signal, memory: scope }
     const saved = await memoryOperations.save(
       {

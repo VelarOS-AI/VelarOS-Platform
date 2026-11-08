@@ -3,10 +3,10 @@
  * 读写只落在这个作用域的目录里：一条记忆一个 `<id>.md`，目录第一次写入时才建，目录里的 `.scope` 原样记着作用域字符串。
  */
 
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { isPresent, readErrnoCode } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/core'
 
 import type { MemoryScopePort } from '../contract/requires.js'
 import type {
@@ -23,7 +23,6 @@ import {
   memoryIdOfFile,
   memoryRevision,
   parseMemoryFile,
-  parseMemoryTags,
   serializeMemoryFile,
 } from '../utils/entry-file.js'
 import {
@@ -35,12 +34,12 @@ import {
   writeFileIfMissing,
 } from '../utils/fs.js'
 import { renderMemoryIndex } from '../utils/index-text.js'
-import { expectedRevisionInput, removeInput, saveInput } from '../utils/input.js'
+import { removeInput, saveInput } from '../utils/input.js'
 import { ScopeRecordFileName } from '../utils/scope-directory.js'
 
-/** 一个作用域：三个操作要的端口，外加会话开场的那段索引。 */
+/** 一个作用域：三个操作要的端口，外加宿主可选的记忆索引。 */
 export interface MemoryScopeApi extends MemoryScopePort {
-  /** 会话开场放进系统提示词的那段索引：按类别分组、一行一条，放不下的只报条数，末尾列出现有标签。宿主在会话开始时调一次，整场不变。 */
+  /** 宿主按需渲染的记忆索引：按类别分组、一行一条，放不下的只报条数，末尾列出现有标签；是否放入提示词由宿主决定。 */
   renderIndex(): Promise<string>
 }
 
@@ -69,7 +68,8 @@ export class MemoryScope implements MemoryScopeApi {
       async () => {
         const previous = await readTextIfExists(path)
         assertMemoryExpected(previous, entry.expectedRevision)
-        const tags = entry.tags ?? (isPresent(previous) ? parseMemoryTags(previous) : [])
+        const current = isPresent(previous) ? parseMemoryFile(entry.id, previous) : null
+        const tags = entry.tags ?? current?.tags ?? []
         signal?.throwIfAborted()
         await writeFileIfMissing(join(this.directory, ScopeRecordFileName), this.scope)
         const raw = serializeMemoryFile({ ...entry, tags }, new Date().toISOString())
@@ -82,8 +82,7 @@ export class MemoryScope implements MemoryScopeApi {
 
   public async remove(input: MemoryIdInput, signal?: AbortSignal): Promise<MemoryRemoved> {
     signal?.throwIfAborted()
-    const id = removeInput(input)
-    const expected = expectedRevisionInput(input)
+    const { id, expectedRevision: expected } = removeInput(input)
     const path = join(this.directory, memoryFileName(id))
     if (!isPresent(await readTextIfExists(path))) {
       assertMemoryExpected(null, expected)
@@ -105,15 +104,10 @@ export class MemoryScope implements MemoryScopeApi {
     return renderMemoryIndex(await this.list())
   }
 
-  /** 读一条：文件内容加修改时间（头部没有能用的更新时间时拿它顶上）。 */
+  /** 读一条当前格式的记忆；格式错误明确失败，文件被并发删除才忽略。 */
   private async read(id: string): Promise<Nullable<MemoryEntry>> {
     const path = join(this.directory, memoryFileName(id))
-    try {
-      const [raw, stats] = await Promise.all([readFile(path, 'utf8'), stat(path)])
-      return parseMemoryFile(id, raw, stats.mtime)
-    } catch (error) {
-      if (readErrnoCode(error) === 'ENOENT') return null
-      throw error
-    }
+    const raw = await readTextIfExists(path)
+    return isPresent(raw) ? parseMemoryFile(id, raw) : null
   }
 }
