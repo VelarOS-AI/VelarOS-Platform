@@ -1,7 +1,7 @@
 // execute 中维护工作笔记；list/read 可用于只读观察。
 import {output} from 'velaros';
 import {memory} from 'velaros:system';
-const {list,read,update,plan,retain,release}=memory;
+const {list,read,update,updateActive,plan,retain,release}=memory;
 async function example(){
  const notes=await list({kind:'notes',limit:8});
  const previous=notes.items.find(item=>item.key==='progress');
@@ -39,5 +39,5 @@ async function readFailedCallPage(ref,invocation,keyPrefix,offset=0){
 // 只在 execute 中按当前帧 revision 和 question.id 关闭旧事项，不调用整理模型、不改用户约束。
 // evidence 使用真实用户原文或执行结果的逐字引文，不能用笔记或摘要；冲突后按新帧重新决定。
 async function resolveQuestion(baseRevision,id,ref,offset,quote){
- output(await memory.updateActive({baseRevision,changes:[{id,status:'resolved',evidence:[{ref,offset,quote}]}]}));
+ output(await updateActive({baseRevision,changes:[{id,status:'resolved',evidence:[{ref,offset,quote}]}]}));
 }
