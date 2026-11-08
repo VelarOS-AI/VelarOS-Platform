@@ -13,6 +13,7 @@ import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instr
 import { nodeRuntimeInstructions } from '../../../dist/act/runtime/utils/node-instructions.js'
 import { VelarBrowserModule } from '../../../dist/browser/contract/surface.js'
 import { VelarComputerModule } from '../../../dist/computer/contract/surface.js'
+import { VelarFeaturesModule } from '../../../dist/features/contract/surface.js'
 import { VelarOfficeModule } from '../../../dist/office/contract/surface.js'
 
 import { done, modelText, turn } from './support/model-turn.mjs'
@@ -446,6 +447,35 @@ test('base instructions stay small while authorized packages are discoverable on
   }
 })
 
+test('Node skill hints use the mounted Feature module or the actual file directory', async (t) => {
+  for (const available of [false, true]) {
+    let instructions
+    const module = createCapabilityModule({
+      surface: VelarFeaturesModule,
+      instanceId: 'feature-hints',
+      implementation: Object.fromEntries(
+        VelarFeaturesModule.methods.map((name) => [
+          name,
+          () => assert.fail('discovery invoked Feature'),
+        ])
+      ),
+      context: () => assert.fail('discovery requested Feature context'),
+    })
+    const f = await fixture(t, {
+      modules: available ? [module] : [],
+      model: driver(async function* (request) {
+        instructions = request.instructions
+        yield* done(request)
+      }),
+    })
+    for await (const event of f.session.submit('Describe available task methods.'))
+      assert.notEqual(event.type, 'error')
+    assert.equal(instructions.includes('velaros:features.load({id})'), available)
+    assert.equal(instructions.includes('skills 的 directory/instructions'), !available)
+    assert.doesNotMatch(instructions, /velaros:skills/)
+  }
+})
+
 test('Node hints expose only available collaboration and search capabilities without their contracts', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-capability-hints-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
@@ -855,11 +885,18 @@ test('INV-67 duplicate legacy package hints do not duplicate instructions or res
   try {
     const session = await invalid.openSession('invalid')
     await session.context.append({ kind: 'user', body: 'Check invalid package export' })
-    const result = await session.execute({
-      source: "import {nonexistent} from 'velaros:project'; nonexistent();",
-    })
-    assert(result.result.failed)
-    assert.match(result.result.process.stderr, /nonexistent/)
+    await assert.rejects(
+      session.execute({
+        source: "import {nonexistent} from 'velaros:project'; nonexistent();",
+      }),
+      (error) => {
+        assert.equal(error.code, 'SCRIPT_CHECK')
+        assert.equal(error.executed, false)
+        assert.match(JSON.stringify(error.diagnostics), /nonexistent/)
+        assert(error.draftRef)
+        return true
+      }
+    )
   } finally {
     await invalid.close()
   }

@@ -20,13 +20,6 @@ export const CodeSurfaces = [
     templates: 'template.js',
   },
   {
-    namespace: 'skills',
-    directory: 'velaros',
-    unit: 'skills',
-    interfaces: ['SkillsOperationsApi'],
-    templates: 'template.js',
-  },
-  {
     namespace: 'images',
     directory: 'velaros',
     unit: 'images',
@@ -304,7 +297,6 @@ export const StandardSurfaces = [
  */
 export const HostContextTypes = new Set([
   'EnvironmentOperationContext',
-  'SkillsOperationContext',
   'FeaturesOperationContext',
   'ImageOperationContext',
   'SandboxOperationContext',

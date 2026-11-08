@@ -33,7 +33,7 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '后台/委派核身份、进度、错误、退出；等回执续跑。时长不证明有效，停滞先诊断。',
     '以用户目标、实际产物和执行回执确认结果；进程成功退出不等于任务完成。遵守任务范围与授权，保留已有成果，按当前任务选择必要验证。',
     '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
-    `其他宿主能力按需从 process.env.${NodeEnvironmentVariables.directory.name}/index.json 的 capabilities 按 module/member 定向查找，只输出命中项；documentationPath、operationPaths[操作名] 指向声明/示例；packages 查包，${modules.includes('velaros:features') ? 'velaros:features.load({id})' : 'velaros:skills.load({name})'} 读全文。`,
+    `其他宿主能力按需从 process.env.${NodeEnvironmentVariables.directory.name}/index.json 的 capabilities 按 module/member 定向查找，只输出命中项；documentationPath、operationPaths[操作名] 指向声明/示例；packages 查包，${modules.includes('velaros:features') ? 'velaros:features.load({id}) 读全文' : 'skills 的 directory/instructions 定位说明文件，按需读取'}。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes(AgentsModuleId)
       ? ['velaros:agents 调度/通信；velaros:system 的 store 共享状态/事件；用前查声明。']

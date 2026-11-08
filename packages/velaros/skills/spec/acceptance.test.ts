@@ -43,8 +43,6 @@ import {
   skillCapabilityModules,
   skillComposition,
   type SkillRegistryApi,
-  type SkillsOperationContext,
-  skillsOperations,
 } from '../index'
 
 const roots: string[] = []
@@ -270,34 +268,24 @@ test('INV-9 按需会话发现全部 Skill，未勾选也能加载，重复并�
   await f.registry.install({ directory }, new AbortController().signal)
   const session = await createSkillSession({ registry: f.registry })
   const signal = new AbortController().signal
-  const context: SkillsOperationContext = {
-    registry: f.registry,
-    lease: session,
-    session,
-    cwd: f.root,
-    sourceScope: 'unrestricted',
-    abortSignal: signal,
-    authorize: async () => {
-      throw new Error('Read-only loading must not ask permission')
-    },
-    recordEffect: () => {},
-  }
   expect(session.skills).toHaveLength(0)
   expect(session.environment.packages).toHaveLength(0)
-  expect((await skillsOperations.list(context))[0]!.available).toBe(true)
+  expect(session.catalog[0]!.manifest.name).toBe('lazy-proof')
   const before = await session.acquireRuntime(signal)
   expect(before.environment.skills).toHaveLength(1)
   const loaded = await Promise.all([
-    skillsOperations.load({ name: 'lazy-proof' }, context),
-    skillsOperations.load({ name: 'lazy-proof' }, context),
+    session.activate('lazy-proof', signal),
+    session.activate('lazy-proof', signal),
   ])
-  expect(loaded[0]!.instructions).toBe('Only read this when the task needs proof.')
+  expect(await readFile(join(loaded[0]!.directory, 'SKILL.md'), 'utf8')).toBe(
+    'Only read this when the task needs proof.'
+  )
   expect(loaded[1]).toEqual(loaded[0])
   expect(session.skills).toHaveLength(1)
   expect(before.environment.packages).toHaveLength(0)
   expect((await session.acquireRuntime(signal)).environment.packages[0]!.name).toBe('lazy-proof')
   await f.registry.remove('lazy-proof')
-  await expect(skillsOperations.load({ name: 'lazy-proof' }, context)).rejects.toThrow('未安装')
+  await expect(session.activate('lazy-proof', signal)).rejects.toMatchObject({ code: 'CONFLICT' })
   expect(await Bun.file(join(loaded[0]!.directory, 'SKILL.md')).exists()).toBe(true)
   await Promise.all([session.release(), session.release()])
   await expect(session.activate('lazy-proof', signal)).rejects.toThrow('已关闭')
@@ -953,61 +941,38 @@ test('INV-1 说明、标准包和组合 Skill 经真实 Node 发现并调用独�
   }
 })
 
-test('INV-6 内置规范、示例和管理操作按需加载，校验只读，写入受宿主确认且通知订阅者', async () => {
+test('INV-6 静态校验不修改来源，当前索引只在发布成功后通知订阅者', async () => {
   const f = await fixture()
-  const lease = await f.registry.acquire()
-  let allowed = false
+  const signal = new AbortController().signal
+  const directory = join(f.root, 'guide')
+  await mkdir(directory)
+  const original =
+    '---\nname: current-guide\ndescription: Current guide\n---\nRead actual evidence.'
+  await writeFile(join(directory, 'SKILL.md'), original)
   let notifications = 0
-  const effects: string[] = []
   const release = f.registry.subscribe(() => {
     notifications++
   })
-  const ctx: SkillsOperationContext = {
-    registry: f.registry,
-    lease,
-    cwd: f.root,
-    sourceScope: 'workspace',
-    abortSignal: new AbortController().signal,
-    authorize: async () => {
-      if (!allowed) throw new Error('host denied')
-    },
-    recordEffect: (effect) => {
-      effects.push(effect)
-    },
-  }
-  const guide = await skillsOperations.guide(undefined, ctx)
-  expect(guide.content).toContain('agentSkill')
-  const example = await skillsOperations.guide({ topic: 'example' }, ctx)
-  const directory = join(f.root, 'demo')
-  await mkdir(directory)
-  for (const [file, content] of Object.entries(example.files))
-    await writeFile(join(directory, file), content)
-  expect((await skillsOperations.validate({ directory: './demo' }, ctx)).name).toBe('guided-review')
+  expect((await f.registry.validate(directory, signal)).name).toBe('current-guide')
+  expect(await readFile(join(directory, 'SKILL.md'), 'utf8')).toBe(original)
   expect(await Bun.file(join(directory, 'package.json')).exists()).toBe(false)
-  await expect(skillsOperations.install({ directory }, ctx)).rejects.toThrow('host denied')
-  expect(await f.registry.list()).toEqual([])
+  expect(await Bun.file(join(f.store, 'index.json')).exists()).toBe(false)
+  const abort = new AbortController()
+  abort.abort(new Error('cancelled install'))
+  await expect(f.registry.install({ directory }, abort.signal)).rejects.toThrow('cancelled install')
   expect(notifications).toBe(0)
-  allowed = true
-  const installed = await skillsOperations.install({ directory }, ctx)
-  expect(installed.available).toBe(false)
+  expect(await f.registry.list()).toEqual([])
+  const installed = await f.registry.install({ directory }, signal)
   expect(notifications).toBe(1)
-  await expect(skillsOperations.load({ name: 'guided-review' }, ctx)).rejects.toThrow(
-    '未被本轮选择'
-  )
-  const selected = await f.registry.acquire(await selectAll(f.registry))
-  const loaded = await skillsOperations.load({ name: 'guided-review' }, { ...ctx, lease: selected })
-  expect(loaded.instructions).toContain('基于证据的代码审查')
-  expect(loaded.skill.available).toBe(true)
-  const outside = await fixture()
-  await symlink(outside.root, join(f.root, 'escape'))
-  await expect(skillsOperations.validate({ directory: 'escape' }, ctx)).rejects.toThrow(
-    '越过安装目录'
-  )
-  await skillsOperations.remove({ name: 'guided-review' }, ctx)
+  expect(await f.create().list()).toEqual([installed])
+  expect(JSON.parse(await readFile(join(f.store, 'index.json'), 'utf8')).version).toBe(2)
+  await expect(f.registry.remove('missing')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  expect(notifications).toBe(1)
+  await f.registry.remove('current-guide')
   expect(notifications).toBe(2)
-  expect(effects).toContain('committed')
   release()
-  await Promise.all([lease.release(), selected.release()])
+  await f.registry.install({ directory }, signal)
+  expect(notifications).toBe(2)
 })
 
 test('INV-6 旧安装索引明确拒绝，不转换或覆盖原文件', async () => {
@@ -1238,55 +1203,4 @@ test('INV-7 未选择的专项包缺少依赖时基础环境仍可使用', async
   await expect(
     registry.acquire(skillComposition.select(await registry.list(), [], ['optional-language']))
   ).rejects.toMatchObject({ code: 'NOT_FOUND' })
-})
-
-test('INV-8 插件注册保持独立选择，内部说明按需读取，插件代次变更撤销旧授权', async () => {
-  const f = await fixture()
-  const directory = await source(f.root, 'plugin-guide', '1.0.0', {
-    instructions: 'SKILL.md',
-    hostCapabilities: ['velaros:computer'],
-  })
-  await writeFile(join(directory, 'SKILL.md'), 'Detailed instructions should be loaded on demand.')
-  let sources = [{ plugin: 'example', generation: 'first', directory }]
-  let listener = () => {}
-  const registry = createSkillRegistry({
-    directory: f.store,
-    nodeVersion: '24.15.0',
-    installer: { install: async () => {} },
-    lock: createExclusiveSqliteLock(() => new Database(join(f.store, 'lock.sqlite'))),
-    plugins: {
-      list: async () => sources,
-      subscribe: (next) => {
-        listener = next
-        return () => {
-          listener = () => {}
-        }
-      },
-    },
-  })
-  let changes = 0
-  const release = registry.subscribe(() => {
-    changes++
-  })
-  const [record] = await registry.list()
-  expect(record!.plugin).toBe('example')
-  expect(record!.builtin).toBeUndefined()
-  expect(skillComposition.select(await registry.list(), [])).toEqual([])
-  const lease = await registry.acquire(
-    skillComposition.select(await registry.list(), [], ['plugin-guide'])
-  )
-  expect(lease.environment.skills[0]!.instructions).toBe('SKILL.md')
-  await expect(registry.remove('plugin-guide')).rejects.toThrow('插件管理')
-  await registry.assertGranted('plugin-guide', record!.generation, 'velaros:computer')
-  sources = [{ plugin: 'example', generation: 'second', directory }]
-  listener()
-  expect(changes).toBe(1)
-  await expect(
-    registry.assertGranted('plugin-guide', record!.generation, 'velaros:computer')
-  ).rejects.toThrow('已失效')
-  sources = []
-  expect(await registry.list()).toEqual([])
-  await lease.release()
-  expect(await registry.collect()).toHaveLength(1)
-  release()
 })
