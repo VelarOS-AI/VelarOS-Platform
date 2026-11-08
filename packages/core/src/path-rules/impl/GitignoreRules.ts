@@ -1,6 +1,6 @@
 /**
  * .gitignore 的解析与判定：`GitignoreRules`。接口 `GitignoreRulesApi` 在本文件的类上方，由 `contract/provides.ts` 登记。
- * 整个进程一份 `gitignoreRules`；它不持状态，读到的规则由调用方自己攒。
+ * 整个进程一份 `gitignoreRules`；规则由调用方持有，这里只缓存规则的派生匹配器。
  */
 
 import { isEmpty } from '@velaros-ai/core'
@@ -9,13 +9,10 @@ import type { GitignoreRule } from '../types/path-rules.js'
 import { readGitignoreContent } from '../utils/discovery.js'
 import {
   buildGitignorePatterns,
+  compileGitignorePattern,
+  normalizeGitignorePath,
   trimGitignoreLine,
-  unescapeGitignoreLine,
 } from '../utils/gitignore.js'
-import { ancestorRelativePaths, toComparableRelativePath } from '../utils/path.js'
-
-import type { PathMatcherApi } from './PathMatcher.js'
-import { pathMatcher } from './PathMatcher.js'
 
 /**
  * .gitignore 的解析与判定，实例是 `gitignoreRules`：取反（`!`）、锚定（`/` 开头或中间有 `/`）、目录限定（`/` 结尾）、
@@ -24,29 +21,23 @@ import { pathMatcher } from './PathMatcher.js'
  * 判定一律区分大小写——git 自己就是这么判的，跟盘区不区分大小写无关。
  */
 export interface GitignoreRulesApi {
-  /** 解析一份 .gitignore 的正文；`baseRelativePath` 是这份文件所在目录相对规则根的路径（在根上时给空串）。 */
+  /** 解析一份 .gitignore 的正文；`baseRelativePath` 是以 `/` 分隔的所在目录相对规则根路径（在根上给空串）。 */
   parse(content: string, baseRelativePath?: string): GitignoreRule[]
   /** 读某个目录下那份 .gitignore 并解析；没有这个文件或读不了时当作没有规则。 */
   readRules(rootPath: string, directoryRelativePath: string): Promise<GitignoreRule[]>
   /** 从规则根到 `directoryRelativePath` 的父目录逐级累积的规则（不含这个目录自己的那份）。 */
   readAncestorRules(rootPath: string, directoryRelativePath: string): Promise<GitignoreRule[]>
-  /** 按顺序套用规则判断一条相对路径是否被忽略：最后一条命中的说了算，反向规则命中就不忽略。 */
+  /** 目标以 `/` 分隔；先核对每级祖先仍可达，再按顺序判断目标，反向规则不能越过排除的父目录。 */
   isIgnored(relativePath: string, rules: readonly GitignoreRule[], isDirectory: boolean): boolean
 }
 
 export class GitignoreRules implements GitignoreRulesApi {
-  private readonly matcher: PathMatcherApi
-
-  constructor(matcher: PathMatcherApi) {
-    this.matcher = matcher
-  }
+  /** 只随调用方仍持有的只读规则存活，不让每次遍历留下全局规则历史。 */
+  private readonly matchers = new WeakMap<GitignoreRule, ReadonlyArray<(path: string) => boolean>>()
 
   public parse(content: string, baseRelativePath = ''): GitignoreRule[] {
     const rules: GitignoreRule[] = []
-    const base =
-      toComparableRelativePath(baseRelativePath) === '.'
-        ? ''
-        : toComparableRelativePath(baseRelativePath)
+    const base = normalizeGitignorePath(baseRelativePath)
 
     for (const rawLine of content.split('\n')) {
       let line = trimGitignoreLine(rawLine)
@@ -58,15 +49,14 @@ export class GitignoreRules implements GitignoreRulesApi {
         line = line.slice(1)
       }
 
-      // 转义在判完注释与取反之后才还原：`\#foo`、`\!foo` 是字面量，不是注释、也不是反向规则。
-      const body = unescapeGitignoreLine(line).replace(/\\/g, '/')
-      const directoryOnly = body.endsWith('/')
-      const pattern = body.replace(/\/+$/, '')
+      // 保留反斜杠到编译时：它是 Git 的转义字符，不是 Windows 路径分隔符。
+      const directoryOnly = line.endsWith('/')
+      const pattern = directoryOnly ? line.slice(0, -1) : line
       if (!pattern) continue
 
       const patterns = buildGitignorePatterns(pattern, base)
       if (isEmpty(patterns)) continue
-      rules.push({ negated, directoryOnly, patterns })
+      rules.push(Object.freeze({ negated, directoryOnly, patterns: Object.freeze(patterns) }))
     }
 
     return rules
@@ -76,8 +66,7 @@ export class GitignoreRules implements GitignoreRulesApi {
     rootPath: string,
     directoryRelativePath: string
   ): Promise<GitignoreRule[]> {
-    const normalized = toComparableRelativePath(directoryRelativePath)
-    const base = normalized === '.' ? '' : normalized
+    const base = normalizeGitignorePath(directoryRelativePath)
     return this.parse(await readGitignoreContent(rootPath, base), base)
   }
 
@@ -85,7 +74,7 @@ export class GitignoreRules implements GitignoreRulesApi {
     rootPath: string,
     directoryRelativePath: string
   ): Promise<GitignoreRule[]> {
-    const segments = toComparableRelativePath(directoryRelativePath)
+    const segments = normalizeGitignorePath(directoryRelativePath)
       .split('/')
       .filter((segment) => segment && segment !== '.')
     const rules: GitignoreRule[] = []
@@ -100,31 +89,33 @@ export class GitignoreRules implements GitignoreRulesApi {
     rules: readonly GitignoreRule[],
     isDirectory: boolean
   ): boolean {
-    const target = toComparableRelativePath(relativePath)
-    if (!target || target === '.') return false
-    // 各级上级目录只算一次：「目录被忽略则里面的一切跟着被忽略」要拿它们逐条比。
-    const ancestors = ancestorRelativePaths(target)
-    let ignored = false
-
-    for (const rule of rules) {
-      if (this.matchesRule(rule, target, ancestors, isDirectory)) ignored = !rule.negated
-    }
-
-    return ignored
+    const target = normalizeGitignorePath(relativePath)
+    if (!target) return false
+    const segments = target.split('/')
+    for (let depth = 1; depth < segments.length; depth++)
+      if (this.isDirectlyIgnored(segments.slice(0, depth).join('/'), rules, true)) return true
+    return this.isDirectlyIgnored(target, rules, isDirectory)
   }
 
-  /** 一条规则是否命中：规则本身命中（目录限定的只认目录），或者某一级上级目录命中——上级被忽略时里面的一切跟着被忽略。 */
-  private matchesRule(
-    rule: GitignoreRule,
+  /** 只判断这一级自己的最终状态；目录继承由调用方逐级处理，匹配器不附加目录前缀语义。 */
+  private isDirectlyIgnored(
     target: string,
-    ancestors: readonly string[],
+    rules: readonly GitignoreRule[],
     isDirectory: boolean
   ): boolean {
-    if ((!rule.directoryOnly || isDirectory) && this.matcher.matchesAny(target, rule.patterns))
-      return true
-    return ancestors.some((ancestor) => this.matcher.matchesAny(ancestor, rule.patterns))
+    let ignored = false
+    for (const rule of rules) {
+      if (rule.directoryOnly && !isDirectory) continue
+      let matchers = this.matchers.get(rule)
+      if (!matchers) {
+        matchers = rule.patterns.map(compileGitignorePattern)
+        this.matchers.set(rule, matchers)
+      }
+      if (matchers.some((matches) => matches(target))) ignored = !rule.negated
+    }
+    return ignored
   }
 }
 
 /** 整个进程唯一的 .gitignore 判定。 */
-export const gitignoreRules: GitignoreRulesApi = new GitignoreRules(pathMatcher)
+export const gitignoreRules: GitignoreRulesApi = new GitignoreRules()

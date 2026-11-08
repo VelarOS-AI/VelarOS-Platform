@@ -2,7 +2,7 @@
  * 遍历忽略策略的实现细节：每个目录的规则只读一次、一批条目只问一次 git、根之外的条目不判。
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -66,4 +66,43 @@ describe('createIgnorePolicy', () => {
     expect([...(await policy.ignoredAmong([]))]).toEqual([])
     expect(calls).toBe(0)
   })
+
+  test('尾部 /** 不剪掉目录自身，遍历能找到反向规则保留的文件', async () => {
+    await mkdir(join(root, 'build'))
+    await writeFile(join(root, 'build', 'keep.txt'), 'keep')
+    await writeFile(join(root, 'build', 'drop.txt'), 'drop')
+    const walk = async (
+      policy: ReturnType<typeof createIgnorePolicy>,
+      directory: string
+    ): Promise<string[]> => {
+      const files: string[] = []
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const absolute = join(directory, entry.name)
+        if (await policy.shouldSkip(absolute, entry.isDirectory())) continue
+        if (entry.isDirectory()) files.push(...(await walk(policy, absolute)))
+        else files.push(absolute)
+      }
+      return files
+    }
+    await writeFile(join(root, '.gitignore'), 'build/**\n!build/keep.txt\n')
+    const included = await walk(createIgnorePolicy(root), root)
+    expect(included).toContain(join(root, 'build', 'keep.txt'))
+    expect(included).not.toContain(join(root, 'build', 'drop.txt'))
+    await writeFile(join(root, '.gitignore'), 'build/\n!build/keep.txt\n')
+    expect(await walk(createIgnorePolicy(root), root)).not.toContain(
+      join(root, 'build', 'keep.txt')
+    )
+  })
+
+  test.skipIf(process.platform === 'win32')(
+    'POSIX 实际文件名中的反斜杠不是目录分隔符',
+    async () => {
+      const directory = join(root, 'pkg\\name')
+      await mkdir(directory)
+      const file = join(directory, 'a.log')
+      await writeFile(file, 'log')
+      await writeFile(join(directory, '.gitignore'), '*.log\n')
+      expect(await createIgnorePolicy(root).shouldSkip(file, false)).toBe(true)
+    }
+  )
 })

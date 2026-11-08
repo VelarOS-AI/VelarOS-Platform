@@ -70,6 +70,10 @@ describe('.gitignore 判定', () => {
     ['a/**/b', 'a/x/y/b', true, true],
     ['[Dd]ist', 'Dist', true, true],
     ['foo\\ ', 'foo ', false, true],
+    [' leading', ' leading', false, true],
+    [' leading', 'leading', false, false],
+    ['foo\\*', 'foo*', false, true],
+    ['foo\\*', 'fooX', false, false],
     ['*.log', 'deep/inside/x.log', false, true],
   ])('INV-2 规则 %j 对 %j 的结论跟 git 一致', (rule, path, isDirectory, expected) => {
     expect(ignored(rule, path, isDirectory)).toBe(expected)
@@ -92,6 +96,11 @@ describe('.gitignore 判定', () => {
     expect(ignored('node_modules\n', 'node_modules/pkg/deep/index.js')).toBe(true)
     expect(ignored('/build*\n', 'build-output/deep/app.js')).toBe(true)
     expect(ignored('[Dd]ist\n', 'Dist/a/b.js')).toBe(true)
+    expect(ignored('build/\n!build/keep.txt\n', 'build/keep.txt')).toBe(true)
+    expect(ignored('build/**\n!build/keep.txt\n', 'build', true)).toBe(false)
+    expect(ignored('build/**\n!build/keep.txt\n', 'build/keep.txt')).toBe(false)
+    expect(ignored('build/**\n!build/keep.txt\n', 'build/drop.txt')).toBe(true)
+    expect(ignored('build/\n!build/\n', 'build/deep/file.txt')).toBe(false)
   })
 
   test('INV-4 子目录里的 .gitignore 只管它自己那一支', async () => {
