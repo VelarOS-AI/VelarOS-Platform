@@ -1,11 +1,41 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { localContextStorage } from '@velaros-ai/context/node'
 
-import { volatileStorageBackend } from '../../../../context/test/support/storage-contract.mjs'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+
+async function observedSqliteStorage(t) {
+  const temporary = await realpath(tmpdir())
+  const directory = await realpath(await mkdtemp(join(temporary, 'runtime-lifecycle-')))
+  const connections = new Set()
+  const backend = {
+    closes: 0,
+    open: () => {
+      const storage = localContextStorage({ path: join(directory, 'context.sqlite') })
+      const close = storage.close.bind(storage)
+      storage.close = async () => {
+        if (!connections.has(storage)) return
+        await close()
+        connections.delete(storage)
+        backend.closes++
+      }
+      connections.add(storage)
+      return storage
+    },
+  }
+  t.after(async () => {
+    for (const storage of connections) await storage.close()
+    assert.equal(dirname(directory), temporary)
+    assert.ok(basename(directory).startsWith('runtime-lifecycle-'))
+    await rm(directory, { recursive: true, force: true })
+  })
+  return backend
+}
 
 const deferred = () => {
   let resolve
@@ -34,8 +64,8 @@ async function boundedClose(runtime) {
   }
 }
 
-test('INV-47 full runtime close preserves noncooperative writes, real effects and storage until settlement', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 full runtime close preserves noncooperative writes, real effects and storage until settlement', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const storage = await backend.open()
   const audit = createContextInvocationJournal(await backend.open())
   const entered = deferred()
@@ -44,7 +74,6 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
   let writes = 0
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     context: { maintenance: false },
     modules: [
       {
@@ -108,8 +137,8 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
   assert.ok(final.receipt.lifecycle.startedAt)
 })
 
-test('INV-47 close deadline covers session shutdown before Kernel disposal', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 close deadline covers session shutdown before Kernel disposal', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const entered = deferred()
   const release = deferred()
   const runtime = await createRuntime({
@@ -140,14 +169,13 @@ test('INV-47 close deadline covers session shutdown before Kernel disposal', asy
   assert.equal(backend.closes, 1)
 })
 
-test('INV-47 caller cancellation keeps the actual write lock until the handler exits', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 caller cancellation keeps the actual write lock until the handler exits', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const entered = deferred()
   const release = deferred()
   const started = []
   const runtime = await createRuntime({
     storage: await backend.open(),
-    runner: nodeSubprocessCodeRunner,
     context: { maintenance: false },
     modules: [
       {

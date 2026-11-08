@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
@@ -11,7 +10,6 @@ async function setup(t, beforeComplete, stream, modules = []) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules,
     context: { maintenance: false },
     model: {

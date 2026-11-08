@@ -23,7 +23,7 @@ import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
 import type { CodeRunnerApi } from '@velaros-ai/script'
-import { createNodeCodeRunner, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { createLocalShellHost } from '../../../execution/local.js'
 import { createLocalImagePort } from '../../../images/local.js'
@@ -351,15 +351,6 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       baseNode && packageEnvironment
         ? withPackageEnvironment(baseNode, packageEnvironment)
         : baseNode
-    const observationNode =
-      node ??
-      (options.runner === nodeSubprocessCodeRunner
-        ? createNodeExecutionEnvironment({
-            cwd: workspace ?? process.cwd(),
-            directory: join(dataDir ?? tmpdir(), 'velaros-node'),
-            host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
-          })
-        : undefined)
     const defaults = Boolean(options.workspace || (options.model && !('stream' in options.model)))
     const search = isFalse(options.search)
       ? undefined
@@ -427,18 +418,17 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       modules,
       node,
       packageEnvironment,
-      runner: observationNode
+      runner: node
         ? createNodeCodeRunner({
-            cwd: observationNode.cwd,
-            directory: observationNode.directory,
-            packageDirectory: observationNode.packageDirectory,
-            runtime: observationNode.runtime,
-            acquireRuntime:
-              'acquireRuntime' in observationNode ? observationNode.acquireRuntime : undefined,
+            cwd: node.cwd,
+            directory: node.directory,
+            packageDirectory: node.packageDirectory,
+            runtime: node.runtime,
+            acquireRuntime: 'acquireRuntime' in node ? node.acquireRuntime : undefined,
             execute: (request, output, signal) =>
-              observationNode.execute({ ...request, mode: 'observe' }, output, signal),
+              node.execute({ ...request, mode: 'observe' }, output, signal),
           })
-        : (options.runner ?? nodeSubprocessCodeRunner),
+        : options.runner!,
       memory,
       search,
       agents,

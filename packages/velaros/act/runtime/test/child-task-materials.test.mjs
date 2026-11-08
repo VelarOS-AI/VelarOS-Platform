@@ -170,9 +170,10 @@ test('attachments cannot smuggle another session into the exported input', async
 test('Node child reads original parent inputs and attachments from ordinary files and refreshes them on resume', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'velaros-parent-materials-'))
   await mkdir(join(root, 'workspace'))
+  // 本例核对原文导出与业务身份，实际 IO 使用已批准的标准宿主；它不证明 OS 隔离。
   const shell = createLocalShellHost({
     cwd: join(root, 'workspace'),
-    processConfinement: { mode: 'workspace-write', workspaceRoot: join(root, 'workspace') },
+    processConfinement: { mode: 'danger-full-access', workspaceRoot: join(root, 'workspace') },
   })
   const node = createNodeExecutionEnvironment({
     cwd: join(root, 'workspace'),
@@ -305,9 +306,10 @@ test('parent and worker reuse the authorized default project port and kernel', a
   const root = await mkdtemp(join(tmpdir(), 'runtime-shared-project-'))
   const workspace = join(root, 'workspace')
   await mkdir(workspace)
+  // 本例核对同一 Project 端口与内核的授权复用，不以进程 confinement 作为判据。
   const shell = createLocalShellHost({
     cwd: workspace,
-    processConfinement: { mode: 'workspace-write', workspaceRoot: workspace },
+    processConfinement: { mode: 'danger-full-access', workspaceRoot: workspace },
   })
   const node = createNodeExecutionEnvironment({
     cwd: workspace,

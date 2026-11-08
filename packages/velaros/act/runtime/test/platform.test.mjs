@@ -8,7 +8,6 @@ import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import {
   createCapabilityModule,
@@ -59,7 +58,7 @@ async function open(runtime) {
   return s
 }
 
-test('INV-4 all 14 generated module surfaces / 102 operations use the same strict registry and templates', async (t) => {
+test('INV-4 all 14 generated module surfaces use the same strict registry, schemas and templates', async (t) => {
   const f = await storageFixture(t)
   const modules = []
   for (const unit of [
@@ -88,21 +87,37 @@ test('INV-4 all 14 generated module surfaces / 102 operations use the same stric
     }
   }
   assert.equal(modules.length, 14)
-  assert.equal(
-    modules.reduce((n, m) => n + Object.keys(m.operations).length, 0),
-    102
-  )
   const kernel = createOperationRuntime({
     modules,
     journal: createContextInvocationJournal(f.storage),
   })
   f.cleanup.push(() => kernel.dispose())
   await kernel.start()
+  const registered = kernel.list({ limit: 100 })
+  const expectedMethods = modules.flatMap((module) =>
+    module.surface.methods.map((name) => `${module.surface.specifier}.${name}`)
+  )
+  const actualMethods = registered.items.flatMap((module) =>
+    module.operations.map((name) => `${module.binding.moduleId}.${name}`)
+  )
+  assert.equal(registered.nextOffset, null)
+  assert.equal(registered.items.length, modules.length)
+  assert.equal(actualMethods.length, expectedMethods.length)
+  assert.deepEqual(actualMethods.sort(), expectedMethods.sort())
   for (const module of modules) {
     const description = kernel.describe(module.binding.moduleId)
+    assert(module.surface.methods.length > 0, module.binding.moduleId)
+    assert.deepEqual(description.binding, module.binding)
+    assert.equal(description.binding.schemaRevision, module.surface.revision)
+    assert.deepEqual(Object.keys(description.operations).sort(), [...module.surface.methods].sort())
     assert.equal(description.declarations, module.surface.declarations)
     assert.equal(description.template, module.surface.template)
     assert.match(description.binding.schemaRevision, /^[a-f0-9]{64}$/)
+    for (const name of module.surface.methods) {
+      const { hasInput, ...expected } = module.surface.operations[name]
+      assert.equal(typeof hasInput, 'boolean')
+      assert.deepEqual(description.operations[name], expected, `${module.binding.moduleId}.${name}`)
+    }
   }
   let dispatched = 0
   const module = createCapabilityModule({
@@ -395,7 +410,7 @@ test('project evidence accepts the shared source candidate range through one hun
 
 test('INV-5 default runtime enables shared views, auto-saves scripts and reuses immutable source after restart', async (t) => {
   const f = await storageFixture(t)
-  const options = { storage: f.storage, runner: nodeSubprocessCodeRunner, modules: [] }
+  const options = { storage: f.storage, modules: [] }
   const runtime = await createRuntime(options)
   f.cleanup.push(() => runtime.close())
   const s = await open(runtime)
@@ -424,7 +439,6 @@ test('repeated execution uses immutable source refs and records each real execut
   const f = await storageFixture(t)
   const runtime = await createRuntime({
     storage: f.storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   f.cleanup.push(() => runtime.close())
@@ -514,7 +528,6 @@ test('INV-56 a workspace project can also mount velaros:code and velaros:images 
   await writeFile(join(f.root, 'outside.png'), Buffer.from(png, 'base64'))
   const runtime = await createRuntime({
     storage: f.storage,
-    runner: nodeSubprocessCodeRunner,
     workspace,
     project: { code: true, images: true },
   })
@@ -541,7 +554,6 @@ test('INV-56 a workspace project can also mount velaros:code and velaros:images 
   const plainStorage = localContextStorage({ path: join(f.root, 'plain.sqlite') })
   const plain = await createRuntime({
     storage: plainStorage,
-    runner: nodeSubprocessCodeRunner,
     workspace,
   })
   f.cleanup.push(async () => {
@@ -603,7 +615,6 @@ test('INV-7 real image capability persists attachments and sends them as images 
   }
   const runtime = await createRuntime({
     storage: f.storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [module],
     model,
   })
@@ -629,7 +640,7 @@ for (const scenario of [
   },
   { name: 'aggregate byte capacity', batches: [3, 3], delivered: 5, bytes: 3 * 1024 * 1024 },
   {
-    name: 'cancel during image audit',
+    name: 'cancel during request audit',
     batches: [3, 3],
     delivered: 5,
     bytes: 3 * 1024 * 1024,
@@ -774,9 +785,10 @@ for (const scenario of [
       const controller = new AbortController()
       if (scenario.cancelAudit) {
         const append = session.context.append.bind(session.context)
+        let audits = 0
         t.mock.method(session.context, 'append', async (input, signal) => {
           const result = await append(input, signal)
-          if (input.title === 'model-request:image-data') controller.abort()
+          if (input.title === 'model-request' && ++audits === 2) controller.abort()
           return result
         })
       }
@@ -787,8 +799,8 @@ for (const scenario of [
       ))
         events.push(event)
       if (scenario.cancelAudit) {
-        assert.equal(calls, 1, 'cancelled image audit never dispatches the second request')
-        assert.equal((await f.storage.records('s', { title: 'model-request' })).items.length, 1)
+        assert.equal(calls, 1, 'cancelled request audit never dispatches the second request')
+        assert.equal((await f.storage.records('s', { title: 'model-request' })).items.length, 2)
         assert.notEqual(events.at(-1).status, 'completed')
         return
       }
@@ -802,35 +814,36 @@ for (const scenario of [
         const audits = (await f.storage.records('s', { title: 'model-request' })).items
         const auditRecord = audits[1]
         const raw = await f.storage.get('s', auditRecord.objectId)
-        assert(raw.length < 8000000)
-        const pixels = new Map()
+        assert(
+          raw.length < 2048,
+          'multi-megabyte live images do not enlarge the persisted request audit'
+        )
         const manifests = []
         for (const ref of auditRecord.sources) {
           const record = await session.context.read(ref, { limit: 1 })
           const body = await f.storage.get('s', record.record.objectId)
-          if (record.record.title === 'model-request:image-data') pixels.set(ref.id, body)
-          else {
-            assert.equal(record.record.title, 'runtime:instruction-manifest')
+          if (record.record.title === 'runtime:instruction-manifest') {
             manifests.push(JSON.parse(body))
-          }
+          } else assert(record.record.title.startsWith('context:frame:'))
         }
-        assert.equal(pixels.size, 1, 'identical pixels are archived once despite different labels')
+        assert.equal(
+          (await f.storage.records('s', { title: 'model-request:image-data' })).items.length,
+          0
+        )
         assert.equal(manifests.length, 1)
         assert.equal(manifests[0].text, actualRequests[1].instructions)
-        const restored = JSON.parse(raw, (_key, value) => {
-          if (value?.$velarosType !== 'context-image') return value
-          const body = pixels.get(value.ref.id)
-          assert.equal(typeof body, 'string')
-          return value.encoding === 'data-url' ? value.prefix + body : body
-        })
-        assert.deepEqual(restored.request, JSON.parse(JSON.stringify(actualRequests[1])))
+        const audit = JSON.parse(raw)
+        assert(!Object.hasOwn(audit, 'request'))
+        assert(!Object.hasOwn(audit, 'providerRequest'))
         const compiler = createProviderRequestCompiler()
         const expected = await compiler.compileModelTurn(actualRequests[1], model, 0)
-        assert.deepEqual(
-          restored.providerRequest,
-          JSON.parse(JSON.stringify(expected.providerRequest))
-        )
-        await compiler.verify(restored.providerRequest)
+        assert.deepEqual(audit.requestAudit, JSON.parse(JSON.stringify(expected.requestAudit)))
+        for (const image of actualRequests[1].images)
+          assert.equal(
+            image.data,
+            data.toString('base64'),
+            'live model receives the original pixels'
+          )
       }
     }
   )
@@ -839,7 +852,6 @@ test('Node data codecs preserve UTF-8 and binary roundtrips without host objects
   const f = await storageFixture(t)
   const runtime = await createRuntime({
     storage: f.storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   f.cleanup.push(() => runtime.close())
@@ -881,16 +893,27 @@ test('runtime project resolver authorizes cross-root transactions through the ge
   })
   f.cleanup.push(() => runtime.close())
   const session = await open(runtime)
-  ok(
-    await session.execute({
-      source: `import {snapshot,commit,undo} from 'velaros:project';
+  const executed = await session.execute({
+    source: `import {snapshot,commit,undo} from 'velaros:project';
 const projectRoot=${JSON.stringify(target)};
 const current=await snapshot({projectRoot,files:[{path:'a.txt',key:'current',purpose:'compare'}]});
 if(current.value.files[0].text!=='before')throw Error('wrong project');
 const change=await commit({projectRoot,changes:[{path:'a.txt',before:'before',after:'after'}]});
 await undo({projectRoot,changeRef:change.changeRef});`,
-    })
-  )
+  })
+  ok(executed)
+  const journal = createContextInvocationJournal(f.storage)
+  const invocation = await journal.read('s', `${executed.executionId}:1`)
+  assert.equal(invocation.phase, 'settled')
+  assert.equal(invocation.prepared.mode, 'execute')
+  assert.equal(invocation.prepared.operation, 'snapshot')
+  assert.equal(invocation.prepared.input.projectRoot, target)
+  assert.equal(invocation.receipt.outcome, 'succeeded')
+  assert.equal(invocation.receipt.effect, 'none')
+  assert.equal(invocation.receipt.observation, undefined)
+  assert.equal(invocation.receipt.value.complete, true)
+  assert.equal(invocation.receipt.value.root, target)
+  assert.equal(invocation.receipt.value.value.files[0].text, 'before')
   assert.deepEqual(modes, [false, true, true])
   assert.equal(await readFile(join(target, 'a.txt'), 'utf8'), 'before')
   await assert.rejects(readFile(join(workspace, 'a.txt')), { code: 'ENOENT' })

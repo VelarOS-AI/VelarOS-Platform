@@ -91,21 +91,17 @@ test('trace reuses bounded page facts but observes new responses and missing bod
   const f = fixture()
   const shared = f.add('shared-evidence', { evidence: true })
   f.bodies.delete(shared.objectId)
+  const frame = f.add('context:frame:shared', {
+    frameId: 'shared',
+    entries: [{ ref: shared.ref.id }],
+    observation: {},
+  })
   const requests = Array.from({ length: 3 }, (_, turn) =>
     f.add('model-request', {
       runId: 'run',
       turn,
       repair: 0,
-      request: {
-        materials: [
-          {
-            origin: 'runtime-view',
-            text: JSON.stringify({
-              goals: [{ record: { ref: shared.ref } }],
-            }),
-          },
-        ],
-      },
+      frameRef: frame.ref,
     })
   )
   const counts = new Map<string, number>()
@@ -177,21 +173,17 @@ test('branch trace selects only current root bindings and still rejects unrelate
 test('trace preserves oversized shared evidence without retaining it in the page cache', async () => {
   const f = fixture()
   const evidence = f.add('large-evidence', 'x'.repeat(ActRuntimeTuning.tracePageCacheChars + 1))
+  const frame = f.add('context:frame:large', {
+    frameId: 'large',
+    entries: [{ ref: evidence.ref.id }],
+    observation: {},
+  })
   for (let turn = 0; turn < 2; turn++)
     f.add('model-request', {
       runId: 'run',
       turn,
       repair: 0,
-      request: {
-        materials: [
-          {
-            origin: 'runtime-view',
-            text: JSON.stringify({
-              goals: [{ record: { ref: evidence.ref } }],
-            }),
-          },
-        ],
-      },
+      frameRef: frame.ref,
     })
   let reads = 0
   const port = {
@@ -275,43 +267,38 @@ test('snapshot capture is a fresh journal fact even when its old derivation is r
     timing: { durationMs: 4 },
   })
   f.add(`script:execution:${captureId}`, { executionId: captureId, kind: 'snapshot-capture' })
+  const frame = f.add('context:frame:snapshot', {
+    frameId: 'snapshot',
+    entries: [],
+    observation: {
+      sourceRef: source.ref.id,
+      resultRef: old.ref.id,
+      freshness: {
+        status: 'reused',
+        executionId: oldId,
+        resultRef: old.ref.id,
+        sourceRef: source.ref.id,
+        observedAt: '2026-10-01T00:00:00Z',
+        ageMs: 10,
+        probeMs: 0,
+        reason: 'snapshot-unchanged',
+        snapshot: {
+          captureExecutionId: captureId,
+          captureResultRef: capture.ref.id,
+          checkedAt: '2026-10-01T00:00:01Z',
+          captureMs: 4,
+          deriveMs: 0,
+          derived: false,
+          reused: true,
+        },
+      },
+    },
+  })
   const request = f.add('model-request', {
     runId: 'run',
     turn: 0,
     repair: 0,
-    request: {
-      materials: [
-        {
-          origin: 'runtime-view',
-          text: JSON.stringify({
-            observation: {
-              sourceRef: source.ref.id,
-              resultRef: old.ref.id,
-              freshness: {
-                status: 'reused',
-                executionId: oldId,
-                resultRef: old.ref.id,
-                sourceRef: source.ref.id,
-                observedAt: '2026-10-01T00:00:00Z',
-                ageMs: 10,
-                probeMs: 0,
-                reason: 'snapshot-unchanged',
-                snapshot: {
-                  captureExecutionId: captureId,
-                  captureResultRef: capture.ref.id,
-                  checkedAt: '2026-10-01T00:00:01Z',
-                  captureMs: 4,
-                  deriveMs: 0,
-                  derived: false,
-                  reused: true,
-                },
-              },
-            },
-            results: [],
-          }),
-        },
-      ],
-    },
+    frameRef: frame.ref,
   })
   f.journal.list = async (_session, executionId) => {
     f.lookups.push(executionId!)

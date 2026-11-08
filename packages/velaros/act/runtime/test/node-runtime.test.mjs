@@ -32,6 +32,7 @@ import {
 } from '../../../dist/skills/index.js'
 
 const fixtureRoots = new Set()
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 // 各测试的 Runtime.close 必须先完成；Windows 不能删除仍由 SQLite 持有的目录。
 after(async () => {
   for (const root of fixtureRoots) await rm(root, { recursive: true, force: true })
@@ -544,7 +545,12 @@ test('native Node calls preserve a restricted runner and expose only the allowed
               },
             },
           }
-        } else yield nativeDone('已读取来源，写入受到宿主的只读限制。')
+        } else
+          yield nativeDone(
+            platformHasDefaultConfinement
+              ? '已读取来源，写入受到宿主的只读限制。'
+              : '宿主无法隔离只读进程，已拒绝读取和写入。'
+          )
         yield { type: 'finish', reason: 'stop' }
       },
     },
@@ -556,8 +562,14 @@ test('native Node calls preserve a restricted runner and expose only the allowed
   assert.deepEqual(modes, ['observe', 'observe'])
   assert.equal(await readFile(join(f.cwd, 'input.txt'), 'utf8'), 'read-only-source')
   const trace = await runtime.trace('restricted', { fullContent: true })
-  assert.equal(trace.turns[0].executions[0].status, 'succeeded')
+  assert.equal(
+    trace.turns[0].executions[0].status,
+    platformHasDefaultConfinement ? 'succeeded' : 'failed'
+  )
   assert.equal(trace.turns[1].executions[0].status, 'failed')
+  if (!platformHasDefaultConfinement)
+    for (const turn of trace.turns.slice(0, 2))
+      assert.equal(turn.executions[0].failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
 })
 
 test('native decoder rejects ungranted Shell and honors configured response budgets', () => {
@@ -597,6 +609,9 @@ test('INV-10 native result leases survive their configured scope without re-exec
       const f = await fixture(t)
       const payload = 'original output retained across subsequent editing steps'
       await writeFile(join(f.cwd, 'source.txt'), payload)
+      const readSource =
+        "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')"
+      const childSource = `import {execa} from 'execa'; await execa(process.execPath,['--input-type=module','-e',${JSON.stringify(readSource)}],{stdin:'ignore',stdout:'inherit',stderr:'inherit'});`
       const storage = localContextStorage({ path: join(f.root, 'retention.sqlite') })
       const id = 'retention'
       const requests = []
@@ -624,10 +639,7 @@ test('INV-10 native result leases survive their configured scope without re-exec
                   id: `step-${turn}`,
                   name: 'exec',
                   input: {
-                    code:
-                      turn % 2
-                        ? commandProgram('cat source.txt; printf x >> calls.txt')
-                        : "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')",
+                    code: turn % 2 ? childSource : readSource,
                   },
                 },
               }
@@ -658,10 +670,24 @@ test('INV-10 native result leases survive their configured scope without re-exec
           finalResults.find((result) => result.ref === firstRef).remainingTurns,
           duration ?? 'segment'
         )
-      const original = requests[1].history.find((message) =>
-        message.content.includes(payload)
-      ).content
-      assert(requests.at(-1).history.some((message) => message.content === original))
+      const wires = requests.map((request) =>
+        modelRequestEncoder
+          .messages(request)
+          .map(({ role, content, toolExchange, toolResult }) => ({
+            role,
+            content,
+            toolExchange,
+            toolResult,
+          }))
+      )
+      const exchange = wires[1].find((message) =>
+        message.toolExchange?.calls.some((call) => call.id === 'step-1')
+      ).toolExchange
+      assert.equal(exchange.results[0].output.resultRef, firstRef)
+      const original = wires[1].find((message) => message.toolResult?.callId === 'step-1')
+      assert.ok(original)
+      assert(original.content.includes(payload))
+      for (const wire of wires.slice(2)) assert.deepEqual(wire.slice(0, wires[1].length), wires[1])
       assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), 'xxxxx')
       const programs = new ProgramContext(id, session.context, storage)
       const leases = (await programs.state()).leases
@@ -1822,16 +1848,19 @@ test('Execa command source persists and is reusable by sourceRef', async (t) => 
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('shell-owner')
-  await session.context.append({ kind: 'user', body: 'Write a literal file using shell' })
+  await session.context.append({ kind: 'user', body: 'Write a literal file using an Execa child' })
+  const literal = '$literal `quoted` 中文\n'
+  const child = `import {writeFile,readFile} from 'node:fs/promises'; await writeFile('literal.txt',${JSON.stringify(literal)}); process.stdout.write(await readFile('literal.txt','utf8'));`
   const receipt = await session.execute({
-    source: commandProgram(
-      "cat <<'EOF' > literal.txt\n$literal `quoted` 中文\nEOF\ncat literal.txt"
-    ),
+    source: `import {execa} from 'execa'; await execa(process.execPath,['--input-type=module','-e',${JSON.stringify(child)}],{stdin:'ignore',stdout:'inherit',stderr:'inherit'});`,
   })
   assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
-  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), '$literal `quoted` 中文\n')
+  assert.equal(receipt.result.process.stdout, literal)
+  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), literal)
   const repeated = await session.execute({ sourceRef: receipt.sourceRef })
-  assert.equal(repeated.result.process.stdout, '$literal `quoted` 中文\n')
+  assert.equal(repeated.result.failed, undefined, JSON.stringify(repeated))
+  assert.equal(repeated.result.process.stdout, literal)
+  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), literal)
 })
 
 test('custom modules import by name and denied static imports run no earlier mutation', async (t) => {
@@ -1869,11 +1898,16 @@ test('read-only Node uses the same standard library and capability bridge with p
   const f = await fixture(t)
   await writeFile(join(f.cwd, 'readable.txt'), '42')
   const { createServer } = await import('node:net')
-  const server = createServer((socket) => socket.end())
+  let connections = 0
+  const server = createServer((socket) => {
+    connections++
+    socket.end()
+  })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise((resolve) => server.close(resolve)))
   const port = server.address().port
   const runner = createNodeCodeRunner(f.node)
+  let calls = 0
   const result = await runner.run(
     {
       ...request(
@@ -1890,17 +1924,30 @@ test('read-only Node uses the same standard library and capability bridge with p
       ),
       mode: 'observe',
     },
-    async () => ({ value: 7 }),
+    async () => {
+      calls++
+      return { value: 7 }
+    },
     () => {}
   )
-  assert.equal(result.ok, true, JSON.stringify(result))
-  const data = result.output.blocks[0].value
-  assert.match(data.node, /^\d+\./)
-  assert.deepEqual(
-    { ...data, node: undefined },
-    { node: undefined, text: '42', value: 7, writeDenied: true, networkDenied: true }
-  )
-  assert.equal(result.process.confinement.mode, 'read-only')
+  if (platformHasDefaultConfinement) {
+    assert.equal(result.ok, true, JSON.stringify(result))
+    const data = result.output.blocks[0].value
+    assert.match(data.node, /^\d+\./)
+    assert.deepEqual(
+      { ...data, node: undefined },
+      { node: undefined, text: '42', value: 7, writeDenied: true, networkDenied: true }
+    )
+    assert.equal(result.process.confinement.mode, 'read-only')
+    assert.equal(calls, 1)
+  } else {
+    assert.equal(result.ok, false, JSON.stringify(result))
+    assert.equal(result.error.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.process, undefined)
+    assert.equal(calls, 0)
+  }
+  assert.equal(connections, 0)
+  assert.equal(await readFile(join(f.cwd, 'readable.txt'), 'utf8'), '42')
   await assert.rejects(readFile(join(f.cwd, 'blocked.txt')), { code: 'ENOENT' })
 })
 
@@ -1932,16 +1979,45 @@ test('runtime observation uses real Node and retains structured input and output
   t.after(() => runtime.close())
   const session = await runtime.openSession('native-observe')
   await session.context.append({ kind: 'user', body: 'Observe with Node' })
-  const published = await session.observe({
-    source:
-      "import {input} from 'velaros:program';import {output} from 'velaros';output({node:typeof process.versions.node,value:input.value})",
-    input: { value: 42 },
-  })
+  const source =
+    "import {input} from 'velaros:program';import {output} from 'velaros';import {writeFile} from 'node:fs/promises';let writeDenied=false;try{await writeFile('observation-write.txt','bad')}catch{writeDenied=true}output({node:typeof process.versions.node,value:input.value,writeDenied})"
+  const input = { value: 42 }
+  const published = await session.observe({ source, input })
   assert.equal(published.status, 'updated', JSON.stringify(published))
   for await (const event of session.submit('Verify the observation')) void event
   assert.equal((await session.inspect()).status, 'completed')
-  assert.match(observed, /42/)
-  assert.match(observed, /string/)
+  const trace = (await runtime.trace('native-observe', { fullContent: true })).turns[0]
+  const request = JSON.parse(trace.request.body)
+  assert.equal(request.requestAudit.schemaVersion, 3)
+  assert.equal(request.frameRef.sessionId, 'native-observe')
+  const frameRecord = trace.records.find((record) => record.ref.id === request.frameRef.id)
+  const frame = JSON.parse(frameRecord.body)
+  assert.equal(frameRecord.title, `context:frame:${frame.frameId}`)
+  const sourceRecord = trace.records.find((record) => record.ref.id === frame.observation.sourceRef)
+  const resultRecord = trace.records.find((record) => record.ref.id === frame.observation.resultRef)
+  const saved = JSON.parse(sourceRecord.body)
+  assert.equal(saved.source, source)
+  assert.deepEqual(saved.input, input)
+  assert.equal(trace.observation.run.source, source)
+  const result = JSON.parse(resultRecord.body)
+  assert.equal(result.mode, 'observe')
+  if (platformHasDefaultConfinement) {
+    assert.match(observed, /42/)
+    assert.match(observed, /string/)
+    assert.equal(trace.observation.run.status, 'succeeded')
+    assert.deepEqual(result.output.blocks[0].value, {
+      node: 'string',
+      value: 42,
+      writeDenied: true,
+    })
+  } else {
+    assert.match(observed, /SHELL_CONFINEMENT_UNAVAILABLE/)
+    assert.equal(trace.observation.run.status, 'failed')
+    assert.equal(trace.observation.run.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.result.process, undefined)
+  }
+  await assert.rejects(readFile(join(f.cwd, 'observation-write.txt')), { code: 'ENOENT' })
 })
 
 test('native child status keeps actionable delivery metadata and recalls the immutable artifact manifest on demand', () => {
@@ -2200,7 +2276,7 @@ test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints an
 })
 
 test('standard package references expose installed versions, original docs and declarations on demand', async (t) => {
-  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] }, 'workspace-write')
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] })
   const result = await createNodeCodeRunner(f.node).run(
     request(`
     import {readFile} from 'node:fs/promises';

@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
@@ -17,6 +16,7 @@ import { done, marker } from './support/model-turn.mjs'
 const block = (request, head, source = '') =>
   `${marker(request)} ${head}\n${source}${source ? '\n' : ''}${marker(request)}\n`
 const finish = { type: 'finish', reason: 'stop' }
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 test('INV-86 a whitespace-stalled response performs no write and starts no repair request', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield {
@@ -116,7 +116,6 @@ async function fixture(t, stream, extra = {}) {
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [module],
     ...extra,
@@ -297,7 +296,9 @@ test('protocol repair reuses the frame and does not rerun stable observation', a
     source: "import {read} from 'test:ops';import {output} from 'velaros';output(await read());",
   })
   assertDone(await collect(f))
-  assert.equal(f.reads, 1)
+  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(tags[0], tags[1])
   assert.equal(f.frames[0].programFrame.id, f.frames[1].programFrame.id)
 })
@@ -328,7 +329,10 @@ test('INV-84 short random markers reject a prior frame before dispatch and prese
   assert.equal(f.calls, 3)
   assert.deepEqual(f.writes, ['one'])
   const trace = await f.runtime.trace('s', { fullContent: true })
-  assert.equal(trace.turns[1].requestSummary.system, trace.turns[0].requestSummary.system)
+  assert.equal(
+    JSON.parse(trace.turns[1].request.body).requestAudit.requestFingerprint.systemHash,
+    JSON.parse(trace.turns[0].request.body).requestAudit.requestFingerprint.systemHash
+  )
   assert.equal(trace.turns[1].repair, 0)
   assert.equal(trace.turns[2].repair, 1)
 })
@@ -373,7 +377,9 @@ test('explicit observation clear removes the next-frame rerun', async (t) => {
   })
   await f.session.observe({ source: "import {read} from 'test:ops';await read();" })
   assertDone(await collect(f))
-  assert.equal(f.reads, 1)
+  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(f.frames[1].observation.sourceRef, null)
 })
 

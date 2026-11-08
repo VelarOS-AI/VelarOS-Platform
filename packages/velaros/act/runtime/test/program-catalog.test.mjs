@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
-import { codeProgramChecker, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { codeProgramChecker, createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 const request = (operation, input, caught = false) => ({
   source: caught
@@ -24,7 +25,15 @@ const valid = (receipt) => {
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'scriptact-program-catalog-'))
-  const f = { writes: 0, runs: 0, modules: [], checks: 0 }
+  const host = createLocalShellHost({ cwd: root })
+  const delegate = createNodeCodeRunner(
+    createNodeExecutionEnvironment({
+      cwd: root,
+      directory: join(root, 'runs'),
+      host,
+    })
+  )
+  const f = { root, writes: 0, runs: 0, modules: [], checks: 0 }
   const module = {
     binding: { moduleId: 'test:catalog', instanceId: 'one', generation: 1, schemaRevision: '1' },
     summary: 'parameterized catalog proof',
@@ -43,9 +52,11 @@ async function fixture(t) {
   }
   f.modules = [module]
   const runner = {
+    environment: delegate.environment,
+    cwd: delegate.cwd,
     run(...args) {
       f.runs++
-      return nodeSubprocessCodeRunner.run(...args)
+      return delegate.run(...args)
     },
   }
   const open = async () => {
@@ -85,6 +96,7 @@ async function fixture(t) {
   }
   t.after(async () => {
     await f.runtime.close()
+    await host.dispose()
     await rm(root, { recursive: true, force: true })
   })
   return f
@@ -155,6 +167,7 @@ test('INV-81 malformed and unauthorized publication keep old alias and do not ex
   for (const source of [
     'export default (',
     "import {secret} from 'test:ungranted';export default secret;",
+    "import {missing} from 'test:catalog';export default missing;",
   ]) {
     const failed = valid(
       await f.session.execute(
@@ -172,6 +185,66 @@ test('INV-81 malformed and unauthorized publication keep old alias and do not ex
     )
   }
   assert.equal(f.writes, 0)
+})
+
+test('INV-81 Node publications preserve native dependencies and validate reachable capability imports without executing', async (t) => {
+  const f = await fixture(t)
+  const packageRoot = join(f.root, 'node_modules', 'catalog-local')
+  await mkdir(packageRoot, { recursive: true })
+  await writeFile(
+    join(packageRoot, 'package.json'),
+    JSON.stringify({ name: 'catalog-local', type: 'module', exports: './index.mjs' })
+  )
+  await writeFile(join(packageRoot, 'index.mjs'), 'export const seed=4;')
+  await writeFile(join(f.root, 'helper.mjs'), 'export const increment=3;')
+  const first = valid(
+    await f.session.execute(
+      request('publish', {
+        name: 'native',
+        purpose: 'Use actual Node dependencies',
+        source:
+          "import {sep} from 'node:path';import {diffLines} from 'velaros:npm/diff';import {seed} from 'catalog-local';import {increment} from './helper.mjs';import {step} from './lib/step.js';export default [await step(seed+increment),sep,diffLines('a\\n','b\\n').length];",
+        modules: {
+          'lib/step.js': "export {add as step} from 'test:catalog';",
+          'unused.js': "import {secret} from 'test:ungranted';export default secret;",
+        },
+      })
+    )
+  )
+  assert.equal(f.writes, 0)
+  assert.deepEqual(
+    first.dependencies.map((binding) => binding.moduleId),
+    ['test:catalog']
+  )
+  assert.deepEqual(valid(await f.session.execute({ sourceRef: first.sourceRef })), [8, sep, 2])
+  assert.equal(f.writes, 1)
+  for (const source of [
+    "export {missing as step} from 'test:catalog';",
+    "export {secret as step} from 'test:ungranted';",
+    'export const step = (',
+  ]) {
+    const rejected = valid(
+      await f.session.execute(
+        request(
+          'publish',
+          {
+            name: 'native',
+            baseRevision: first.revision,
+            purpose: 'Invalid reachable module',
+            source: "import {step} from './lib/step.js';export default await step(1);",
+            modules: { 'lib/step.js': source },
+          },
+          true
+        )
+      )
+    )
+    assert.equal(rejected.error.code, 'VALIDATION')
+    assert.equal(
+      valid(await f.session.execute(request('describe', { name: 'native' }))).sourceRef,
+      first.sourceRef
+    )
+    assert.equal(f.writes, 1, 'publication checks never execute the candidate')
+  }
 })
 
 test('INV-81 concurrent name CAS has one winner; directory query reuses publication checks instead of parsing again', async (t) => {
@@ -268,8 +341,14 @@ test('INV-81 same schema label with changed actual operation contract forces imp
   ])
   assert.deepEqual(valid(await f.session.execute(request('list', {}))).items, [])
   assert.equal(
+    valid(await f.session.execute(request('describe', { name: 'binding' }, true))).error.code,
+    'NOT_FOUND'
+  )
+  assert.equal(
     valid(await f.session.execute(request('describe', { sourceRef: entry.sourceRef }, true))).error
       .code,
     'NOT_FOUND'
   )
+  await assert.rejects(f.session.execute({ sourceRef: entry.sourceRef }), { code: 'SCRIPT_CHECK' })
+  assert.equal(f.writes, 0)
 })

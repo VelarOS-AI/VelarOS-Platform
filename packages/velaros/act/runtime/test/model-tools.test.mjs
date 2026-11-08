@@ -3,7 +3,6 @@ import { test } from 'node:test'
 
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { BudgetedModelDriver } from '../../../dist/act/runtime/impl/BudgetedModelDriver.js'
 import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntime.js'
@@ -19,6 +18,10 @@ const model = (stream) => ({
 })
 const execute = (request, source) => turn(request, { execute: { source } })
 const finish = { type: 'finish', reason: 'stop' }
+const readonlyHostUnavailable =
+  process.platform === 'win32'
+    ? 'Windows has no default read-only process confinement backend; rejection is covered separately'
+    : false
 const delegate =
   "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const child=await start({task:'investigate',profile:'read'});output(await wait({id:child.id}));"
 
@@ -26,7 +29,6 @@ async function fixture(t, options) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     ...options,
   })
@@ -64,74 +66,78 @@ async function* report(request) {
   yield finish
 }
 
-test('main, business child and search progress with one model slot and charge every ancestor exactly once', async (t) => {
-  let main = 0
-  let childCalls = 0
-  let searchCalls = 0
-  const child = model(async function* (request) {
-    if (++childCalls === 1) {
-      yield execute(request, lookup)
-      yield finish
-    } else {
-      yield { type: 'usage', inputTokens: 13, outputTokens: 7 }
-      yield* done(request, 'branch result')
-    }
-  })
-  const f = await fixture(t, {
-    modelTools: { concurrency: 1 },
-    search: searchOptions(async function* (request) {
-      searchCalls++
-      yield { type: 'usage', inputTokens: 5, outputTokens: 3 }
-      yield* report(request)
-    }),
-    agents: {
-      concurrency: 1,
-      maxChildren: 3,
-      profiles: { read: { model: child, modules: ['velaros:search'] } },
-    },
-    model: model(async function* (request) {
-      if (++main === 1) {
-        yield execute(request, delegate)
+test(
+  'main, business child and search progress with one model slot and charge every ancestor exactly once',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let main = 0
+    let childCalls = 0
+    let searchCalls = 0
+    const child = model(async function* (request) {
+      if (++childCalls === 1) {
+        yield execute(request, lookup)
         yield finish
-      } else yield* done(request)
-    }),
-  })
-  const events = []
-  for await (const event of f.session.submit('delegated investigation')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.equal(main, 2)
-  assert.equal(childCalls, 2)
-  assert.equal(searchCalls, 1)
-  const root = await f.session.view.inspect()
-  assert.equal(root.usage.contextCalls, 3)
-  assert.equal(root.usage.inputTokens, 18)
-  assert.equal(root.usage.outputTokens, 10)
-  const snapshot = await f.storage.load('root')
-  const bindings = [
-    ...new Map(
+      } else {
+        yield { type: 'usage', inputTokens: 13, outputTokens: 7 }
+        yield* done(request, 'branch result')
+      }
+    })
+    const f = await fixture(t, {
+      modelTools: { concurrency: 1 },
+      search: searchOptions(async function* (request) {
+        searchCalls++
+        yield { type: 'usage', inputTokens: 5, outputTokens: 3 }
+        yield* report(request)
+      }),
+      agents: {
+        concurrency: 1,
+        maxChildren: 3,
+        profiles: { read: { model: child, modules: ['velaros:search'], node: true } },
+      },
+      model: model(async function* (request) {
+        if (++main === 1) {
+          yield execute(request, delegate)
+          yield finish
+        } else yield* done(request)
+      }),
+    })
+    const events = []
+    for await (const event of f.session.submit('delegated investigation')) events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert.equal(main, 2)
+    assert.equal(childCalls, 2)
+    assert.equal(searchCalls, 1)
+    const root = await f.session.view.inspect()
+    assert.equal(root.usage.contextCalls, 3)
+    assert.equal(root.usage.inputTokens, 18)
+    assert.equal(root.usage.outputTokens, 10)
+    const snapshot = await f.storage.load('root')
+    const bindings = [
+      ...new Map(
+        snapshot.records
+          .filter((record) => record.title.startsWith('model-tool:node:'))
+          .map((record) => [record.title, record])
+      ).values(),
+    ]
+    const values = await Promise.all(
+      bindings.map(async (record) => JSON.parse(await f.storage.get('root', record.objectId)))
+    )
+    assert.deepEqual(values.map((value) => value.depth).sort(), [1, 2])
+    assert(values.every((value) => value.status === 'closed'))
+    const deliveries = await Promise.all(
       snapshot.records
-        .filter((record) => record.title.startsWith('model-tool:node:'))
-        .map((record) => [record.title, record])
-    ).values(),
-  ]
-  const values = await Promise.all(
-    bindings.map(async (record) => JSON.parse(await f.storage.get('root', record.objectId)))
-  )
-  assert.deepEqual(values.map((value) => value.depth).sort(), [1, 2])
-  assert(values.every((value) => value.status === 'closed'))
-  const deliveries = await Promise.all(
-    snapshot.records
-      .filter((record) => record.title === 'model-tool:delivery')
-      .map(async (record) => JSON.parse(await f.storage.get('root', record.objectId)))
-  )
-  const delivery = deliveries.find((item) => item.kind === 'agent')
-  assert(delivery)
-  assert.equal(delivery.parentTaskId, root.id)
-  assert.equal(delivery.continuation.operation, 'agents.resume')
-  assert.equal(delivery.status, 'completed')
-  assert(delivery.artifacts.some((item) => item.kind === 'script'))
-  assert(delivery.artifacts.every((item) => item.ref.sessionId === 'root'))
-})
+        .filter((record) => record.title === 'model-tool:delivery')
+        .map(async (record) => JSON.parse(await f.storage.get('root', record.objectId)))
+    )
+    const delivery = deliveries.find((item) => item.kind === 'agent')
+    assert(delivery)
+    assert.equal(delivery.parentTaskId, root.id)
+    assert.equal(delivery.continuation.operation, 'agents.resume')
+    assert.equal(delivery.status, 'completed')
+    assert(delivery.artifacts.some((item) => item.kind === 'script'))
+    assert(delivery.artifacts.every((item) => item.ref.sessionId === 'root'))
+  }
+)
 
 test('search inside a business child cannot escape the root ledger', async (t) => {
   let main = 0
@@ -151,7 +157,7 @@ test('search inside a business child cannot escape the root ledger', async (t) =
     agents: {
       concurrency: 1,
       maxChildren: 3,
-      profiles: { read: { model: child, modules: ['velaros:search'] } },
+      profiles: { read: { model: child, modules: ['velaros:search'], node: true } },
     },
     model: model(async function* (request) {
       main++
@@ -241,7 +247,7 @@ test('business child discovery and script declarations omit delegation even if t
     agents: {
       concurrency: 1,
       maxChildren: 3,
-      profiles: { read: { model: child, modules: ['velaros:agents'] } },
+      profiles: { read: { model: child, modules: ['velaros:agents'], node: true } },
     },
     model: model(async function* (request) {
       if (++main === 1) {
@@ -472,45 +478,99 @@ test('main defaults have no local quota while explicit host budgets remain autho
   assert.equal(limited.session.view.limits.modelTokens, 10000)
 })
 
-test('search only discovers its evidence and local system members, including in the aggregate template', async (t) => {
-  let main = 0
-  let calls = 0
-  let checked = false
-  const search = searchOptions(async function* (request) {
-    calls++
-    if (calls === 1) {
-      yield execute(
-        request,
-        "import {modules} from 'velaros:system';import {output} from 'velaros';output({catalog:await modules.list({limit:64}),system:await modules.describe({module:'velaros:system'})});"
-      )
-      yield finish
-    } else {
-      const text = JSON.stringify(request)
-      assert(!text.includes('memory.organize'))
-      assert(!text.includes('context.request'))
-      assert(!text.includes('velaros:agents'))
-      assert(!text.includes('velaros:context-materials'))
-      assert(!text.includes('velaros:search'))
-      assert(text.includes('velaros:evidence'))
-      checked = true
-      yield* report(request)
-    }
-  })
-  const f = await fixture(t, {
-    search,
-    model: model(async function* (request) {
-      if (++main === 1) {
-        yield execute(request, lookup)
+test(
+  'search only discovers its evidence and local system members, including in the aggregate template',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let main = 0
+    let calls = 0
+    let checked = false
+    const search = searchOptions(async function* (request) {
+      calls++
+      if (calls === 1) {
+        yield execute(
+          request,
+          "import {modules} from 'velaros:system';import {output} from 'velaros';output({catalog:await modules.list({limit:64}),system:await modules.describe({module:'velaros:system'})});"
+        )
         yield finish
-      } else yield* done(request)
-    }),
-  })
-  const events = []
-  for await (const event of f.session.submit('find evidence')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.equal(calls, 2)
-  assert(checked)
-})
+      } else {
+        const text = JSON.stringify(request)
+        assert(!text.includes('memory.organize'))
+        assert(!text.includes('context.request'))
+        assert(!text.includes('velaros:agents'))
+        assert(!text.includes('velaros:context-materials'))
+        assert(!text.includes('velaros:search'))
+        assert(text.includes('velaros:evidence'))
+        checked = true
+        yield* report(request)
+      }
+    })
+    const f = await fixture(t, {
+      search,
+      model: model(async function* (request) {
+        if (++main === 1) {
+          yield execute(request, lookup)
+          yield finish
+        } else yield* done(request)
+      }),
+    })
+    const events = []
+    for await (const event of f.session.submit('find evidence')) events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert.equal(calls, 2)
+    assert(checked)
+  }
+)
+
+test(
+  'Windows search rejects unavailable read-only execution instead of borrowing parent Node permissions',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    let main = 0
+    let calls = 0
+    const search = searchOptions(async function* (request) {
+      calls++
+      yield* report(request)
+    })
+    search.profiles.standard = { ...searchProfile, modelCalls: 2 }
+    const f = await fixture(t, {
+      context: { maintenance: false },
+      search,
+      model: model(async function* (request) {
+        if (++main === 1) {
+          yield execute(request, lookup)
+          yield finish
+        } else yield* done(request)
+      }),
+    })
+    const events = []
+    for await (const event of f.session.submit('Attempt a read-only search report'))
+      events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert(calls > 0 && calls <= 2)
+    const directory = await f.runtime.trace('root')
+    const branch = directory.branches.find((item) => item.kind === 'search')
+    assert(branch, 'the attempted search must retain its actual child identity')
+    const page = await f.runtime.trace('root', { sessionId: branch.sessionId, fullContent: true })
+    const failures = page.turns
+      .flatMap((turn) => turn.executions.map((execution) => execution.failure))
+      .filter(Boolean)
+    assert(
+      failures.some((failure) => failure.code === 'SHELL_CONFINEMENT_UNAVAILABLE'),
+      JSON.stringify(failures)
+    )
+    assert.equal(
+      page.turns
+        .flatMap((turn) => turn.invocations)
+        .filter(
+          (call) =>
+            call.summary.moduleId === 'velaros:evidence' && call.summary.operation === 'report'
+        ).length,
+      0,
+      'the rejected process must not dispatch the report through the parent permission scope'
+    )
+  }
+)
 
 test('new logical task renews child allocation; continuing cannot reset the task quota', async (t) => {
   let main = 0

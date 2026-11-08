@@ -6,7 +6,6 @@ import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
@@ -17,6 +16,7 @@ import { done, turn } from './support/model-turn.mjs'
 const observe =
   "import {output} from 'velaros'; import {read} from 'test:world'; output({value:await read()});"
 const execute = "import {write} from 'test:world'; await write(2);"
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 async function fixture(
   t,
   stream = async function* (request) {
@@ -66,7 +66,7 @@ async function fixture(
     },
   ]
   let storage = localContextStorage({ path })
-  let runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+  let runtime = await createRuntime({ storage, modules, model })
   let session = await runtime.openSession('s')
   await session.context.append({ kind: 'user', body: 'Maintain a counter.' })
   const f = {
@@ -86,7 +86,7 @@ async function fixture(
     restart: async () => {
       await runtime.close()
       storage = localContextStorage({ path })
-      runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+      runtime = await createRuntime({ storage, modules, model })
       session = await runtime.openSession('s')
     },
     submit: async () => {
@@ -113,15 +113,17 @@ test('one model call publishes observer, executes once and sends fresh context w
     } else yield* done(request)
   })
   await f.submit()
-  assert.deepEqual(f.world, { value: 2, writes: 1, reads: 1 })
-  assert.equal(JSON.parse(f.frames[1].observation.text).value.default.value, 2)
+  assert.deepEqual(f.world, { value: 2, writes: 1, reads: platformHasDefaultConfinement ? 1 : 0 })
+  if (platformHasDefaultConfinement)
+    assert.equal(JSON.parse(f.frames[1].observation.text).value.default.value, 2)
+  else assert.match(f.frames[1].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(f.frames[1].results[0].remainingTurns, 2)
   const journal = await createContextInvocationJournal(f.storage).list('s')
   assert.deepEqual(
     journal.map((x) => [x.prepared.binding.moduleId, x.prepared.operation, x.prepared.mode]),
     [
       ['test:world', 'write', 'execute'],
-      ['test:world', 'read', 'observe'],
+      ...(platformHasDefaultConfinement ? [['test:world', 'read', 'observe']] : []),
     ]
   )
   t.diagnostic(
@@ -181,7 +183,12 @@ test('INV-11 implicit edits bind to the displayed observation and can accompany 
   const initial = await f.session.script({ observe: { source: observe } })
   await f.submit()
   assert.notEqual(f.frames[1].observation.sourceRef, initial.observe.sourceRef)
-  assert.equal(JSON.parse(f.frames[1].observation.text).value.default.current, 2)
+  if (platformHasDefaultConfinement)
+    assert.equal(JSON.parse(f.frames[1].observation.text).value.default.current, 2)
+  else {
+    assert.match(f.frames[1].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
+    assert.equal(f.world.reads, 0)
+  }
   assert.equal(f.frames[1].results[0].remainingTurns, 1)
   assert.equal(f.world.writes, 1)
 })
@@ -215,7 +222,9 @@ test('omitted sections preserve observer and do not run one-shot code', async (t
   assert.equal((await f.state()).observation, first.observe.sourceRef)
   await f.submit()
   assert.equal(f.world.writes, 1)
-  assert.equal(f.world.reads, 1)
+  assert.equal(f.world.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
 })
 
 test('combined retries return the original receipt across restart without advancing versions or writing again', async (t) => {
@@ -296,7 +305,12 @@ test('execution runtime failure keeps the published observer available for diagn
   assert.ok(result.execute.result.failed)
   assert.equal((await f.state()).observation, result.observe.sourceRef)
   await f.submit()
-  assert.equal(JSON.parse(f.frames[0].observation.text).value.default.value, 1)
+  if (platformHasDefaultConfinement)
+    assert.equal(JSON.parse(f.frames[0].observation.text).value.default.value, 1)
+  else {
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
+    assert.equal(f.world.reads, 0)
+  }
 })
 
 test('a stale displayed baseline rejects implicit edits and the accompanying execution', async (t) => {

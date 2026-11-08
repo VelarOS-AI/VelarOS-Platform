@@ -143,8 +143,10 @@ export function createProjectCapabilityModule(
       },
       recordWriteOutcome: (outcome) =>
         call.recordEffect(outcome === 'applied' ? 'committed' : 'none'),
-      recordSnapshotCompletion: () =>
-        call.recordObservation?.({ completed: true, protection: 'full' }),
+      recordSnapshotCompletion: () => {
+        if (call.invocation.mode === 'observe')
+          call.recordObservation?.({ completed: true, protection: 'full' })
+      },
       recordSnapshotMetrics: (metrics) =>
         call.recordDiagnostic?.({
           code: 'PROJECT_SNAPSHOT_COST',

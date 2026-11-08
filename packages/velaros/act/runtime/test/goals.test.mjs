@@ -12,7 +12,7 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { done, frameText, marker, turn } from './support/model-turn.mjs'
 
 const limits = { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 }
-const estimate = async () => ({ tokens: 1000, precision: 'exact' })
+const estimate = async () => ({ tokens: 1000, precision: 'exact', basis: 'goal-fixture' })
 /** 最终答复带完成依据：有进行中的目标时由 Runtime 据此结束目标。 */
 async function* doneWith(request, reason, message = '') {
   yield {
@@ -118,7 +118,7 @@ test('active goal prevents premature done; model operation explicitly completes 
   const model = {
     id: 'goal-test',
     limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
-    estimate: async () => ({ tokens: 1000, precision: 'exact' }),
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'goal-fixture' }),
     async *stream(request) {
       frames.push(request)
       if (frames.length === 2) {
@@ -386,7 +386,7 @@ test('paused goals survive normal submissions and cancellation never completes a
   const model = {
     id: 'goal-stop-test',
     limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
-    estimate: async () => ({ tokens: 1000, precision: 'exact' }),
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'goal-fixture' }),
     async *stream(request, signal) {
       const goal = JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text)
         .partitions.runtime.goal

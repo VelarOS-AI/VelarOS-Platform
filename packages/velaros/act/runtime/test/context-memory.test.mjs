@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -29,9 +29,10 @@ import { VelarSystemMemoryModule } from '../../../dist/act/system/contract/surfa
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 
-import { baseNotes, baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { baseNotes, baseText, done, historyEntries, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 
 test('INV-58 new and legacy output representations share actual prompt bounds and preserve failure gaps', () => {
   const value = 'alpha("beta");\n'.repeat(40)
@@ -394,7 +395,6 @@ async function fixture(
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [],
     limits: {
@@ -1609,7 +1609,6 @@ test('INV-62 reopening preserves task bytes while current-run status changes ind
   await f.runtime.close()
   const runtime = await createRuntime({
     storage: localContextStorage({ path: join(f.root, 'context.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: f.model,
   })
@@ -1710,7 +1709,15 @@ test('INV-18 one partitioned frame carries current observation, persistent notes
   assert.equal(f.requests[1].contextStatus.mode, 'partitioned')
   assert.equal(frame.partitions.workspace.notes[0].text, 'Cache restoration remains unverified')
   assert.equal(frame.partitions.workspace.notes[0].origin, 'model-note')
-  assert.match(frame.partitions.observation.text, /version/)
+  if (platformHasDefaultConfinement) assert.match(frame.partitions.observation.text, /version/)
+  else {
+    assert.equal(frame.partitions.observation.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    const programs = new ProgramContext('s', f.session.context, f.storage)
+    const archived = JSON.parse((await programs.read(frame.partitions.observation.resultRef)).text)
+    assert.equal(archived.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(archived.result.process, undefined)
+    assert.equal(archived.output, undefined)
+  }
   assert(frame.partitions.recent.results.length)
   assert(frame.memoryStatus.changes.added.includes('workspace:auth'))
   assert(Object.values(frame.memoryStatus.footprint).every(Number.isSafeInteger))
@@ -1729,7 +1736,6 @@ test('INV-19 workspace revisions survive reopening, compare-and-swap conflicts n
   await f.runtime.close()
   const runtime = await createRuntime({
     storage: localContextStorage({ path: join(f.root, 'context.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   try {
@@ -1786,7 +1792,10 @@ test('observation cannot mutate a workspace through aliases or wrappers', async 
   })
   await run(f)
   assert.equal((await f.memory.list({}, signal)).items.length, 0)
-  assert.match(f.requests[0].materials[0].text, /OPERATION_MODE_DENIED/)
+  assert.match(
+    f.requests[0].materials[0].text,
+    platformHasDefaultConfinement ? /OPERATION_MODE_DENIED/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
 })
 
 test('oversized notes become honest reference cards and can be recalled without auto-residency changes', async (t) => {
@@ -1905,7 +1914,6 @@ test('host memory policy rejects invalid capacities before a model request', asy
   ]) {
     const runtime = await createRuntime({
       storage: localContextStorage({ path: ':memory:' }),
-      runner: nodeSubprocessCodeRunner,
       modules: [],
       context: { sources: [], memory },
     })
@@ -1921,25 +1929,19 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   let toolCalls = 0
   const maintenance = {
     id: 'maintenance',
+    nativeTools: true,
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
       toolCalls++
-      const snapshot = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
+      const { material } = JSON.parse(request.materials[0].text)
       const patch = {
-        baseRevision: snapshot.baseRevision,
+        baseRevision: material.baseRevision,
         summary: 'Preserved progress',
         unresolved: [],
         notes: [{ ref: note.ref, summary: 'Maintenance preserved progress' }],
       }
-      const part = turn(request, {
-        execute: {
-          source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`,
-        },
-      })
-      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      yield { type: 'tool-call', value: { id: 'preserve-progress', name: 'submit', input: patch } }
       yield { type: 'finish', reason: 'stop' }
     },
   }
@@ -1953,7 +1955,7 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
       assert.equal(request.mode, 'work')
       yield* done(request)
     },
-    { context: { sources: [], maintenance: { model: maintenance } } }
+    { context: { sources: [], maintenance: { model: maintenance, execution: 'data' } } }
   )
   const note = await f.memory.update(
     { key: 'progress', baseRevision: 0, body: 'Original main-model progress' },
@@ -2106,7 +2108,7 @@ test('business children always own a scoped workspace even without world capabil
     },
     {
       agents: {
-        profiles: { reader: { model: child, modules: [] } },
+        profiles: { reader: { model: child, node: true, modules: [] } },
         concurrency: 1,
         maxChildren: 1,
       },
@@ -3606,23 +3608,41 @@ test('zero-history results and current observation render code without extra str
   const observed = 'function current() {\n  return "当前";\n}'
   const result = 'function receipt() {\n  return "\\n";\n}'
   const f = await fixture(t, undefined, { context: { sources: [], memory: { recentRecords: 0 } } })
-  await f.session.observe({
-    source: `import {output} from 'velaros';output(${JSON.stringify(observed)},{key:'observe-code',type:'code'});`,
-  })
+  const source = `import {output} from 'velaros';output(${JSON.stringify(observed)},{key:'observe-code',type:'code'});`
+  const observation = await f.session.observe({ source })
   await execute(
     f,
     `import {output} from 'velaros';output(${JSON.stringify(result)},{key:'result-code',type:'code'});`
   )
   await run(f)
   const request = f.requests[0]
-  assert(request.compiledPrompt.includes(observed))
   assert(request.compiledPrompt.includes(result))
   assert.equal(request.history.length, 1)
   assert.match(baseText(request), /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
-  assert.equal(frame.partitions.observation.presentation.format, 'text')
-  assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
-  assert(frame.partitions.observation.text.endsWith(observed))
+  const rendered = frame.partitions.recent.results.find((item) => item.text?.includes(result))
+  assert(rendered)
+  assert.equal(rendered.outputFormat, 'text')
+  assert(rendered.text.endsWith(result))
+  assert(!rendered.text.includes(JSON.stringify(result).slice(1, -1)))
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const original = JSON.parse((await programs.read(rendered.ref)).text)
+  assert.equal(original.output.blocks.find((block) => block.key === 'result-code').value, result)
+  if (platformHasDefaultConfinement) {
+    assert(request.compiledPrompt.includes(observed))
+    assert.equal(frame.partitions.observation.presentation.format, 'text')
+    assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
+    assert(frame.partitions.observation.text.endsWith(observed))
+  } else {
+    const archived = JSON.parse((await programs.read(frame.partitions.observation.resultRef)).text)
+    assert.equal(frame.partitions.observation.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(archived.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(archived.result.process, undefined)
+    assert.equal(archived.output, undefined)
+    assert(!request.compiledPrompt.includes(observed))
+    const saved = JSON.parse((await programs.readProgram(observation.sourceRef)).text)
+    assert.equal(saved.source, source)
+  }
 })
 
 test('INV-69 current original bodies are omitted only after same-request cross-carrier full coverage', async (t) => {

@@ -13,7 +13,7 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker } from './support/model-turn.mjs'
 
-test('large archived requests cannot consume execution output and call preview budgets', async (t) => {
+test('bounded request metadata leaves the body budget for execution output and call previews', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'output-budget', storage })
@@ -24,13 +24,18 @@ test('large archived requests cannot consume execution output and call preview b
       runId: 'run',
       turn: 0,
       repair: 0,
-      providerRequest: {
-        schemaVersion: 2,
+      requestAudit: {
+        schemaVersion: 3,
         model: 'test',
-        system: 'large archived request '.repeat(100_000),
-        messages: [],
+        modelTruncated: false,
+        inputTokens: 1000,
+        precision: 'exact',
+        basis: 'test',
+        basisTruncated: false,
+        messageCount: 1,
+        toolCount: 0,
         outputTokens: 4096,
-        requestFingerprint: { id: 'fp' },
+        requestFingerprint: { id: '1234567890abcdef' },
       },
     }),
   })
@@ -44,7 +49,7 @@ test('large archived requests cannot consume execution output and call preview b
   const source = await context.append({
     kind: 'audit',
     title: 'program',
-    body: JSON.stringify({ source: 'console.log("visible output")', language: 'node' }),
+    body: JSON.stringify({ source: 'console.log("visible output")' }),
   })
   const result = await context.append({
     kind: 'audit',
@@ -97,20 +102,18 @@ test('large archived requests cannot consume execution output and call preview b
   assert.equal(trace.executions[0].processOutputTruncated, false)
   assert.match(trace.invocations[0].summary.output, /visible call result/)
   assert.equal(trace.invocations[0].summary.outputTruncated, false)
-  assert.equal(trace.request.truncated, true)
+  assert.equal(trace.request.truncated, false)
   const total =
     [trace.request, trace.response, trace.decision, ...trace.records, ...trace.invocations].reduce(
       (n, v) => n + (v?.body?.length ?? 0),
       0
     ) +
     trace.executions.reduce((n, v) => n + v.source.length + (v.processOutput?.length ?? 0), 0) +
-    trace.invocations.reduce((n, v) => n + v.summary.input.length + v.summary.output.length, 0) +
-    trace.requestSummary.system.length +
-    trace.requestSummary.messages.length
+    trace.invocations.reduce((n, v) => n + v.summary.input.length + v.summary.output.length, 0)
   assert(total <= 32_768, 'presentation priority still obeys the total page budget')
 })
 
-test('exhausted trace budgets check presence without loading historical bodies and preserve the legacy projection', async (t) => {
+test('exhausted trace budgets use presence probes without changing trace facts or loading historical bodies', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'budget', storage })
@@ -146,27 +149,29 @@ test('exhausted trace budgets check presence without loading historical bodies a
     )
   const snapshot = await storage.load('budget')
   const objectOf = (ref) => snapshot.records.find((record) => record.ref.id === ref.id).objectId
-  const read = async (indexed, query, missing) => {
+  const read = async (directPresence, query, missing) => {
     const gets = []
     const checks = []
     let chars = 0
     const metrics = []
+    const get = async (id, objectId) => {
+      gets.push(objectId)
+      const body = objectId === missing ? null : await storage.get(id, objectId)
+      chars += body?.length ?? 0
+      return body
+    }
     const port = {
       load: (id) => storage.load(id),
-      get: async (id, objectId) => {
-        gets.push(objectId)
-        const body = objectId === missing ? null : await storage.get(id, objectId)
-        chars += body?.length ?? 0
-        return body
+      get,
+      has: async (id, objectId) => {
+        checks.push(objectId)
+        // Both backends satisfy the current required has contract. The read-through
+        // control measures the body IO that a real existence query avoids.
+        return (
+          objectId !== missing &&
+          (directPresence ? storage.has(id, objectId) : (await get(id, objectId)) !== null)
+        )
       },
-      ...(indexed
-        ? {
-            has: async (id, objectId) => {
-              checks.push(objectId)
-              return objectId !== missing && storage.has(id, objectId)
-            },
-          }
-        : {}),
     }
     const measured = new RuntimeDiagnostics(port, (metric) => metrics.push(metric)).storage
     const startedAt = performance.now()
@@ -175,15 +180,15 @@ test('exhausted trace budgets check presence without loading historical bodies a
   }
   for (const missing of [undefined, objectOf(history[7].ref), objectOf(decision.ref)]) {
     for (const maxChars of [1, 32_768]) {
-      const legacy = await read(false, { limit: 1, maxChars }, missing)
+      const readThrough = await read(false, { limit: 1, maxChars }, missing)
       const indexed = await read(true, { limit: 1, maxChars }, missing)
-      assert.deepEqual(indexed.trace, legacy.trace)
+      assert.deepEqual(indexed.trace, readThrough.trace)
       if (missing !== objectOf(decision.ref)) {
         assert.equal(indexed.trace.turns[0].modelAccounting.usage.inputTokens, 123)
         assert.equal(indexed.trace.accounting.modelRequests.known, 1)
       }
-      assert(indexed.gets.length < legacy.gets.length / 10)
-      assert(indexed.chars < legacy.chars / 10)
+      assert(indexed.gets.length < readThrough.gets.length / 10)
+      assert(indexed.chars < readThrough.chars / 10)
       assert(indexed.metrics.some((metric) => metric.operation === 'has'))
       assert(!indexed.checks.includes(objectOf(request.ref)), 'cached request is not checked twice')
       assert(
@@ -201,14 +206,14 @@ test('exhausted trace budgets check presence without loading historical bodies a
           )
         )
       t.diagnostic(
-        `budget=${maxChars}, missing=${Boolean(missing)}: get ${legacy.gets.length}->${indexed.gets.length}, body chars ${legacy.chars}->${indexed.chars}, elapsed ${legacy.durationMs.toFixed(2)}->${indexed.durationMs.toFixed(2)}ms`
+        `budget=${maxChars}, missing=${Boolean(missing)}: get ${readThrough.gets.length}->${indexed.gets.length}, body chars ${readThrough.chars}->${indexed.chars}, elapsed ${readThrough.durationMs.toFixed(2)}->${indexed.durationMs.toFixed(2)}ms`
       )
     }
   }
-  const legacyFull = await read(false, { limit: 1, maxChars: 1, fullContent: true })
+  const readThroughFull = await read(false, { limit: 1, maxChars: 1, fullContent: true })
   const indexedFull = await read(true, { limit: 1, maxChars: 1, fullContent: true })
-  assert.deepEqual(indexedFull.trace, legacyFull.trace)
-  assert.deepEqual(indexedFull.gets, legacyFull.gets)
+  assert.deepEqual(indexedFull.trace, readThroughFull.trace)
+  assert.deepEqual(indexedFull.gets, readThroughFull.gets)
   assert.deepEqual(indexedFull.checks, [])
 })
 
@@ -224,6 +229,15 @@ test('trace pages use one metadata snapshot and query only associated execution 
     body: '{}',
     sources: [source.ref],
   })
+  const frame = await context.append({
+    kind: 'audit',
+    title: 'context:frame:selected',
+    body: JSON.stringify({
+      frameId: 'selected',
+      entries: [],
+      observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
+    }),
+  })
   const requests = []
   for (let turn = 0; turn < 3; turn++) {
     const request = await context.append({
@@ -233,20 +247,7 @@ test('trace pages use one metadata snapshot and query only associated execution 
         runId: 'run',
         turn,
         repair: 0,
-        request: {
-          materials: [
-            {
-              origin: 'runtime-view',
-              text: JSON.stringify({
-                partitions: {
-                  task: { goals: [] },
-                  observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
-                  recent: { results: [] },
-                },
-              }),
-            },
-          ],
-        },
+        frameRef: frame.ref,
       }),
     })
     requests.push(request)
@@ -395,7 +396,6 @@ test('observation summaries say what a turn registered and which run fed its req
         failure: null,
         source: watch,
         sourceTruncated: false,
-        language: 'node',
       },
       run: null,
     })
@@ -433,8 +433,6 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'full', storage })
-  const system = `${'s'.repeat(9000)}SYSTEM_END`
-  const content = `${'m'.repeat(30000)}MESSAGE_END`
   const response = `${'r'.repeat(500_001)}RESPONSE_END`
   const requests = []
   for (let turn = 0; turn < 2; turn++) {
@@ -445,13 +443,18 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
         runId: 'run',
         turn,
         repair: 0,
-        providerRequest: {
-          schemaVersion: 2,
+        requestAudit: {
+          schemaVersion: 3,
           model: 'model',
-          system,
-          messages: [{ role: 'user', content }],
+          modelTruncated: false,
+          inputTokens: 1000,
+          precision: 'exact',
+          basis: 'test',
+          basisTruncated: false,
+          messageCount: 1,
+          toolCount: 0,
           outputTokens: 4096,
-          requestFingerprint: { id: 'fp' },
+          requestFingerprint: { id: '1234567890abcdef' },
         },
       }),
     })
@@ -460,11 +463,10 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
   }
   const trace = new RuntimeTrace('full', storage, { list: async () => [] })
   const bounded = await trace.page({ limit: 1, maxChars: 500 })
-  assert.equal(bounded.turns[0].requestSummary.systemTruncated, true)
+  assert.equal(bounded.turns[0].response.truncated, true)
   const first = await trace.page({ limit: 1, fullContent: true, maxChars: 500 })
   assert.equal(first.turns.length, 1)
-  assert.equal(first.turns[0].requestSummary.system, system)
-  assert.equal(JSON.parse(first.turns[0].requestSummary.messages)[0].content, content)
+  assert.deepEqual(first.turns[0].requestSummary, bounded.turns[0].requestSummary)
   assert.equal(first.turns[0].response.body, response)
   assert.equal(first.turns[0].response.truncated, false)
   assert.equal(first.nextAfter, requests[0].sequence)

@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
@@ -69,7 +68,6 @@ for (const [name, events] of [
     }
     const runtime = await createRuntime({
       storage,
-      runner: nodeSubprocessCodeRunner,
       model,
       modules: [
         {
@@ -147,7 +145,6 @@ for (const scenario of ['recover', 'exhaust', 'cancel'])
     }
     const runtime = await createRuntime({
       storage,
-      runner: nodeSubprocessCodeRunner,
       model,
       modules: [
         {

@@ -9,10 +9,15 @@ import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDecoder.js'
-import { createProjectCapabilityModule, createRuntime } from '../../../dist/act/runtime/index.js'
+import {
+  createNodeExecutionEnvironment,
+  createProjectCapabilityModule,
+  createRuntime,
+} from '../../../dist/act/runtime/index.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
   createProjectKernel,
   createProjectObservationProvider,
@@ -22,6 +27,12 @@ import { done, marker, runtimeFrame, turn } from './support/model-turn.mjs'
 
 const stop = { type: 'finish', reason: 'stop' }
 const noop = "import {output} from 'velaros'; output('continue');"
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const nativeDerivation = {
+  skip: platformHasDefaultConfinement
+    ? false
+    : 'The default host has no read-only process backend; derivation rejection is covered separately.',
+}
 const entries = [
   {
     path: 'facts.json',
@@ -54,6 +65,14 @@ async function fixture(t, stream, options = {}) {
     JSON.stringify({ active: { items: [1, 2], enabled: true }, ignored: 7 })
   )
   await writeFile(join(workspace, 'note.txt'), 'Alpha\nBeta\nGamma\n')
+  const host = createLocalShellHost({ cwd: workspace })
+  const delegate = createNodeCodeRunner(
+    createNodeExecutionEnvironment({
+      cwd: workspace,
+      directory: join(root, 'runs'),
+      host,
+    })
+  )
   const f = {
     root,
     workspace,
@@ -72,9 +91,11 @@ async function fixture(t, stream, options = {}) {
   }
   let kernel
   const runner = {
+    environment: delegate.environment,
+    cwd: delegate.cwd,
     async run(request, ...args) {
       const started = performance.now()
-      const result = await nodeSubprocessCodeRunner.run(request, ...args)
+      const result = await delegate.run(request, ...args)
       f.runs.push({
         source: request.source,
         derive: Boolean(request.input?.capture),
@@ -161,6 +182,7 @@ async function fixture(t, stream, options = {}) {
   }
   t.after(async () => {
     await f.runtime.close()
+    await host.dispose()
     await rm(root, { recursive: true, force: true })
   })
   return f
@@ -174,169 +196,288 @@ const steady = (rounds) =>
     } else yield* done(request)
   }
 
-test('INV-80 default workspace model entry captures real Project values every round and reuses only pure derivation', async (t) => {
-  const f = await fixture(t, async function* (request, f) {
-    if (f.calls === 1) {
-      yield {
-        type: 'text',
-        text: block(
-          request,
-          snapshot([
-            ...entries,
-            { path: 'note.txt', range: [2, 2], key: 'note', purpose: 'Current note', view: 'full' },
-          ])
-        ),
-      }
-      yield stop
-    } else yield* steady(7)(request, f)
-  })
-  const events = await collect(f)
-  assert.equal(events.at(-1).status, 'completed')
-  assert.equal(f.captureCalls, 6)
-  assert.equal(f.runs.filter((item) => item.derive).length, 1)
-  const observed = f.frames.slice(1).map((frame) => frame.observation.freshness)
-  assert.deepEqual(
-    observed.map((item) => item.status),
-    ['collected', 'reused', 'reused', 'reused', 'reused', 'reused']
-  )
-  assert.equal(new Set(observed.map((item) => item.executionId)).size, 1)
-  assert.equal(new Set(observed.map((item) => item.resultRef)).size, 1)
-  assert.equal(new Set(observed.map((item) => item.observedAt)).size, 1)
-  assert.equal(new Set(observed.map((item) => item.snapshot.captureExecutionId)).size, 6)
-  assert.ok(
-    observed.every((item) => item.snapshot.readRequests === 4 && item.snapshot.materialBytes > 0)
-  )
-  assert.ok(f.frames[1].observation.text.includes('Beta'))
-  const traces = (await f.runtime.trace('s', { fullContent: true, limit: 8 })).turns.slice(1)
-  for (const trace of traces) {
-    const capture = trace.invocations.filter(
-      (item) => item.summary.moduleId === 'velaros:project' && item.summary.operation === 'snapshot'
-    )
-    assert.equal(capture.length, 1)
-    assert.equal(trace.invocations.length, 1, 'reused derivation adds no current Kernel invocation')
+test(
+  'INV-80 unavailable read-only derivation retains authorized captures and archives failures without reuse',
+  {
+    skip: platformHasDefaultConfinement
+      ? 'This host has a default read-only backend; successful derivation is covered below.'
+      : false,
+  },
+  async (t) => {
+    const f = await fixture(t, steady(2), { custom: true })
+    await f.session.observe(snapshot())
+    assert.equal((await collect(f)).at(-1).status, 'completed')
+    assert.equal(f.reads, 4)
+    assert.equal(f.captureCalls, 2)
+    const derives = f.runs.filter((run) => run.derive)
+    assert.equal(derives.length, 2)
+    assert.notEqual(f.frames[0].observation.resultRef, f.frames[1].observation.resultRef)
+    assert(f.frames.every((frame) => frame.observation.freshness.status !== 'reused'))
     assert.equal(
-      capture[0].executionId,
-      trace.observation.run.collection.snapshot.captureExecutionId
+      await readFile(join(f.workspace, 'facts.json'), 'utf8'),
+      '{"active":{"items":[1,2],"enabled":true},"ignored":7}'
     )
+    const traces = (await f.runtime.trace('s', { fullContent: true, limit: 8 })).turns
+    assert.equal(traces.length, 2)
+    for (const [index, trace] of traces.entries()) {
+      const request = JSON.parse(trace.request.body)
+      assert.equal(request.requestAudit.schemaVersion, 3)
+      const frameRecord = trace.records.find((record) => record.ref.id === request.frameRef.id)
+      const frame = JSON.parse(frameRecord.body)
+      assert.equal(frameRecord.title, `context:frame:${frame.frameId}`)
+      const sourceRecord = trace.records.find(
+        (record) => record.ref.id === frame.observation.sourceRef
+      )
+      assert.equal(JSON.parse(sourceRecord.body).source, derives[index].source)
+      const versionRecord = trace.records.find(
+        (record) => record.title === `script:version:${frame.observation.sourceRef}`
+      )
+      assert.deepEqual(JSON.parse(versionRecord.body).snapshot.input, { files: entries })
+      const captured = trace.records.find(
+        (record) => record.ref.id === frame.observation.freshness.snapshot.captureResultRef
+      )
+      const capture = JSON.parse(captured.body)
+      assert.ok(capture.capture)
+      assert.equal(capture.result.failed, undefined)
+      assert.equal(trace.invocations.length, 1)
+      assert.equal(trace.invocations[0].summary.moduleId, 'velaros:project')
+      assert.equal(trace.invocations[0].summary.operation, 'snapshot')
+      assert.equal(trace.invocations[0].summary.status, 'succeeded')
+      const failed = trace.records.find((record) => record.ref.id === frame.observation.resultRef)
+      const result = JSON.parse(failed.body)
+      assert.equal(result.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+      assert.equal(result.result.process, undefined)
+      assert.equal(result.attachments, undefined)
+      assert.equal(trace.observation.run.status, 'failed')
+      assert.equal(trace.observation.run.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    }
   }
-  const before = f.captureCalls
-  f.stream = steady(f.calls + 1)
-  await collect(f)
-  assert.equal(f.captureCalls, before, 'logical task completion retires snapshot plan')
-})
+)
 
-test('INV-80 authorization reset retires the plan and a newly accepted stage captures again', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1) {
-        await f.session.context.append({
-          kind: 'audit',
-          title: 'search:history-reset',
-          body: 'Authorize a new stage from this point',
-        })
-        yield turn(request, { execute: { source: noop } })
-        yield stop
-      } else if (f.calls === 2) {
-        yield { type: 'text', text: block(request, snapshot()) }
-        yield stop
-      } else yield* done(request)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 4)
-  assert.equal(f.captureCalls, 2)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.frames[1].observation.sourceRef, null)
-  assert.notEqual(f.frames[0].observation.sourceRef, f.frames[2].observation.sourceRef)
-})
-
-test('INV-80 content changes and ABA with a changed captured revision force fresh pure derivation', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1) {
-        await writeFile(join(f.workspace, 'facts.json'), '{"active":{"items":[9]}}')
-        await writeFile(
-          join(f.workspace, 'facts.json'),
-          '{"active":{"items":[1,2],"enabled":true},"ignored":7}'
-        )
-      }
-      if (f.calls === 2)
-        await writeFile(
-          join(f.workspace, 'facts.json'),
-          '{"active":{"items":[3],"enabled":false},"ignored":7}'
-        )
-      yield* steady(3)(request, f)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 6)
-  assert.equal(
-    f.runs.filter((item) => item.derive).length,
-    3,
-    JSON.stringify(f.frames.map((frame) => frame.observation))
-  )
-  assert.deepEqual(
-    f.frames.map((frame) => frame.observation.freshness.status),
-    ['collected', 'collected', 'collected']
-  )
-  assert.notEqual(f.frames[0].observation.resultRef, f.frames[1].observation.resultRef)
-  assert.notEqual(f.frames[1].observation.resultRef, f.frames[2].observation.resultRef)
-})
-
-test('INV-80 a truncated real capture drops the old baseline and keeps all returned material cost', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1)
-        await writeFile(
-          join(f.workspace, 'facts.json'),
-          JSON.stringify({ active: { items: [1, 2], enabled: true }, padding: 'x'.repeat(500001) })
-        )
-      if (f.calls === 2)
-        await writeFile(
-          join(f.workspace, 'facts.json'),
-          JSON.stringify({ active: { items: [1, 2], enabled: true }, ignored: 7 })
-        )
-      yield* steady(3)(request, f)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 5)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
-  assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, 1)
-  assert.equal(f.frames[1].observation.freshness.snapshot.materialBytes, 500000)
-  assert.equal(f.frames[2].observation.freshness.status, 'collected')
-})
-
-test('INV-80 pre/post external mutation produces failed capture with authoritative real costs; next round recaptures', async (t) => {
-  const f = await fixture(t, steady(3), { custom: true })
-  await f.session.observe(snapshot())
-  f.onRead = async (_input, _result, reads) => {
-    if (reads === 3) await writeFile(join(f.workspace, 'facts.json'), '{"active":{"items":[4]}}')
+test('INV-80 denied capture and project escape never start a derivation on any host', async (t) => {
+  const f = await fixture(t, steady(1), { custom: true })
+  f.onCapture = async () => {
+    throw new AppError('PERMISSION', 'permission revoked before capture')
   }
+  await f.session.observe(snapshot())
   await collect(f)
-  assert.equal(f.reads, 6)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
-  assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, 2)
-  assert.equal(f.frames[1].observation.freshness.snapshot.derived, false)
-  const records = await f.records()
-  const archived = records.find((record) => record.body.includes('PROJECT_SNAPSHOT_COST'))
-  assert.ok(archived)
-  const diagnostic = JSON.parse(archived.body).diagnostic
-  assert.equal(diagnostic.code, 'PROJECT_SNAPSHOT_COST')
-  assert.equal(JSON.parse(diagnostic.message).readRequests, 2)
-  assert.ok(JSON.parse(diagnostic.message).materialBytes > 0)
+  assert.equal(f.reads, 0)
+  assert.equal(f.runs.filter((run) => run.derive).length, 0)
+  assert.equal(f.frames[0].observation.freshness.reason, 'snapshot-capture-failed')
+  const secret = join(f.root, 'protected.txt')
+  await writeFile(secret, 'PROTECTED')
+  await symlink(secret, join(f.workspace, 'outside.txt'))
+  f.onCapture = async () => {}
+  f.stream = async function* (request) {
+    yield* done(request)
+  }
+  await f.session.observe(
+    snapshot([{ path: 'outside.txt', key: 'outside', purpose: 'Reject escape' }])
+  )
+  await collect(f)
+  assert.equal(f.reads, 0)
+  assert.equal(f.runs.filter((run) => run.derive).length, 0)
+  assert.equal(f.frames.at(-1).observation.freshness.reason, 'snapshot-capture-failed')
+  assert.equal(await readFile(secret, 'utf8'), 'PROTECTED')
 })
+
+test(
+  'INV-80 default workspace model entry captures real Project values every round and reuses only pure derivation',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(t, async function* (request, f) {
+      if (f.calls === 1) {
+        yield {
+          type: 'text',
+          text: block(
+            request,
+            snapshot([
+              ...entries,
+              {
+                path: 'note.txt',
+                range: [2, 2],
+                key: 'note',
+                purpose: 'Current note',
+                view: 'full',
+              },
+            ])
+          ),
+        }
+        yield stop
+      } else yield* steady(7)(request, f)
+    })
+    const events = await collect(f)
+    assert.equal(events.at(-1).status, 'completed')
+    assert.equal(f.captureCalls, 6)
+    assert.equal(f.runs.filter((item) => item.derive).length, 1)
+    const observed = f.frames.slice(1).map((frame) => frame.observation.freshness)
+    assert.deepEqual(
+      observed.map((item) => item.status),
+      ['collected', 'reused', 'reused', 'reused', 'reused', 'reused']
+    )
+    assert.equal(new Set(observed.map((item) => item.executionId)).size, 1)
+    assert.equal(new Set(observed.map((item) => item.resultRef)).size, 1)
+    assert.equal(new Set(observed.map((item) => item.observedAt)).size, 1)
+    assert.equal(new Set(observed.map((item) => item.snapshot.captureExecutionId)).size, 6)
+    assert.ok(
+      observed.every((item) => item.snapshot.readRequests === 4 && item.snapshot.materialBytes > 0)
+    )
+    assert.ok(f.frames[1].observation.text.includes('Beta'))
+    const traces = (await f.runtime.trace('s', { fullContent: true, limit: 8 })).turns.slice(1)
+    for (const trace of traces) {
+      const capture = trace.invocations.filter(
+        (item) =>
+          item.summary.moduleId === 'velaros:project' && item.summary.operation === 'snapshot'
+      )
+      assert.equal(capture.length, 1)
+      assert.equal(
+        trace.invocations.length,
+        1,
+        'reused derivation adds no current Kernel invocation'
+      )
+      assert.equal(
+        capture[0].executionId,
+        trace.observation.run.collection.snapshot.captureExecutionId
+      )
+    }
+    const before = f.captureCalls
+    f.stream = steady(f.calls + 1)
+    await collect(f)
+    assert.equal(f.captureCalls, before, 'logical task completion retires snapshot plan')
+  }
+)
+
+test(
+  'INV-80 authorization reset retires the plan and a newly accepted stage captures again',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1) {
+          await f.session.context.append({
+            kind: 'audit',
+            title: 'search:history-reset',
+            body: 'Authorize a new stage from this point',
+          })
+          yield turn(request, { execute: { source: noop } })
+          yield stop
+        } else if (f.calls === 2) {
+          yield { type: 'text', text: block(request, snapshot()) }
+          yield stop
+        } else yield* done(request)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 4)
+    assert.equal(f.captureCalls, 2)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.frames[1].observation.sourceRef, null)
+    assert.notEqual(f.frames[0].observation.sourceRef, f.frames[2].observation.sourceRef)
+  }
+)
+
+test(
+  'INV-80 content changes and ABA with a changed captured revision force fresh pure derivation',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1) {
+          await writeFile(join(f.workspace, 'facts.json'), '{"active":{"items":[9]}}')
+          await writeFile(
+            join(f.workspace, 'facts.json'),
+            '{"active":{"items":[1,2],"enabled":true},"ignored":7}'
+          )
+        }
+        if (f.calls === 2)
+          await writeFile(
+            join(f.workspace, 'facts.json'),
+            '{"active":{"items":[3],"enabled":false},"ignored":7}'
+          )
+        yield* steady(3)(request, f)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 6)
+    assert.equal(
+      f.runs.filter((item) => item.derive).length,
+      3,
+      JSON.stringify(f.frames.map((frame) => frame.observation))
+    )
+    assert.deepEqual(
+      f.frames.map((frame) => frame.observation.freshness.status),
+      ['collected', 'collected', 'collected']
+    )
+    assert.notEqual(f.frames[0].observation.resultRef, f.frames[1].observation.resultRef)
+    assert.notEqual(f.frames[1].observation.resultRef, f.frames[2].observation.resultRef)
+  }
+)
+
+test(
+  'INV-80 a truncated real capture drops the old baseline and keeps all returned material cost',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1)
+          await writeFile(
+            join(f.workspace, 'facts.json'),
+            JSON.stringify({
+              active: { items: [1, 2], enabled: true },
+              padding: 'x'.repeat(500001),
+            })
+          )
+        if (f.calls === 2)
+          await writeFile(
+            join(f.workspace, 'facts.json'),
+            JSON.stringify({ active: { items: [1, 2], enabled: true }, ignored: 7 })
+          )
+        yield* steady(3)(request, f)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 5)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
+    assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, 1)
+    assert.equal(f.frames[1].observation.freshness.snapshot.materialBytes, 500000)
+    assert.equal(f.frames[2].observation.freshness.status, 'collected')
+  }
+)
+
+test(
+  'INV-80 pre/post external mutation produces failed capture with authoritative real costs; next round recaptures',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(t, steady(3), { custom: true })
+    await f.session.observe(snapshot())
+    f.onRead = async (_input, _result, reads) => {
+      if (reads === 3) await writeFile(join(f.workspace, 'facts.json'), '{"active":{"items":[4]}}')
+    }
+    await collect(f)
+    assert.equal(f.reads, 6)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
+    assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, 2)
+    assert.equal(f.frames[1].observation.freshness.snapshot.derived, false)
+    const records = await f.records()
+    const archived = records.find((record) => record.body.includes('PROJECT_SNAPSHOT_COST'))
+    assert.ok(archived)
+    const diagnostic = JSON.parse(archived.body).diagnostic
+    assert.equal(diagnostic.code, 'PROJECT_SNAPSHOT_COST')
+    assert.equal(JSON.parse(diagnostic.message).readRequests, 2)
+    assert.ok(JSON.parse(diagnostic.message).materialBytes > 0)
+  }
+)
 
 test('INV-80 a reset during authorized capture does not republish captured values in the new stage', async (t) => {
   const f = await fixture(t, steady(1), { custom: true })
@@ -367,293 +508,325 @@ test('INV-80 a reset during authorized capture does not republish captured value
   assert.equal(f.frames[0].observation.sourceRef, null)
 })
 
-test('INV-80 provider incarnation replacement and process restart force actual capture and fresh derivation', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1) await f.replaceKernel()
-      yield* steady(2)(request, f)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.reads, 4)
-  f.stream = () => ({
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    async next() {
-      throw new AppError('UNAVAILABLE', 'fixture stops with task active')
-    },
-  })
-  await f.session.observe(snapshot())
-  await collect(f)
-  const previous = f.frames.at(-1).observation.freshness.executionId
-  await f.restart()
-  f.stream = async function* (request) {
-    yield* done(request)
+test(
+  'INV-80 provider incarnation replacement and process restart force actual capture and fresh derivation',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1) await f.replaceKernel()
+        yield* steady(2)(request, f)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.reads, 4)
+    f.stream = () => ({
+      [Symbol.asyncIterator]() {
+        return this
+      },
+      async next() {
+        throw new AppError('UNAVAILABLE', 'fixture stops with task active')
+      },
+    })
+    await f.session.observe(snapshot())
+    await collect(f)
+    const previous = f.frames.at(-1).observation.freshness.executionId
+    await f.restart()
+    f.stream = async function* (request) {
+      yield* done(request)
+    }
+    await collect(f)
+    assert.equal(f.frames.at(-1).observation.freshness.status, 'collected')
+    assert.notEqual(f.frames.at(-1).observation.freshness.executionId, previous)
   }
-  await collect(f)
-  assert.equal(f.frames.at(-1).observation.freshness.status, 'collected')
-  assert.notEqual(f.frames.at(-1).observation.freshness.executionId, previous)
-})
+)
 
-test('INV-80 missing result attachment provenance forces fresh derivation after real capture', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1) {
-        const ref = f.frames[0].observation.resultRef
-        const state = await f.storage.load('s')
-        const record = state.records.find((item) => item.ref.id === ref)
-        const result = JSON.parse(await f.storage.get('s', record.objectId))
-        result.attachments = [{ sessionId: 's', id: 'missing-image-object' }]
-        const objectId = await f.storage.put('s', JSON.stringify(result))
-        assert.equal(
-          await f.storage.compareAndSwap('s', state.version, {
-            ...state,
-            version: state.version + 1,
-            records: state.records.map((item) => (item === record ? { ...item, objectId } : item)),
-          }),
-          true
-        )
+test(
+  'INV-80 missing result attachment provenance forces fresh derivation after real capture',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1) {
+          const ref = f.frames[0].observation.resultRef
+          const state = await f.storage.load('s')
+          const record = state.records.find((item) => item.ref.id === ref)
+          const result = JSON.parse(await f.storage.get('s', record.objectId))
+          result.attachments = [{ sessionId: 's', id: 'missing-image-object' }]
+          const objectId = await f.storage.put('s', JSON.stringify(result))
+          assert.equal(
+            await f.storage.compareAndSwap('s', state.version, {
+              ...state,
+              version: state.version + 1,
+              records: state.records.map((item) =>
+                item === record ? { ...item, objectId } : item
+              ),
+            }),
+            true
+          )
+        }
+        yield* steady(2)(request, f)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 4)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.frames[1].observation.freshness.reason, 'attachment-or-result-unavailable')
+  }
+)
+
+test(
+  'INV-80 failed pure derivations never reuse and paused observation is not revived by refresh',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 3) {
+          yield {
+            type: 'text',
+            text: block(request, {
+              sourceRef: f.frames.at(-1).observation.sourceRef,
+              refresh: true,
+            }),
+          }
+          yield stop
+        } else yield* steady(4)(request, f)
+      },
+      { custom: true }
+    )
+    await writeFile(join(f.workspace, 'facts.json'), '{invalid json}')
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 6)
+    assert.equal(f.runs.filter((item) => item.derive).length, 3)
+    assert.deepEqual(
+      f.frames.map((frame) => frame.observation.freshness.status),
+      ['collected', 'collected', 'collected', 'paused']
+    )
+  }
+)
+
+test(
+  'INV-80 accepted refresh forces pure derivation; clear retires the plan without later IO',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1) {
+          yield {
+            type: 'text',
+            text: block(request, {
+              sourceRef: f.frames.at(-1).observation.sourceRef,
+              refresh: true,
+            }),
+          }
+          yield stop
+        } else if (f.calls === 2) {
+          yield { type: 'text', text: block(request, { clear: true }) }
+          yield stop
+        } else yield* done(request)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 4)
+    assert.equal(f.runs.filter((item) => item.derive).length, 2)
+    assert.equal(f.frames[1].observation.freshness.reason, 'refresh-requested')
+    assert.equal(f.frames[2].observation.sourceRef, null)
+  }
+)
+
+test(
+  'INV-80 revoked authorization and project escape fail through real Kernel without cached output reuse',
+  nativeDerivation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        if (f.calls === 1)
+          f.onCapture = async () => {
+            throw new AppError('PERMISSION', 'permission revoked')
+          }
+        yield* steady(2)(request, f)
+      },
+      { custom: true }
+    )
+    await f.session.observe(snapshot())
+    await collect(f)
+    assert.equal(f.reads, 2)
+    assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
+    assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, undefined)
+    const secret = join(f.root, 'protected.txt')
+    await writeFile(secret, 'PROTECTED')
+    await symlink(secret, join(f.workspace, 'outside.txt'))
+    f.onCapture = async () => {}
+    f.stream = async function* (request) {
+      yield* done(request)
+    }
+    await f.session.observe(
+      snapshot([{ path: 'outside.txt', key: 'outside', purpose: 'Escape must be rejected' }])
+    )
+    const before = f.reads
+    await collect(f)
+    assert.equal(f.reads, before)
+    assert.equal(f.frames.at(-1).observation.freshness.reason, 'snapshot-capture-failed')
+    assert.equal(await readFile(secret, 'utf8'), 'PROTECTED')
+  }
+)
+
+test(
+  'INV-80 cancellation returns promptly with unknown cost, then late physical IO settles in the authoritative journal and trace',
+  nativeDerivation,
+  async (t) => {
+    const gate = Promise.withResolvers()
+    const entered = Promise.withResolvers()
+    t.after(() => gate.resolve())
+    const f = await fixture(t, steady(3), { custom: true })
+    const expectedMaterialBytes = (await readFile(join(f.workspace, 'facts.json'))).byteLength
+    await f.session.observe(snapshot())
+    const controller = new AbortController()
+    f.beforeRead = async (_input, count) => {
+      if (count === 3) {
+        entered.resolve()
+        await gate.promise
       }
-      yield* steady(2)(request, f)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 4)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.frames[1].observation.freshness.reason, 'attachment-or-result-unavailable')
-})
-
-test('INV-80 failed pure derivations never reuse and paused observation is not revived by refresh', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 3) {
-        yield {
-          type: 'text',
-          text: block(request, { sourceRef: f.frames.at(-1).observation.sourceRef, refresh: true }),
+    }
+    const timers = new TimerScope({ name: 'snapshot-cancellation-proof' })
+    let phase = 'waiting-for-third-read'
+    try {
+      const pending = collect(f, controller.signal)
+      await timers.withTimeout(2000, () => entered.promise)
+      phase = 'waiting-for-cancellation'
+      const started = performance.now()
+      controller.abort(new AppError('CANCELLED', 'stop current capture'))
+      const events = await timers.withTimeout(1000, () => pending)
+      assert.notEqual(events.at(-1).status, 'completed')
+      assert.ok(performance.now() - started < 1000)
+      assert.equal(f.calls, 1, 'the next model request was never sent')
+      assert.equal(f.reads, 3)
+      assert.equal(f.readCompletions, 2, 'the cancelled physical read has not completed')
+      assert.equal(
+        f.runs.filter((item) => item.derive).length,
+        1,
+        'cancelled capture does not derive or reuse'
+      )
+      const records = await f.records()
+      const failed = records
+        .filter((record) => record.title.endsWith(':result'))
+        .map((record) => JSON.parse(record.body))
+        .find((value) => value.kind === 'snapshot-capture' && value.result.failed)
+      assert.ok(failed)
+      assert.equal(failed.capture, undefined)
+      assert.equal(failed.diagnostic, undefined)
+      const decisions = records
+        .filter((record) => record.title === 'script:lease-state')
+        .map((record) => JSON.parse(record.body).observationCollection)
+        .filter((value) => value?.snapshot?.captureExecutionId === failed.executionId)
+      assert.ok(decisions.length > 0)
+      assert.ok(
+        decisions.every(
+          (value) =>
+            value.snapshot.readRequests === undefined &&
+            value.snapshot.materialBytes === undefined &&
+            !value.snapshot.derived &&
+            !value.snapshot.reused
+        )
+      )
+      const journal = createContextInvocationJournal(f.storage)
+      const invocationId = `${failed.executionId}:1`
+      const before = await journal.read('s', invocationId)
+      assert.equal(before.phase, 'prepared')
+      assert.equal(before.receipt, undefined)
+      const beforeTrace = await f.runtime.trace('s', { fullContent: true, limit: 8 })
+      const beforeActivity = beforeTrace.sessionActivity.entries.find(
+        (item) => item.executionId === failed.executionId
+      )
+      assert.equal(beforeActivity.kind, 'snapshot-capture')
+      assert.equal(beforeActivity.invocations.length, 1)
+      assert.ok(beforeActivity.invocations[0].body.includes('prepared'))
+      assert.ok(
+        beforeTrace.turns.every((turn) =>
+          turn.invocations.every((item) => item.executionId !== failed.executionId)
+        ),
+        'an unsent capture is an independent session activity'
+      )
+      phase = 'waiting-for-late-settlement'
+      gate.resolve()
+      const settled = await timers.withTimeout(2000, async (signal) => {
+        for (;;) {
+          signal.throwIfAborted()
+          const current = await journal.read('s', invocationId)
+          if (current?.phase === 'settled') return current
+          await timers.sleep(5, { signal })
         }
-        yield stop
-      } else yield* steady(4)(request, f)
-    },
-    { custom: true }
-  )
-  await writeFile(join(f.workspace, 'facts.json'), '{invalid json}')
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 6)
-  assert.equal(f.runs.filter((item) => item.derive).length, 3)
-  assert.deepEqual(
-    f.frames.map((frame) => frame.observation.freshness.status),
-    ['collected', 'collected', 'collected', 'paused']
-  )
-})
-
-test('INV-80 accepted refresh forces pure derivation; clear retires the plan without later IO', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1) {
-        yield {
-          type: 'text',
-          text: block(request, { sourceRef: f.frames.at(-1).observation.sourceRef, refresh: true }),
-        }
-        yield stop
-      } else if (f.calls === 2) {
-        yield { type: 'text', text: block(request, { clear: true }) }
-        yield stop
-      } else yield* done(request)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 4)
-  assert.equal(f.runs.filter((item) => item.derive).length, 2)
-  assert.equal(f.frames[1].observation.freshness.reason, 'refresh-requested')
-  assert.equal(f.frames[2].observation.sourceRef, null)
-})
-
-test('INV-80 revoked authorization and project escape fail through real Kernel without cached output reuse', async (t) => {
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      if (f.calls === 1)
-        f.onCapture = async () => {
-          throw new AppError('PERMISSION', 'permission revoked')
-        }
-      yield* steady(2)(request, f)
-    },
-    { custom: true }
-  )
-  await f.session.observe(snapshot())
-  await collect(f)
-  assert.equal(f.reads, 2)
-  assert.equal(f.frames[1].observation.freshness.reason, 'snapshot-capture-failed')
-  assert.equal(f.frames[1].observation.freshness.snapshot.readRequests, undefined)
-  const secret = join(f.root, 'protected.txt')
-  await writeFile(secret, 'PROTECTED')
-  await symlink(secret, join(f.workspace, 'outside.txt'))
-  f.onCapture = async () => {}
-  f.stream = async function* (request) {
-    yield* done(request)
-  }
-  await f.session.observe(
-    snapshot([{ path: 'outside.txt', key: 'outside', purpose: 'Escape must be rejected' }])
-  )
-  const before = f.reads
-  await collect(f)
-  assert.equal(f.reads, before)
-  assert.equal(f.frames.at(-1).observation.freshness.reason, 'snapshot-capture-failed')
-  assert.equal(await readFile(secret, 'utf8'), 'PROTECTED')
-})
-
-test('INV-80 cancellation returns promptly with unknown cost, then late physical IO settles in the authoritative journal and trace', async (t) => {
-  const gate = Promise.withResolvers()
-  const entered = Promise.withResolvers()
-  t.after(() => gate.resolve())
-  const f = await fixture(t, steady(3), { custom: true })
-  const expectedMaterialBytes = (await readFile(join(f.workspace, 'facts.json'))).byteLength
-  await f.session.observe(snapshot())
-  const controller = new AbortController()
-  f.beforeRead = async (_input, count) => {
-    if (count === 3) {
-      entered.resolve()
-      await gate.promise
+      })
+      assert.equal(settled.receipt.outcome, 'cancelled')
+      assert.equal(f.readCompletions, 3, 'the late journal follows the actual physical read')
+      assert.equal(settled.receipt.diagnostic.code, 'PROJECT_SNAPSHOT_COST')
+      assert.equal(JSON.parse(settled.receipt.diagnostic.message).readRequests, 1)
+      assert.equal(
+        JSON.parse(settled.receipt.diagnostic.message).materialBytes,
+        expectedMaterialBytes
+      )
+      const trace = await f.runtime.trace('s', { fullContent: true, limit: 8 })
+      const activity = trace.sessionActivity.entries.find(
+        (item) => item.executionId === failed.executionId
+      )
+      const captured = activity?.invocations.find((item) => item.id === invocationId)
+      assert.ok(captured, JSON.stringify({ failed, settled, activity }))
+      assert.ok(
+        trace.turns.every((turn) =>
+          turn.invocations.every((item) => item.executionId !== failed.executionId)
+        ),
+        'late settlement does not create a model request'
+      )
+      assert.equal(captured.summary.status, 'cancelled')
+      assert.ok(captured.body.includes('PROJECT_SNAPSHOT_COST'))
+      assert.equal(
+        JSON.parse(JSON.parse(captured.body).receipt.diagnostic.message).materialBytes,
+        expectedMaterialBytes
+      )
+      assert.equal(
+        JSON.parse(activity.records.find((record) => record.title.endsWith(':result')).body)
+          .diagnostic,
+        undefined,
+        'host failure and current journal receipt remain separate facts'
+      )
+      const original = (await f.records()).find(
+        (record) => record.title === `script:${failed.executionId}:result`
+      )
+      assert.equal(
+        JSON.parse(original.body).diagnostic,
+        undefined,
+        'original unknown-cost decision is immutable'
+      )
+    } catch (error) {
+      t.diagnostic(
+        JSON.stringify({
+          phase,
+          calls: f.calls,
+          reads: f.reads,
+          readCompletions: f.readCompletions,
+          runs: f.runs,
+        })
+      )
+      throw error
+    } finally {
+      gate.resolve()
+      timers.dispose()
     }
   }
-  const timers = new TimerScope({ name: 'snapshot-cancellation-proof' })
-  let phase = 'waiting-for-third-read'
-  try {
-    const pending = collect(f, controller.signal)
-    await timers.withTimeout(2000, () => entered.promise)
-    phase = 'waiting-for-cancellation'
-    const started = performance.now()
-    controller.abort(new AppError('CANCELLED', 'stop current capture'))
-    const events = await timers.withTimeout(1000, () => pending)
-    assert.notEqual(events.at(-1).status, 'completed')
-    assert.ok(performance.now() - started < 1000)
-    assert.equal(f.calls, 1, 'the next model request was never sent')
-    assert.equal(f.reads, 3)
-    assert.equal(f.readCompletions, 2, 'the cancelled physical read has not completed')
-    assert.equal(
-      f.runs.filter((item) => item.derive).length,
-      1,
-      'cancelled capture does not derive or reuse'
-    )
-    const records = await f.records()
-    const failed = records
-      .filter((record) => record.title.endsWith(':result'))
-      .map((record) => JSON.parse(record.body))
-      .find((value) => value.kind === 'snapshot-capture' && value.result.failed)
-    assert.ok(failed)
-    assert.equal(failed.capture, undefined)
-    assert.equal(failed.diagnostic, undefined)
-    const decisions = records
-      .filter((record) => record.title === 'script:lease-state')
-      .map((record) => JSON.parse(record.body).observationCollection)
-      .filter((value) => value?.snapshot?.captureExecutionId === failed.executionId)
-    assert.ok(decisions.length > 0)
-    assert.ok(
-      decisions.every(
-        (value) =>
-          value.snapshot.readRequests === undefined &&
-          value.snapshot.materialBytes === undefined &&
-          !value.snapshot.derived &&
-          !value.snapshot.reused
-      )
-    )
-    const journal = createContextInvocationJournal(f.storage)
-    const invocationId = `${failed.executionId}:1`
-    const before = await journal.read('s', invocationId)
-    assert.equal(before.phase, 'prepared')
-    assert.equal(before.receipt, undefined)
-    const beforeTrace = await f.runtime.trace('s', { fullContent: true, limit: 8 })
-    const beforeActivity = beforeTrace.sessionActivity.entries.find(
-      (item) => item.executionId === failed.executionId
-    )
-    assert.equal(beforeActivity.kind, 'snapshot-capture')
-    assert.equal(beforeActivity.invocations.length, 1)
-    assert.ok(beforeActivity.invocations[0].body.includes('prepared'))
-    assert.ok(
-      beforeTrace.turns.every((turn) =>
-        turn.invocations.every((item) => item.executionId !== failed.executionId)
-      ),
-      'an unsent capture is an independent session activity'
-    )
-    phase = 'waiting-for-late-settlement'
-    gate.resolve()
-    const settled = await timers.withTimeout(2000, async (signal) => {
-      for (;;) {
-        signal.throwIfAborted()
-        const current = await journal.read('s', invocationId)
-        if (current?.phase === 'settled') return current
-        await timers.sleep(5, { signal })
-      }
-    })
-    assert.equal(settled.receipt.outcome, 'cancelled')
-    assert.equal(f.readCompletions, 3, 'the late journal follows the actual physical read')
-    assert.equal(settled.receipt.diagnostic.code, 'PROJECT_SNAPSHOT_COST')
-    assert.equal(JSON.parse(settled.receipt.diagnostic.message).readRequests, 1)
-    assert.equal(
-      JSON.parse(settled.receipt.diagnostic.message).materialBytes,
-      expectedMaterialBytes
-    )
-    const trace = await f.runtime.trace('s', { fullContent: true, limit: 8 })
-    const activity = trace.sessionActivity.entries.find(
-      (item) => item.executionId === failed.executionId
-    )
-    const captured = activity?.invocations.find((item) => item.id === invocationId)
-    assert.ok(captured, JSON.stringify({ failed, settled, activity }))
-    assert.ok(
-      trace.turns.every((turn) =>
-        turn.invocations.every((item) => item.executionId !== failed.executionId)
-      ),
-      'late settlement does not create a model request'
-    )
-    assert.equal(captured.summary.status, 'cancelled')
-    assert.ok(captured.body.includes('PROJECT_SNAPSHOT_COST'))
-    assert.equal(
-      JSON.parse(JSON.parse(captured.body).receipt.diagnostic.message).materialBytes,
-      expectedMaterialBytes
-    )
-    assert.equal(
-      JSON.parse(activity.records.find((record) => record.title.endsWith(':result')).body)
-        .diagnostic,
-      undefined,
-      'host failure and current journal receipt remain separate facts'
-    )
-    const original = (await f.records()).find(
-      (record) => record.title === `script:${failed.executionId}:result`
-    )
-    assert.equal(
-      JSON.parse(original.body).diagnostic,
-      undefined,
-      'original unknown-cost decision is immutable'
-    )
-  } catch (error) {
-    t.diagnostic(
-      JSON.stringify({
-        phase,
-        calls: f.calls,
-        reads: f.reads,
-        readCompletions: f.readCompletions,
-        runs: f.runs,
-      })
-    )
-    throw error
-  } finally {
-    gate.resolve()
-    timers.dispose()
-  }
-})
+)
 
 test('INV-80 snapshot protocol only accepts empty, exclusive literal plan blocks', () => {
   const decoder = new ScriptTurnDecoder('@@sfixed')

@@ -420,10 +420,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
           body: JSON.stringify({
             runId: id,
             turn,
-            model: model.id,
-            estimate: compiled.estimate,
-            providerRequest: compiled.providerRequest,
-            request: compiled.request,
+            requestAudit: compiled.requestAudit,
           }),
         },
         signal

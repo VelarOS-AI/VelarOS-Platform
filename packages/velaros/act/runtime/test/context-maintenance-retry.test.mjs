@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ContextMaintenance } from '../../../dist/act/runtime/impl/ContextMaintenance.js'
 import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntime.js'
@@ -19,7 +18,7 @@ const narrative = {
 
 async function fixture(t) {
   const storage = localContextStorage({ path: ':memory:' })
-  const runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules: [] })
+  const runtime = await createRuntime({ storage, modules: [] })
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
   const input = await session.context.append({ kind: 'user', body: 'Continue the investigation' })

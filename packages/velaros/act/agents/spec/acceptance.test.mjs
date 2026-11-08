@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import {
   AgentsLimits,
@@ -231,7 +230,6 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
   })
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     widgets: { show: (widget, sessionId) => received.push({ ...widget, sessionId }) },
     model: model(async function* (request) {
@@ -259,7 +257,6 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
 
   const bare = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   t.after(() => bare.close())

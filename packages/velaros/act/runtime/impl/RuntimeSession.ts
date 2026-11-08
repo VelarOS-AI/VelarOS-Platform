@@ -1162,7 +1162,7 @@ export class RuntimeSession implements VelarosSession {
           throw new AppError('STALE_VIEW', '发布前能力授权或环境事实发生变化')
         if (!(await this.view.validate(view, currentSignal)))
           throw new AppError('STALE_VIEW', '发布前证据版本发生变化')
-        await memory.publish(body, currentSignal)
+        return memory.publish(body, currentSignal)
       },
     }
   }

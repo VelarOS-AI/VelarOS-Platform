@@ -174,8 +174,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
           (sum, item) => sum + item.summary.input.length + item.summary.output.length,
           0
         ) +
-        (value.requestSummary?.system.length ?? 0) +
-        (value.requestSummary?.messages.length ?? 0) +
         value.executions.reduce(
           (sum, item) => sum + item.source.length + (item.processOutput?.length ?? 0),
           0
@@ -460,44 +458,54 @@ export class RuntimeTrace implements RuntimeTraceApi {
           }
       }
     }
-    const material = request.request?.materials?.findLast(
-      (item: { origin: string }) => item.origin === 'runtime-view'
-    )
-    if (material) {
-      const saved = JSON.parse(material.text)
-      // 只关联实际请求选中的帧，容量试探产生的其他帧不代表本次展示预算。
-      if (isString(saved.frameId))
-        select(
-          records.findLast(
-            (record) =>
-              record.title === `context:frame:${saved.frameId}` &&
-              record.sequence < requestRecord.sequence
-          )
-        )
-      const frame = saved.partitions
-        ? {
-            goals: saved.partitions.task.goals,
-            observation: saved.partitions.observation,
-            results: saved.partitions.recent.results,
+    if (request.frameRef?.sessionId === this.sessionId) {
+      // 只关联实际完成发布的帧引用；容量试算与迟到发布都不能冒充本次帧。
+      const frameRecord = byRef(request.frameRef.id)
+      if (
+        frameRecord &&
+        frameRecord.title.startsWith('context:frame:') &&
+        frameRecord.sequence < requestRecord.sequence
+      ) {
+        select(frameRecord)
+        const body = await raw(frameRecord)
+        if (!isNull(body)) {
+          const frame = JSON.parse(body)
+          if (frameRecord.title !== `context:frame:${frame.frameId}`)
+            throw new AppError('INVARIANT', '模型请求的帧引用与真实帧身份不一致')
+          select(byRef(frame.input?.latest?.id))
+          if (frame.input)
+            for (const record of records)
+              if (
+                record.kind === 'user' &&
+                record.sequence > frame.input.after &&
+                record.sequence <= frame.input.through
+              )
+                select(record)
+          for (const entry of frame.entries) select(byRef(entry.ref))
+          observed = frame.observation
+          select(byRef(frame.observation?.sourceRef))
+          select(byRef(frame.observation?.resultRef))
+          const capture = frame.observation?.freshness?.snapshot
+          if (isString(capture?.captureExecutionId)) {
+            executions.add(capture.captureExecutionId)
+            select(byRef(capture.captureResultRef))
+            select(
+              records.find(
+                (record) => record.title === `script:execution:${capture.captureExecutionId}`
+              )
+            )
           }
-        : saved
-      for (const goal of frame.goals ?? []) select(byRef(goal.record?.ref?.id))
-      observed = frame.observation
-      select(byRef(frame.observation?.sourceRef))
-      select(byRef(frame.observation?.resultRef))
-      const capture = frame.observation?.freshness?.snapshot
-      if (isString(capture?.captureExecutionId)) {
-        executions.add(capture.captureExecutionId)
-        select(byRef(capture.captureResultRef))
-        select(
-          records.find(
-            (record) => record.title === `script:execution:${capture.captureExecutionId}`
-          )
-        )
-      }
-      for (const result of frame.results ?? []) {
-        select(byRef(result.ref))
-        select(byRef(result.sourceRef))
+          for (const record of records)
+            if (
+              record.title.startsWith('context:request-proof:') &&
+              record.sources.some(
+                (source) => source.sessionId === this.sessionId && source.id === frameRecord.ref.id
+              )
+            )
+              select(record)
+        }
+      } else if (frameRecord) {
+        gaps.push(`请求帧尚未发布或引用类型错误：${request.frameRef.id}`)
       }
     }
     // 首请求前已接受的引导属于本次运行的前序事实，不能因请求窗口下界丢失。
@@ -629,15 +637,13 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 程序记录里的源码，按本页剩下的正文预算截取；记录读不出源码时记一处缺口，不让整页读取失败
     const programSource = async (
       ref: Optional<string>
-    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated' | 'language'>> => {
+    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated'>> => {
       const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
       let text: unknown = ''
-      let language: 'node' | 'shell' = 'node'
       if (!isNull(program))
         try {
-          const data = JSON.parse(program) as { source?: unknown; language?: unknown }
+          const data = JSON.parse(program) as { source?: unknown }
           text = data.source
-          if (data.language === 'shell') language = 'shell'
         } catch (error) {
           this.log.debug('程序记录读不出源码', { ref, error: AppError.getMessage(error) })
           gaps.push(`程序记录读不出源码：${ref}`)
@@ -648,7 +654,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
       return {
         source,
         sourceTruncated: source.length < full.length,
-        language,
       }
     }
     // 执行摘要跟踪异步任务的最新事实；历史请求帧仍只关联当时的租约记录。
@@ -817,10 +822,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
         })
       }
     }
-    // 展示摘要先分配预算，原始请求、历史租约和重复 JSON 最后读取。
+    // 原始结果先分配正文预算，元数据和历史租约最后投影。
     // 截图等大正文不能挤掉已成功执行的 stdout、调用结果与子任务回答。
-    const requestSummary = summarizeModelRequest(request, remaining, fullContent)
-    remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
+    const requestSummary = summarizeModelRequest(request)
     const projectedInvocations = invocations.map((invocation) => {
       const record = journal
         .get(invocation.executionId)!

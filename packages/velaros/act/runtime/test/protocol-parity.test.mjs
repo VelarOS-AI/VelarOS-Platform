@@ -266,124 +266,131 @@ test('plain replies enter completion validation, tool identities stay unique, an
   assert.equal(decoder.finish().message, 'Verified')
 })
 
-test('INV-88 real Node sessions observe, execute, pair mixed receipts and switch transports', async (t) => {
-  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import('node:fs/promises')
-  const { tmpdir } = await import('node:os')
-  const { join } = await import('node:path')
-  const { createRuntime, createNodeExecutionEnvironment } =
-    await import('../../../dist/act/runtime/index.js')
-  const { createLocalShellHost } = await import('../../../dist/execution/local.js')
-  const { modelText } = await import('./support/model-turn.mjs')
-  const root = await mkdtemp(join(tmpdir(), 'protocol-parity-'))
-  const cwd = join(root, 'work')
-  await mkdir(cwd)
-  const host = createLocalShellHost({ cwd })
-  t.after(async () => {
-    await host.dispose()
-    await rm(root, { recursive: true, force: true })
-  })
-  const node = createNodeExecutionEnvironment({ cwd, directory: join(root, 'runs'), host })
-  for (const transport of ['text', 'tools', 'text']) {
-    await writeFile(join(cwd, 'state.txt'), 'before-change')
-    let round = 0
-    const model = {
-      id: 'parity',
-      nativeTools: true,
-      limits: { contextTokens: 128000, inputTokens: 100000, outputTokens: 4000 },
-      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
-      async *stream(request) {
-        assert.equal(request.response.type, transport === 'text' ? 'text' : 'tools')
-        round++
-        let records
-        if (round === 1)
-          records = [
-            {
-              kind: 'observe',
-              code: "import {readFile} from 'node:fs/promises'; console.log('observed:'+await readFile('state.txt','utf8'))",
-            },
-          ]
-        else if (round === 2) {
-          assert.match(modelText(request), /observed:before-change/)
-          records = [
-            { kind: 'blobs', name: 'next', text: 'after-change' },
-            {
-              kind: 'execute',
-              code: "import {writeFile} from 'node:fs/promises'; import {blobs} from 'velaros:program'; await writeFile('state.txt',blobs.next); console.log('updated')",
-            },
-          ]
-        } else {
-          assert.equal(round, 3)
-          assert.match(modelText(request), /observed:after-change/)
-          if (transport === 'tools') {
-            const exchange = request.history.findLast((item) =>
-              item.toolExchange?.calls.some((call) => call.name === 'exec')
-            ).toolExchange
-            assert.equal(exchange.results[0].name, 'blobs')
-            assert.equal(exchange.results[1].name, 'exec')
-            assert(exchange.results[1].output.resultRef)
-          }
-          records = [{ kind: 'done', message: 'Verified' }]
-        }
-        if (transport === 'text') {
-          const frame = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
-          yield { type: 'text', text: encode(records).replaceAll(marker, frame) }
-        } else
-          for (const [index, record] of records.entries()) {
-            const { kind, code = '', options = {}, name, text, message } = record
-            yield {
-              type: 'tool-call',
-              value: {
-                id: `${round}-${index}`,
-                name: kind === 'execute' ? 'exec' : kind,
-                input:
-                  kind === 'blobs'
-                    ? { name, text }
-                    : kind === 'done'
-                      ? { message }
-                      : { code, options },
-              },
-            }
-          }
-        yield { type: 'finish', reason: 'stop' }
-      },
-    }
-    const runtime = await createRuntime({
-      workspace: cwd,
-      dataDir: join(root, 'state'),
-      node,
-      model,
-      protocol: { transport },
-      project: false,
-      memory: false,
-      search: false,
-      agents: false,
-      context: { maintenance: false },
+test(
+  'INV-88 real Node sessions observe, execute, pair mixed receipts and switch transports',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Successful mixed observation receipts require the default read-only process backend.'
+        : false,
+  },
+  async (t) => {
+    const { mkdtemp, mkdir, writeFile, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { createRuntime, createNodeExecutionEnvironment } =
+      await import('../../../dist/act/runtime/index.js')
+    const { createLocalShellHost } = await import('../../../dist/execution/local.js')
+    const { modelText } = await import('./support/model-turn.mjs')
+    const root = await mkdtemp(join(tmpdir(), 'protocol-parity-'))
+    const cwd = join(root, 'work')
+    await mkdir(cwd)
+    const host = createLocalShellHost({ cwd })
+    t.after(async () => {
+      await host.dispose()
+      await rm(root, { recursive: true, force: true })
     })
-    try {
-      const session = await runtime.openSession('same-session')
-      const events = []
-      for await (const event of session.submit('Track state and change it')) events.push(event)
-      assert.equal(
-        events.filter((event) => event.type === 'error').length,
-        0,
-        JSON.stringify(events)
-      )
-      assert.equal(events.at(-1).status, 'completed')
-      assert.equal(await readFile(join(cwd, 'state.txt'), 'utf8'), 'after-change')
-    } finally {
-      await runtime.close()
+    const node = createNodeExecutionEnvironment({ cwd, directory: join(root, 'runs'), host })
+    for (const transport of ['text', 'tools', 'text']) {
+      await writeFile(join(cwd, 'state.txt'), 'before-change')
+      let round = 0
+      const model = {
+        id: 'parity',
+        nativeTools: true,
+        limits: { contextTokens: 128000, inputTokens: 100000, outputTokens: 4000 },
+        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+        async *stream(request) {
+          assert.equal(request.response.type, transport === 'text' ? 'text' : 'tools')
+          round++
+          let records
+          if (round === 1)
+            records = [
+              {
+                kind: 'observe',
+                code: "import {readFile} from 'node:fs/promises'; console.log('observed:'+await readFile('state.txt','utf8'))",
+              },
+            ]
+          else if (round === 2) {
+            assert.match(modelText(request), /observed:before-change/)
+            records = [
+              { kind: 'blobs', name: 'next', text: 'after-change' },
+              {
+                kind: 'execute',
+                code: "import {writeFile} from 'node:fs/promises'; import {blobs} from 'velaros:program'; await writeFile('state.txt',blobs.next); console.log('updated')",
+              },
+            ]
+          } else {
+            assert.equal(round, 3)
+            assert.match(modelText(request), /observed:after-change/)
+            if (transport === 'tools') {
+              const exchange = request.history.findLast((item) =>
+                item.toolExchange?.calls.some((call) => call.name === 'exec')
+              ).toolExchange
+              assert.equal(exchange.results[0].name, 'blobs')
+              assert.equal(exchange.results[1].name, 'exec')
+              assert(exchange.results[1].output.resultRef)
+            }
+            records = [{ kind: 'done', message: 'Verified' }]
+          }
+          if (transport === 'text') {
+            const frame = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+            yield { type: 'text', text: encode(records).replaceAll(marker, frame) }
+          } else
+            for (const [index, record] of records.entries()) {
+              const { kind, code = '', options = {}, name, text, message } = record
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: `${round}-${index}`,
+                  name: kind === 'execute' ? 'exec' : kind,
+                  input:
+                    kind === 'blobs'
+                      ? { name, text }
+                      : kind === 'done'
+                        ? { message }
+                        : { code, options },
+                },
+              }
+            }
+          yield { type: 'finish', reason: 'stop' }
+        },
+      }
+      const runtime = await createRuntime({
+        workspace: cwd,
+        dataDir: join(root, 'state'),
+        node,
+        model,
+        protocol: { transport },
+        project: false,
+        memory: false,
+        search: false,
+        agents: false,
+        context: { maintenance: false },
+      })
+      try {
+        const session = await runtime.openSession('same-session')
+        const events = []
+        for await (const event of session.submit('Track state and change it')) events.push(event)
+        assert.equal(
+          events.filter((event) => event.type === 'error').length,
+          0,
+          JSON.stringify(events)
+        )
+        assert.equal(events.at(-1).status, 'completed')
+        assert.equal(await readFile(join(cwd, 'state.txt'), 'utf8'), 'after-change')
+      } finally {
+        await runtime.close()
+      }
     }
   }
-})
+)
 
 test('explicit tools rejects unsupported drivers and omitted transport falls back to text', async (t) => {
   const { localContextStorage } = await import('@velaros-ai/context/node')
-  const { nodeSubprocessCodeRunner } = await import('@velaros-ai/script')
   const { createRuntime } = await import('../../../dist/act/runtime/index.js')
   for (const transport of [undefined, 'tools']) {
     const runtime = await createRuntime({
       storage: localContextStorage({ path: ':memory:' }),
-      runner: nodeSubprocessCodeRunner,
       project: false,
       memory: false,
       search: false,

@@ -125,7 +125,7 @@ export interface ContextMemoryApi {
   ): Promise<{
     project(maxChars: number): ReturnType<ContextMemoryApi['project']>
     reconcile: ContextMemoryApi['reconcile']
-    publish(body: string, signal: AbortSignal): Promise<void>
+    publish(body: string, signal: AbortSignal): Promise<ContextRef>
   }>
   /** 合并段底座、段内历史与本帧五分区，生成同一快照。 */
   project(
@@ -672,6 +672,9 @@ export class ContextMemory implements ContextMemoryApi {
       { title: 'context:delivered', latest: true },
       { titlePrefix: 'task:completion:', latest: true },
       { titlePrefix: 'context:decision-state:', latest: true },
+      ...active.items.flatMap((item) =>
+        item.sources.filter((ref) => ref.sessionId === this.id).map((ref) => ({ refId: ref.id }))
+      ),
       ...programState.leases
         .filter(
           (item) => item.task || item.segment || item.expiresAfter > programState.completedTurns
@@ -721,9 +724,17 @@ export class ContextMemory implements ContextMemoryApi {
       'released',
       signal
     )
+    const narrativeThrough = new Map<string, number>()
+    for (const record of snapshot?.records ?? []) {
+      if (record.title !== 'context:volume-narrative') continue
+      const volume = record.sources[0]
+      if (!volume) throw new AppError('INVARIANT', '卷叙事缺少原卷引用')
+      narrativeThrough.set(record.ref.id, await this.recent.volumeThrough(volume, signal))
+    }
     return {
       active,
       snapshot,
+      narrativeThrough,
       reset,
       lastAttempt,
       pending,
@@ -799,6 +810,7 @@ export class ContextMemory implements ContextMemoryApi {
         await prepared.registrations.get(JSON.parse(body).frameId)?.()
         audits.clear()
         proofs.clear()
+        return record.ref
       },
     }
   }
@@ -849,8 +861,17 @@ export class ContextMemory implements ContextMemoryApi {
     save?: (input: Parameters<ContextRuntime['append']>[0]) => void
   ): ReturnType<ContextMemoryApi['project']> {
     const stable = prepared ?? (await this.prepareFrame(maxChars, signal))
-    const { active, snapshot, reset, lastAttempt, pending, presentation, residents, segment } =
-      stable
+    const {
+      active,
+      snapshot,
+      narrativeThrough,
+      reset,
+      lastAttempt,
+      pending,
+      presentation,
+      residents,
+      segment,
+    } = stable
     const workspaceBudget = Math.max(
       0,
       Math.floor(maxChars * (segment.workspaceShare ?? this.policy.workspaceShare))
@@ -1340,7 +1361,12 @@ export class ContextMemory implements ContextMemoryApi {
     const historicalSources = new Set(
       active.items
         .flatMap((item) => item.sources)
-        .filter((ref) => (records.get(ref.id)?.sequence ?? 0) <= latestInputSequence)
+        .filter((ref) => {
+          const source = records.get(ref.id)
+          if (ref.sessionId !== this.id || !source)
+            throw new AppError('NOT_FOUND', '当前事项的来源不在本会话快照中')
+          return (narrativeThrough.get(ref.id) ?? source.sequence) <= latestInputSequence
+        })
         .map((ref) => `${ref.sessionId}:${ref.id}`)
     )
     const partitions = {
@@ -1511,6 +1537,18 @@ export class ContextMemory implements ContextMemoryApi {
       title: `context:frame:${material.programFrame.id}`,
       body: JSON.stringify({
         frameId: material.programFrame.id,
+        input: latestGoal
+          ? {
+              latest: latestGoal.record.ref,
+              after: segment.from,
+              through: latestGoal.record.sequence,
+            }
+          : undefined,
+        observation: {
+          sourceRef: material.observation.sourceRef,
+          resultRef: material.observation.resultRef,
+          freshness: material.observation.freshness,
+        },
         budget: { maxChars, program: frame.budget, historyEntryChars },
         entries,
         segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },

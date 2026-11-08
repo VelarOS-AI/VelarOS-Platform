@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -19,7 +19,6 @@ async function fixture(t) {
   const requests = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: {
       id: 'output-history-identity',

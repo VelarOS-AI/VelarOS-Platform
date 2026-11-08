@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -18,6 +18,13 @@ import {
 } from '../../../dist/act/runtime/utils/program-context.js'
 
 import { done, runtimeFrame, turn } from './support/model-turn.mjs'
+
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const nativeObservation = {
+  skip: platformHasDefaultConfinement
+    ? false
+    : 'This mechanism needs a successful read-only Node collection; unavailable hosts are covered separately.',
+}
 
 const stop = async function* (request) {
   yield* done(request)
@@ -97,7 +104,7 @@ async function fixture(t, stream = stop, extra = {}) {
       },
     },
   }
-  const options = { runner: nodeSubprocessCodeRunner, model, modules: [module], ...extra }
+  const options = { model, modules: [module], ...extra }
   let storage = localContextStorage({ path })
   let runtime = await createRuntime({ ...options, storage })
   let session = await runtime.openSession('s')
@@ -337,43 +344,47 @@ test('INV-58 short result shares permit a complete batch of real recalled pages 
   for (const value of values) assert(unproven.text.includes(value))
 })
 
-test('INV-6 stable observation refreshes; one execution result has exactly two successful visible rounds', async (t) => {
-  const f = await fixture(t)
-  await f.session.observe({ source: observe })
-  ok(await f.session.execute({ source: write }))
-  const ref = (await f.state()).leases[0].ref
-  for (const value of [3, 4, 5]) {
-    f.world.value = value
-    success(await submit(f))
-  }
-  assert.equal(f.world.writes, 1)
-  assert.equal(f.world.reads, 3)
-  assert.deepEqual(
-    f.frames.map((v) => v.results.map((r) => r.remainingTurns)),
-    [[2], [1], []]
-  )
-  for (let i = 0; i < 3; i++)
-    assert.match(f.frames[i].observation.text, new RegExp(`"current":\\s*${i + 3}`))
-  assert(!JSON.stringify(f.frames[2]).includes('"written"'))
-  const archived = await f.session.context.read({ sessionId: 's', id: ref })
-  assert.match(archived.text, /'written'|"written"/)
-  t.diagnostic(
-    JSON.stringify({
-      kind: 'script-context-lease-trace',
-      worldWrites: f.world.writes,
-      observationRuns: f.world.reads,
-      archivedResultReadable: true,
-      frames: f.frames.map((frame) => ({
-        completedTurns: frame.programFrame.completedTurns,
-        observation: JSON.parse(frame.observation.text).value,
-        results: frame.results.map((result) => ({
-          ref: result.ref,
-          remainingTurns: result.remainingTurns,
+test(
+  'INV-6 stable observation refreshes; one execution result has exactly two successful visible rounds',
+  nativeObservation,
+  async (t) => {
+    const f = await fixture(t)
+    await f.session.observe({ source: observe })
+    ok(await f.session.execute({ source: write }))
+    const ref = (await f.state()).leases[0].ref
+    for (const value of [3, 4, 5]) {
+      f.world.value = value
+      success(await submit(f))
+    }
+    assert.equal(f.world.writes, 1)
+    assert.equal(f.world.reads, 3)
+    assert.deepEqual(
+      f.frames.map((v) => v.results.map((r) => r.remainingTurns)),
+      [[2], [1], []]
+    )
+    for (let i = 0; i < 3; i++)
+      assert.match(f.frames[i].observation.text, new RegExp(`"current":\\s*${i + 3}`))
+    assert(!JSON.stringify(f.frames[2]).includes('"written"'))
+    const archived = await f.session.context.read({ sessionId: 's', id: ref })
+    assert.match(archived.text, /'written'|"written"/)
+    t.diagnostic(
+      JSON.stringify({
+        kind: 'script-context-lease-trace',
+        worldWrites: f.world.writes,
+        observationRuns: f.world.reads,
+        archivedResultReadable: true,
+        frames: f.frames.map((frame) => ({
+          completedTurns: frame.programFrame.completedTurns,
+          observation: JSON.parse(frame.observation.text).value,
+          results: frame.results.map((result) => ({
+            ref: result.ref,
+            remainingTurns: result.remainingTurns,
+          })),
         })),
-      })),
-    })
-  )
-})
+      })
+    )
+  }
+)
 
 test('INV-10 renewal resets duration without producer replay; archived reads do not renew', async (t) => {
   const f = await fixture(t)
@@ -404,7 +415,10 @@ test('INV-10 renewal resets duration without producer replay; archived reads do 
   success(await submit(f))
   assert.equal(f.world.writes, 1)
   assert.equal((await f.state()).leases.length, 0)
-  assert.match(f.frames.at(-1).observation.text, /written/)
+  assert.match(
+    f.frames.at(-1).observation.text,
+    platformHasDefaultConfinement ? /written/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
 })
 
 test('observation denies a write before prepare and gives the model a repairable error', async (t) => {
@@ -413,10 +427,17 @@ test('observation denies a write before prepare and gives the model a repairable
   success(await submit(f))
   assert.equal(f.world.prepares, 0)
   assert.equal(f.world.writes, 0)
-  assert.match(f.frames[0].observation.text, /禁止调用/)
+  assert.match(
+    f.frames[0].observation.text,
+    platformHasDefaultConfinement ? /禁止调用/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   await f.session.observe({ source: observe })
   success(await submit(f))
-  assert.match(f.frames[1].observation.text, /current/)
+  assert.match(
+    f.frames[1].observation.text,
+    platformHasDefaultConfinement ? /current/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
+  if (!platformHasDefaultConfinement) assert.equal(f.world.reads, 0)
 })
 
 test('observation cannot renew leases or nest the system execution entry', async (t) => {
@@ -427,13 +448,19 @@ test('observation cannot renew leases or nest the system execution entry', async
     source: `import {memory as results} from 'velaros:system';await results.retain({ref:${JSON.stringify(ref)},turns:32});`,
   })
   success(await submit(f))
-  assert.match(f.frames[0].observation.text, /不允许调用/)
+  assert.match(
+    f.frames[0].observation.text,
+    platformHasDefaultConfinement ? /不允许调用/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   assert.equal((await f.state()).leases[0].expiresAfter, 2)
   await f.session.observe({
     source: `import {execute} from 'velaros:script';await execute({source:${JSON.stringify(write)}});`,
   })
   success(await submit(f))
-  assert.match(f.frames.at(-1).observation.text, /velaros:script|PERMISSION/)
+  assert.match(
+    f.frames.at(-1).observation.text,
+    platformHasDefaultConfinement ? /velaros:script|PERMISSION/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   assert.equal(f.world.writes, 1)
 })
 
@@ -486,39 +513,43 @@ test('observation and remaining leases survive a restart; foreign result refs ar
   assert(result.result.failed)
 })
 
-test('script diff and output diff are independent; failed delivery does not advance the baseline', async (t) => {
-  let failed = false
-  const f = await fixture(t, async function* (request) {
-    if (failed) throw Error('no delivery')
-    yield* done(request)
-  })
-  await f.session.observe({ source: observe })
-  success(await submit(f))
-  success(await submit(f))
-  assert.equal(f.frames[1].progress.script.changed, false)
-  assert.equal(f.frames[1].progress.observation.changed, false)
-  f.world.value = 9
-  failed = true
-  await submit(f)
-  assert.equal((await f.state()).completedTurns, 2)
-  failed = false
-  success(await submit(f))
-  assert.equal(f.frames[3].progress.script.changed, false)
-  assert.equal(f.frames[3].progress.observation.changed, true)
-  assert.match(f.frames[3].progress.observation.patch, /\+.*9/)
-  await f.session.observe({ source: `${observe}\n// Keep watching current value.` })
-  success(await submit(f))
-  assert.equal(f.frames[4].progress.script.changed, true)
-  assert.equal(f.frames[4].progress.observation.changed, false)
-  await f.session.observe({
-    source: `${observe}\n// Keep watching current value.`,
-    modules: { 'extra.js': 'export default 1;' },
-  })
-  success(await submit(f))
-  assert.equal(f.frames[5].progress.script.changed, true)
-  assert.equal(f.frames[5].progress.observation.changed, false)
-  assert.match(f.frames[5].progress.script.patch, /extra.js/)
-})
+test(
+  'script diff and output diff are independent; failed delivery does not advance the baseline',
+  nativeObservation,
+  async (t) => {
+    let failed = false
+    const f = await fixture(t, async function* (request) {
+      if (failed) throw Error('no delivery')
+      yield* done(request)
+    })
+    await f.session.observe({ source: observe })
+    success(await submit(f))
+    success(await submit(f))
+    assert.equal(f.frames[1].progress.script.changed, false)
+    assert.equal(f.frames[1].progress.observation.changed, false)
+    f.world.value = 9
+    failed = true
+    await submit(f)
+    assert.equal((await f.state()).completedTurns, 2)
+    failed = false
+    success(await submit(f))
+    assert.equal(f.frames[3].progress.script.changed, false)
+    assert.equal(f.frames[3].progress.observation.changed, true)
+    assert.match(f.frames[3].progress.observation.patch, /\+.*9/)
+    await f.session.observe({ source: `${observe}\n// Keep watching current value.` })
+    success(await submit(f))
+    assert.equal(f.frames[4].progress.script.changed, true)
+    assert.equal(f.frames[4].progress.observation.changed, false)
+    await f.session.observe({
+      source: `${observe}\n// Keep watching current value.`,
+      modules: { 'extra.js': 'export default 1;' },
+    })
+    success(await submit(f))
+    assert.equal(f.frames[5].progress.script.changed, true)
+    assert.equal(f.frames[5].progress.observation.changed, false)
+    assert.match(f.frames[5].progress.script.patch, /extra.js/)
+  }
+)
 
 test('oversized observation and leased result carry truncation flags and a readable tail', async (t) => {
   const f = await fixture(t)
@@ -527,7 +558,11 @@ test('oversized observation and leased result carry truncation flags and a reada
   ok(await f.session.execute({ source }))
   success(await submit(f))
   const frame = f.frames[0]
-  assert(frame.observation.truncated)
+  if (platformHasDefaultConfinement) assert(frame.observation.truncated)
+  else {
+    assert.notEqual(frame.observation.truncated, true)
+    assert.match(frame.observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
+  }
   assert(frame.results[0].truncated)
   assert(!frame.results[0].text.includes('THE_END'))
   const body = await f.session.context.read(
@@ -546,8 +581,10 @@ test('ordered observe then execute sees the committed value next round, with one
   })
   success(await submit(f))
   assert.equal(f.world.writes, 1)
-  assert.equal(f.world.reads, 1)
-  assert.equal(JSON.parse(f.frames[1].observation.text).value.default.current, 2)
+  assert.equal(f.world.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (platformHasDefaultConfinement)
+    assert.equal(JSON.parse(f.frames[1].observation.text).value.default.current, 2)
+  else assert.match(f.frames[1].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(f.frames[1].results[0].remainingTurns, 'segment')
 })
 
@@ -623,7 +660,9 @@ test('compiler budget recovery counts history and reduces excerpts without rerun
   // 自动整理使用独立工具会话；这里验证根会话没有重复业务回合。
   const work = requests.filter((request) => runtimeFrame(request).scope.sessionId === 's')
   assert.equal(work.length, 1)
-  assert.equal(f.world.reads, 1)
+  assert.equal(f.world.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   const frame = runtimeFrame(work[0])
   assert(frame.results[0].truncated)
   assert((frame.results[0].text ?? '').length < 12000)
@@ -638,7 +677,12 @@ test('INV-61 caught observation denials remain visible independently of model-se
   })
   success(await submit(f))
   assert.equal(f.world.writes, 0)
-  assert(f.frames[0].observation.safety.some((item) => item.code === 'OBSERVATION_EFFECT_DENIED'))
+  if (platformHasDefaultConfinement)
+    assert(f.frames[0].observation.safety.some((item) => item.code === 'OBSERVATION_EFFECT_DENIED'))
+  else {
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
+    assert.equal(f.world.prepares, 0)
+  }
 })
 
 test('oversized observation updates preserve the installed version and cancellation preserves leases', async (t) => {

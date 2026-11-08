@@ -3,7 +3,6 @@ import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -55,7 +54,6 @@ test('INV-70 failed script exposes a journal recall route in the actual next req
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [
       {
@@ -120,7 +118,6 @@ async function fixture(t, value = { text: 'synthetic value' }) {
   const requests = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model: {
       id: 'recall-fixture',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4000 },
@@ -377,7 +374,6 @@ test('INV-70 caught Kernel failure exposes recovery without inventing a script e
   let calls = 0
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model: {
       id: 'caught-failure',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4000 },

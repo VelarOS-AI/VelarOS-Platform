@@ -54,6 +54,8 @@ export interface RecentContextApi {
   segment(signal: AbortSignal): Promise<Nullable<ContextSegment>>
   /** 目录里的卷（已被合并的不再单列）及各自最新的叙事，按区间排序。 */
   volumes(signal: AbortSignal): Promise<readonly VolumeView[]>
+  /** 同一授权代次内不可变卷的事实终点；叙事迟写不改变这个边界。 */
+  volumeThrough(ref: ContextRef, signal: AbortSignal): Promise<number>
   /** 当前段起点的有界机械交接，不调用模型、不写业务状态。 */
   handoff(signal: AbortSignal): Promise<SegmentHandoff>
   /** 当前授权代次的全部卷叙事，含已并进上一级的卷，按写入顺序。 */
@@ -198,6 +200,24 @@ export class RecentContext implements RecentContextApi {
 
   public async volumes(signal: AbortSignal): Promise<readonly VolumeView[]> {
     return (await this.historyIndex(signal)).volumes
+  }
+
+  public async volumeThrough(ref: ContextRef, signal: AbortSignal): Promise<number> {
+    signal.throwIfAborted()
+    if (ref.sessionId !== this.id) throw new AppError('PERMISSION', '历史卷不属于当前会话')
+    const state = await this.snapshot([{ refId: ref.id }])
+    const reset = this.reset(state)
+    const record = state?.records.find(
+      (item) => item.ref.id === ref.id && item.title === 'context:volume' && item.sequence > reset
+    )
+    if (!record) throw new AppError('NOT_FOUND', '历史卷不在当前授权代次')
+    const body = await this.storage.get(this.id, record.objectId)
+    signal.throwIfAborted()
+    if (isNull(body)) throw new AppError('NOT_FOUND', '历史卷正文缺失')
+    const volume = JSON.parse(body) as ContextVolume
+    if (!Number.isSafeInteger(volume.through) || volume.through <= volume.from)
+      throw new AppError('INVARIANT', '历史卷事实区间无效')
+    return volume.through
   }
 
   public async ledgers(signal: AbortSignal): Promise<SegmentLedgers> {

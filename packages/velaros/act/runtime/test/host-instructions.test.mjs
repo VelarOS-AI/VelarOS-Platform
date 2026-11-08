@@ -547,7 +547,15 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   assert.match(frames[0].compiledPrompt, /当前帧标记/)
   const turn = events.find((event) => event.type === 'turn')
   const trace = await f.session.trace(turn.turnId)
-  assert.match(trace.request.body, /host-language-first/)
+  const manifests = trace.records.filter(
+    (record) =>
+      record.title === 'runtime:instruction-manifest' &&
+      trace.request.sources.some(
+        (ref) => ref.sessionId === record.ref.sessionId && ref.id === record.ref.id
+      )
+  )
+  assert.equal(manifests.length, 1)
+  assert.equal(JSON.parse(manifests[0].body).text, frames[0].instructions)
   await f.runtime.close()
   const reopened = await createRuntime({
     dataDir: f.dataDir,
@@ -694,7 +702,11 @@ await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>a
   assert(frames.every((frame) => frame.instructions === frames[0].instructions))
   const trace = await f.runtime.trace('main', { fullContent: true })
   assert(
-    trace.turns.every((turn) => turn.requestSummary.system === trace.turns[0].requestSummary.system)
+    trace.turns.every(
+      (turn) =>
+        JSON.parse(turn.request.body).requestAudit.requestFingerprint.systemHash ===
+        JSON.parse(trace.turns[0].request.body).requestAudit.requestFingerprint.systemHash
+    )
   )
 })
 

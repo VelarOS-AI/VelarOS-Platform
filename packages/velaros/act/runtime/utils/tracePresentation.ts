@@ -1,13 +1,6 @@
-import {
-  isArray,
-  isNumber,
-  isPlainObject,
-  isString,
-  Log,
-  optionalWhen,
-  toNullable,
-} from '@velaros-ai/core'
+import { isArray, isBoolean, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 import type { InvocationRecord } from '@velaros-ai/kernel'
+import { ModelRequestAuditLimits } from '@velaros-ai/model/contracts'
 
 import type { ActInvocationSummary, ActRequestSummary } from '../types/trace.js'
 
@@ -122,67 +115,46 @@ export function childAnswerText(note: unknown): string {
   return isPlainObject(accepted) && isString(accepted.text) ? accepted.text : ''
 }
 
-/** 从完整封存请求提取展示；常规模式按预算采样，宿主全文模式保留完整文本；图片和字节数据使用占位。 */
-export function summarizeModelRequest(
-  audit: unknown,
-  maxChars: number,
-  fullContent = false
-): Nullable<ActRequestSummary> {
-  if (!isPlainObject(audit) || !isPlainObject(audit.providerRequest)) return null
-  const request = audit.providerRequest
+/** 只展示当前有界审计合同；不反向还原历史请求正文。 */
+export function summarizeModelRequest(audit: unknown): Nullable<ActRequestSummary> {
+  if (!isPlainObject(audit) || !isPlainObject(audit.requestAudit)) return null
+  const request = audit.requestAudit
   if (
-    request.schemaVersion !== 2 ||
+    request.schemaVersion !== 3 ||
     !isString(request.model) ||
-    !isString(request.system) ||
-    !isArray(request.messages) ||
+    request.model.length > ModelRequestAuditLimits.modelChars ||
+    !isBoolean(request.modelTruncated) ||
+    !isNumber(request.inputTokens) ||
+    !Number.isSafeInteger(request.inputTokens) ||
+    request.inputTokens < 0 ||
+    (request.precision !== 'exact' && request.precision !== 'estimate') ||
+    !isString(request.basis) ||
+    request.basis.length > ModelRequestAuditLimits.basisChars ||
+    !isBoolean(request.basisTruncated) ||
     !isNumber(request.outputTokens) ||
     !Number.isSafeInteger(request.outputTokens) ||
     request.outputTokens < 1 ||
+    !isNumber(request.messageCount) ||
+    !Number.isSafeInteger(request.messageCount) ||
+    request.messageCount < 0 ||
+    !isNumber(request.toolCount) ||
+    !Number.isSafeInteger(request.toolCount) ||
+    request.toolCount < 0 ||
     !isPlainObject(request.requestFingerprint) ||
-    !isString(request.requestFingerprint.id)
+    !isString(request.requestFingerprint.id) ||
+    !/^[0-9a-f]{16}$/u.test(request.requestFingerprint.id)
   )
     return null
-  let mediaOmitted = false
-  const messages = JSON.stringify(
-    request.messages,
-    (_key, value) => {
-      if (isPlainObject(value) && (value.type === 'image' || value.$velarosType === 'bytes')) {
-        mediaOmitted = true
-        return { type: 'media-omitted', mediaType: optionalWhen(isString, value.mediaType) }
-      }
-      return value
-    },
-    2
-  )
-  const system = fullContent
-    ? request.system
-    : request.system.slice(0, Math.min(8000, Math.floor(maxChars / 4)))
-  const text = fullContent ? messages : messages.slice(0, Math.min(24000, maxChars - system.length))
-  const value = audit.estimate
-  const estimate:
-    { tokens: number; precision: 'exact' | 'estimate'; basis: Nullable<string> } | undefined =
-    isPlainObject(value) &&
-    isNumber(value.tokens) &&
-    Number.isSafeInteger(value.tokens) &&
-    value.tokens >= 0 &&
-    (value.precision === 'exact' || value.precision === 'estimate')
-      ? {
-          tokens: value.tokens,
-          precision: value.precision,
-          basis: isString(value.basis) ? value.basis : null,
-        }
-      : undefined
   return {
     model: request.model,
+    modelTruncated: request.modelTruncated,
     fingerprint: request.requestFingerprint.id,
-    inputTokens: toNullable(estimate?.tokens),
-    precision: toNullable(estimate?.precision),
-    basis: isString(estimate?.basis) ? estimate.basis : null,
+    inputTokens: request.inputTokens,
+    precision: request.precision,
+    basis: request.basis,
+    basisTruncated: request.basisTruncated,
     outputTokens: request.outputTokens,
-    system,
-    messages: text,
-    systemTruncated: system.length < request.system.length,
-    messagesTruncated: text.length < messages.length,
-    mediaOmitted,
+    messageCount: request.messageCount,
+    toolCount: request.toolCount,
   }
 }

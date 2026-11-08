@@ -23,7 +23,7 @@ async function fixture(t) {
     model: {
       id: 'notes-test',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
-      estimate: async () => ({ tokens: 1000, precision: 'exact' }),
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'host-notes-fixture' }),
       async *stream(request) {
         frames.push(request)
         yield* done(request)
