@@ -10,7 +10,7 @@ import {
   type WriteFileOptions,
   writeFileSync,
 } from 'node:fs'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { type FileHandle, link, mkdir, open, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { logRuntime } from '../logger'
@@ -114,6 +114,39 @@ function writeFileAtomicallySync(
   }
 }
 
+/** 异步写入并刷新独占临时普通文件，以硬链接发布；已存在返回 false，绝不覆盖或跟随目标链接。 */
+async function writeFileOnce(
+  filePath: string,
+  content: AtomicFileWriteContent,
+  options: AtomicTextFileWriteOptions = {}
+): Promise<boolean> {
+  await mkdir(dirname(filePath), { recursive: true })
+  const tmpPath = createAtomicTempPath(filePath)
+  let handle: FileHandle | undefined
+  try {
+    handle = await open(tmpPath, 'wx', options.mode ?? 0o600)
+    await handle.writeFile(content, toWriteFileOptions(options))
+    await handle.sync()
+    await handle.close()
+    handle = undefined
+    try {
+      await link(tmpPath, filePath)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+      throw error
+    }
+  } finally {
+    try {
+      if (!isUndefined(handle)) await handle.close()
+    } finally {
+      await rm(tmpPath, { force: true }).catch((error) => {
+        log.warn('failed to remove one-time file staging path', { error, tmpPath })
+      })
+    }
+  }
+}
+
 /** 完整写入并刷新临时文件后，以硬链接一次性发布；目标已存在时返回 false，绝不覆盖。 */
 function writeFileOnceSync(
   filePath: string,
@@ -189,6 +222,7 @@ function writeJsonFileAtomicallySync<T>(
 export {
   writeFileAtomically,
   writeFileAtomicallySync,
+  writeFileOnce,
   writeFileOnceSync,
   writeJsonFileAtomically,
   writeJsonFileAtomicallySync,
