@@ -5,8 +5,8 @@
 import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import type { AgentLabCliResult, RunArchiveView } from '../types/agent-lab.js'
-import type { LoadedArchives, ParsedArguments } from '../types/internal.js'
+import type { AgentLabCliResult, RunArchive } from '../types/agent-lab.js'
+import type { ParsedArguments } from '../types/internal.js'
 import type { AgentLabCliOptions, CertificationInput } from '../types/options.js'
 import { readJsonFile } from '../utils/archive-files.js'
 import { numberFlag, optionalFlag, parseArguments, requiredFlag } from '../utils/arguments.js'
@@ -99,24 +99,18 @@ class AgentLabCli implements AgentLabCliApi {
   }
 
   /** 把一批文件或目录读成归档：文件直接读，目录走归档发现；有读不出来的目录当场报错。 */
-  private async loadArchives(paths: readonly string[]): Promise<LoadedArchives> {
-    const views: RunArchiveView[] = []
+  private async loadArchives(paths: readonly string[]): Promise<readonly RunArchive[]> {
+    const archives: RunArchive[] = []
     for (const path of paths) {
       const absolute = resolve(path)
       const details = await stat(absolute)
-      if (details.isFile())
-        views.push(this.archives.readRunArchiveView(await readJsonFile(absolute)))
+      if (details.isFile()) archives.push(await this.archives.readRunArchive(absolute))
       else if (details.isDirectory()) {
         const discovery = await this.archives.discoverRunArchives(absolute)
-        views.push(...discovery.archives.map((entry) => entry.view))
-        if (discovery.unreadableDirectories.length > 0) {
-          throw new Error(
-            `这些运行目录里的归档读不出来: ${discovery.unreadableDirectories.join(', ')}`
-          )
-        }
-      }
+        archives.push(...discovery.archives.map((entry) => entry.archive))
+      } else throw new Error(`归档输入不是文件或目录: ${absolute}`)
     }
-    return { archives: views.flatMap((view) => (view.archive ? [view.archive] : [])), views }
+    return archives
   }
 
   /** `validate`：按种类严格校验一份线格式数据。 */
@@ -201,21 +195,18 @@ class AgentLabCli implements AgentLabCliApi {
     }
   }
 
-  /** `report`：全是 v3 归档就出运行报告，混了历史归档就出历史归档报告。 */
+  /** `report`：只读取严格校验的当前 v3 归档并生成运行报告。 */
   private async report(
     parsed: ParsedArguments,
     options: AgentLabCliOptions
   ): Promise<AgentLabCliResult> {
     if (parsed.positionals.length === 0) throw new Error('report 至少要给一个文件或目录')
     const output = resolve(requiredFlag(parsed, 'output'))
-    const loaded = await this.loadArchives(parsed.positionals)
-    if (loaded.views.length === 0) throw new Error('没有找到任何 JSON 归档')
+    const archives = await this.loadArchives(parsed.positionals)
+    if (archives.length === 0) throw new Error('没有找到任何当前 v3 归档')
     const generatedAt = (options.now ?? Date.now)()
-    const models = loaded.archives.map((archive) => this.reports.createRunReportModel(archive))
-    const html =
-      loaded.archives.length === loaded.views.length
-        ? this.reports.renderRunReportHtml(models, { generatedAt })
-        : this.reports.renderHistoricalReportHtml(loaded.views, { generatedAt })
+    const models = archives.map((archive) => this.reports.createRunReportModel(archive))
+    const html = this.reports.renderRunReportHtml(models, { generatedAt })
     await this.archives.writeReportFile(output, html)
     return { exitCode: AgentLabCli.ExitCodes.ok, stdout: `${output}\n`, stderr: '' }
   }
@@ -224,8 +215,8 @@ class AgentLabCli implements AgentLabCliApi {
   private async compare(parsed: ParsedArguments): Promise<AgentLabCliResult> {
     const executorA = requiredFlag(parsed, 'a')
     const executorB = requiredFlag(parsed, 'b')
-    const loaded = await this.loadArchives(parsed.positionals)
-    const result = this.statistics.compareExecutors(loaded.archives, executorA, executorB, {
+    const archives = await this.loadArchives(parsed.positionals)
+    const result = this.statistics.compareExecutors(archives, executorA, executorB, {
       minimumEffect: numberFlag(parsed, 'minimum-effect', 0),
       seed: numberFlag(parsed, 'seed', 1),
     })
@@ -247,16 +238,15 @@ class AgentLabCli implements AgentLabCliApi {
     const subject = this.wire.parseCertificationSubject(
       await readJsonFile(requiredFlag(parsed, 'subject'))
     )
-    const loaded = await this.loadArchives(parsed.positionals)
+    const archives = await this.loadArchives(parsed.positionals)
     const baselinePath = optionalFlag(parsed, 'baseline')
-    const baseline =
-      baselinePath === null ? { archives: [] } : await this.loadArchives([baselinePath])
+    const baseline = baselinePath === null ? [] : await this.loadArchives([baselinePath])
     const baselineExecutorId = optionalFlag(parsed, 'baseline-executor')
     const base = {
       policy,
       subject,
-      archives: loaded.archives,
-      baselineArchives: baseline.archives,
+      archives,
+      baselineArchives: baseline,
       subjectExecutorId: requiredFlag(parsed, 'executor'),
     }
     const input: CertificationInput =

@@ -1,15 +1,15 @@
 /**
- * 归档落盘的两件小事：run id 的安全校验与路径拼装，以及原子写一份 JSON。
+ * 归档文件边界：run id 与路径、严格当前格式读取，以及原子发布。
  * 原子写只有这一份实现：先写同目录临时文件再改名，失败时把临时文件清掉，不留半份归档。
  */
 import { randomUUID } from 'node:crypto'
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { AgentLabLimits } from '../contract/constants.js'
 import type { DiscoveredRunArchive } from '../types/agent-lab.js'
 
-import { readRunArchiveView } from './measure/archive-view.js'
+import { runArchiveSchema } from './wire/journey.js'
 
 /** run id 会当目录名用：只许字母数字开头，后面只许字母数字与 `. _ : -`，长度按常量表的上限卡。 */
 const SafeRunIdPattern = new RegExp(
@@ -45,33 +45,19 @@ export async function writeJsonAtomically(path: string, value: unknown): Promise
   await writeTextAtomically(path, `${JSON.stringify(value, null, 2)}\n`)
 }
 
-/** 这个路径存不存在。 */
-export async function fileExists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false
-  )
-}
-
-/**
- * 在一个运行目录里找一份归档：先看 `report.json`，读不出来再退回 `progress.json`。
- * 不去把别的 JSON 夹具「发明」成第四种归档格式；都读不出来就是 `null`。
- */
-export async function readArchiveCandidate(
+/** 读取目录唯一的当前 report.json；只有 ENOENT 是缺席，其余错误保留并上抛。 */
+export async function readRunArchiveDirectory(
   directory: string
 ): Promise<DiscoveredRunArchive | null> {
-  for (const name of ['report.json', 'progress.json'] as const) {
-    const path = join(directory, name)
-    if (!(await fileExists(path))) continue
-    try {
-      const view = readRunArchiveView(JSON.parse(await readFile(path, 'utf8')))
-      if (view.shape === 'invalid' || view.shape === 'missing') continue
-      return { directory, path, source: name === 'report.json' ? 'report' : 'progress', view }
-    } catch {
-      // 写了一半的 report.json 后面可能还有一份能读的 progress.json。
-    }
+  const path = join(directory, 'report.json')
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
   }
-  return null
+  return { directory, path, archive: runArchiveSchema.parse(JSON.parse(text)) }
 }
 
 /** 读一个 JSON 文件并解析；路径先 resolve 成绝对路径。 */

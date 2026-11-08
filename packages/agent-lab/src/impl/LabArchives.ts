@@ -1,6 +1,5 @@
 /**
- * 归档读写：v3 归档原子写、四代归档只读、真实任务的记录与用例落盘。
- * 写之前一律先校验，历史归档永远只读，不回写、不改形状。
+ * 当前 v3 归档与真实任务的记录、用例落盘；读写都严格校验，不改写原件。
  */
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
@@ -12,16 +11,13 @@ import type {
   RealTaskRecord,
   RunArchive,
   RunArchiveDiscovery,
-  RunArchiveView,
 } from '../types/agent-lab.js'
 import {
-  fileExists,
-  readArchiveCandidate,
+  readRunArchiveDirectory,
   runArchivePath,
   writeJsonAtomically,
   writeTextAtomically,
 } from '../utils/archive-files.js'
-import { readRunArchiveView } from '../utils/measure/archive-view.js'
 import { renderRealTaskReportHtml } from '../utils/render/real-task-report.js'
 import { runArchiveSchema } from '../utils/wire/journey.js'
 import {
@@ -32,16 +28,14 @@ import {
 
 /**
  * 归档的读写口。写一律是原子的（先写同目录临时文件再改名），写之前一律先严格校验；
- * 读历史归档只给视图，不去补字段、不回写。实例归本包，进程里只有一份。
+ * 读取只接受当前格式，不补字段、不回写。实例归本包，进程里只有一份。
  */
 export interface LabArchivesApi {
   /** 校验并原子写一份 v3 归档到 `<root>/<runId>/report.json`，返回写到哪；run id 不能当目录名时当场报错。 */
   writeRunArchive: (root: string, archive: RunArchive) => Promise<string>
-  /** 读一份归档文件，按四代形状给出视图。 */
-  readRunArchive: (path: string) => Promise<RunArchiveView>
-  /** 把一段已经读进内存的 JSON 折成归档视图；缺的字段保持缺。 */
-  readRunArchiveView: (input: unknown) => RunArchiveView
-  /** 在一个目录下找归档：一个运行目录一份，优先 `report.json`，退回 `progress.json`。 */
+  /** 读取并严格校验一份当前 v3 归档；错误保留原件并向调用方报告。 */
+  readRunArchive: (path: string) => Promise<RunArchive>
+  /** 在目录下查找当前 `report.json`；缺席才跳过，坏格式或 I/O 失败直接报错。 */
   discoverRunArchives: (root: string) => Promise<RunArchiveDiscovery>
   /** 写一份真实任务的三件套（记录、评估、HTML 报告）；评估不属于这条记录时当场报错。 */
   writeRealTaskBundle: (
@@ -67,9 +61,6 @@ class LabArchives implements LabArchivesApi {
     report: 'report.html',
   } as const
 
-  /** 发现归档时认的两个候选文件名。 */
-  private static readonly CandidateFiles = ['report.json', 'progress.json'] as const
-
   public async writeRunArchive(root: string, archive: RunArchive): Promise<string> {
     const parsed = runArchiveSchema.parse(archive)
     const target = runArchivePath(root, parsed.manifest.runId)
@@ -77,12 +68,8 @@ class LabArchives implements LabArchivesApi {
     return target
   }
 
-  public async readRunArchive(path: string): Promise<RunArchiveView> {
-    return readRunArchiveView(JSON.parse(await readFile(path, 'utf8')))
-  }
-
-  public readRunArchiveView(input: unknown): RunArchiveView {
-    return readRunArchiveView(input)
+  public async readRunArchive(path: string): Promise<RunArchive> {
+    return runArchiveSchema.parse(JSON.parse(await readFile(path, 'utf8')))
   }
 
   public async discoverRunArchives(root: string): Promise<RunArchiveDiscovery> {
@@ -90,8 +77,8 @@ class LabArchives implements LabArchivesApi {
     const details = await stat(absolute)
     if (!details.isDirectory()) throw new Error(`归档根不是一个目录: ${absolute}`)
 
-    const direct = await readArchiveCandidate(absolute)
-    if (direct) return { archives: [direct], skippedDirectories: 0, unreadableDirectories: [] }
+    const direct = await readRunArchiveDirectory(absolute)
+    if (direct) return { archives: [direct], skippedDirectories: 0 }
 
     const entries = await readdir(absolute, { withFileTypes: true })
     const directories = entries
@@ -99,21 +86,13 @@ class LabArchives implements LabArchivesApi {
       .map((entry) => join(absolute, entry.name))
       .sort((left, right) => basename(left).localeCompare(basename(right)))
     const archives: DiscoveredRunArchive[] = []
-    const unreadable: string[] = []
     let skippedDirectories = 0
     for (const directory of directories) {
-      const candidates = await Promise.all(
-        LabArchives.CandidateFiles.map((name) => fileExists(join(directory, name)))
-      )
-      if (!candidates.some(Boolean)) {
-        skippedDirectories += 1
-        continue
-      }
-      const archive = await readArchiveCandidate(directory)
+      const archive = await readRunArchiveDirectory(directory)
       if (archive) archives.push(archive)
-      else unreadable.push(directory)
+      else skippedDirectories += 1
     }
-    return { archives, skippedDirectories, unreadableDirectories: unreadable }
+    return { archives, skippedDirectories }
   }
 
   public async writeRealTaskBundle(

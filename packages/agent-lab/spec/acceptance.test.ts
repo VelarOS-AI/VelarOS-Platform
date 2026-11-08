@@ -22,7 +22,6 @@ import {
   createDetectorRegistry,
   createVerifierRegistry,
   journeyRunner,
-  labArchives,
   labCertification,
   labDrivers,
   labReports,
@@ -33,7 +32,7 @@ import {
 } from '../src/index.js'
 import { canonicalJson } from '../src/utils/canonical-json.js'
 
-import { FullCapabilities, journey, observation, trial } from './support.js'
+import { archive, FullCapabilities, journey, observation, trial } from './support.js'
 
 /** 一个总是收敛的假驱动；时钟按段推进，用来把「本段用时」与「整程用时」分开。 */
 function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
@@ -197,18 +196,20 @@ describe('一个试验失败不影响其它试验', () => {
 })
 
 describe('归档只读与严格校验', () => {
-  test('INV-3 v3 严格校验，历史归档缺的字段保持缺', () => {
+  test('INV-3 归档只接受严格当前 v3，旧格式和额外字段不降级读取', () => {
     const base = journey()
     expect(() => labWire.parseJourney({ ...base, unexpected: true })).toThrow()
 
-    const v0 = labArchives.readRunArchiveView([{ ok: true }])
-    const v1 = labArchives.readRunArchiveView({ sessionId: 's1', rounds: [{ ok: true }] })
-    const v2 = labArchives.readRunArchiveView({ manifest: { runId: 'r2' }, rounds: [] })
-    expect([v0.shape, v1.shape, v2.shape]).toEqual(['v0-array', 'v1-flat', 'v2-manifest'])
-    expect(v0.passed).toBeNull()
-    expect(v1.drops).toBeNull()
-    expect(v2.findings).toBeNull()
-    expect(v2.usage).toBeNull()
+    const current = archive({ score: null })
+    expect(labWire.parseRunArchive(current)).toEqual(current)
+    for (const input of [
+      [{ ok: true }],
+      { sessionId: 's1', rounds: [{ ok: true }] },
+      { manifest: { runId: 'r2' }, rounds: [] },
+      { ...current, unexpected: true },
+      { ...current, manifest: { ...current.manifest, schema: 'agent-lab/run@2' } },
+    ])
+      expect(() => labWire.parseRunArchive(input)).toThrow()
   })
 })
 
@@ -367,8 +368,8 @@ describe('本包不认宿主', () => {
 
 describe('报告自包含', () => {
   test('INV-12 报告不拉任何外部资源，未知显示破折号而不是 0', () => {
-    const view = labArchives.readRunArchiveView({ sessionId: 'legacy', rounds: [] })
-    const html = labReports.renderHistoricalReportHtml([view], { generatedAt: 1 })
+    const model = labReports.createRunReportModel(archive({ score: null }))
+    const html = labReports.renderRunReportHtml([model], { generatedAt: 1 })
 
     expect(html).toContain('data-value="null">—</span>')
     expect(/<link\b|<script\b[^>]*\bsrc=|@import\b/i.test(html)).toBe(false)

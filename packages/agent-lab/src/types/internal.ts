@@ -9,8 +9,6 @@ import type {
   LoopThresholds,
   Observation,
   RealTaskFinding,
-  RunArchive,
-  RunArchiveView,
   SessionHandle,
   SettleOutcome,
   TrialSpec,
@@ -56,12 +54,6 @@ export interface ParsedArguments {
   readonly command: string | null
   readonly positionals: readonly string[]
   readonly flags: Readonly<Record<string, string | true>>
-}
-
-/** 一批归档输入读进来的结果：能当 v3 用的那些，和全部视图。 */
-export interface LoadedArchives {
-  readonly archives: readonly RunArchive[]
-  readonly views: readonly RunArchiveView[]
 }
 
 /** 成对比较里的一对：同一把配对钥匙下两边各自的完成度，连同它属于哪个簇。 */

@@ -444,7 +444,7 @@ test(
       observedFiles(oldVersion).map((item) => item.file.text),
       ['one\n']
     )
-    assert((await labArchives.readRunArchive(result.summary.archivePath)).archive)
+    assert(await labArchives.readRunArchive(result.summary.archivePath))
   }
 )
 
@@ -609,10 +609,7 @@ test('a stalled model ends at the formal Runtime deadline and leaves a failed ar
   assert.equal(result.summary.passed, false)
   assert(Date.now() - started < 3000)
   assert.equal(result.summary.modelCalls, 1)
-  assert.equal(
-    (await labArchives.readRunArchive(result.summary.archivePath)).archive.legs[0].passed,
-    false
-  )
+  assert.equal((await labArchives.readRunArchive(result.summary.archivePath)).legs[0].passed, false)
 })
 
 test('model configuration requires an explicit credential variable and never retains its value in metadata', () => {

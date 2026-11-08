@@ -38,7 +38,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test spec/acceptance.test.ts test",
     "check:arch": "node scripts/check-architecture.mjs",
-    "check:legacy": "bun scripts/check-legacy-equivalence.mjs",
     "check": "bun run typecheck && bun run test && bun run check:arch",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-lab",
     "test:built": "bun test spec/acceptance.test.ts test"

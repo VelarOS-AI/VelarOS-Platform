@@ -1,3 +1,8 @@
+import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import { archive, observation } from '../spec/support.js'
@@ -8,17 +13,91 @@ import {
   findExternalResourceViolations,
 } from '../src/utils/render/html.js'
 
-describe('archive compatibility and reports', () => {
-  test('reads legacy shapes without inventing absent fields', () => {
-    const v0 = labArchives.readRunArchiveView([{ ok: true }])
-    const v1 = labArchives.readRunArchiveView({ sessionId: 's1', rounds: [{ ok: true }] })
-    const v2 = labArchives.readRunArchiveView({ manifest: { runId: 'r2' }, rounds: [] })
-    expect(v0.shape).toBe('v0-array')
-    expect(v0.passed).toBeNull()
-    expect(v1.total).toBe(1)
-    expect(v1.passed).toBeNull()
-    expect(v1.drops).toBeNull()
-    expect(v2.findings).toBeNull()
+async function withDirectory(verify: (root: string) => Promise<void>): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'agent-lab-archive-'))
+  try {
+    await verify(root)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+describe('current archive boundaries and reports', () => {
+  test('round-trips a strict v3 archive without rewriting its bytes', async () => {
+    await withDirectory(async (root) => {
+      const value = archive({ score: null })
+      const path = await labArchives.writeRunArchive(root, value)
+      const original = await readFile(path, 'utf8')
+      expect(await labArchives.readRunArchive(path)).toEqual(value)
+      expect(await labArchives.discoverRunArchives(root)).toEqual({
+        archives: [{ directory: join(root, value.manifest.runId), path, archive: value }],
+        skippedDirectories: 0,
+      })
+      expect(await readFile(path, 'utf8')).toBe(original)
+    })
+  })
+
+  test('rejects old, malformed and extra-field reports without consulting progress or changing originals', async () => {
+    await withDirectory(async (root) => {
+      const value = archive()
+      const report = join(root, 'report.json')
+      const progress = join(root, 'progress.json')
+      const progressBytes = JSON.stringify(value)
+      await writeFile(progress, progressBytes)
+      const invalid = [
+        JSON.stringify([{ ok: true }]),
+        JSON.stringify({ sessionId: 'old', rounds: [] }),
+        JSON.stringify({ manifest: { runId: 'old' }, rounds: [] }),
+        JSON.stringify({ ...value, unexpected: true }),
+        JSON.stringify({ ...value, manifest: { ...value.manifest, unexpected: true } }),
+        JSON.stringify({ ...value, manifest: { ...value.manifest, schema: 'agent-lab/run@2' } }),
+        JSON.stringify({ unrelated: true }),
+        '{',
+      ]
+      for (const text of invalid) {
+        await writeFile(report, text)
+        await assert.rejects(labArchives.readRunArchive(report))
+        await assert.rejects(labArchives.discoverRunArchives(root))
+        expect(await readFile(report, 'utf8')).toBe(text)
+        expect(await readFile(progress, 'utf8')).toBe(progressBytes)
+      }
+    })
+  })
+
+  test('skips only missing reports and never discovers progress files', async () => {
+    await withDirectory(async (root) => {
+      expect(await labArchives.discoverRunArchives(root)).toEqual({
+        archives: [],
+        skippedDirectories: 0,
+      })
+      await assert.rejects(labArchives.readRunArchive(join(root, 'report.json')), {
+        code: 'ENOENT',
+      })
+      await writeFile(join(root, 'progress.json'), JSON.stringify(archive()))
+      const child = join(root, 'old-run')
+      await mkdir(child)
+      await writeFile(join(child, 'progress.json'), '{')
+      expect(await labArchives.discoverRunArchives(root)).toEqual({
+        archives: [],
+        skippedDirectories: 1,
+      })
+    })
+  })
+
+  test('propagates real report read failures and rejects a bad child among valid runs', async () => {
+    await withDirectory(async (root) => {
+      const value = archive({ runId: 'valid-run' })
+      await labArchives.writeRunArchive(root, value)
+      const broken = join(root, 'broken-run')
+      await mkdir(broken)
+      await writeFile(join(broken, 'progress.json'), JSON.stringify(value))
+      await mkdir(join(broken, 'report.json'))
+      await assert.rejects(labArchives.readRunArchive(join(broken, 'report.json')))
+      await assert.rejects(labArchives.discoverRunArchives(root))
+      await rm(join(broken, 'report.json'), { recursive: true })
+      await writeFile(join(broken, 'report.json'), JSON.stringify({ ...value, unexpected: true }))
+      await assert.rejects(labArchives.discoverRunArchives(root))
+    })
   })
 
   test('deduplicates cumulative debug snapshots by toolCallId', () => {
@@ -48,19 +127,15 @@ describe('archive compatibility and reports', () => {
     expect(normalized.turns.flatMap((turn) => turn.toolCalls)).toHaveLength(1)
   })
 
-  test('renders deterministic self-contained v3 and legacy reports', () => {
-    const model = labReports.createRunReportModel(archive())
+  test('renders deterministic self-contained v3 reports with honest unknown values', () => {
+    const model = labReports.createRunReportModel(archive({ score: null }))
     const first = labReports.renderRunReportHtml([model], { generatedAt: 1 })
     const second = labReports.renderRunReportHtml([model], { generatedAt: 1 })
     expect(first).toBe(second)
     expect(findExternalResourceViolations(first)).toEqual([])
-    const historical = labReports.renderHistoricalReportHtml(
-      [labArchives.readRunArchiveView({ sessionId: 'legacy', rounds: [] })],
-      { generatedAt: 1 }
-    )
-    expect(historical).toContain('data-value="null">—</span>')
+    expect(first).toContain('data-value="null">—</span>')
     expect(() =>
-      assertSelfContainedHtml(`${historical}<script src="https://bad.invalid/x.js"></script>`)
+      assertSelfContainedHtml(`${first}<script src="https://bad.invalid/x.js"></script>`)
     ).toThrow()
   })
 })

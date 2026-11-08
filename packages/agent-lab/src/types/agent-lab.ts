@@ -4,7 +4,6 @@
  * 这里是线格式的**单一来源**：`utils/wire/` 的 zod schema 逐个 `satisfies z.ZodType<…>` 对齐它们，走形就编译不过。
  */
 import type {
-  ArchiveShape,
   ArtifactProvenance,
   AttritionCause,
   CampaignFailureState,
@@ -461,37 +460,17 @@ export interface RunArchive {
   readonly extensions: JsonObject
 }
 
-/** 读任意一代归档得到的视图：缺的字段一律是 `null`，不借 0 表达。 */
-export interface RunArchiveView {
-  readonly shape: ArchiveShape
-  readonly archive: RunArchive | null
-  readonly manifest: JsonObject | null
-  readonly runId: string | null
-  readonly sessionId: string | null
-  readonly rounds: readonly JsonValue[]
-  readonly passed: number | null
-  readonly total: number | null
-  readonly findings: readonly JsonValue[] | null
-  readonly drops: readonly JsonValue[] | null
-  readonly usage: JsonObject | null
-  readonly context: JsonObject | null
-  readonly raw: JsonValue | null
-  readonly errors: readonly string[]
-}
-
 /** 在一个目录里找到的一份归档。 */
 export interface DiscoveredRunArchive {
   readonly directory: string
   readonly path: string
-  readonly source: 'report' | 'progress'
-  readonly view: RunArchiveView
+  readonly archive: RunArchive
 }
 
-/** 一次归档发现的结果：找到哪些、跳过几个目录、哪些目录读不出来。 */
+/** 一次归档发现的结果；缺席 report.json 的目录计为跳过，其余读取错误直接抛出。 */
 export interface RunArchiveDiscovery {
   readonly archives: readonly DiscoveredRunArchive[]
   readonly skippedDirectories: number
-  readonly unreadableDirectories: readonly string[]
 }
 
 /** 一份归档折成真实任务覆盖统计认的那一种结局。 */
