@@ -240,7 +240,7 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     this.sessions.delete(sessionId)
     this.generations.delete(sessionId)
     if (this.sessions.size === 0 && this.sweeper) {
-      this.timers.cancel(this.sweeper)
+      this.sweeper.cancel()
       this.sweeper = null
     }
   }
