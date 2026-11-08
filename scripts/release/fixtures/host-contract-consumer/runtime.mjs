@@ -67,7 +67,7 @@ async function probeMemoryStore() {
     assert.equal(entry.title, '发版夹具')
     assert.equal(entry.revision, saved.revision)
     assert.deepEqual(entry.tags, ['发版'])
-    assert.match(await scope.renderIndex(), /\[发版夹具\]\(packed-contract\)/u)
+    assert.equal((await scope.list())[0].title, '发版夹具')
     assert.deepEqual(await store.scope('project:/srv/other').list(), [])
     assert.deepEqual((await store.listScopes()).map((summary) => [summary.scope, summary.count]), [['project:/srv/packed', 1]])
     const changed = await memoryOperations.save({

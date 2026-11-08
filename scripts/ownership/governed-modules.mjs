@@ -498,7 +498,6 @@ export const GovernedModules = [
     portable: 'memory.ts',
     impl: 'memory/impl',
     utils: 'memory/utils',
-    tuning: 'tuning.ts',
     // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     // 作用域端口：三个操作经 ctx.memory 调它；每个方法都必须有操作在调
@@ -510,7 +509,7 @@ export const GovernedModules = [
       ['MemoryOperations.ts'],
       // 记忆库：根目录下按作用域分目录，列出有记忆的作用域
       ['MemoryStore.ts'],
-      // 一个作用域：读写目录里的条目，排会话开场的索引
+      // 一个作用域：读写目录里的条目
       ['MemoryScope.ts'],
     ],
     invariants: 'memory/spec/invariants.md',

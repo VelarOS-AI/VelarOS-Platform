@@ -65,7 +65,7 @@ test('package root exposes the store factory and the three operations', async ()
       (await memoryOperations.list(context)).map((entry) => entry.id),
       ['consumer']
     )
-    assert.match(await scope.renderIndex(), /\[构建产物\]\(consumer\)/u)
+    assert.equal((await scope.list())[0].title, '构建产物')
   } finally {
     await rm(root, { recursive: true, force: true })
   }

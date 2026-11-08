@@ -16,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { VelarMemoryModule } from '../contract/surface'
 import type { MemorySaveInput } from '../index'
 import { createMemoryStore, MemoryLimits, memoryOperations, MemoryTypes } from '../index'
-import { MemoryTuning } from '../utils/tuning'
 
 import {
   failureOf,
@@ -69,7 +68,6 @@ describe('作用域', () => {
     const store = createMemoryStore({ root })
     const project = store.scope('project:/Srv/Repos/VelarOS Platform')
     expect(await project.list()).toEqual([])
-    expect(await project.renderIndex()).toBe('## 记忆\n还没有记忆。')
     expect(await readdir(root)).toEqual([])
     await project.save(entry('first'))
     const [directory] = await readdir(root)
@@ -449,87 +447,6 @@ describe('读写', () => {
   })
 })
 
-describe('开场索引', () => {
-  test('INV-8 按类别分组、一行一条，条目后面一行数出现有标签', async () => {
-    const scope = createMemoryStore({ root }).scope('system')
-    await scope.save(
-      entry('ref', {
-        type: 'reference',
-        title: '发版流水线',
-        description: '发版进度看 release 工作流',
-        tags: ['发版'],
-      })
-    )
-    await scope.save(
-      entry('rule', {
-        type: 'feedback',
-        title: '提交前先看暂存区',
-        description: '提交前跑 git diff --cached',
-        tags: ['提交', '发版'],
-      })
-    )
-    await scope.save(
-      entry('who', { type: 'user', title: '汇报用中文', description: '写给用户的文字都用中文' })
-    )
-    await scope.save(
-      entry('plan', {
-        type: 'work',
-        title: '发版顺序',
-        description: 'Platform → 产品 → Cloud',
-        tags: ['发版'],
-      })
-    )
-    expect(await scope.renderIndex()).toBe(
-      [
-        '## 记忆（共 4 条，括号里是 id）',
-        '### 用户',
-        '- [汇报用中文](who) — 写给用户的文字都用中文',
-        '### 反馈',
-        '- [提交前先看暂存区](rule) — 提交前跑 git diff --cached',
-        '### 工作',
-        '- [发版顺序](plan) — Platform → 产品 → Cloud',
-        '### 参考',
-        '- [发版流水线](ref) — 发版进度看 release 工作流',
-        '现有标签：发版 3 · 提交 1',
-      ].join('\n')
-    )
-  })
-
-  test('INV-8 放不下时先保用户与反馈，再按更新时间放，条数与字数都有上限，剩下的只报条数', async () => {
-    const scope = createMemoryStore({ root }).scope('system')
-    await scope.save(entry('old-feedback', { type: 'feedback' }))
-    const works = MemoryTuning.index.maxEntries + 20
-    for (let index = 0; index < works; index += 1)
-      await scope.save(entry(`work-${String(index).padStart(3, '0')}`))
-
-    const byCount = await scope.renderIndex()
-    const listedByCount = [...byCount.matchAll(/\]\(([a-z0-9-]+)\)/gu)].map((match) => match[1])
-    const newestWorks = (await scope.list())
-      .filter((memory) => memory.type === 'work')
-      .map((memory) => memory.id)
-    expect(listedByCount).toEqual([
-      'old-feedback',
-      ...newestWorks.slice(0, MemoryTuning.index.maxEntries - 1),
-    ])
-    expect(byCount).toContain(
-      `另有 ${works + 1 - MemoryTuning.index.maxEntries} 条没列出，用 list() 看全部`
-    )
-
-    const long = 'x'.repeat(MemoryLimits.descriptionChars)
-    for (let index = 0; index < works; index += 1)
-      await scope.save(entry(`work-${String(index).padStart(3, '0')}`, { description: long }))
-    const byChars = await scope.renderIndex()
-    const listedByChars = [...byChars.matchAll(/\]\(([a-z0-9-]+)\)/gu)].map((match) => match[1])
-    expect(listedByChars.length).toBeLessThan(MemoryTuning.index.maxEntries)
-    expect(listedByChars[0]).toBe('old-feedback')
-    const entryLines = byChars.split('\n').filter((line) => line.startsWith('- ['))
-    expect(entryLines.reduce((sum, line) => sum + line.length + 1, 0)).toBeLessThanOrEqual(
-      MemoryTuning.index.maxChars
-    )
-    expect(byChars).toContain(`另有 ${works + 1 - listedByChars.length} 条没列出`)
-  }, 60_000)
-})
-
 describe('模型面', () => {
   it('INV-9 程序照生成的声明调到真实操作；失败时看得到 code 与 message', async () => {
     const space = memorySpace(createMemoryStore({ root }).scope('system'))
@@ -577,7 +494,6 @@ export const removed = await remove({ id: 'reply-style' })`
       'MemoryOperationContext',
       'MemoryStore',
       'MemoryScopeSummary',
-      'renderIndex',
       'listScopes',
       'prepareRemove',
       'abortSignal',

@@ -44,11 +44,11 @@ const inspectForOffice: OfficeOperationContext['office']['inspectEnvironment'] =
 const wordWritten: Promise<OfficeWritten> = officeOperations.createWord({ outputPath: 'report.docx', content: '# 周报' }, officeContext)
 void [inspectForOffice, wordWritten]
 
-// 记忆在 velaros 的 memory 单元里：宿主给根目录造一个记忆库，按会话的作用域取一份、开场排一段索引；三个操作经调用上下文里的作用域端口读写。
+// 记忆在 velaros 的 memory 单元里：宿主给根目录造一个记忆库，按会话的作用域取一份；三个操作经调用上下文里的作用域端口读写。
 const memoryStore: MemoryStoreApi = createMemoryStore({ root: '/srv/velaros/memory' })
 const memoryScope: MemoryScopeApi = memoryStore.scope('project:/srv/project')
 const memoryContext: MemoryOperationContext = { abortSignal: new AbortController().signal, memory: memoryScope }
-void [memoryScope.renderIndex(), memoryStore.listScopes(), memoryOperations.list(memoryContext)]
+void [memoryScope.list(), memoryStore.listScopes(), memoryOperations.list(memoryContext)]
 
 // 网上查资料在 velaros 的 web 单元里：宿主给不显示的页面与用户的搜索引擎，两个操作交回声明好的结果。
 declare const hiddenPage: WebPage

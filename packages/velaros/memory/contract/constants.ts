@@ -1,10 +1,10 @@
 /**
  * 约定的常量表（对外合同的一部分）：`velaros:memory` 的四个类别与公开上限。
- * 上限直接被入参核对引用，也是模型在声明里看到的数字（两边一致由验收核对）；包内可调、不对外承诺的参数在 `utils/tuning.ts`。
+ * 上限直接被入参核对引用，也是模型在声明里看到的数字（两边一致由验收核对）。
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./memory/contracts` 入口出单元。
  */
 
-/** 记忆的四个类别，也是开场索引里分组的顺序：user 用户、feedback 反馈、work 工作、reference 参考。 */
+/** 记忆的四个类别：user 用户、feedback 反馈、work 工作、reference 参考。 */
 export const MemoryTypes = Object.freeze(['user', 'feedback', 'work', 'reference'] as const)
 
 /** `velaros:memory` 对外承诺的上限。 */

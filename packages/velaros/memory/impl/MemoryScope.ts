@@ -33,15 +33,11 @@ import {
   writeFileAtomically,
   writeFileIfMissing,
 } from '../utils/fs.js'
-import { renderMemoryIndex } from '../utils/index-text.js'
 import { removeInput, saveInput } from '../utils/input.js'
 import { ScopeRecordFileName } from '../utils/scope-directory.js'
 
-/** 一个作用域：三个操作要的端口，外加宿主可选的记忆索引。 */
-export interface MemoryScopeApi extends MemoryScopePort {
-  /** 宿主按需渲染的记忆索引：按类别分组、一行一条，放不下的只报条数，末尾列出现有标签；是否放入提示词由宿主决定。 */
-  renderIndex(): Promise<string>
-}
+/** 一个作用域里的条目读写端口。 */
+export interface MemoryScopeApi extends MemoryScopePort {}
 
 export class MemoryScope implements MemoryScopeApi {
   constructor(
@@ -98,10 +94,6 @@ export class MemoryScope implements MemoryScopeApi {
       },
       signal
     )
-  }
-
-  public async renderIndex(): Promise<string> {
-    return renderMemoryIndex(await this.list())
   }
 
   /** 读一条当前格式的记忆；格式错误明确失败，文件被并发删除才忽略。 */
