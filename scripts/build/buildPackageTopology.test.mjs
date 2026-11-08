@@ -81,6 +81,29 @@ appendFileSync('../../order.log', ${JSON.stringify(`${name}\n`)});
   }
 }
 
+async function resourceFixture(t) {
+  const f = await fixture(t, { build: false })
+  const directory = join(f.root, 'packages/resources')
+  await mkdir(directory)
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({
+      name: '@velaros-ai/resources',
+      files: ['SKILL.md'],
+      dependencies: { '@velaros-ai/core': 'workspace:*' },
+    })
+  )
+  await writeFile(join(directory, 'SKILL.md'), '# Source-only resource')
+  const appManifest = join(f.root, 'packages/app/package.json')
+  const manifest = JSON.parse(await readFile(appManifest, 'utf8'))
+  await writeFile(
+    appManifest,
+    JSON.stringify({ ...manifest, dependencies: { '@velaros-ai/resources': 'workspace:*' } })
+  )
+  succeeded(f.run('--for', 'app'))
+  return f
+}
+
 async function lockOwner(path) {
   const entries = await readdir(path)
   assert.equal(entries.length, 1)
@@ -225,6 +248,91 @@ test('pack proof verifies the real build dependency closure and excludes concurr
   assert.deepEqual(Object.keys(proof), ['@velaros-ai/core', '@velaros-ai/app'])
   assert.match(proof['@velaros-ai/app'].outputFingerprint, /^[a-f0-9]{64}$/)
   await assert.rejects(readdir(f.lock), { code: 'ENOENT' })
+})
+
+test('source-only resource dependencies prove real inputs without invented outputs or cache entries', async (t) => {
+  const f = await resourceFixture(t)
+  const proof = await f.verify(async (proof) => {
+    const owner = await lockOwner(f.lock)
+    assert.equal(owner.pid, process.pid)
+    await assert.rejects(f.verify(), /正在运行/u)
+    const concurrent = f.run('--incremental', '--for', 'app')
+    assert.notEqual(concurrent.status, 0, diagnostic(concurrent))
+    assert.match(diagnostic(concurrent), /正在运行/u)
+    assert.deepEqual(await lockOwner(f.lock), owner)
+    return proof
+  })
+  assert.deepEqual(Object.keys(proof), [
+    '@velaros-ai/core',
+    '@velaros-ai/resources',
+    '@velaros-ai/app',
+  ])
+  assert.deepEqual(Object.keys(proof['@velaros-ai/resources']), ['inputFingerprint'])
+  assert.match(proof['@velaros-ai/resources'].inputFingerprint, /^[a-f0-9]{64}$/u)
+  const cache = JSON.parse(await readFile(f.cache, 'utf8'))
+  assert.equal(Object.hasOwn(cache.packages, '@velaros-ai/resources'), false)
+  for (const name of ['@velaros-ai/core', '@velaros-ai/app']) {
+    assert.deepEqual(proof[name], cache.packages[name])
+    assert.match(proof[name].outputFingerprint, /^[a-f0-9]{64}$/u)
+  }
+  await assert.rejects(readdir(join(f.root, 'packages/resources/dist')), { code: 'ENOENT' })
+  await assert.rejects(readdir(f.lock), { code: 'ENOENT' })
+
+  await rm(join(f.root, 'packages/app/dist'), { recursive: true })
+  await assert.rejects(f.verify(), /Stale or unverified build for @velaros-ai\/app/u)
+  await assert.rejects(readdir(f.lock), { code: 'ENOENT' })
+})
+
+test('resource inputs participate in incremental and transitive dependency fingerprints', async (t) => {
+  const f = await resourceFixture(t)
+  const before = await f.verify()
+  assert.deepEqual(await f.order(), ['core', 'app'])
+  succeeded(f.run('--incremental', '--for', 'app'))
+  assert.deepEqual(await f.order(), ['core', 'app'])
+
+  await writeFile(join(f.root, 'packages/resources/SKILL.md'), '# Changed resource')
+  let consumed = false
+  await assert.rejects(
+    f.verify(() => {
+      consumed = true
+    }),
+    /Stale or unverified build for @velaros-ai\/app/u
+  )
+  assert.equal(consumed, false)
+  succeeded(f.run('--incremental', '--for', 'app'))
+  assert.deepEqual(await f.order(), ['core', 'app', 'app'])
+  const resourceChanged = await f.verify()
+  assert.deepEqual(resourceChanged['@velaros-ai/core'], before['@velaros-ai/core'])
+  for (const name of ['@velaros-ai/resources', '@velaros-ai/app']) {
+    assert.notEqual(resourceChanged[name].inputFingerprint, before[name].inputFingerprint)
+  }
+
+  await writeFile(join(f.root, 'packages/core/source.js'), 'export const changed = true')
+  succeeded(f.run('--incremental', '--for', 'app'))
+  assert.deepEqual(await f.order(), ['core', 'app', 'app', 'core', 'app'])
+  const dependencyChanged = await f.verify()
+  for (const name of Object.keys(dependencyChanged)) {
+    assert.notEqual(
+      dependencyChanged[name].inputFingerprint,
+      resourceChanged[name].inputFingerprint
+    )
+  }
+})
+
+test('source-only target mutations during consumption fail the final proof under the same lock', async (t) => {
+  const f = await resourceFixture(t)
+  const { withVerifiedPackageBuilds } = await import(pathToFileURL(f.runner).href)
+  await assert.rejects(
+    withVerifiedPackageBuilds(['resources'], async (proof) => {
+      const owner = await lockOwner(f.lock)
+      assert.deepEqual(Object.keys(proof), ['@velaros-ai/core', '@velaros-ai/resources'])
+      await writeFile(join(f.root, 'packages/resources/SKILL.md'), '# Changed while consuming')
+      assert.deepEqual(await lockOwner(f.lock), owner)
+    }),
+    /Build inputs or outputs changed while preparing the candidate/u
+  )
+  await assert.rejects(readdir(f.lock), { code: 'ENOENT' })
+  await assert.rejects(f.verify(), /Stale or unverified build for @velaros-ai\/app/u)
 })
 
 test('pack rejects stale source, stale output and changed dependencies', async (t) => {

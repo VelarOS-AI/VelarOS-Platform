@@ -496,19 +496,23 @@ export async function withVerifiedPackageBuilds(targets, consume) {
           node.deps.map((name) => [name, resolvedFingerprints.get(name)])
         )
         const inputFingerprint = computePackageInputFingerprint(node, dependencies)
-        const outputFingerprint = computeBuildOutputFingerprint(node)
-        const cached = cache.packages[node.name]
-        if (
-          !node.hasBuild ||
-          !outputFingerprint ||
-          cached?.inputFingerprint !== inputFingerprint ||
-          cached?.outputFingerprint !== outputFingerprint
-        )
-          throw new Error(
-            `Stale or unverified build for ${node.name}; run the package topology build before preparing a candidate`
+        // 无构建的资源包只证明源输入，其指纹仍参与下游依赖链。
+        const entry = { inputFingerprint }
+        if (node.hasBuild) {
+          const outputFingerprint = computeBuildOutputFingerprint(node)
+          const cached = cache.packages[node.name]
+          if (
+            !outputFingerprint ||
+            cached?.inputFingerprint !== inputFingerprint ||
+            cached?.outputFingerprint !== outputFingerprint
           )
+            throw new Error(
+              `Stale or unverified build for ${node.name}; run the package topology build before preparing a candidate`
+            )
+          entry.outputFingerprint = outputFingerprint
+        }
         resolvedFingerprints.set(node.name, inputFingerprint)
-        proof[node.name] = { inputFingerprint, outputFingerprint }
+        proof[node.name] = entry
       }
       return proof
     }
@@ -550,10 +554,6 @@ async function main() {
     const cache = readBuildCache()
     const resolvedFingerprints = new Map()
     for (const node of order) {
-      if (!node.hasBuild) {
-        buildPackage(node)
-        continue
-      }
       const dependencyFingerprints = new Map(
         node.deps.flatMap((dependencyName) => {
           const fingerprint = resolvedFingerprints.get(dependencyName)
@@ -561,6 +561,11 @@ async function main() {
         })
       )
       const inputFingerprint = computePackageInputFingerprint(node, dependencyFingerprints)
+      if (!node.hasBuild) {
+        buildPackage(node)
+        resolvedFingerprints.set(node.name, inputFingerprint)
+        continue
+      }
       const cached = cache.packages[node.name]
       const outputFingerprint = options.incremental ? computeBuildOutputFingerprint(node) : null
       if (
