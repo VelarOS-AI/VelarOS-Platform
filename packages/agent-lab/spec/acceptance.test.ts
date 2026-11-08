@@ -79,22 +79,27 @@ function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
 function sensitiveRecord(): RealTaskRecord {
   return labWire.parseRealTaskRecord({
     schema: 'agent-lab/real-task@1',
-    id: 'task-secret',
+    id: 'SECRET-RECORD-ID',
     capturedAt: 20,
     task: {
-      sessionId: 'session-1',
-      runId: 'run-1',
+      sessionId: 'SECRET-SESSION-ID',
+      runId: 'SECRET-RUN-ID',
       rootInputId: null,
       source: 'user',
       surface: 'project',
-      title: '修一个持久化缺陷',
+      title: 'SECRET-TITLE /srv/evaluation/secret-workspace/title.txt',
       prompt: 'SECRET-PROMPT-TOKEN',
       workspaceRoot: '/srv/evaluation/secret-workspace',
       startedAt: 1,
       finishedAt: 5,
       terminalStatus: 'ok',
     },
-    executor: { executorId: 'executor-a', provider: null, model: null, reasoningProfile: null },
+    executor: {
+      executorId: 'SECRET-EXECUTOR-ID',
+      provider: 'SECRET-PROVIDER',
+      model: 'SECRET-MODEL',
+      reasoningProfile: 'SECRET-REASONING',
+    },
     privacy: {
       classification: 'local-only',
       containsPrompt: true,
@@ -105,12 +110,12 @@ function sensitiveRecord(): RealTaskRecord {
       spans: [],
       assertions: [
         {
-          id: 'file',
+          id: 'SECRET-ASSERTION-ID',
           kind: 'file',
-          description: '文件写对了',
+          description: 'SECRET-ASSERTION-DESCRIPTION',
           outcome: 'pass',
-          detail: 'ok',
-          evidenceRefs: [],
+          detail: 'SECRET-ASSERTION-DETAIL',
+          evidenceRefs: ['SECRET-EVIDENCE-REF'],
         },
       ],
       artifacts: [
@@ -124,8 +129,8 @@ function sensitiveRecord(): RealTaskRecord {
         },
       ],
       finalAnswer: 'SECRET-ANSWER-TOKEN',
-      userFeedback: null,
-      observationGaps: [],
+      userFeedback: { verdict: 'accepted', detail: 'SECRET-FEEDBACK', recordedAt: 10 },
+      observationGaps: ['SECRET-OBSERVATION-GAP'],
     },
   })
 }
@@ -225,13 +230,30 @@ describe('归档只读与严格校验', () => {
 describe('真实任务报告不外泄内容', () => {
   test('INV-4 报告不嵌入提示词、回答、绝对路径与产物正文', () => {
     const record = sensitiveRecord()
-    const assessment: RealTaskAssessment = realTaskWorkload.audit(record, { generatedAt: 1 })
-    const html = labReports.renderRealTaskReportHtml(record, assessment)
+    const audited = realTaskWorkload.audit(record, { generatedAt: 1 })
+    const assessment: RealTaskAssessment = {
+      ...audited,
+      findings: [
+        ...audited.findings,
+        {
+          id: 'SECRET-FINDING-ID',
+          severity: 'info',
+          class: 'policy',
+          title: 'SECRET-FINDING-TITLE',
+          detail: 'SECRET-FINDING-DETAIL',
+          evidenceRefs: ['SECRET-FINDING-REF'],
+        },
+      ],
+    }
+    const html = labReports.renderRealTaskReportHtml(assessment)
 
-    expect(html).not.toContain('SECRET-PROMPT-TOKEN')
-    expect(html).not.toContain('SECRET-ANSWER-TOKEN')
+    expect(html).not.toContain('SECRET-')
     expect(html).not.toContain('/srv/evaluation/secret-workspace')
     expect(html).toContain('verified-pass')
+    expect(html).toContain('data-finding-class="observation-gap"')
+    expect(html).toContain('data-finding-class="policy"')
+    expect(html).toContain('data-value="null">—</span>')
+    expect(/<link\b|<script\b[^>]*\bsrc=|@import\b|https?:\/\//i.test(html)).toBe(false)
   })
 })
 

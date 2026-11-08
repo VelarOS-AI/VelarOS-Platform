@@ -1,7 +1,20 @@
+import assert from 'node:assert/strict'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import { archive } from '../spec/support.js'
-import { labReports, labWire, realTaskWorkload } from '../src/index.js'
+import type { RealTaskAssessment } from '../src/index.js'
+import {
+  labArchives,
+  labReports,
+  labWire,
+  RealTaskPrivacyClassifications,
+  realTaskWorkload,
+} from '../src/index.js'
+import { findExternalResourceViolations } from '../src/utils/render/html.js'
 
 function record() {
   return labWire.parseRealTaskRecord({
@@ -159,9 +172,222 @@ describe('real workload evaluation', () => {
     expect(assessment.metrics.repeatedToolErrors).toBe(3)
     expect(assessment.metrics.redundantToolCalls).toBe(0)
     expect(assessment.promotionRecommended).toBeTrue()
-    const report = labReports.renderRealTaskReportHtml(input, assessment)
+    const report = labReports.renderRealTaskReportHtml(assessment)
     expect(report).not.toContain(input.task.prompt!)
     expect(report).not.toContain(input.task.workspaceRoot!)
+    expect(report).toContain('data-value="null">—</span>')
+    expect(report).toContain('data-value="0">0</span>')
+    expect(findExternalResourceViolations(report)).toEqual([])
+  })
+
+  test('renders only closed summaries while preserving private record and finding facts in every bundle classification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'agent-lab-private-report-'))
+    try {
+      for (const classification of RealTaskPrivacyClassifications) {
+        const sentinels: string[] = []
+        const secret = (label: string) => {
+          const value = `PRIVATE-${label}-界`
+          sentinels.push(value)
+          return value
+        }
+        const base = record()
+        const input = labWire.parseRealTaskRecord({
+          ...base,
+          id: secret('record-id'),
+          capturedAt: 40,
+          task: {
+            ...base.task,
+            sessionId: secret('session-id'),
+            runId: secret('run-id'),
+            rootInputId: secret('input-id'),
+            surface: secret('surface'),
+            title: `C:\\Private\\${secret('title')}.txt`,
+            prompt: secret('prompt'),
+            workspaceRoot: `/srv/private/${secret('workspace')}`,
+          },
+          executor: {
+            executorId: secret('executor-id'),
+            provider: secret('provider'),
+            model: secret('model'),
+            reasoningProfile: secret('reasoning-profile'),
+          },
+          privacy: {
+            classification,
+            containsPrompt: true,
+            containsAnswer: true,
+            containsPaths: true,
+          },
+          evidence: {
+            spans: [
+              {
+                ...base.evidence.spans[0]!,
+                id: secret('model-span-id'),
+                category: 'model',
+                status: 'ok',
+                name: secret('model-span-name'),
+                startedAt: 10,
+                endedAt: 11,
+                toolCallId: null,
+                toolName: null,
+                toolCategoryId: null,
+                toolEffectKind: null,
+                errorCode: null,
+                provider: secret('span-provider'),
+                model: secret('span-model'),
+                mutation: false,
+                metrics: { latencyMs: 1, tokensIn: 11, tokensOut: 7, costUsd: 0.01 },
+              },
+              ...base.evidence.spans.map((span, index) => ({
+                ...span,
+                id: secret(`tool-span-${index}`),
+                name: secret(`span-name-${index}`),
+                toolCallId: secret(`call-${index}`),
+                toolName: 'PRIVATE-tool-name-界',
+                errorCode: 'PRIVATE-error-code-界',
+                toolCategoryId: secret(`category-${index}`),
+                toolEffectKind: secret(`effect-${index}`),
+              })),
+            ],
+            assertions: [
+              {
+                id: secret('assertion-id'),
+                kind: 'file',
+                outcome: 'fail',
+                description: secret('assertion-description'),
+                detail: secret('assertion-detail'),
+                evidenceRefs: [secret('assertion-evidence')],
+              },
+              {
+                id: secret('unknown-assertion-id'),
+                kind: 'file',
+                outcome: 'unknown',
+                description: secret('unknown-description'),
+                detail: secret('unknown-detail'),
+                evidenceRefs: [],
+              },
+            ],
+            artifacts: [
+              {
+                id: secret('artifact-id'),
+                kind: secret('artifact-kind'),
+                path: `/srv/private/${secret('artifact-path')}`,
+                sha256: 'f'.repeat(64),
+                sizeBytes: 13,
+                provenance: 'agent',
+              },
+            ],
+            finalAnswer: secret('answer'),
+            userFeedback: { verdict: 'rejected', detail: secret('feedback'), recordedAt: 30 },
+            observationGaps: [secret('observation-gap')],
+          },
+        })
+        sentinels.push('PRIVATE-tool-name-界', 'PRIVATE-error-code-界', 'f'.repeat(64))
+        const audited = realTaskWorkload.audit(input, { generatedAt: 40 })
+        expect(
+          audited.findings.some((finding) => finding.detail.includes('PRIVATE-tool-name-界'))
+        ).toBe(true)
+        expect(
+          audited.findings.some((finding) => finding.id.includes('PRIVATE-error-code-界'))
+        ).toBe(true)
+        const custom = {
+          id: secret('custom-finding-id'),
+          severity: 'warn',
+          class: 'policy',
+          title: secret('custom-title'),
+          detail: secret('custom-detail'),
+          evidenceRefs: [secret('custom-evidence')],
+        }
+        const assessment = labWire.parseRealTaskAssessment({
+          ...audited,
+          findings: [...audited.findings, custom, { ...custom, id: secret('second-custom-id') }],
+        })
+        const originals = structuredClone({ input, assessment })
+        const html = labReports.renderRealTaskReportHtml(assessment)
+        for (const sentinel of sentinels) expect(html).not.toContain(sentinel)
+        expect(html).not.toContain('/srv/private/')
+        expect(html).not.toContain('C:\\Private\\')
+        expect(html).toContain('verified-fail')
+        expect(html).toContain('>fail</span>')
+        expect(html).toContain('>broken</span>')
+        for (const [label, value] of [
+          ['模型调用', 1],
+          ['工具调用', 3],
+          ['工具错误', 3],
+          ['重复错误', 3],
+          ['并行冗余调用', 0],
+          ['输入 token', 11],
+          ['输出 token', 7],
+        ])
+          expect(html).toContain(
+            `<span>${label}</span><strong><span data-value="${value}">${value}</span>`
+          )
+        const groups = [
+          { category: 'tool-error', severity: 'warn', count: 1 },
+          { category: 'retry-loop', severity: 'fail', count: 1 },
+          { category: 'acceptance', severity: 'fail', count: 1 },
+          { category: 'observation-gap', severity: 'info', count: 2 },
+          { category: 'user-rejected', severity: 'fail', count: 1 },
+          { category: 'policy', severity: 'warn', count: 2 },
+        ]
+        let summarized = 0
+        for (const { category, severity, count: expected } of groups) {
+          const group = html.match(
+            new RegExp(
+              `data-finding-class="${category}" data-finding-severity="${severity}"[\\s\\S]*?<span data-value="([0-9]+)">`
+            )
+          )
+          expect(group).not.toBeNull()
+          const count = Number(group![1])
+          expect(count).toBe(expected)
+          summarized += count
+        }
+        expect(summarized).toBe(assessment.findings.length)
+        expect(html.match(/<article class="finding /g)).toHaveLength(groups.length)
+        expect(findExternalResourceViolations(html)).toEqual([])
+        const written = await labArchives.writeRealTaskBundle(
+          join(root, classification),
+          input,
+          assessment
+        )
+        const savedRecord = JSON.parse(await readFile(written.record, 'utf8'))
+        const savedAssessment = JSON.parse(await readFile(written.assessment, 'utf8'))
+        expect(savedRecord).toEqual(originals.input)
+        expect(savedAssessment).toEqual(originals.assessment)
+        for (const sentinel of sentinels)
+          expect(JSON.stringify([savedRecord, savedAssessment])).toContain(sentinel)
+        expect(await readFile(written.report, 'utf8')).toBe(html)
+        expect({ input, assessment }).toEqual(originals)
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects malformed public assessment states instead of rendering arbitrary enum or metric text', () => {
+    const assessment = realTaskWorkload.audit(record(), { generatedAt: 30 })
+    for (const input of [
+      { ...assessment, outcome: 'PRIVATE-invalid-outcome' },
+      { ...assessment, metrics: { ...assessment.metrics, modelCalls: 'PRIVATE-invalid-count' } },
+      { ...assessment, findings: [{ ...assessment.findings[0]!, class: 'PRIVATE-invalid-class' }] },
+    ])
+      expect(() =>
+        labReports.renderRealTaskReportHtml(input as unknown as RealTaskAssessment)
+      ).toThrow()
+  })
+
+  test('rejects an unrelated assessment before publishing any private bundle files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'agent-lab-report-association-'))
+    try {
+      const input = record()
+      const assessment = realTaskWorkload.audit(input, { generatedAt: 30 })
+      await assert.rejects(
+        labArchives.writeRealTaskBundle(root, input, { ...assessment, recordId: 'another-record' }),
+        /不属于/
+      )
+      expect(await readdir(root)).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test('does not call parallel fan-out a feedback retry loop', () => {

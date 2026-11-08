@@ -109,7 +109,7 @@ class LabArchives implements LabArchivesApi {
     const reportPath = join(root, LabArchives.BundleFiles.report)
     await writeJsonAtomically(recordPath, record)
     await writeJsonAtomically(assessmentPath, assessment)
-    await writeTextAtomically(reportPath, renderRealTaskReportHtml(record, assessment))
+    await writeTextAtomically(reportPath, renderRealTaskReportHtml(assessment))
     return { record: recordPath, assessment: assessmentPath, report: reportPath }
   }
 

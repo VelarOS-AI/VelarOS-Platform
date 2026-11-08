@@ -4,7 +4,6 @@
  */
 import type {
   RealTaskAssessment,
-  RealTaskRecord,
   ReportRenderOptions,
   RunArchive,
   RunReportModel,
@@ -12,6 +11,7 @@ import type {
 import { createRunReportModel } from '../utils/measure/report-model.js'
 import { renderRealTaskReportHtml } from '../utils/render/real-task-report.js'
 import { renderReportHtml } from '../utils/render/run-report.js'
+import { realTaskAssessmentSchema } from '../utils/wire/workload.js'
 
 /**
  * 当前运行报告与真实任务报告的出口。
@@ -23,8 +23,8 @@ export interface LabReportsApi {
   createRunReportModel: (archive: RunArchive) => RunReportModel
   /** 把一批运行报告模型渲染成一份自包含 HTML。 */
   renderRunReportHtml: (models: readonly RunReportModel[], options?: ReportRenderOptions) => string
-  /** 渲染一份真实任务报告；它永远不嵌入提示词、回答、绝对路径或产物正文。 */
-  renderRealTaskReportHtml: (record: RealTaskRecord, assessment: RealTaskAssessment) => string
+  /** 校验当前评估并渲染闭集状态、数值和分类计数；自由文本及身份只留在私有 JSON。 */
+  renderRealTaskReportHtml: (assessment: RealTaskAssessment) => string
 }
 
 class LabReports implements LabReportsApi {
@@ -39,8 +39,8 @@ class LabReports implements LabReportsApi {
     return renderReportHtml(models, options)
   }
 
-  public renderRealTaskReportHtml(record: RealTaskRecord, assessment: RealTaskAssessment): string {
-    return renderRealTaskReportHtml(record, assessment)
+  public renderRealTaskReportHtml(assessment: RealTaskAssessment): string {
+    return renderRealTaskReportHtml(realTaskAssessmentSchema.parse(assessment))
   }
 }
 
