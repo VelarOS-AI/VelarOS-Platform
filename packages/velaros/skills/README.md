@@ -30,6 +30,8 @@ async function openEnvironment(options: SkillRegistryOptions) {
 
 标准依赖使用 package.json 的 dependencies，公开给 Agent 的包名在 agentSkill.packages 声明。说明入口为可选的 agentSkill.instructions。纯 SKILL.md 目录安装时生成清单。宿主在独立暂存目录完成依赖安装，随后内容验证与原子发布；原有会话持有的租约保护它使用的安装版本。
 
+标准 npm 安装器在首次安装与锁文件恢复时都复制 `file:` 依赖，不创建指向暂存位置的链接。环境发布移动目录后，依赖仍属于该不可变安装版本，不要求产品宿主改写 npm 进程环境。
+
 模型通过 `velaros:skills` 的 guide、list、load、validate、install、remove 查询规范、管理本机库与读取说明。宿主用 `createSkillSession({ registry, selection })` 启用按需加载，将同一个 session 传入模型操作上下文和能力装配，并以其 `acquireRuntime` 提供每次 Node 执行的快照。selection 只预加载工作区默认项与显式选择；其他已安装 Skill 由模型按需加载，不要求用户勾选。执行与后台任务全部收束后释放 session。固定授权宿主仍可使用 `registry.acquire()`。
 
 内置 browser 与专项 jsts 共用目录、发现、租约和授权。项目事务与代码查询由宿主根据项目根装配。hostCapabilities 声明宿主能力，当前资源绑定经 createRuntime 的 skills 装配；缺少资源时显式失败。标准 npm 包的 API、README 和类型保持原样，Skill 正文只在 load 时读取。

@@ -7,12 +7,16 @@ import type { NpmClientApi } from '../../execution/index.js'
 import { createNpmClient } from '../../execution/local.js'
 import type { NpmSkillInstallerOptions, SkillDependencyInstaller } from '../contract/requires.js'
 
-/** Skill 只决定使用安装或锁文件恢复；npm 进程生命周期由 execution 统一管理。 */
+/** Skill 负责可发布的依赖安装策略；npm 进程生命周期由 execution 统一管理。 */
 class NpmSkillInstaller implements SkillDependencyInstaller {
   private readonly npm: NpmClientApi
 
   public constructor(options: NpmSkillInstallerOptions) {
-    this.npm = createNpmClient(options)
+    // 发布会移动整个暂存目录；file: 依赖必须复制，不能保留指向暂存路径的链接。
+    this.npm = createNpmClient({
+      ...options,
+      environment: { npm_config_install_links: 'true' },
+    })
   }
 
   public async install(

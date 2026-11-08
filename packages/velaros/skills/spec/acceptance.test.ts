@@ -1,4 +1,14 @@
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -22,10 +32,12 @@ import {
   scriptContractCompiler,
 } from '@velaros-ai/script'
 
+import { createLocalShellHost } from '../../execution/local'
 import type { SkillDependencyInstaller } from '../contract/requires'
 import {
   builtinSkillDirectories,
   BuiltinSkillNames,
+  createNpmSkillInstaller,
   createSkillRegistry,
   createSkillSession,
   skillCapabilityModules,
@@ -314,6 +326,81 @@ test('INV-1 依赖安装失败与取消都保留原来的安装版本', async ()
   await expect(f.registry.install({ directory }, signal)).rejects.toThrow('cancelled')
   expect((await f.registry.list())[0]!.manifest.version).toBe('1.0.0')
 })
+
+test('INV-1 标准 npm 首装与锁文件恢复复制 file: 依赖，暂存发布后仍可独立读取', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'velaros-skills-local-dependencies-'))
+  roots.push(root)
+  const store = join(root, 'store')
+  await mkdir(store)
+  const executable = await realpath(nodeExecutable.resolve()!)
+  const npmCli = join(
+    dirname(executable),
+    process.platform === 'win32'
+      ? 'node_modules/npm/bin/npm-cli.js'
+      : '../lib/node_modules/npm/bin/npm-cli.js'
+  )
+  const host = createLocalShellHost({
+    cwd: root,
+    processConfinement: { mode: 'danger-full-access' },
+  })
+  try {
+    const directory = await source(root, 'portable-install', '1.0.0', { packages: ['local-proof'] })
+    const manifestPath = join(directory, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest.dependencies = { 'local-proof': 'file:vendor/local-proof' }
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await mkdir(join(directory, 'vendor/local-proof'), { recursive: true })
+    await writeFile(
+      join(directory, 'vendor/local-proof/package.json'),
+      JSON.stringify({
+        name: 'local-proof',
+        version: '1.0.0',
+        main: 'index.cjs',
+      })
+    )
+    await writeFile(join(directory, 'vendor/local-proof/index.cjs'), 'module.exports = 42;')
+    const registry = createSkillRegistry({
+      directory: store,
+      nodeVersion: (await execa(executable, ['-p', 'process.versions.node'])).stdout,
+      installer: createNpmSkillInstaller({
+        executable,
+        npmCli,
+        cacheDirectory: join(root, 'npm-cache'),
+        host,
+      }),
+      lock: createExclusiveSqliteLock(() => new Database(join(store, 'lock.sqlite'))),
+    })
+    const signal = new AbortController().signal
+    const installed = await registry.install({ directory }, signal)
+    expect(
+      (await lstat(join(installed.directory, 'node_modules/local-proof'))).isSymbolicLink()
+    ).toBe(false)
+    expect(
+      (
+        await execa(executable, ['-e', "console.log(require('local-proof'))"], {
+          cwd: installed.directory,
+        })
+      ).stdout
+    ).toBe('42')
+    const lock = await readFile(join(installed.directory, 'package-lock.json'), 'utf8')
+    await writeFile(join(directory, 'package-lock.json'), lock)
+    const restored = await registry.install({ directory }, signal)
+    expect(await readFile(join(restored.directory, 'package-lock.json'), 'utf8')).toBe(lock)
+    await rm(directory, { recursive: true, force: true })
+    expect(
+      (await lstat(join(restored.directory, 'node_modules/local-proof'))).isSymbolicLink()
+    ).toBe(false)
+    expect(
+      (
+        await execa(executable, ['-e', "console.log(require('local-proof'))"], {
+          cwd: restored.directory,
+        })
+      ).stdout
+    ).toBe('42')
+  } finally {
+    await host.dispose()
+  }
+}, 30_000)
 
 test('INV-2 升级与卸载保留旧环境文件，租约释放后才能回收', async () => {
   const f = await fixture()

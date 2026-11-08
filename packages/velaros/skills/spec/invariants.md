@@ -2,7 +2,7 @@
 
 | 编号 | 承诺 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 纯说明与 npm 贡献安装为同一类包，失败不修改当前索引。 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 纯说明与 npm 贡献安装为同一类包，失败不修改当前索引；标准安装器首装与锁文件恢复复制本地依赖，发布后仍可读取。 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 环境锁定安装代次，升级和卸载不破坏持有租约的文件。 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 安装不自动加载；能力授权只属于所选会话，卸载或升级阻止旧代次后续调用。 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 文件越界、清单损坏和内容篡改必须显式失败。 | 测试 | `spec/acceptance.test.ts` |
