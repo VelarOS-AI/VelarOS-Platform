@@ -107,4 +107,4 @@ await session.close()
 
 一次组帧周期先准备稳定材料（能力 inventory、环境、当前段底座及已释放历史退役）；容量候选只试算正文和实际历史覆盖，不发布 `context:frame`、`context:request-proof` 或程序 `pendingFrame`。只有最终完整请求通过容量检查与证据验证，才发布选中帧及其正文 hash 证明，并登记程序帧。正式发布前重新核对授权、最新输入、段版本与 npm 环境；变化时丢弃周期并重新准备，不跨轮缓存。inventory 每周期一次，最终 npm 快照获取仅作版本复核并释放，须在计数中与 inventory 采集区分。
 
-本地候选仍执行实际正文/历史载体 proof 核对，不把引用视为已读；失败、取消和预算试算不消费租约。租约仍在成功接受响应后由原 acknowledge/consume 路径扣减。可选 `ActContextPort.beginFrame` 缺省时继续沿用旧 `project`/`reconcile`；直接程序投影默认仍登记其帧。
+本地候选仍执行实际正文/历史载体 proof 核对，不把引用视为已读；失败、取消和预算试算不消费租约。租约仍在成功接受响应后由原 acknowledge/consume 路径扣减。宿主通过 `ActContextPort.beginFrame` 提供组帧周期；直接程序投影默认仍登记其帧。

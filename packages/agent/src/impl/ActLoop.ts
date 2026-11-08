@@ -681,7 +681,7 @@ export class ActLoop implements ActLoopApi {
                 ),
                 controller.signal
               )
-              if (!compiled.okToSend)
+              if (!compiled.okToSend || compiled.estimate.tokens > this.capacity().window)
                 throw new AppError('CONTEXT_BUDGET', '协议修复请求超过上下文预算')
             } finally {
               attemptController.abort()

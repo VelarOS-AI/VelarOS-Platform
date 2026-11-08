@@ -3727,7 +3727,7 @@ test.each(['available', 'forecast', 'capacity'] as const)(
   }
 )
 
-test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
+test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] as const)(
   'INV-50 protocol repair preserves calibrated admission and execution boundaries: %s',
   async (mode) => {
     const f = runFixture()
@@ -3739,15 +3739,16 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
     let abortTimer: Optional<ReturnType<typeof setTimeout>>
     const sent: string[] = []
     f.options.limits = { ...f.options.limits, timeoutMs: mode === 'timeout' ? 100 : 2000 }
+    if (mode === 'window') f.options.frames.policy = { windowTokens: 2000 }
     f.options.model.estimate = async (request) => {
       const repair = request.compiledPrompt?.includes('本帧上次响应未通过校验')
       if (repair && (mode === 'timeout' || mode === 'abort')) {
         if (mode === 'abort') abortTimer = setTimeout(() => controller.abort(), 20)
         return new Promise(() => {})
       }
+      const repairTokens = mode === 'overflow' ? 120000 : mode === 'window' ? 30000 : 12020
       return {
-        tokens:
-          folded || executed === 0 ? 1000 : repair ? (mode === 'overflow' ? 120000 : 12020) : 12000,
+        tokens: folded || executed === 0 ? 1000 : repair ? repairTokens : 12000,
         precision: 'estimate',
         basis: 'synthetic repair estimate',
       }
@@ -3819,7 +3820,7 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
         expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
         expect(requests[2].request.compiledPrompt).toContain('synthetic invalid intent')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
-      } else if (mode === 'overflow') {
+      } else if (mode === 'overflow' || mode === 'window') {
         expect(calls).toBe(2)
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'context_blocked' })
       } else if (mode === 'provider-reject') {

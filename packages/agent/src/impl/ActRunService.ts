@@ -97,11 +97,7 @@ class ActRunService implements ActRunServiceApi {
             turnSignal.throwIfAborted()
             if (!restored) {
               const state = await this.options.storage.load(this.options.sessionId)
-              const applied = new Set(
-                (state?.records ?? [])
-                  .filter((r) => r.title?.startsWith('act:input-applied:'))
-                  .map((r) => r.title.slice('act:input-applied:'.length))
-              )
+              const applied = new Set<string>()
               const events: ActRunEvent[] = []
               for (const record of state?.records ?? [])
                 if (record.title === 'act:event') {
