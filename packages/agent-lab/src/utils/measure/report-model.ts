@@ -10,6 +10,9 @@ import type {
   RunReportModel,
 } from '../../types/agent-lab.js'
 
+import { classifyRunArchiveOutcome, hasCompleteLegCoverage } from './coverage.js'
+import { archiveCompletion } from './statistics.js'
+
 /** 数出这份归档里每一类失败各有几条：判词与失败判据都算。 */
 function findingCounts(archive: RunArchive): Partial<Record<FailureClass, number>> {
   const counts: Partial<Record<FailureClass, number>> = {}
@@ -23,20 +26,6 @@ function findingCounts(archive: RunArchive): Partial<Record<FailureClass, number
     }
   }
   return counts
-}
-
-/** 整条旅程的完成度：按段权重加权；一段可判的都没有时是未知。 */
-function completion(archive: RunArchive): number | null {
-  let weighted = 0
-  let weight = 0
-  for (const leg of archive.legs) {
-    if (leg.score === null) continue
-    const definition = archive.journey.legs.find((item) => item.id === leg.legId)
-    if (!definition) continue
-    weighted += leg.score * definition.weight
-    weight += definition.weight
-  }
-  return weight > 0 ? weighted / weight : null
 }
 
 /** 列出这份归档的数据缺口：没看全的观测面，以及只跑了一次重复试验这件事。 */
@@ -149,12 +138,12 @@ function verdicts(
       detail: `${unknownLegs}/${archive.legs.length} 段为未知，而不是失败或 0 分。`,
     })
   }
-  if (archive.legs.length < archive.journey.legs.length) {
+  if (!hasCompleteLegCoverage(archive)) {
     output.push({
       id: 'journey-incomplete',
       level: 'critical',
-      title: '连续旅程提前结束',
-      detail: `只执行 ${archive.legs.length}/${archive.journey.legs.length} 段。`,
+      title: '连续旅程没有完整覆盖声明的段',
+      detail: `${archive.legs.length} 条段结果未能唯一覆盖 ${archive.journey.legs.length} 个声明身份。`,
     })
   }
   if (gaps.length > 0) {
@@ -166,7 +155,7 @@ function verdicts(
     })
   }
   const hasCritical = output.some((item) => item.level === 'critical')
-  if (!hasCritical && archive.legs.length > 0 && unknownLegs === 0) {
+  if (!hasCritical && classifyRunArchiveOutcome(archive).outcome === 'pass') {
     output.push({
       id: 'all-gates-green',
       level: 'positive',
@@ -192,9 +181,11 @@ export function createRunReportModel(archive: RunArchive): RunReportModel {
     startedAt: archive.manifest.startedAt,
     durationMs: archive.manifest.finishedAt - archive.manifest.startedAt,
     passedLegs:
-      knownLegs.length === 0 ? null : knownLegs.filter((leg) => leg.passed === true).length,
-    totalLegs: archive.legs.length,
-    completion: completion(archive),
+      !hasCompleteLegCoverage(archive) || knownLegs.length === 0
+        ? null
+        : knownLegs.filter((leg) => leg.passed === true).length,
+    totalLegs: archive.journey.legs.length,
+    completion: archiveCompletion(archive),
     toolCalls: archive.manifest.usage.toolCalls,
     totalTokens: archive.usage?.totalTokens ?? null,
     costUsd: archive.usage?.costUsd ?? null,

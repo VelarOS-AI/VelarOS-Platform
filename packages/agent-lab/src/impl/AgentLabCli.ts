@@ -222,7 +222,7 @@ class AgentLabCli implements AgentLabCliApi {
     })
     return {
       exitCode:
-        result.decision === 'not-comparable'
+        result.decision === 'not-comparable' || result.decision === 'inconclusive'
           ? AgentLabCli.ExitCodes.inconclusive
           : AgentLabCli.ExitCodes.ok,
       stdout: `${JSON.stringify(result, null, 2)}\n`,

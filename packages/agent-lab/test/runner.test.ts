@@ -7,7 +7,14 @@ import type {
   SessionHandle,
   VerifierRegistryApi,
 } from '../src/index.js'
-import { createDetectorRegistry, createVerifierRegistry, journeyRunner } from '../src/index.js'
+import {
+  createDetectorRegistry,
+  createVerifierRegistry,
+  journeyRunner,
+  labReports,
+  labStatistics,
+  realTaskWorkload,
+} from '../src/index.js'
 
 function successfulDriver(prompts: string[], sessions: string[]): LabDriver {
   const session: SessionHandle = {
@@ -116,6 +123,211 @@ describe('continuous journey runner', () => {
     expect(result.legs).toHaveLength(0)
     expect(result.drops[0]?.cause).toBe('environment-setup-failed')
     expect(result.manifest.exitReason).toBe('environment-setup-failed')
+  })
+
+  test('keeps all non-gating void criteria unknown instead of passing the leg', async () => {
+    const definition = journey()
+    const leg = definition.legs[0]!
+    const verifiers = createVerifierRegistry()
+    verifiers.register('complete', () => ({
+      kind: 'void',
+      cause: 'verifier-unavailable',
+      detail: 'No evidence',
+      evidence: {},
+    }))
+    const result = await journeyRunner.runJourney({
+      jobId: 'job',
+      suiteId: 'suite',
+      trial: trial(),
+      journey: {
+        ...definition,
+        legs: [
+          { ...leg, criteria: leg.criteria.map((criterion) => ({ ...criterion, gate: false })) },
+        ],
+      },
+      driver: successfulDriver([], []),
+      detectors: createDetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    })
+    expect(result.legs[0]!.score).toBeNull()
+    expect(result.legs[0]!.passed).toBeNull()
+    expect(result.legs[0]!.criteria[0]!.outcome.kind).toBe('void')
+    expect(result.drops).toHaveLength(1)
+    expect(realTaskWorkload.classifyArchiveOutcome(result).outcome).toBe('void')
+    expect(labStatistics.estimateReliability([result])).toMatchObject({
+      attempts: 0,
+      successes: 0,
+      dropped: 1,
+    })
+  })
+
+  test('separates registered detector gates from perfect scores and non-gating diagnostics', async () => {
+    for (const gated of [true, false]) {
+      const definition = journey()
+      const detectors = createDetectorRegistry()
+      detectors.register({
+        definition: {
+          id: 'host-check',
+          version: 1,
+          description: 'Host verification',
+          face: 'transcript',
+          phases: ['idle'],
+          defaultSeverity: 'fail',
+          abortClass: null,
+        },
+        detect: () => [
+          {
+            detectorId: 'host-check',
+            severity: 'fail',
+            failureClass: 'output-contract',
+            summary: 'Host check failed',
+            references: [],
+            evidence: {},
+          },
+        ],
+      })
+      const verifiers = createVerifierRegistry()
+      verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+      const result = await journeyRunner.runJourney({
+        jobId: 'job',
+        suiteId: 'suite',
+        trial: trial(),
+        journey: { ...definition, gatingDetectorIds: gated ? ['host-check'] : [] },
+        driver: successfulDriver([], []),
+        detectors,
+        verifiers,
+        workspaceRoot: null,
+        sourceCommit: null,
+        consumerCommit: null,
+      })
+      expect(result.legs[0]!.score).toBe(1)
+      expect(result.legs[0]!.passed).toBe(!gated)
+      expect(result.findings).toHaveLength(1)
+      expect(result.drops).toHaveLength(0)
+      expect(realTaskWorkload.classifyArchiveOutcome(result).outcome).toBe(gated ? 'fail' : 'pass')
+      expect(labStatistics.estimateReliability([result])).toMatchObject({
+        attempts: 1,
+        successes: gated ? 0 : 1,
+        dropped: 0,
+      })
+      const report = labReports.createRunReportModel(result)
+      expect(report.completion).toBe(1)
+      expect(report.failureCounts['output-contract']).toBe(1)
+      expect(report.verdicts.some((verdict) => verdict.id === 'all-gates-green')).toBe(!gated)
+    }
+  })
+
+  test('retains non-gating criterion failures as scored diagnostics without failing passing gates', async () => {
+    const definition = journey()
+    const leg = definition.legs[0]!
+    const verifiers = createVerifierRegistry()
+    verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+    verifiers.register('quality', () => ({
+      kind: 'fail',
+      credit: 0,
+      failureClass: 'output-contract',
+      reason: 'Optional diagnostic failed',
+      evidence: {},
+    }))
+    const result = await journeyRunner.runJourney({
+      jobId: 'job',
+      suiteId: 'suite',
+      trial: trial(),
+      journey: {
+        ...definition,
+        legs: [
+          {
+            ...leg,
+            criteria: [
+              ...leg.criteria,
+              { id: 'quality', verifierId: 'quality', parameters: {}, weight: 1, gate: false },
+            ],
+          },
+        ],
+      },
+      driver: successfulDriver([], []),
+      detectors: createDetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    })
+    expect(result.legs[0]!.score).toBe(0.5)
+    expect(result.legs[0]!.passed).toBe(true)
+    expect(result.legs[0]!.criteria.map((criterion) => criterion.outcome.kind)).toEqual([
+      'pass',
+      'fail',
+    ])
+    expect(realTaskWorkload.classifyArchiveOutcome(result).outcome).toBe('pass')
+    expect(labStatistics.estimateReliability([result])).toMatchObject({
+      attempts: 1,
+      successes: 1,
+      dropped: 0,
+    })
+    const report = labReports.createRunReportModel(result)
+    expect(report.completion).toBe(0.5)
+    expect(report.failureCounts['output-contract']).toBe(1)
+  })
+
+  test('preserves an explicit failure beside an unavailable gate without inventing a conclusive total', async () => {
+    const definition = journey()
+    const leg = definition.legs[0]!
+    const verifiers = createVerifierRegistry()
+    verifiers.register('complete', () => ({
+      kind: 'fail',
+      credit: 0,
+      failureClass: 'output-contract',
+      reason: 'Real failure',
+      evidence: {},
+    }))
+    verifiers.register('secondary', () => ({
+      kind: 'void',
+      cause: 'verifier-unavailable',
+      detail: 'Missing evidence',
+      evidence: {},
+    }))
+    const result = await journeyRunner.runJourney({
+      jobId: 'job',
+      suiteId: 'suite',
+      trial: trial(),
+      journey: {
+        ...definition,
+        legs: [
+          {
+            ...leg,
+            criteria: [
+              ...leg.criteria,
+              { id: 'secondary', verifierId: 'secondary', parameters: {}, weight: 1, gate: true },
+            ],
+          },
+        ],
+      },
+      driver: successfulDriver([], []),
+      detectors: createDetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    })
+    expect(result.legs[0]!.criteria.map((criterion) => criterion.outcome.kind)).toEqual([
+      'fail',
+      'void',
+    ])
+    expect(result.legs[0]!.score).toBe(0)
+    expect(result.legs[0]!.passed).toBeNull()
+    expect(result.drops).toHaveLength(1)
+    expect(labStatistics.estimateReliability([result])).toMatchObject({
+      attempts: 0,
+      successes: 0,
+      dropped: 1,
+    })
+    const report = labReports.createRunReportModel(result)
+    expect(report.completion).toBeNull()
+    expect(report.legs[0]!.score).toBe(0)
+    expect(report.failureCounts['output-contract']).toBe(1)
   })
 
   test('continues the same journey after an explicitly expected native abort', async () => {

@@ -16,15 +16,16 @@ import type { CompletionPair, MatchedCompletionPairs } from '../../types/interna
 import { canonicalJson } from '../canonical-json.js'
 import { AgentLabTuning } from '../tuning.js'
 
-/** 一份归档的完成度：按段权重加权的得分；有丢弃时没有完成度（`null`），不按 0 算。 */
+import { classifyRunArchiveOutcome, hasCompleteLegCoverage } from './coverage.js'
+
+/** 完整旅程的加权得分；丢弃、不完整或任一段分数未知时保持 null，不把缺失补成 0。 */
 export function archiveCompletion(archive: RunArchive): number | null {
-  if (archive.drops.length > 0) return null
+  if (archive.drops.length > 0 || !hasCompleteLegCoverage(archive)) return null
   let weighted = 0
   let weight = 0
   for (const leg of archive.legs) {
-    if (leg.score === null) continue
-    const definition = archive.journey.legs.find((item) => item.id === leg.legId)
-    if (!definition) continue
+    if (leg.score === null) return null
+    const definition = archive.journey.legs.find((item) => item.id === leg.legId)!
     weighted += leg.score * definition.weight
     weight += definition.weight
   }
@@ -50,16 +51,16 @@ export function wilsonInterval(successes: number, attempts: number): IntervalEst
   }
 }
 
-/** 单次可靠性：完成度满分才算成功，被丢弃的既不进分子也不进分母，只单列。 */
+/** 单次可靠性只认完整旅程的真实通过结论；失败计入尝试，丢弃和不可判单列。 */
 export function estimateReliability(archives: readonly RunArchive[]): ReliabilityEstimate {
-  const values = archives.map((archive) => archiveCompletion(archive))
-  const attempts = values.filter((value) => value !== null).length
-  const successes = values.filter((value) => value === 1).length
+  const outcomes = archives.map((archive) => classifyRunArchiveOutcome(archive).outcome)
+  const attempts = outcomes.filter((outcome) => outcome !== 'void').length
+  const successes = outcomes.filter((outcome) => outcome === 'pass').length
   return {
     ...wilsonInterval(successes, attempts),
     successes,
     attempts,
-    dropped: values.length - attempts,
+    dropped: outcomes.length - attempts,
   }
 }
 

@@ -139,7 +139,7 @@ function withCalls(calls: readonly ToolCallRecord[]): Observation {
 }
 
 describe('结果只由独立验证决定', () => {
-  test('INV-1 没有验证器判过的判据是 unknown，不被总分掩盖', async () => {
+  test('INV-1 没有可判权重时门与非门都保持 unknown，不凭空通过', async () => {
     const verifiers = createVerifierRegistry()
     verifiers.register('complete', () => ({
       kind: 'void',
@@ -147,24 +147,33 @@ describe('结果只由独立验证决定', () => {
       detail: '外部真相取不到',
       evidence: {},
     }))
-    const archive = await journeyRunner.runJourney({
-      jobId: 'job',
-      suiteId: 'suite',
-      trial: trial(),
-      journey: journey(),
-      driver: fakeDriver({ value: 0 }, 1),
-      detectors: createDetectorRegistry(),
-      verifiers,
-      workspaceRoot: null,
-      sourceCommit: null,
-      consumerCommit: null,
-    })
+    for (const gate of [true, false]) {
+      const definition = journey()
+      const result = await journeyRunner.runJourney({
+        jobId: 'job',
+        suiteId: 'suite',
+        trial: trial(),
+        journey: {
+          ...definition,
+          legs: definition.legs.map((leg) => ({
+            ...leg,
+            criteria: leg.criteria.map((criterion) => ({ ...criterion, gate })),
+          })),
+        },
+        driver: fakeDriver({ value: 0 }, 1),
+        detectors: createDetectorRegistry(),
+        verifiers,
+        workspaceRoot: null,
+        sourceCommit: null,
+        consumerCommit: null,
+      })
 
-    expect(archive.legs[0]?.passed).toBeNull()
-    expect(archive.legs[0]?.score).toBeNull()
-    expect(archive.drops).toHaveLength(1)
-    expect(archive.drops[0]?.cause).toBe('verifier-unavailable')
-    expect(labStatistics.estimateReliability([archive]).attempts).toBe(0)
+      expect(result.legs[0]?.passed).toBeNull()
+      expect(result.legs[0]?.score).toBeNull()
+      expect(result.drops).toHaveLength(1)
+      expect(result.drops[0]?.cause).toBe('verifier-unavailable')
+      expect(labStatistics.estimateReliability([result]).attempts).toBe(0)
+    }
   })
 })
 

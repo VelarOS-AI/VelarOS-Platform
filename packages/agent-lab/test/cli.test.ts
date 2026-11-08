@@ -106,4 +106,37 @@ describe('public CLI', () => {
       expect(result.stderr).toContain('没有找到任何当前 v3 归档')
     })
   })
+
+  test('comparison exits two for an inconclusive current sample and zero for a conclusive paired result', async () => {
+    await withDirectory(async (root) => {
+      for (const executorId of ['a', 'b']) {
+        await labArchives.writeRunArchive(
+          root,
+          archive({ executorId, journeyId: 'j1', groupId: 'g1', score: executorId === 'a' ? 1 : 0 })
+        )
+      }
+      const one = await agentLabCli.run(['compare', root, '--a', 'a', '--b', 'b'], options)
+      expect(one.exitCode).toBe(2)
+      expect(one.stderr).toBe('')
+      expect(JSON.parse(one.stdout)).toMatchObject({
+        decision: 'inconclusive',
+        matchedPairs: 1,
+        clusters: 1,
+      })
+      for (const executorId of ['a', 'b']) {
+        await labArchives.writeRunArchive(
+          root,
+          archive({ executorId, journeyId: 'j2', groupId: 'g2', score: executorId === 'a' ? 1 : 0 })
+        )
+      }
+      const two = await agentLabCli.run(['compare', root, '--a', 'a', '--b', 'b'], options)
+      expect(two.exitCode).toBe(0)
+      expect(two.stderr).toBe('')
+      expect(JSON.parse(two.stdout)).toMatchObject({
+        decision: 'a-better',
+        matchedPairs: 2,
+        clusters: 2,
+      })
+    })
+  })
 })

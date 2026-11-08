@@ -26,7 +26,7 @@ import {
 export interface LabStatisticsApi {
   /** 一个比例的 Wilson 95% 区间；一次尝试都没有时三项都是 `null`。 */
   wilsonInterval: (successes: number, attempts: number) => IntervalEstimate
-  /** 一组归档的单次可靠性：完成度满分才算成功，丢弃的单列。 */
+  /** 一组归档的单次可靠性：完整旅程真实通过才算成功，丢弃与不可判单列。 */
   estimateReliability: (archives: readonly RunArchive[]) => ReliabilityEstimate
   /** 一组归档的失败形态分布；`unclassified` 单独数。 */
   failureDistribution: (archives: readonly RunArchive[]) => FailureDistribution
