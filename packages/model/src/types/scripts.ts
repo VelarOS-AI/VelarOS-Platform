@@ -36,17 +36,21 @@ export interface RegisteredProviderScriptSource {
 /**
  * Browser-safe contract consumed by the model domain.
  *
- * Loading JavaScript from disk is a host responsibility. Node hosts provide
- * this port through `@velaros-ai/model/provider-scripts/node`.
+ * Node hosts obtain this port from the root entry's `createModelRuntimeComposition`;
+ * trusted script sources and their authorization remain owned by the host.
  */
 export interface ProviderScriptRegistryPort {
   supportsProvider(provider: ChatProviderId): boolean
   getProviderScript(provider: ChatProviderId): Nullable<ProviderScriptDescriptor>
   listProviderManifests(): ProviderScriptManifest[]
   validateProviderRuntime(
-    request: ValidateProviderRuntimeRequest
+    request: ValidateProviderRuntimeRequest,
+    signal?: AbortSignal
   ): Promise<{ ok: boolean; message: Nullable<string> }>
-  listProviderModels(request: ListProviderModelsRequest): Promise<ProviderModelCatalogEntry[]>
+  listProviderModels(
+    request: ListProviderModelsRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalogEntry[]>
   resolveRuntimeMetadata(
     config: ModelAdapterConfig,
     model: string,

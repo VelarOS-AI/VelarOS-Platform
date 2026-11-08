@@ -130,6 +130,12 @@ describe('model 不变量验收', () => {
       await expect(
         resolver(selection, { ...context, providerRuntimeConfigs: [] })
       ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+      await expect(
+        resolver(
+          { ...selection, apiKey: 'request-key' },
+          { ...context, providerRuntimeConfigs: [] }
+        )
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
     }
     expect(context.providerRuntimeConfigs[0]!.apiKey).toBe('system-key')
     expect(context.providerRuntimeConfigs[0]!.baseURL).toBe('https://system.example/v1')
@@ -137,6 +143,30 @@ describe('model 不变量验收', () => {
       { url: 'https://system.example/v1/models', authorization: 'Bearer system-key' },
       { url: 'https://request.example/v1/models', authorization: 'Bearer request-key' },
     ])
+  })
+
+  test('INV-23 missing provider configuration cannot be supplied by an environment key or an optional credential', async () => {
+    let requests = 0
+    const composition = createModelRuntimeComposition({
+      environment: { OPENAI_API_KEY: 'environment-key' },
+      providerScripts: { configPaths: [] },
+      providerCatalog: {
+        fetch: async () => {
+          requests++
+          return Response.json({ data: [] })
+        },
+      },
+    })
+    const context = { providerRuntimeConfigs: [], openRouter: { useFreeModelsForDebug: false } }
+    for (const resolver of [
+      composition.agentModelResolver.resolve.bind(composition.agentModelResolver),
+      composition.agentModelRuntime.resolveRoleRuntime.bind(composition.agentModelRuntime),
+    ])
+      for (const provider of ['openai', 'ollama'] as const)
+        await expect(resolver({ provider, model: 'fixture' }, context)).rejects.toMatchObject({
+          code: 'MODEL_PROVIDER_UNAVAILABLE',
+        })
+    expect(requests).toBe(0)
   })
 
   test('INV-23 provider defaults and environment credentials accept an absent override', () => {

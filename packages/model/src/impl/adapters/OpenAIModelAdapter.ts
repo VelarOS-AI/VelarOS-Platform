@@ -52,7 +52,8 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
             config.provider,
             modelId,
             config.reasoningLevel,
-            this.reasoningFallback
+            this.reasoningFallback,
+            { apiKey, baseURL }
           ),
           {
             sessionKey: true,

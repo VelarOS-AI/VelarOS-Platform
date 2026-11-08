@@ -94,10 +94,14 @@ export class ReasoningFallback implements ReasoningFallbackApi {
       if (!isChatCompletionsRequest(input) || !model) return fetch(input, init)
 
       const maxOutputTokens = [body?.max_completion_tokens, body?.max_tokens].find(isNumber)
+      const url = input instanceof Request ? input.url : String(input)
+      const headers = new Headers(
+        init?.headers ?? (input instanceof Request ? input.headers : undefined)
+      )
       const fieldsAt = (current: Nullable<ReasoningLevel>) =>
         isNull(current) ? null : chatReasoningFields(provider, model, current, maxOutputTokens)
       return this.run(
-        `${provider}:${model}`,
+        JSON.stringify([provider, model, url, headers.get('authorization')]),
         level,
         (current) => {
           const fields = fieldsAt(current)
@@ -124,8 +128,10 @@ export class ReasoningFallback implements ReasoningFallbackApi {
   /** `rejected` 这一档被拒了：记住下一档（退到底就是不带思考参数）并返回它。 */
   private lower(key: string, rejected: ReasoningLevel): Nullable<ReasoningLevel> {
     const next = toNullable(ReasoningLevels[ReasoningLevels.indexOf(rejected) - 1])
-    this.limits.set(key, next)
+    // 迟到的高档拒绝不能把另一条并发请求已经确认的低上限抬高。
+    const limit = isNull(next) ? null : this.start(key, next)
+    this.limits.set(key, limit)
 
-    return next
+    return limit
   }
 }

@@ -125,7 +125,8 @@ describe('思考力度的默认档', () => {
       'anthropic',
       AnthropicModelId,
       'low',
-      new ReasoningFallback()
+      new ReasoningFallback(),
+      { apiKey: 'fixture', baseURL: 'https://fixture.invalid' }
     )
     await (wrapped as LanguageModelV3).doGenerate(ChatCallOptions)
 

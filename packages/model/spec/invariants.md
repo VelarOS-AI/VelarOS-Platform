@@ -30,7 +30,7 @@
 | INV-11 | `./catalog` 与 `./contracts` 的整条引用链不碰 Node 内置模块、不读宿主进程环境；根入口不出任何类                                                                                                                  | 门禁     | `check:model-arch`        |
 | INV-12 | 供应商凭据验证复用 Model 协议：缺密钥不发请求，OpenRouter 使用鉴权端点，超时包含错误正文读取                                                                                                                     | 测试     | `spec/acceptance.test.ts` |
 | INV-13 | 思考摘要只转给宿主展示：同一条响应只认一路来源（SDK 思考分片或 Chat Completions 原始分块），分段之间空一行；超出上限只停转发，不判失败                                                                           | 测试     | `spec/acceptance.test.ts` |
-| INV-14 | 型号不认思考参数时往下退档重发、退到底不带思考参数，能用的档在同一份运行时里记住；与思考档位无关的 400（含加密状态、签名、reasoning.context）原样交出，不重发且不污染记住的档位                                                                                              | 测试     | `spec/acceptance.test.ts` |
+| INV-14 | 型号不认思考参数时往下退档重发、退到底不带思考参数，能用的档仅在同一份运行时的相同供应商、型号、已解析端点与凭据之间记住，并发迟到拒绝不抬高已确认上限；与思考档位无关的 400（含加密状态、签名、reasoning.context）原样交出，不重发且不污染记住的档位 | 测试 | `spec/acceptance.test.ts`、`test/chat-reasoning.test.ts`、`test/reasoning-levels.test.ts` |
 | INV-15 | 会话缓存键只发给认它的线路：OpenAI 官方直连与 OpenRouter 译成 `prompt_cache_key`，其余适配器（OpenAI 兼容、DeepSeek、Anthropic、Google、Velar Cloud、脚本与自定义）只剥掉内部标记、不出线                        | 测试     | `spec/acceptance.test.ts` |
 
 | INV-16 | GPT-6 Sol 经正式 Responses 适配器传递用户选择的 high / max 推理档位，移除不兼容的采样参数 | 测试 | `spec/acceptance.test.ts` |

@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { ReasoningFallback } from '../src/impl/adapters/ReasoningFallback'
+import { createModelRuntimeComposition } from '../src/index'
 import { chatReasoningFields } from '../src/utils/wire/chat-reasoning'
 
 const ChatUrl = 'https://gateway.test/v1/chat/completions'
@@ -106,3 +107,43 @@ describe('Chat Completions 的思考参数', () => {
     expect(kept.bodies[0]?.reasoning_effort).toBe('low')
   })
 })
+
+for (const provider of ['openai', 'openai-compatible-gateway'] as const)
+  test(`INV-14 ${provider} remembers rejected reasoning only for the resolved endpoint and credential`, async () => {
+    const composition = createModelRuntimeComposition({
+      environment: {},
+      providerScripts: { configPaths: [] },
+    })
+    const attempts: unknown[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input, init) => {
+      const body = JSON.parse(String(init?.body))
+      const effort = body.reasoning?.effort ?? body.reasoning_effort ?? null
+      attempts.push(effort)
+      const originalConnection =
+        String(input).startsWith('https://first.invalid/') &&
+        new Headers(init?.headers).get('authorization') === 'Bearer first-key'
+      return rejected(
+        originalConnection && effort ? 'reasoning parameter is unsupported' : 'fixture stop'
+      )
+    }) as typeof fetch
+    try {
+      for (const [baseURL, apiKey] of [
+        ['https://first.invalid/v1/', 'first-key'],
+        ['https://first.invalid/v1', 'first-key'],
+        ['https://second.invalid/v1', 'first-key'],
+        ['https://first.invalid/v1', 'second-key'],
+      ]) {
+        const factory = composition.agentModelRuntime.createAgentProvider({
+          provider,
+          apiKey,
+          baseURL,
+          reasoningLevel: 'high',
+        })
+        await expect(factory('gpt-5.5').doGenerate({ prompt: [] })).rejects.toThrow('fixture stop')
+      }
+    } finally {
+      globalThis.fetch = original
+    }
+    expect(attempts).toEqual(['high', 'medium', 'low', null, null, 'high', 'high'])
+  })

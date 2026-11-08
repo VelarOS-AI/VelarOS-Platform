@@ -148,7 +148,8 @@ describe('五档思考力度', () => {
       'anthropic',
       AnthropicBudgetModelId,
       'xhigh',
-      new ReasoningFallback()
+      new ReasoningFallback(),
+      { apiKey: 'fixture', baseURL: 'https://fixture.invalid' }
     )
 
     await (wrapped as LanguageModelV3).doGenerate(ChatCallOptions)
@@ -204,7 +205,8 @@ describe('五档思考力度', () => {
       'anthropic',
       AnthropicAdaptiveModelId,
       'max',
-      new ReasoningFallback()
+      new ReasoningFallback(),
+      { apiKey: 'fixture', baseURL: 'https://fixture.invalid' }
     ) as LanguageModelV3
 
     await wrapped.doGenerate(ChatCallOptions)
@@ -225,4 +227,34 @@ describe('五档思考力度', () => {
       effort: 'low',
     })
   })
+})
+
+test('INV-14 a late concurrent rejection cannot raise an already learned lower ceiling', async () => {
+  const fallback = new ReasoningFallback()
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const rejection = new APICallError({
+    message: 'reasoning parameter is unsupported',
+    url: 'https://fixture.invalid',
+    requestBodyValues: {},
+    statusCode: 400,
+  })
+  const older = fallback.run('connection', 'high', async (level) => {
+    if (level === 'high') {
+      entered.resolve()
+      await release.promise
+      throw rejection
+    }
+    return level
+  })
+  await entered.promise
+  expect(
+    await fallback.run('connection', 'high', async (level) => {
+      if (level) throw rejection
+      return level
+    })
+  ).toBeNull()
+  release.resolve()
+  expect(await older).toBeNull()
+  expect(await fallback.run('connection', 'high', async (level) => level)).toBeNull()
 })

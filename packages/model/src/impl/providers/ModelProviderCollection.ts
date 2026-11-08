@@ -1,4 +1,4 @@
-import { isBlank, isNonBlankString, toNullable } from '@velaros-ai/core'
+import { isBlank, isNonBlankString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes, ModelProviderOperationalManifests } from '../../contract/constants.js'
@@ -256,9 +256,8 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     runtimeConfigs: readonly AgentProviderRuntimeConfig[],
     provider: ChatProviderId
   ): Nullable<AgentProviderRuntimeConfig> {
-    return toNullable(
-      this.normalizeRuntimeConfigs(runtimeConfigs).find((config) => config.provider === provider)
-    )
+    const config = new Map(runtimeConfigs.map((row) => [row.provider, row])).get(provider)
+    return config ? { ...this.getDefaultRuntimeConfig(provider), ...config } : null
   }
 
   public isRuntimeConfigured(input: ModelProviderConfiguredInput): boolean {
