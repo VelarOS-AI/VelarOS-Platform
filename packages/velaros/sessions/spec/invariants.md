@@ -11,7 +11,7 @@
 | INV-1 | list 不收入参，照宿主的原样交回这个对话里的会话（自己那一个 self 为真），宿主调一次 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | ask 交给已有的会话：to 去掉首尾空白交给宿主，task 原样交；交给宿主的对象只有 to 与 task 两个字段 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | ask 开新会话：workspace 是 project、system、browser 之一；project 带去掉首尾空白的 root（绝对路径：/ 开头、盘符加斜杠、\\\\服务器\\共享，哪个平台的宿主都认），browser 可以带 site（换成网址的规范写法），system 什么都不带；没给的字段不放在对象上，空白的 to、root、site 当作没给 | 测试 | `spec/acceptance.test.ts` |
-| INV-4 | 宿主交回的结果原样交回（同一个对象）：ask 的 completed、failed、cancelled、waiting 四种，tell 的 delivered、queued 两种；宿主拒绝时的错误原样抛出，码与说明都不改 | 测试 | `spec/acceptance.test.ts` |
+| INV-4 | 宿主交回的结果原样交回（同一个对象）：ask 的 completed、failed、cancelled、waiting 四种；tell 只承诺向活动运行追加引导后返回 queued，不另开一轮，空闲目标由宿主拒绝；宿主拒绝时的错误原样抛出，码与说明都不改 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | tell：to 去掉首尾空白，message 原样交给宿主；交给宿主的对象只有 to 与 message | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 入参不对抛 `SessionsErrorCodes` 里的码，宿主一次都不调：不是对象、多给字段、字段不是字符串（`SESSIONS_INPUT_INVALID`）；task、message 去掉首尾空白后是空的（`SESSIONS_TASK_EMPTY`、`SESSIONS_MESSAGE_EMPTY`）；没说交给谁（`SESSIONS_TARGET_MISSING`）；to 与 workspace 都给了（`SESSIONS_TARGET_CONFLICT`）；workspace 不认得（`SESSIONS_WORKSPACE_UNKNOWN`）；开项目会话没给 root 或不是绝对路径（`SESSIONS_ROOT_INVALID`）；site 不是 http(s) 网址（`SESSIONS_SITE_INVALID`）；root、site 没配着 workspace 或跟错了工作区（`SESSIONS_OPTION_MISMATCH`）。message 点名字段、说怎么改 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 取消：调用之前就取消的，宿主一次都不调；调用上下文的取消信号原样交给宿主；宿主还没回时一取消就以取消原因失败，不陪宿主等 | 测试 | `spec/acceptance.test.ts` |

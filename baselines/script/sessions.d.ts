@@ -2,7 +2,7 @@
  * 同一个对话里的几个会话互相交活、传话。每个会话有自己的工作区与能力：
  * 浏览器会话（browser）有内置浏览器，要在网页上动手的事（登录、填表、下单、到处点）交给它；
  * 项目会话（project）在自己的项目里干活，别的项目里的事交给那个项目的会话；系统会话（system）在本机上干活。
- * list 看这个对话里有哪些会话；ask 交一件事给一个会话、等它这一轮跑完，拿回它说的话；tell 只传话、不等。
+ * list 看这个对话里有哪些会话；ask 启动一件事并等它这一轮的结果；tell 只向正在跑的会话追加引导，不另开一轮、不等回答。
  * 对方看不到你们的对话：task、message 里把要做什么、做到哪一步、交回什么写清楚。
  * 互不相干的几件事可以同时 ask（Promise.all）；不要让两个会话互相等对方的回答，宿主会拒绝。
  * 入参不对抛 SESSIONS_ 开头的码（message 写明哪里不对、怎么改）；对方不在这个对话里、互相等待这类情况宿主会拒绝，错误原样抛给你。
@@ -17,14 +17,15 @@ declare module 'velaros:sessions' {
    */
   export function ask(input: SessionAskInput): Promise<SessionAnswer>
 
-  /** 给这个对话里的一个会话传一句话，不等它：它闲着就马上收到、为这句话跑一轮；正在跑就等这一轮跑完再收到。
+  /** 给这个对话里正在跑的会话追加一句引导，进入当前运行的引导队列，不等回答、不另开一轮。
+   * 空闲目标会拒绝；要启动任务并等结果，用 ask。list 的 running 只是查询时的状态，投递时仍以宿主实际准入为准。
    */
   export function tell(input: SessionTellInput): Promise<SessionTold>
 
   /**
    * 这个对话里的一个会话。id 交给 ask、tell 的 to；title 是会话的标题（还没有标题是 null）。
    * root 是项目会话的项目目录，site 是浏览器会话在看的网站，别的会话是 null。
-   * running 为真是它正在跑（交给它的事要等这一轮跑完）；self 为真的是你自己。
+   * running 为真是它正在跑：ask 等这轮结束再交活，tell 向当前运行追加引导；self 为真的是你自己。
    */
   interface SessionPeer {
     id: string
@@ -67,10 +68,10 @@ declare module 'velaros:sessions' {
     message: string
   }
 
-  /** 传到了没有：delivered 是对方闲着，已经收到、开始为它跑一轮；queued 是对方正在跑，这一轮跑完再收到。 */
+  /** queued 表示引导已被目标的活动运行接纳，尚不表示已消费或已回答；空闲目标拒绝，不返回结果。 */
   interface SessionTold {
     session: string
-    status: 'delivered' | 'queued'
+    status: 'queued'
   }
 
   /** 会话的工作区：project 在一个项目里干活，system 在本机上干活，browser 有内置浏览器。 */

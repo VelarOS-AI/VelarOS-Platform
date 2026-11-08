@@ -77,7 +77,7 @@ function doneAnswer(input: SessionAskInput): SessionAnswer {
 }
 
 /**
- * 一个假宿主：会话表、ask 与 tell 怎么回都能按用例换（缺省是做完了、马上收到）。
+ * 一个假宿主：会话表、ask 与 tell 怎么回都能按用例换（缺省是做完了、活动运行已接纳引导）。
  * 交回端口、调用上下文、代码面宿主装上下文的写法，以及它收到的东西。
  */
 export function sessionsSpace(
@@ -100,7 +100,7 @@ export function sessionsSpace(
     },
     tell: async (input, signal) => {
       record.tells.push({ input, signal })
-      return options.told ? options.told(input, signal) : { session: input.to, status: 'delivered' }
+      return options.told ? options.told(input, signal) : { session: input.to, status: 'queued' }
     },
   }
   const context: SessionsOperationContext = {

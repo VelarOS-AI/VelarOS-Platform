@@ -32,8 +32,8 @@ async function compareProjects(frontend = '/home/me/shop-web', backend = '/home/
   return { web: web.answer, api: api.answer }
 }
 
-// 给别的会话捎句话，不等它：闲着的马上收到，正在跑的这一轮跑完再收到（queued）。
+// 给正在跑的项目会话追加引导（queued），不另开一轮、不等回答。空闲目标拒绝；要启动任务并等结果用 ask。
 async function notifyProjects(message = '订单接口的路径改成了 /api/v2/orders，后面的改动照新路径来。') {
-  const peers = (await list()).filter((peer) => !peer.self && peer.workspace === 'project')
+  const peers = (await list()).filter((peer) => !peer.self && peer.workspace === 'project' && peer.running)
   return Promise.all(peers.map((peer) => tell({ to: peer.id, message })))
 }

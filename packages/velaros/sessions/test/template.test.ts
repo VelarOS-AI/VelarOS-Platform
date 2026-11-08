@@ -13,7 +13,7 @@ import { DefaultPeers, runModelProgram, sessionsSpace } from '../spec/support'
 
 const it = test.skipIf(process.platform === 'win32')
 
-/** 后端项目的会话：正在跑，捎给它的话要排队。 */
+/** 后端项目的会话：正在跑，允许向当前运行追加引导。 */
 const BackendPeer: SessionPeer = {
   id: 'project-2',
   workspace: 'project',
@@ -43,9 +43,13 @@ export const notified = await notifyProjects()
 `
 
 describe('代码模版', () => {
-  it('已经有合适的会话：下单交给浏览器会话、停在付款前问，答复之后接着做；两个项目同时查；给后端捎话排了队', async () => {
+  it('已有合适会话时复用；通知只交给活动项目，跳过空闲项目与自己', async () => {
     const space = sessionsSpace({
-      peers: [...DefaultPeers, BackendPeer],
+      peers: [
+        ...DefaultPeers,
+        BackendPeer,
+        { ...BackendPeer, id: 'project-idle', root: '/home/me/idle', running: false },
+      ],
       answer: answerOf,
       told: async (input) => ({ session: input.to, status: 'queued' }),
     })
@@ -56,6 +60,7 @@ describe('代码模版', () => {
     expect(values.done).toEqual({ status: 'completed', answer: '订单号 JD123' })
     expect(values.compared).toEqual({ web: 'project-1 的接口表', api: 'project-2 的接口表' })
     expect(values.notified).toEqual([{ session: 'project-2', status: 'queued' }])
+    expect(space.record.tells.map(({ input }) => input.to)).toEqual(['project-2'])
     expect(space.record.asks.map(({ input }) => input.to)).toEqual([
       'browser-1',
       'browser-1',
