@@ -165,6 +165,8 @@ export async function runActEvaluation({
     failure = null,
     started = 0,
     finished = 0,
+    legTraceStart = 0,
+    legToolIds = new Set(),
     traces = [],
     events = [],
     artifacts = [],
@@ -243,8 +245,13 @@ export async function runActEvaluation({
     async prepare() {},
     async send(_handle, leg) {
       if (running) throw new Error('同一验收会话仍在运行')
+      legTraceStart = traces.length
+      legToolIds = new Set(
+        observedCalls(traces).flatMap((turn) => turn.toolCalls.map((call) => call.id))
+      )
       running = true
       started = Date.now()
+      finished = 0
       pending = (async () => {
         try {
           for await (const event of session.submit(leg.prompt)) {
@@ -288,10 +295,13 @@ export async function runActEvaluation({
         usage: {
           toolCalls: running
             ? null
-            : observedCalls(traces).reduce((n, turn) => n + turn.toolCalls.length, 0),
+            : observedCalls(traces).reduce(
+                (n, turn) => n + turn.toolCalls.filter((call) => !legToolIds.has(call.id)).length,
+                0
+              ),
           workingMs: null,
           wallClockMs: started ? (finished || Date.now()) - started : 0,
-          tokens: running ? null : measuredUsage(traces).totalTokens,
+          tokens: running ? null : measuredUsage(traces.slice(legTraceStart)).totalTokens,
           legs: started ? 1 : 0,
         },
         unavailable: failure ? { detail: failure } : null,

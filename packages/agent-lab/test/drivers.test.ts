@@ -56,6 +56,126 @@ function sessionSpec() {
   return { trial: trial(), journey: journey(), workspaceRoot: null }
 }
 
+test('polling budgets use native segment counters while the journey counts cumulative observations once', async () => {
+  let leg = 0
+  const closed: string[] = []
+  const driver = labDrivers.createPolling(
+    adapter({
+      send: async () => {
+        leg += 1
+      },
+      readState: async () => ({
+        running: false,
+        awaitingConfirmation: false,
+        awaitingInput: false,
+        revision: `leg-${leg}`,
+        usage:
+          leg === 0
+            ? EmptyBudgetUsage
+            : {
+                toolCalls: leg === 1 ? 5 : 1,
+                tokens: leg === 1 ? 100 : 10,
+                workingMs: 10,
+                wallClockMs: 10,
+                legs: 1,
+              },
+        unavailable: null,
+      }),
+      collect: async (_session, phase) => {
+        const base = observation(phase)
+        const count = leg === 0 ? 0 : leg === 1 ? 5 : 6
+        return {
+          ...base,
+          usage: { ...base.usage!, totalTokens: leg === 0 ? 0 : leg === 1 ? 100 : 110 },
+          turns: [
+            {
+              id: 'turns',
+              index: 1,
+              finishReasons: [],
+              toolCalls: Array.from({ length: count }, (_, index) => ({
+                id: `call-${index}`,
+                turnId: 'turns',
+                name: 'read',
+                input: { index },
+                result: null,
+                isError: false,
+                startedAt: null,
+                finishedAt: null,
+              })),
+            },
+          ],
+        }
+      },
+      closeSession: async (session) => {
+        closed.push(session.id)
+      },
+    }),
+    { ...Policy, settlePolls: 1 }
+  )
+  const definition = journey('journey-a', 2)
+  const verifiers = createVerifierRegistry()
+  verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+  const result = await journeyRunner.runJourney({
+    jobId: 'job',
+    suiteId: 'suite',
+    trial: trial(),
+    journey: {
+      ...definition,
+      budget: { ...UnlimitedBudget, legs: 2 },
+      legs: [
+        definition.legs[0]!,
+        {
+          ...definition.legs[1]!,
+          budget: { ...UnlimitedBudget, toolCalls: 2, tokens: 20 },
+        },
+      ],
+    },
+    driver,
+    detectors: createDetectorRegistry(),
+    verifiers,
+    workspaceRoot: null,
+    sourceCommit: null,
+    consumerCommit: null,
+  })
+  expect(result.legs.map((entry) => entry.settleOutcome.kind)).toEqual(['settled', 'settled'])
+  expect(result.manifest.usage).toMatchObject({ toolCalls: 6, tokens: 110, workingMs: 20, legs: 2 })
+  expect(closed).toEqual([Session.id])
+})
+
+test('polling retains its native segment budget check when the observer continues', async () => {
+  let revision = 0
+  let closed = 0
+  const driver = labDrivers.createPolling(
+    adapter({
+      send: async () => {
+        revision += 1
+      },
+      readState: async () => ({
+        running: false,
+        awaitingConfirmation: false,
+        awaitingInput: false,
+        revision: `${revision}`,
+        usage: { toolCalls: 3, tokens: null, workingMs: null, wallClockMs: 0, legs: 1 },
+        unavailable: null,
+      }),
+      closeSession: async () => {
+        closed += 1
+      },
+    }),
+    { ...Policy, settlePolls: 1 }
+  )
+  const session = await driver.openSession(sessionSpec())
+  await driver.send(session, journey().legs[0])
+  const result = await driver.waitSettled(session, {
+    budget: { ...UnlimitedBudget, toolCalls: 2 },
+    signal: new AbortController().signal,
+    onSample: async () => ({ kind: 'continue' }),
+  })
+  expect(result).toEqual({ kind: 'budget-exhausted', limit: 'toolCalls' })
+  await driver.closeSession(session)
+  expect(closed).toBe(1)
+})
+
 test('polling driver requires executor-native progress and stable idle', async () => {
   const states: NativeExecutionState[] = [
     { running: false, revision: 'old' },

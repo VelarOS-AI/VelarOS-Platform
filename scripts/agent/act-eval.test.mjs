@@ -56,6 +56,7 @@ test('workflow local edit runs through formal Runtime and exports evidence metri
     }),
   })
   assert.equal(result.summary.passed, true, JSON.stringify(result.archive.findings))
+  assert.equal(result.archive.manifest.usage.legs, 1)
   assert.equal(result.summary.workflow.completedWithoutVerification, false)
   assert.equal(result.summary.workflow.totalTokens, null)
   assert.ok(result.summary.workflow.knownToolCalls >= 1)
@@ -197,6 +198,7 @@ test(
     })
     const result = await runActEvaluation({ model: driver, output: await output(t) })
     assert.equal(result.summary.passed, true, JSON.stringify(result.archive))
+    assert.equal(result.archive.manifest.usage.legs, 1)
     assert.equal(calls, 3)
     assert.equal(result.summary.usage.totalTokens, 360)
     assert.equal(result.summary.usage.costUsd, null)

@@ -75,7 +75,7 @@ export interface Budget {
   readonly legs: number | null
 }
 
-/** 已经用掉多少；`null` 表示这一维没观测到，不是 0。段数一定有值。 */
+/** 用量快照；manifest 是整程总量，原生采样是当前 send 段累计。`null` 是没观测到，不是 0。 */
 export interface BudgetUsage {
   readonly toolCalls: number | null
   readonly workingMs: number | null
@@ -306,7 +306,7 @@ export interface ArtifactReference {
   readonly provenance: ArtifactProvenance
 }
 
-/** 一次观测：这一刻驱动能看到的全部东西，以及每一面看到了多少。 */
+/** 会话累计观测：turns/usage 保持同一会话口径，不在每次 send 时清零；coverage 声明可见程度。 */
 export interface Observation {
   readonly phase: ObservationPhase
   readonly coverage: Readonly<Record<ObservationFace, ObservationCoverage>>
@@ -534,9 +534,10 @@ export interface WatchdogAbort {
   readonly reason: string
 }
 
-/** 等待过程中的一次采样：这一刻的观测与用量。 */
+/** 等待过程中的一次采样：会话累计观测，配当前 send 段的原生累计用量。 */
 export interface WatchSample {
   readonly observation: Observation
+  /** 当前段累计，重复采样不相加；未知保持 null。运行器自己的完成段数不从此处复制。 */
   readonly usage: BudgetUsage
 }
 
@@ -556,6 +557,7 @@ export interface NativeExecutionState {
   readonly awaitingInput: boolean
   /** 执行体原生的单调完成栅栏，例如一个消息 id 或进程世代。 */
   readonly revision: string | null
+  /** 当前 send 段累计的用量，与 Observation 的会话累计口径不同。 */
   readonly usage: BudgetUsage
   readonly unavailable: { readonly detail: string } | null
 }
