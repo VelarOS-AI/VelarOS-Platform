@@ -146,6 +146,160 @@ describe('adaptive real-task campaign', () => {
     expect(selection.selected.map((entry) => entry.id)).toEqual(['b'])
   })
 
+  test('keeps a pending proof identity ahead of a heavier alias and reconciles only actual planned passes', () => {
+    const coverage = { capability: 'system.shared', objective: 'same measured coverage' }
+    const proof = task('proof-a', { coverage })
+    const alias = task('ordinary-alias', { coverage: { ...coverage, dailyWeight: 10 } })
+    const other = task('proof-b')
+    const fixed = fixedFailure('parameter-validation', ['proof-a', 'proof-b'])
+    const partial = adaptiveCampaign.recordProof(fixed, 'proof-b')
+    const evidence: CampaignEvidence[] = [
+      {
+        taskId: 'ordinary-alias',
+        taskRevision: 'r1',
+        outcome: 'pass',
+        failureKey: null,
+        updatedAt: 1,
+      },
+      { taskId: 'proof-b', taskRevision: 'r1', outcome: 'pass', failureKey: null, updatedAt: 1 },
+    ]
+    expect(adaptiveCampaign.semanticSignature(proof)).toBe(
+      adaptiveCampaign.semanticSignature(alias)
+    )
+    for (const cases of [
+      [proof, alias, other],
+      [alias, other, proof],
+    ]) {
+      const revisions = cases.map((entry) => ({ taskId: entry.id, revision: 'r1' }))
+      const selection = adaptiveCampaign.selectTasks({
+        cases,
+        revisions,
+        evidence,
+        failures: [partial],
+        limit: 1,
+      })
+      expect(selection.selected.map((entry) => entry.id)).toEqual(['proof-a'])
+      expect(selection.duplicateTaskIds).toEqual(['ordinary-alias'])
+      expect(selection.reusedTaskIds).toEqual(['ordinary-alias', 'proof-b'])
+      expect(adaptiveCampaign.recordProof(partial, 'ordinary-alias')).toBe(partial)
+      const notProven = adaptiveCampaign.reconcileProof(partial, new Set(selection.reusedTaskIds))
+      expect(notProven.state).toBe('proving')
+      expect(notProven.passedProofTaskIds).toEqual(['proof-b'])
+
+      const selectedId = selection.selected[0]!.id
+      const recorded = adaptiveCampaign.recordProof(partial, selectedId)
+      expect(recorded.state).toBe('closed')
+      const complete = adaptiveCampaign.selectTasks({
+        cases,
+        revisions,
+        failures: [partial],
+        limit: 1,
+        evidence: [
+          ...evidence,
+          {
+            taskId: selectedId,
+            taskRevision: 'r1',
+            outcome: 'pass',
+            failureKey: null,
+            updatedAt: 2,
+          },
+        ],
+      })
+      const reconciled = adaptiveCampaign.reconcileProof(partial, new Set(complete.reusedTaskIds))
+      expect(reconciled.state).toBe('closed')
+      expect(reconciled.passedProofTaskIds).toEqual(['proof-a', 'proof-b'])
+    }
+  })
+
+  test('retains distinct pending proof tasks with one coverage credit and never fabricates missing proof cases', () => {
+    const coverage = { capability: 'system.shared', objective: 'same measured coverage' }
+    const a = task('proof-a', { coverage })
+    const b = task('proof-b', { coverage })
+    const alias = task('ordinary-alias', { coverage: { ...coverage, dailyWeight: 10 } })
+    const failure = fixedFailure('runtime', ['proof-a', 'proof-b', 'missing-proof'])
+    for (const cases of [
+      [a, b, alias],
+      [alias, b, a],
+    ]) {
+      const revisions = cases.map((entry) => ({ taskId: entry.id, revision: 'r1' }))
+      const selection = adaptiveCampaign.selectTasks({
+        cases,
+        revisions,
+        evidence: [],
+        failures: [failure],
+        limit: 10,
+      })
+      expect(selection.selected.map((entry) => entry.id)).toEqual(['proof-a', 'proof-b'])
+      expect(selection.duplicateTaskIds).toEqual(['ordinary-alias'])
+      expect(Object.keys(selection.scores).sort()).toEqual(['proof-a', 'proof-b'])
+      const covered = adaptiveCampaign.selectTasks({
+        cases,
+        revisions,
+        failures: [failure],
+        limit: 10,
+        evidence: [
+          {
+            taskId: 'ordinary-alias',
+            taskRevision: 'r1',
+            outcome: 'pass',
+            failureKey: null,
+            updatedAt: 1,
+          },
+        ],
+      })
+      expect(selection.scores['proof-a']!).toBeGreaterThan(selection.scores['proof-b']!)
+      expect(selection.scores['proof-b']).toBe(covered.scores['proof-b'])
+
+      const recorded = selection.selected.reduce(
+        (current, entry) => adaptiveCampaign.recordProof(current, entry.id),
+        failure
+      )
+      expect(recorded.state).toBe('proving')
+      const observed = adaptiveCampaign.selectTasks({
+        cases,
+        revisions,
+        failures: [recorded],
+        limit: 10,
+        evidence: selection.selected.map((entry): CampaignEvidence => ({
+          taskId: entry.id,
+          taskRevision: 'r1',
+          outcome: 'pass',
+          failureKey: null,
+          updatedAt: 2,
+        })),
+      })
+      const reconciled = adaptiveCampaign.reconcileProof(recorded, new Set(observed.reusedTaskIds))
+      expect(reconciled.state).toBe('proving')
+      expect(reconciled.passedProofTaskIds).toEqual(['proof-a', 'proof-b'])
+      expect(observed.selected.map((entry) => entry.id)).toEqual(['ordinary-alias'])
+    }
+  })
+
+  test('keeps ordinary highest-weight dedup when there is no pending proof for that identity', () => {
+    const coverage = { capability: 'system.shared', objective: 'same measured coverage' }
+    const low = task('low', { coverage })
+    const high = task('high', { coverage: { ...coverage, dailyWeight: 10 } })
+    const other = task('other')
+    const fixed = fixedFailure('parameter-validation', ['low', 'other'])
+    const closed = adaptiveCampaign.recordProof(adaptiveCampaign.recordProof(fixed, 'low'), 'other')
+    for (const cases of [
+      [low, high, other],
+      [other, high, low],
+    ]) {
+      for (const failures of [[], [closed]]) {
+        const selection = adaptiveCampaign.selectTasks({
+          cases,
+          revisions: cases.map((entry) => ({ taskId: entry.id, revision: 'r1' })),
+          evidence: [],
+          failures,
+          limit: 10,
+        })
+        expect(selection.selected.map((entry) => entry.id)).toEqual(['high', 'other'])
+        expect(selection.duplicateTaskIds).toEqual(['low'])
+      }
+    }
+  })
+
   test('halts new sampling until a failure is diagnosed and fixed', () => {
     const cases = [task('a'), task('b')]
     const failures = adaptiveCampaign.recordFailure({

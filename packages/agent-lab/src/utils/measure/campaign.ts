@@ -116,9 +116,16 @@ export function selectAdaptiveCampaignTasks(
   )
 
   const duplicateTaskIds: string[] = []
+  const provingTasks = input.cases.filter((task) => provingTaskIds.has(task.id))
+  const provingSignatures = new Set(provingTasks.map(realTaskSemanticSignature))
   const bySignature = new Map<string, RealTaskCase>()
   for (const task of input.cases) {
+    if (provingTaskIds.has(task.id)) continue
     const signature = realTaskSemanticSignature(task)
+    if (provingSignatures.has(signature)) {
+      duplicateTaskIds.push(task.id)
+      continue
+    }
     const previous = bySignature.get(signature)
     if (!previous) {
       bySignature.set(signature, task)
@@ -132,10 +139,10 @@ export function selectAdaptiveCampaignTasks(
 
   const scoring = AgentLabTuning.campaign
   const scores: Record<string, number> = {}
-  const candidates = [...bySignature.values()].filter((task) => {
-    if (provingTaskIds.has(task.id)) return true
-    return current.get(task.id)?.outcome !== 'pass'
-  })
+  const candidates = [
+    ...provingTasks,
+    ...[...bySignature.values()].filter((task) => current.get(task.id)?.outcome !== 'pass'),
+  ]
   const selected: RealTaskCase[] = []
   const selectionDimensions = new Set(coveredDimensions)
   while (selected.length < Math.max(0, input.limit) && candidates.length > 0) {
