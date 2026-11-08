@@ -525,7 +525,7 @@ export const GovernedModules = [
     impl: 'office/impl',
     utils: 'office/utils',
     tuning: 'tuning.ts',
-    // 文档和渲染入口加载对应引擎；locator 只做本机资源定位。这三类只给 Node，可移植数据才供渲染进程加载。
+    // 操作入口按调用加载执行组，渲染入口直接加载引擎；locator 只定位资源。可移植数据才供渲染进程加载。
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'OfficeEnvironmentVariables',
     // 空间端口：九个操作经 ctx.office 调它；每个方法都必须有操作在调
@@ -541,6 +541,28 @@ export const GovernedModules = [
       ['operations/'],
       // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
       ['runtime/'],
+    ],
+    lazyImports: [
+      {
+        specifier: './operations/OfficeDocumentOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际创建 Word、PowerPoint 或 Excel 时才加载文档生成引擎和共享写队列',
+      },
+      {
+        specifier: './operations/OfficePdfOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际调用 PDF 操作时才加载 PDF 引擎、Canvas 与转换执行组',
+      },
+      {
+        specifier: './operations/OfficePreviewOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际预览文档时才加载解析和原生渲染引擎',
+      },
+      {
+        specifier: './operations/OfficeMarkdownOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际转 Markdown 时才加载转换执行组与默认资源定位器',
+      },
     ],
     invariants: 'office/spec/invariants.md',
     acceptance: 'office/spec/acceptance.test.ts',

@@ -77,6 +77,7 @@ console.log(page.width, page.height, page.pageCount, page.buffer.byteLength)
 - 目标已在又没传 `overwrite: true` 抛 `OFFICE_OUTPUT_EXISTS`，原文件一个字节不动；只有 `createWord` 的 `appendMode` 例外。
 - 同一执行实例内，Word 按真实输出目标串行创建与追加；追加在发布前核对读取的原字节，发现外部改写就拒绝。它不提供与不合作外部进程之间的原子比较交换。
 - 入参在做事之前整份核对，不对抛 `VALIDATION`（message 点名字段），端口一次都不调；正文 `content` 与结构化的 `blocks`、`slides`、`sheets` 只能给一样。
+- 导入根操作入口不加载文档与图形引擎；实际调用通过参数核对后，才加载对应的文档、PDF、预览或 Markdown 执行组。执行组复用进程单例，加载后仍核对本次取消信号。
 - 外部转换器只经端口的 `runCommand` 按原生 argv 执行，本单元在第三参数传入取消信号；超时在命令选项里给。宿主在取消时终止并排空进程及输出管道，Promise 结束后本单元才回收临时目录。
 - 缺 LibreOffice 或 LaTeX 编译器抛 `OFFICE_CONVERTER_MISSING`，MarkItDown 没装或被停用抛 `OFFICE_MARKITDOWN_UNAVAILABLE`；装什么、怎么装由宿主界面回答。命令失败或跑完没产出抛 `OFFICE_CONVERSION_FAILED`，message 带输出结尾，LaTeX 的 .tex 留在原处可改。
 - 端口不实现 `locateMarkItDown` 时回落到只按平台约定找资源的缺省定位器，用户的停用开关就到不了本单元；要认开关，照上面用 `createMarkItDownLocator({ resources })` 接上。

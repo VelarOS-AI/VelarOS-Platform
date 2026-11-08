@@ -263,6 +263,26 @@ function relativeSpecifiers(sourceFile) {
   })
 }
 
+/** 实现依赖图：静态相对边，加上本文件真实使用且已按目标登记的相对懒加载边。 */
+function implementationSpecifiers(sourceFile, lazyImports, relativeFile) {
+  const specifiers = relativeSpecifiers(sourceFile).map((entry) => entry.specifier)
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const target = node.arguments[0]
+      if (
+        target &&
+        ts.isStringLiteralLike(target) &&
+        target.text.startsWith('.') &&
+        lazyImports.some((entry) => entry.file === relativeFile && entry.specifier === target.text)
+      )
+        specifiers.push(target.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return specifiers
+}
+
 const ChinesePattern = /[\u4e00-\u9fff]/u
 const NodeBuiltinModules = new Set(builtinModules)
 
@@ -918,7 +938,11 @@ for (const module of selectedModules) {
   for (const file of implFiles) {
     const from = layerOf(file)
     if (from === null) continue
-    for (const { specifier } of relativeSpecifiers(parse(file))) {
+    for (const specifier of implementationSpecifiers(
+      parse(file),
+      module.lazyImports ?? [],
+      shortPath(file)
+    )) {
       const target = resolveRelativeImport(file, specifier)
       const to = target ? layerOf(target) : null
       if (to !== null && to < from) {
@@ -1730,12 +1754,16 @@ for (const module of selectedModules) {
       }
       ts.forEachChild(node, visitCalls)
     }
-    // 入口文件自己调的，加上从它出发、沿相对 import 能走到的 impl 与 utils 文件里调的（入口一行交给类、类再交给工具函数时，端口调用在更深处）。
+    // 入口自己调用的，加上沿静态或已登记懒加载边可达的 impl 与 utils；端口调用可能在实际执行组里。
     const reachable = new Set(surfaceSourceFiles)
     const queue = [...surfaceSourceFiles]
     while (queue.length > 0) {
       const file = queue.pop()
-      for (const { specifier } of relativeSpecifiers(parse(file))) {
+      for (const specifier of implementationSpecifiers(
+        parse(file),
+        module.lazyImports ?? [],
+        shortPath(file)
+      )) {
         const target = resolveRelativeImport(file, specifier)
         if (
           !target ||

@@ -21,7 +21,7 @@ registerHooks({resolve(specifier, context, next) {
 const entry = await import('@velaros-ai/velaros/office/locator');
 assert.deepEqual(Object.keys(entry), ['createMarkItDownLocator']);
 assert.equal(entry.createMarkItDownLocator({resourceRoots: []}).resolve(), null);
-await assert.rejects(import('@velaros-ai/velaros/office'), /document engine loaded:/u);
+await assert.rejects(import('@velaros-ai/velaros/office/renderer'), /document engine loaded:/u);
 process.stdout.write('locator dependency boundary verified\n');
 `,
     ],

@@ -82,7 +82,7 @@ describe('办公文档不变量验收', () => {
     expect(value.sheet.structure.sheets[0].rows.length).toBeLessThan(33)
   }, 120_000)
 
-  test('INV-1 读写目标按真实路径都在工作区根内', async () => {
+  test('INV-1 读写目标按真实路径都在工作区根内：表格写出', async () => {
     const { office } = await workspace()
     expect(
       await failureOf(
@@ -91,6 +91,10 @@ describe('办公文档不变量验收', () => {
     ).toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
     })
+  })
+
+  test('INV-1 读写目标按真实路径都在工作区根内：PDF 读取', async () => {
+    const { office } = await workspace()
     expect(await failureOf(office.call('readPdf', { inputPath: '../outside.pdf' }))).toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
     })
