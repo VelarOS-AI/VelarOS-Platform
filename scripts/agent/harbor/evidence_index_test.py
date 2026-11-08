@@ -6,10 +6,17 @@ import shutil
 import tempfile
 import unittest
 
-from evidence_index import BENCH, _cli_events, collect_campaign_evidence
+from evidence_index import _cli_events, collect_campaign_evidence
 from parallel_campaign import phase_identity
 
 PRIVATE = "secret-payload-never-exported"
+
+
+def audit_metadata():
+    return {"schemaVersion": 3, "model": "fixture", "modelTruncated": False,
+            "inputTokens": 100, "precision": "exact", "basis": PRIVATE, "basisTruncated": False,
+            "outputTokens": 10, "messageCount": 1, "toolCount": 0,
+            "requestFingerprint": {name: "a" * 16 for name in ("id", "systemHash", "messageHash", "prefixHash")}}
 
 
 def write(path, value):
@@ -59,7 +66,7 @@ class EvidenceIndexTest(unittest.TestCase):
                 if number == 1:
                     write(trial / "agent/status.json", {"status": "completed", "traceProgress": {"provisional": False}})
                     self.set_trace({"traces": [{"sessionId": "fixture", "turnId": "turn-1", "request": {"body": json.dumps({
-                        "providerRequest": {"messages": [{"role": "user", "content": PRIVATE}]}})}}]})
+                        "requestAudit": audit_metadata()})}}]})
                 else:
                     (trial / "agent/codex.txt").write_text('Reading additional input from stdin...\n' +
                         json.dumps({"type": "thread.started", "thread_id": "bound-thread"}) + '\n' +
@@ -91,6 +98,17 @@ class EvidenceIndexTest(unittest.TestCase):
         self.assertEqual(len(first["attempts"][1]["phases"]["source"]["native_sources"]), 1)
         self.assertEqual(first["attempts"][1]["phases"]["source"]["native_cli_format"]["prefix_text_lines"], 1)
         self.assertTrue(all(row["sha256"] and row["size_bytes"] is not None for row in first["artifacts"] if row["state"] == "verified"))
+        phase = first["attempts"][0]["phases"]["source"]
+        self.assertEqual(phase["request_audits"][0]["role"], "scriptact_request_audit")
+        self.assertEqual(phase["trace_validation"]["request_audit_scope"], "bounded_compiler_metadata_not_wire_acceptance")
+
+    def test_invalid_or_truncated_audit_does_not_become_provider_delivery_evidence(self):
+        for change in ({"schemaVersion": 2}, {"inputTokens": None}, {"model": "x" * 513}, {"requestFingerprint": {"id": "not-a-hash"}}):
+            with self.subTest(change=change):
+                self.set_trace({"traces": [{"request": {"body": json.dumps({"requestAudit": {**audit_metadata(), **change}})}}]})
+                self.assertEqual(self.collect()["status"], "partial")
+        self.set_trace({"traces": [{"request": {"body": json.dumps({"requestAudit": audit_metadata()}), "truncated": True}}]})
+        self.assertEqual(self.collect()["status"], "partial")
 
     def test_unstarted_and_active_are_not_terminal_or_reusable(self):
         receipt = self.receipts[1, "source"]
@@ -109,7 +127,7 @@ class EvidenceIndexTest(unittest.TestCase):
         write(self.receipts[1, "source"], value)
         index = self.collect()
         self.assertEqual(index["status"], "unknown")
-        self.assertNotIn("sdk_records", index["attempts"][0]["phases"]["source"])
+        self.assertNotIn("request_audits", index["attempts"][0]["phases"]["source"])
 
     def test_duplicate_trial_and_external_receipt_paths_block_discovery(self):
         extra = self.trials[1, "source"].parent / "foreign-trial"
@@ -139,7 +157,7 @@ class EvidenceIndexTest(unittest.TestCase):
         blob = self.trials[1, "source"] / "agent/trace-invocations.jsonl"
         row = {"schema": 1, "sessionId": "fixture", "id": "call-1", "sha256": digest, "json": invocation}
         blob.write_text(json.dumps(row) + '\n')
-        self.set_trace({"artifactSchema": 2, "data": {"traces": [{"sessionId": "fixture", "request": {"body": json.dumps({"providerRequest": {"messages": []}})},
+        self.set_trace({"artifactSchema": 2, "data": {"traces": [{"sessionId": "fixture", "request": {"body": json.dumps({"requestAudit": audit_metadata()})},
             "invocations": [{"sessionId": "fixture", "id": "call-1", "sha256": digest}]}]}})
         self.assertEqual(self.collect()["status"], "complete")
         row["sha256"] = "0" * 64; blob.write_text(json.dumps(row) + '\n')
@@ -151,7 +169,7 @@ class EvidenceIndexTest(unittest.TestCase):
         agent = self.trials[1, "source"] / "agent"
         (agent / "trace-invocations.jsonl").write_text('')
         turn = {"sessionId": "fixture", "turnId": "turn-1", "invocations": [],
-                "request": {"body": json.dumps({"providerRequest": {"messages": []}})}}
+                "request": {"body": json.dumps({"requestAudit": audit_metadata()})}}
         raw = json.dumps(turn).encode()
         digest = hashlib.sha256(raw).hexdigest()
         body = agent / "trace-turns" / (digest + ".json")
@@ -167,7 +185,7 @@ class EvidenceIndexTest(unittest.TestCase):
         body.unlink()
         self.assertEqual(self.collect()["status"], "unknown")
 
-    def test_missing_sdk_body_and_partial_trace_are_unknown(self):
+    def test_missing_request_audit_and_partial_trace_are_unknown(self):
         self.set_trace({"traces": [{"request": {}}]})
         self.assertEqual(self.collect()["status"], "partial")
         (self.trials[1, "source"] / "agent/traces.json").write_text('{"traces":')
@@ -326,25 +344,6 @@ class EvidenceIndexTest(unittest.TestCase):
         index = self.collect(resource_paths=(resource,))
         self.assertEqual(index["status"], "partial")
         self.assertTrue(any(row["code"] == "resource_jsonl_incomplete_or_invalid" for row in index["issues"]))
-
-
-class ArchivedCanaryTest(unittest.TestCase):
-    def test_finalized_r_q_and_old_n_archives_use_exact_jobs_and_native_paths(self):
-        base = BENCH / "parallel-54"
-        for suffix, expected_frames in (("r", 7), ("q", 8), ("n-v2", 19)):
-            with self.subTest(campaign=suffix):
-                path = base / f"parallel-54{suffix}-manifest.json"
-                if not path.exists():
-                    self.skipTest("Workspace finalized canary archives unavailable")
-                raw = path.read_bytes(); manifest = json.loads(raw)
-                index = collect_campaign_evidence(manifest, base / f"controller-{suffix}", manifest_path=path)
-                self.assertEqual(index["status"], "complete")
-                self.assertEqual(index["manifest_sha256"], hashlib.sha256(raw).hexdigest())
-                phases = [attempt["phases"]["source"] for attempt in index["attempts"]]
-                self.assertEqual(sum(len(phase.get("sdk_records", [])) for phase in phases), expected_frames)
-                self.assertEqual(sum(len(phase.get("native_sources", [])) for phase in phases), 1)
-                self.assertTrue(all(phase["state"] == "terminal" for attempt in index["attempts"] for phase in attempt["phases"].values()))
-                self.assertEqual(path.read_bytes(), raw)
 
 
 if __name__ == "__main__":

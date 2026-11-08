@@ -10,6 +10,7 @@ import stat
 import time
 
 from request_identity import validate_identity, validate_request_ledger
+from metrics import request_audit
 from trace_artifact import _key as invocation_key, decode_trace_artifact
 
 BENCH = Path(__file__).resolve().parents[3] / ".velaros-workspace/bench"
@@ -272,30 +273,28 @@ def _trace(index, agent, phase):
         sessions = [("root", prefix + "traces", data["traces"])] + [
             ("branch", prefix + f"branches[{number}].turns", branch["turns"])
             for number, branch in enumerate(data.get("branches", []))]
-        sdk = []
+        audits = []
         for kind, locator, turns in sessions:
             if not isinstance(turns, list):
                 raise ValueError("invalid_trace_turns")
             for ordinal, turn in enumerate(turns):
                 request = turn.get("request") or {}
                 body = request.get("body")
-                envelope = json.loads(body) if isinstance(body, str) and body else {}
-                provider = envelope.get("providerRequest") if isinstance(envelope, dict) else None
-                valid = bool(body) and not request.get("truncated") and isinstance(provider, dict) and isinstance(provider.get("messages"), list)
+                valid = request_audit(turn) is not None
                 location = locator + f"[{ordinal}].request"
-                sdk.append({"artifact_id": _digest(("sdk_record\0" + str(agent / "traces.json") + "\0" + location).encode()),
-                            "role": "scriptact_compiled_provider_snapshot", "path": str(agent / "traces.json"),
+                audits.append({"artifact_id": _digest(("request_audit\0" + str(agent / "traces.json") + "\0" + location).encode()),
+                            "role": "scriptact_request_audit", "path": str(agent / "traces.json"),
                             "locator": location, "kind": kind, "ordinal": ordinal,
                             "sha256": _digest(body.encode()) if isinstance(body, str) and body else None,
                             "size_bytes": len(body.encode()) if isinstance(body, str) and body else None,
-                            "state": "verified" if valid else "unknown", "reason": None if valid else "compiled_provider_snapshot_missing_or_truncated"})
-        phase["sdk_records"] = sdk
+                            "state": "verified" if valid else "unknown", "reason": None if valid else "request_audit_missing_invalid_or_truncated"})
+        phase["request_audits"] = audits
         phase["trace_validation"] = {"reader": "trace_artifact.decode_trace_artifact",
             "artifact_schema": source.get("artifactSchema", "legacy_raw"), "root_turns": len(data["traces"]),
             "branch_turns": sum(len(branch["turns"]) for branch in data.get("branches", [])),
-            "referenced_materials_verified": True, "sdk_scope": "recorded_compiled_provider_payload_not_wire_acceptance"}
-        if any(row["state"] != "verified" for row in sdk):
-            index.issue("compiled_provider_snapshot_unknown", attempt_id=phase["identity"]["attemptId"])
+            "referenced_materials_verified": True, "request_audit_scope": "bounded_compiler_metadata_not_wire_acceptance"}
+        if any(row["state"] != "verified" for row in audits):
+            index.issue("request_audit_unknown", attempt_id=phase["identity"]["attemptId"])
     except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
         item.update(state="unknown", reason="trace_integrity_or_shape_invalid")
         index.issue("trace_integrity_or_shape_invalid", "blocker", artifact_id=item["artifact_id"])

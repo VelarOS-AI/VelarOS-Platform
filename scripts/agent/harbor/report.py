@@ -327,7 +327,7 @@ def markdown(report):
             ratios = comparison["candidate_over_reference"]
             lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {comparison["complete"]} | {comparison["jointly_solved_tasks"]} | {number(ratios["agent_seconds"])} | {number(ratios.get("attempt_wall_seconds"))} | {number(ratios["cost_usd"])} |')
     lines += context_diagnostics_markdown(report["jobs"])
-    lines += ["", "## 缓存与上下文", "", "工作帧记录实际提示中的文本字符数；图片等非文本负载另计块数，字符数不等于 token。各分区原始 JSON 大小保留在 JSON 报告中。", "", "| 批次 / 任务 | 缓存读 / 写 token | 缓存净节省美元 | 实际上下文输入限制 | 工作帧峰值字符 | 维护 / 封段 | 协议修复 | 未知费用请求 |", "|---|---:|---:|---|---:|---:|---:|---:|"]
+    lines += ["", "## 缓存与上下文", "", "请求审计只保存 v3 有界元数据，大小按实际持久正文的 UTF-16 代码单元计量。完整提示、历史前缀和图片不归档；此大小不等于 token，也不代表整个数据库大小。", "", "| 批次 / 任务 | 缓存读 / 写 token | 缓存净节省美元 | 实际上下文输入限制 | 请求审计峰值 UTF-16 | 维护 / 封段 | 协议修复 | 未知费用请求 |", "|---|---:|---:|---|---:|---:|---:|---:|"]
     for job in report["jobs"]:
         for trial in job["trials"]:
             m, agent = trial["metrics"], trial["agent_metrics"] or {}
@@ -335,8 +335,8 @@ def markdown(report):
             limits = ", ".join(map(str, context.get("input_limits", []))) or "—"
             maintenance = context.get("maintenance_model_calls")
             transitions = context.get("observed_segment_transitions")
-            frame_chars = ((context.get("prompt_layout") or {}).get("working_frame_text_chars") or {}).get("max")
-            lines.append(f'| {job["job"]} / {trial["task"]} | {number(m["cache_read_tokens"], 0)} / {number(m["cache_write_tokens"], 0)} | {number(m["cache_net_savings_usd"])} | {limits} | {number(frame_chars, 0)} | {number(maintenance, 0)} / {number(transitions, 0)} | {number(agent.get("repair_turns"), 0)} | {m["unknown_cost_requests"]} |')
+            audit_chars = ((context.get("request_audit") or {}).get("model_request_utf16") or {}).get("max")
+            lines.append(f'| {job["job"]} / {trial["task"]} | {number(m["cache_read_tokens"], 0)} / {number(m["cache_write_tokens"], 0)} | {number(m["cache_net_savings_usd"])} | {limits} | {number(audit_chars, 0)} | {number(maintenance, 0)} / {number(transitions, 0)} | {number(agent.get("repair_turns"), 0)} | {m["unknown_cost_requests"]} |')
     lines += ["", "工具调用按 JSON 的 tool_call_scope 标明层级：ScriptAct 为底层能力操作，ATIF 为外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。原始请求计数由网关计量并保留在 JSON 归账审计中。", "", "## 运行配置", ""]
     for job in report["jobs"]:
         lines.append(f'- {job["job"]}：`{json.dumps(job["configurations"], ensure_ascii=False)}`')
