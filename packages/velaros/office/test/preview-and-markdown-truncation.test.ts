@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -73,6 +73,88 @@ async function installFakeMarkItDown(): Promise<void> {
 }
 
 describe('预览页数与 Markdown 截断的如实上报', () => {
+  test.each([false, true])(
+    '返回长度将所有截断提示计入 maxChars（宿主截断=%s）',
+    async (truncated) => {
+      const root = await createRoot()
+      await writeFile(join(root, 'long.md'), 'source')
+      const context = createContext(root, { stdout: '正文'.repeat(2000), truncated })
+      context.office.locateMarkItDown = () => ({
+        command: 'markitdown',
+        packageRoot: root,
+        version: 'test',
+      })
+      const result = await officeOperations.toMarkdown(
+        { inputPath: 'long.md', maxChars: 1000 },
+        context
+      )
+      expect(result.markdown.length).toBeLessThanOrEqual(1000)
+      expect(result.truncated).toBe(true)
+      expect(result.markdown).toContain('maxChars 截断')
+      if (truncated) expect(result.markdown).toContain('开头已被丢弃')
+    }
+  )
+
+  test.each([false, true])(
+    'Markdown 取消传给宿主，命令收尾后不再交付或发布文件（outputPath=%s）',
+    async (write) => {
+      const root = await createRoot()
+      await writeFile(join(root, 'source.md'), 'source')
+      const abort = new AbortController()
+      const context = createContext(root)
+      context.abortSignal = abort.signal
+      context.office.locateMarkItDown = () => ({
+        command: 'markitdown',
+        packageRoot: root,
+        version: 'test',
+      })
+      const resultOf = context.office.runCommand
+      let directory = ''
+      context.office.runCommand = async (command, options, signal) => {
+        expect(signal).toBe(abort.signal)
+        if (write) {
+          const output = command.args[command.args.indexOf('-o') + 1]!
+          directory = output
+          await writeFile(output, 'converted')
+        }
+        abort.abort(new Error('cancelled conversion'))
+        return resultOf(command, options)
+      }
+      await expect(
+        officeOperations.toMarkdown(
+          { inputPath: 'source.md', ...(write ? { outputPath: 'result.md' } : {}) },
+          context
+        )
+      ).rejects.toThrow('cancelled conversion')
+      if (write) {
+        await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' })
+        await expect(stat(join(root, 'result.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+      }
+    }
+  )
+
+  test('Word 摘要计入全部标题，maxItems 只截取大纲', async () => {
+    const root = await createRoot()
+    const context = createContext(root)
+    await officeOperations.createWord(
+      {
+        outputPath: 'headings.docx',
+        blocks: Array.from({ length: 5 }, (_, index) => ({
+          kind: 'heading',
+          text: `标题 ${index + 1}`,
+          level: 1,
+        })),
+      },
+      context
+    )
+    const preview = await officeOperations.preview(
+      { inputPath: 'headings.docx', maxItems: 2 },
+      context
+    )
+    expect(preview.summary.headings).toBe(5)
+    expect(preview.outline).toHaveLength(2)
+  })
+
   test('pptx 预览的 slides 报文档总页数，previewedSlides 才是本次预览页数', async () => {
     const root = await createRoot()
     const context = createContext(root)

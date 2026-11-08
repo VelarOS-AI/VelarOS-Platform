@@ -1,6 +1,6 @@
 /**
  * pdfjs 运行时：`PdfjsRuntime` 与整个进程唯一的 `pdfjsRuntime`。接口 `PdfjsRuntimeApi` 在本文件的类上方。
- * 加载 pdfjs 之前先把它在 Node 里要用的浏览器图形全局补齐，加载成功后整个进程复用同一个模块。
+ * 静态导入的 pdfjs 模块由 ESM 复用，每次取用先补齐它在 Node 里要用的浏览器图形全局。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -18,7 +18,7 @@ import { getPdfjsStandardFontDataUrl, loadPdfjs } from '../../utils/pdf/pdfjs-gl
  * 各自算一遍标准字体目录。实例是 `pdfjsRuntime`。
  */
 export interface PdfjsRuntimeApi {
-  /** 拿到已经补好 Node 全局的 pdfjs 模块；第一次调用会真正加载，之后复用同一份。 */
+  /** 拿到已经补好 Node 全局的 pdfjs 模块。 */
   load(): Promise<PdfjsModule>
   /** 逐页提取文本型 PDF 的可选择文本；pages 指定离散页码，maxPages 只读前若干页，都不给就整本读。 */
   extractTextPages(
@@ -28,11 +28,8 @@ export interface PdfjsRuntimeApi {
 }
 
 export class PdfjsRuntime implements PdfjsRuntimeApi {
-  private loading: Nullable<Promise<PdfjsModule>> = null
-
   public async load(): Promise<PdfjsModule> {
-    this.loading ??= loadPdfjs()
-    return this.loading
+    return loadPdfjs()
   }
 
   public async extractTextPages(
@@ -47,26 +44,25 @@ export class PdfjsRuntime implements PdfjsRuntimeApi {
       isEvalSupported: false,
       standardFontDataUrl: getPdfjsStandardFontDataUrl(),
     })
-    const document = await loadingTask.promise
-    const pageCount = document.numPages
-    const requestedPages = options.pages
-      ? [...new Set(options.pages)]
-      : Array.from(
-          { length: Math.min(pageCount, options.maxPages ?? pageCount) },
-          (_, index) => index + 1
-        )
-    const invalidPage = requestedPages.find(
-      (pageNumber) => pageNumber < 1 || pageNumber > pageCount
-    )
-    if (!isUndefined(invalidPage)) {
-      await loadingTask.destroy()
-      throw new AppError(
-        OfficeErrorCodes.pdfPageOutOfRange,
-        `这份 PDF 只有 ${pageCount} 页，页码 ${invalidPage} 超出范围。`
-      )
-    }
-    const pages: OfficePdfPage[] = []
     try {
+      const document = await loadingTask.promise
+      const pageCount = document.numPages
+      const requestedPages = options.pages
+        ? [...new Set(options.pages)]
+        : Array.from(
+            { length: Math.min(pageCount, options.maxPages ?? pageCount) },
+            (_, index) => index + 1
+          )
+      const invalidPage = requestedPages.find(
+        (pageNumber) => pageNumber < 1 || pageNumber > pageCount
+      )
+      if (!isUndefined(invalidPage)) {
+        throw new AppError(
+          OfficeErrorCodes.pdfPageOutOfRange,
+          `这份 PDF 只有 ${pageCount} 页，页码 ${invalidPage} 超出范围。`
+        )
+      }
+      const pages: OfficePdfPage[] = []
       for (const pageNumber of requestedPages) {
         const page = await document.getPage(pageNumber)
         const content = await page.getTextContent()
@@ -78,10 +74,10 @@ export class PdfjsRuntime implements PdfjsRuntimeApi {
           .trim()
         pages.push({ page: pageNumber, text })
       }
+      return { pageCount, pages }
     } finally {
       await loadingTask.destroy()
     }
-    return { pageCount, pages }
   }
 }
 

@@ -45,7 +45,7 @@ const excelFontSchema = z
 /** 对象单元格 schema 承载样式、公式、日期、富文本和合并单元格信息。 */
 const excelCellObjectSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  dateValue: z.string().datetime().optional(),
+  dateValue: z.union([z.string().date(), z.string().datetime({ offset: true })]).optional(),
   formula: z.string().optional(),
   numFmt: z.string().optional(),
   font: excelFontSchema,

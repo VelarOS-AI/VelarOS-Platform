@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { stat } from 'node:fs/promises'
 
 import { describe, expect, test } from 'bun:test'
 
@@ -26,6 +27,7 @@ describe('Office 命令描述串', () => {
     const command: OfficeNativeCommand = { file: '/bin/echo', args: ['ok'] }
     let seen: Nullable<{ command: string; nativeCommand: OfficeNativeCommand }> = null
     const context = {
+      abortSignal: new AbortController().signal,
       office: {
         runCommand: async (native: OfficeNativeCommand, options: { description: string }) => {
           seen = { command: options.description, nativeCommand: native }
@@ -48,6 +50,71 @@ describe('Office 命令描述串', () => {
 })
 
 describe('Office native process bridge', () => {
+  test('取消信号传到宿主，等待命令结束后才清理旧版 Word 临时产物', async () => {
+    const abort = new AbortController()
+    let finish!: () => void
+    const stopped = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    let started!: () => void
+    const running = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    let directory = ''
+    const context = {
+      abortSignal: abort.signal,
+      office: {
+        runCommand: async (
+          command: OfficeNativeCommand,
+          _options: unknown,
+          signal?: AbortSignal
+        ) => {
+          expect(signal).toBe(abort.signal)
+          directory = command.args[command.args.indexOf('--outdir') + 1]!
+          started()
+          await stopped
+          throw new Error('host command settled after draining')
+        },
+      },
+    } as unknown as OfficeOperationContext
+    const result = officeConverters.normalizeWordInput({
+      ctx: context,
+      inputPath: 'source.doc',
+      libreOffice: { name: 'soffice', available: true, path: 'soffice' },
+    })
+    const failure = result.then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    await running
+    try {
+      abort.abort()
+      expect((await stat(directory)).isDirectory()).toBe(true)
+    } finally {
+      finish()
+    }
+    expect(await failure).toMatchObject({ message: 'host command settled after draining' })
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('命令准备期间已取消就不再启动下一条外部命令', async () => {
+    const abort = new AbortController()
+    abort.abort(new Error('cancel before spawn'))
+    let calls = 0
+    const context = {
+      abortSignal: abort.signal,
+      office: {
+        runCommand: async () => {
+          calls += 1
+        },
+      },
+    } as unknown as OfficeOperationContext
+    await expect(
+      officeConverters.runCommand(context, { file: 'soffice', args: [] }, process.cwd())
+    ).rejects.toThrow('cancel before spawn')
+    expect(calls).toBe(0)
+  })
+
   test('passes literal arguments and matching review text to the host without shell interpolation', async () => {
     const argumentsToEcho = [
       '中文🙂',
@@ -63,6 +130,7 @@ describe('Office native process bridge', () => {
       ],
     }
     const context = {
+      abortSignal: new AbortController().signal,
       office: {
         runCommand: async (native: OfficeNativeCommand, options: { description: string }) => {
           expect(options.description).toBe(describeOfficeNativeCommand(native))

@@ -6,9 +6,13 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 
 import type { OfficeOperationContext } from '../contract/requires'
 import type { OfficeConvertersApi } from '../impl/operations/OfficeConverters'
+import { OfficeDocumentOperations } from '../impl/operations/OfficeDocumentOperations'
 import { OfficePdfOperations } from '../impl/operations/OfficePdfOperations'
-import { officeWorkspace } from '../impl/operations/OfficeWorkspace'
-import type { PdfjsRuntimeApi } from '../impl/runtime/PdfjsRuntime'
+import { OfficeWorkspace, officeWorkspace } from '../impl/operations/OfficeWorkspace'
+import { OfficeDocumentRenderer } from '../impl/runtime/OfficeDocumentRenderer'
+import { PdfjsRuntime, pdfjsRuntime, type PdfjsRuntimeApi } from '../impl/runtime/PdfjsRuntime'
+import type { OfficeWordInput } from '../types/office'
+import type { PdfjsModule } from '../types/pdf'
 import { copyOfficeOutput, prepareOfficeOutputPath, writeOfficeFile } from '../utils/paths'
 
 let root: string
@@ -18,6 +22,40 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
+
+test.each(['text', 'render'])(
+  'PDF %s loading failures still destroy the loading task',
+  async (kind) => {
+    const path = join(root, 'broken.pdf')
+    await writeFile(path, 'broken pdf')
+    let destroyed = 0
+    const fake: PdfjsModule = {
+      getDocument: () => ({
+        promise: Promise.reject(new Error('invalid PDF')),
+        destroy: async () => {
+          destroyed += 1
+        },
+      }),
+    }
+    const original = pdfjsRuntime.load
+    class TestRuntime extends PdfjsRuntime {
+      public override async load() {
+        return fake
+      }
+    }
+    try {
+      pdfjsRuntime.load = async () => fake
+      await expect(
+        kind === 'text'
+          ? new TestRuntime().extractTextPages(path)
+          : new OfficeDocumentRenderer().renderPdfPagePng({ inputPath: path })
+      ).rejects.toThrow('invalid PDF')
+      expect(destroyed).toBe(1)
+    } finally {
+      pdfjsRuntime.load = original
+    }
+  }
+)
 test.each(['write', 'copy'])(
   'exclusive %s preserves a concurrently created output',
   async (kind) => {
@@ -46,6 +84,81 @@ test('explicit overwrite publishes complete output while keeping the output iden
   const result = await writeOfficeFile(output, 'complete')
   expect(result).toEqual({ path, bytes: 8, created: false })
   expect(await readFile(path, 'utf8')).toBe('complete')
+})
+
+test('read-modify-write refuses to publish over changed source bytes', async () => {
+  const path = join(root, 'report.docx')
+  const original = Buffer.from('original')
+  await writeFile(path, original)
+  const output = await prepareOfficeOutputPath(root, path, '.docx', true)
+  await writeFile(path, 'external edit')
+  await expect(
+    writeOfficeFile(output, Buffer.from('merged from original'), undefined, {
+      exists: true,
+      bytes: original,
+    })
+  ).rejects.toBeDefined()
+  expect(await readFile(path, 'utf8')).toBe('external edit')
+  expect(await readdir(root)).toEqual(['report.docx'])
+})
+
+test('queued Word cancellation returns before the active writer and never runs later', async () => {
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let enter!: () => void
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve
+  })
+  let preparations = 0
+  class PausedWorkspace extends OfficeWorkspace {
+    public override async prepareWordOutput(
+      ctx: OfficeOperationContext,
+      input: Pick<OfficeWordInput, 'outputPath' | 'overwrite' | 'appendMode'>
+    ) {
+      preparations += 1
+      enter()
+      await blocked
+      return super.prepareWordOutput(ctx, input)
+    }
+  }
+  const operations = new OfficeDocumentOperations(new PausedWorkspace())
+  const context = {
+    abortSignal: new AbortController().signal,
+    office: { getRootPath: () => root },
+  } as OfficeOperationContext
+  const active = operations.createWord(
+    { outputPath: 'report.docx', content: 'active writer' },
+    context
+  )
+  await entered
+  const abort = new AbortController()
+  const queued = operations.createWord(
+    { outputPath: 'report.docx', content: 'cancelled writer', appendMode: true },
+    { ...context, abortSignal: abort.signal }
+  )
+  const outcome = queued.then(
+    () => 'written',
+    () => 'cancelled'
+  )
+  // 给真实路径解析留出一次事件循环；取消时前一任务仍锁着同一目标。
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  try {
+    abort.abort(new Error('cancel queued writer'))
+    expect(
+      await Promise.race([
+        outcome,
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 100)),
+      ])
+    ).toBe('cancelled')
+    expect(preparations).toBe(1)
+  } finally {
+    release()
+    await active
+  }
+  await queued.catch(() => undefined)
+  expect(preparations).toBe(1)
 })
 test('cancellation during asynchronous preparation leaves no final output', async () => {
   const output = await prepareOfficeOutputPath(root, 'report.docx', '.docx')

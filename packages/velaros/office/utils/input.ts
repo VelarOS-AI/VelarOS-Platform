@@ -215,6 +215,11 @@ const pptElementSchema = z.discriminatedUnion('kind', [
     data: z.string().min(1),
     type: z.enum(['png', 'jpeg', 'gif', 'svg', 'bmp', 'webp']).optional(),
     ...pptBoxShape,
+    options: pptOptionsSchema
+      .refine((options) => !('path' in options) && !('data' in options), {
+        message: '图片来源只用 data 字段；options 不能覆盖 data 或指定 path',
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal('chart'),

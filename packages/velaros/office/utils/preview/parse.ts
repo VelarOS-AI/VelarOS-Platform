@@ -50,7 +50,8 @@ export async function parseDocxPreview(
     }
   )
   const htmlBody = sanitizePreviewHtml(conversion.value)
-  const outline = extractHeadingOutline(htmlBody).slice(0, maxItems)
+  const headings = extractHeadingOutline(htmlBody)
+  const outline = headings.slice(0, maxItems)
   const paragraphs = extractHtmlTagText(htmlBody, 'p').filter(Boolean)
   const zip = await JSZip.loadAsync(await readFile(inputPath))
   const documentXml = await zip.file('word/document.xml')?.async('string')
@@ -61,7 +62,7 @@ export async function parseDocxPreview(
     kind: 'docx',
     title: outline[0]?.title ?? paragraphs[0]?.slice(0, 80) ?? 'Word 文档',
     summary: {
-      headings: outline.length,
+      headings: headings.length,
       paragraphs: paragraphs.length,
       tables: tableCount,
       images: imageCount,

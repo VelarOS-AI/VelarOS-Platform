@@ -33,10 +33,11 @@ export interface OfficeSpacePort {
   resolvePath?: (path: string) => string
   /** 探测这几个命令在本机是否可用、路径在哪。 */
   inspectEnvironment: (commands?: string[]) => Promise<OfficeEnvironmentInspection>
-  /** 执行一条外部命令；只收原生 argv，本单元不拼 shell 串。 */
+  /** 执行一条外部命令；只收原生 argv。收到取消应终止并排空进程与输出管道，Promise 结束后本单元才回收临时目录。 */
   runCommand: (
     command: OfficeNativeCommand,
-    options: OfficeCommandOptions
+    options: OfficeCommandOptions,
+    signal?: AbortSignal
   ) => Promise<OfficeSystemCommandResult>
   /**
    * 按宿主自己的插件状态回答 MarkItDown 装没装、在哪；返回 null 即不可用，操作直接拒绝。

@@ -29,8 +29,9 @@ export function truncateMarkdown(
 ): { markdown: string; truncated: boolean } {
   if (markdown.length <= maxChars) return { markdown, truncated: false }
 
+  const notice = '\n\n<!-- 后续内容已按 maxChars 截断 -->'
   return {
-    markdown: `${markdown.slice(0, maxChars)}\n\n<!-- 后续内容已按 maxChars 截断 -->`,
+    markdown: `${markdown.slice(0, Math.max(0, maxChars - notice.length))}${notice.slice(0, maxChars)}`,
     truncated: true,
   }
 }

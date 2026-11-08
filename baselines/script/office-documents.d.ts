@@ -353,7 +353,7 @@ declare module 'velaros:office-documents' {
   /**
    * 一页上的一个元素：x、y、w、h 是位置与大小（英寸，宽屏页是 13.333×7.5），options 是 PptxGenJS 同名方法的选项，原样交过去。
    * text 的 value 是文字或富文本段；table 的 rows 是二维表；shape 是形状名（rect、roundRect、ellipse、line……）；
-   * image 的 data 是图片的 base64（不带 data: 前缀），type 缺省 png；chart 的 chartType 是 bar、line、pie、area、doughnut 这类，
+   * image 的 data 是图片的 base64（不带 data: 前缀），type 缺省 png；图片 options 不得指定 path 或覆盖 data。chart 的 chartType 是 bar、line、pie、area、doughnut 这类，
    * data 是 PptxGenJS 的系列数组（每项 { name, labels, values }）。
    */
   type PptElement =

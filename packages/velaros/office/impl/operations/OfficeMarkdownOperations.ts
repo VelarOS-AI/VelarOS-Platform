@@ -86,23 +86,30 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
       launch: input.launch,
       inputPath: input.inputPath,
     })
-    const commandResult = await input.ctx.office.runCommand(nativeCommand, {
-      description: describeOfficeNativeCommand(nativeCommand),
-      cwd: this.workspace.rootPath(input.ctx),
-      timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
-      maxOutputChars: input.maxChars + OfficeTuning.markdown.stdoutHeadroomChars,
-    })
+    input.ctx.abortSignal.throwIfAborted()
+    const commandResult = await input.ctx.office.runCommand(
+      nativeCommand,
+      {
+        description: describeOfficeNativeCommand(nativeCommand),
+        cwd: this.workspace.rootPath(input.ctx),
+        timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+        maxOutputChars: input.maxChars + OfficeTuning.markdown.stdoutHeadroomChars,
+      },
+      input.ctx.abortSignal
+    )
+    input.ctx.abortSignal.throwIfAborted()
     if (!commandResult.success) throw conversionFailedError('MarkItDown 转换 ', commandResult)
 
-    const limited = truncateMarkdown(commandResult.stdout ?? '', input.maxChars)
     // 宿主的命令输出窗口**保留结尾**：长文档这里拿到的是文档末尾，而截断发生在 stdout 这一层，
     // 只看 maxChars 的那一步会一路报 truncated=false，模型于是把结尾当开头读（2026-09-16 实测）。
-    if (!commandResult.truncated)
-      return { path: input.inputPath, markdown: limited.markdown, truncated: limited.truncated }
+    const markdown = commandResult.truncated
+      ? `${OfficeMarkdownOperations.OutputWindowTruncatedNotice}\n\n${commandResult.stdout}`
+      : commandResult.stdout
+    const limited = truncateMarkdown(markdown, input.maxChars)
     return {
       path: input.inputPath,
-      markdown: `${OfficeMarkdownOperations.OutputWindowTruncatedNotice}\n\n${limited.markdown}`,
-      truncated: true,
+      markdown: limited.markdown,
+      truncated: commandResult.truncated || limited.truncated,
     }
   }
 
@@ -127,12 +134,18 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
         inputPath: input.inputPath,
         outputPath: tempOutputPath,
       })
-      const commandResult = await input.ctx.office.runCommand(nativeCommand, {
-        description: describeOfficeNativeCommand(nativeCommand),
-        cwd: this.workspace.rootPath(input.ctx),
-        timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
-        maxOutputChars: OfficeTuning.command.outputChars,
-      })
+      input.ctx.abortSignal.throwIfAborted()
+      const commandResult = await input.ctx.office.runCommand(
+        nativeCommand,
+        {
+          description: describeOfficeNativeCommand(nativeCommand),
+          cwd: this.workspace.rootPath(input.ctx),
+          timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+          maxOutputChars: OfficeTuning.command.outputChars,
+        },
+        input.ctx.abortSignal
+      )
+      input.ctx.abortSignal.throwIfAborted()
       if (!commandResult.success) throw conversionFailedError('MarkItDown 转换 ', commandResult)
 
       const output = await this.workspace.prepareOutput(

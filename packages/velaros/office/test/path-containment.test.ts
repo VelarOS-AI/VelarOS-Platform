@@ -46,6 +46,40 @@ async function createHarness(): Promise<Harness> {
 }
 
 describe('office 路径包含门', () => {
+  test.each(['../outside/secret.png', 'https://example.com/secret.png'])(
+    '图片 options 不能绕过受控 data 去读取 %s',
+    async (path) => {
+      const harness = await createHarness()
+      harness.context.office.getRootPath = () => {
+        throw new Error('非法入参不应访问空间端口')
+      }
+      await expect(
+        officeOperations.createPresentation(
+          {
+            outputPath: 'deck.pptx',
+            slides: [
+              {
+                elements: [
+                  {
+                    kind: 'image',
+                    data: 'AAAA',
+                    x: 0,
+                    y: 0,
+                    w: 1,
+                    h: 1,
+                    options: { data: '', path },
+                  },
+                ],
+              },
+            ],
+          },
+          harness.context
+        )
+      ).rejects.toMatchObject({ code: 'VALIDATION', context: { executionOutcome: 'not-applied' } })
+      await expect(readFile(join(harness.root, 'deck.pptx'))).rejects.toBeDefined()
+    }
+  )
+
   test('工作区里指向根外的符号链接不能把产物写出去', async () => {
     const harness = await createHarness()
     await symlink(harness.outside, join(harness.root, 'link'), 'dir')

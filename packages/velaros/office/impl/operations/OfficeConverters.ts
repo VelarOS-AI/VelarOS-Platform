@@ -110,12 +110,19 @@ export class OfficeConverters implements OfficeConvertersApi {
     cwd: string,
     timeoutMs: number = OfficeTuning.command.timeoutMs
   ): Promise<OfficeSystemCommandResult> {
-    return ctx.office.runCommand(command, {
-      description: describeOfficeNativeCommand(command),
-      cwd,
-      timeoutMs,
-      maxOutputChars: OfficeTuning.command.outputChars,
-    })
+    ctx.abortSignal.throwIfAborted()
+    const result = await ctx.office.runCommand(
+      command,
+      {
+        description: describeOfficeNativeCommand(command),
+        cwd,
+        timeoutMs,
+        maxOutputChars: OfficeTuning.command.outputChars,
+      },
+      ctx.abortSignal
+    )
+    ctx.abortSignal.throwIfAborted()
+    return result
   }
 
   public async runLibreOffice(
@@ -128,17 +135,17 @@ export class OfficeConverters implements OfficeConvertersApi {
     const runtimeDir = await mkdtemp(join(tmpdir(), 'velaros-office-fontconfig-'))
     const cacheDir = join(runtimeDir, 'cache')
     const configPath = join(runtimeDir, 'fonts.conf')
-    await mkdir(cacheDir, { recursive: true })
-    await writeFile(
-      configPath,
-      buildMacLibreOfficeFontConfig({ homeDir: homedir(), cacheDir }),
-      'utf8'
-    )
-    const configured: OfficeNativeCommand = {
-      ...command,
-      env: { ...command.env, FONTCONFIG_FILE: configPath },
-    }
     try {
+      await mkdir(cacheDir, { recursive: true })
+      await writeFile(
+        configPath,
+        buildMacLibreOfficeFontConfig({ homeDir: homedir(), cacheDir }),
+        'utf8'
+      )
+      const configured: OfficeNativeCommand = {
+        ...command,
+        env: { ...command.env, FONTCONFIG_FILE: configPath },
+      }
       return await this.runCommand(ctx, configured, cwd, timeoutMs)
     } finally {
       await rm(runtimeDir, { recursive: true, force: true }).catch(
@@ -194,40 +201,37 @@ export class OfficeConverters implements OfficeConvertersApi {
       file: input.libreOffice.path || input.libreOffice.name,
       args: ['--headless', '--convert-to', 'docx', '--outdir', tempDir, input.inputPath],
     }
-    const commandResult = await this.runLibreOffice(
-      input.ctx,
-      command,
-      dirname(input.inputPath),
-      input.timeoutMs ?? OfficeTuning.command.libreOfficeTimeoutMs
-    )
-    if (!commandResult.success) {
+    try {
+      const commandResult = await this.runLibreOffice(
+        input.ctx,
+        command,
+        dirname(input.inputPath),
+        input.timeoutMs ?? OfficeTuning.command.libreOfficeTimeoutMs
+      )
+      if (!commandResult.success)
+        throw conversionFailedError('把旧版 .doc 转成 .docx ', commandResult)
+
+      const generatedDocx = await findGeneratedOfficeFile(
+        tempDir,
+        `${basename(input.inputPath, extname(input.inputPath))}.docx`,
+        '.docx'
+      )
+      if (!generatedDocx) throw missingOutputError('把旧版 .doc 转成 .docx ', 'DOCX')
+
+      return {
+        path: generatedDocx,
+        originalPath: input.inputPath,
+        sourceExtension,
+        convertedFromLegacyDoc: true,
+        tempDir,
+        converter: input.libreOffice.name,
+        conversionCommandResult: commandResult,
+      }
+    } catch (error) {
       await rm(tempDir, { recursive: true, force: true }).catch(
         () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
       )
-      throw conversionFailedError('把旧版 .doc 转成 .docx ', commandResult)
-    }
-
-    const generatedDocx = await findGeneratedOfficeFile(
-      tempDir,
-      `${basename(input.inputPath, extname(input.inputPath))}.docx`,
-      '.docx'
-    )
-    if (!generatedDocx) {
-      // 抛出去就没人认领这个临时目录了，先清掉，免得每失败一次就在系统临时目录留一个 velaros-office-docx-normalize-*。
-      await rm(tempDir, { recursive: true, force: true }).catch(
-        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
-      )
-      throw missingOutputError('把旧版 .doc 转成 .docx ', 'DOCX')
-    }
-
-    return {
-      path: generatedDocx,
-      originalPath: input.inputPath,
-      sourceExtension,
-      convertedFromLegacyDoc: true,
-      tempDir,
-      converter: input.libreOffice.name,
-      conversionCommandResult: commandResult,
+      throw error
     }
   }
 
