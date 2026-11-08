@@ -2,9 +2,115 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
+
+import { AppError } from '@velaros-ai/core/error'
+
+import { projectFileOperations } from '../impl/operations/ProjectFileOperations'
+import { createProjectObservationProvider } from '../impl/operations/ProjectObservationProvider'
 
 import { projectToolFixture } from './support/tools'
+
+test('snapshot plans preserve cross-project roots and reauthorize every real capture', async () => {
+  const a = await mkdtemp(join(tmpdir(), 'snapshot-route-a-'))
+  const b = await mkdtemp(join(tmpdir(), 'snapshot-route-b-'))
+  try {
+    await writeFile(join(a, 'file.txt'), 'A')
+    await writeFile(join(b, 'file.txt'), 'B')
+    const first = await projectToolFixture({ root: a })
+    const second = await projectToolFixture({ root: b })
+    const provider = createProjectObservationProvider()
+    const plan = provider.prepare('files', {
+      projectRoot: b,
+      files: [{ path: 'file.txt', key: 'value', purpose: 'Observe the authorized project' }],
+    })
+    expect(plan.projectRoot).toBe(b)
+    const reads = spyOn(second.kernel, 'read')
+    try {
+      await expect(projectFileOperations.snapshot(plan, first.context)).rejects.toThrow(
+        '宿主未提供'
+      )
+      let allowed = true
+      const modes: boolean[] = []
+      first.context.resolveProject = async (requested, options) => {
+        expect(requested).toBe(b)
+        expect(options.currentProject).toBe(first.host)
+        modes.push(options.write)
+        if (!allowed) throw new AppError('PERMISSION', 'snapshot authorization revoked')
+        return second.host
+      }
+      const captured = await projectFileOperations.snapshot(plan, first.context)
+      expect(captured.root).toBe(b)
+      expect(captured.value.files[0].text).toBe('B')
+      expect(captured.readRequests).toBe(2)
+      await writeFile(join(b, 'file.txt'), 'B changed')
+      const nextPlan = provider.prepare('files', plan)
+      expect(nextPlan.projectRoot).toBe(b)
+      const next = await projectFileOperations.snapshot(nextPlan, first.context)
+      expect(next.value.files[0].text).toBe('B changed')
+      expect(next.fingerprint).not.toBe(captured.fingerprint)
+      expect(reads).toHaveBeenCalledTimes(4)
+      allowed = false
+      await expect(projectFileOperations.snapshot(plan, first.context)).rejects.toThrow(
+        'snapshot authorization revoked'
+      )
+      expect(modes).toEqual([false, false, false])
+      expect(reads).toHaveBeenCalledTimes(4)
+      first.context.resolveProject = async () => first.host
+      await expect(projectFileOperations.snapshot(plan, first.context)).rejects.toThrow(
+        '真实根不一致'
+      )
+      expect(reads).toHaveBeenCalledTimes(4)
+      expect(await readFile(join(a, 'file.txt'), 'utf8')).toBe('A')
+    } finally {
+      reads.mockRestore()
+    }
+  } finally {
+    await rm(a, { recursive: true, force: true })
+    await rm(b, { recursive: true, force: true })
+  }
+})
+
+test('snapshot preparation and capture reject unknown fields while preserving the default root', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'snapshot-default-'))
+  try {
+    await writeFile(join(root, 'file.txt'), 'current project')
+    const f = await projectToolFixture({ root })
+    const provider = createProjectObservationProvider()
+    const plan = { files: [{ path: 'file.txt', key: 'value', purpose: 'Observe current project' }] }
+    const prepared = provider.prepare('files', plan)
+    expect(prepared).toEqual(plan)
+    const captured = await projectFileOperations.snapshot(prepared, f.context)
+    expect(captured.root).toBe(root)
+    expect(captured.value.files[0].text).toBe('current project')
+    const reads = spyOn(f.kernel, 'read')
+    try {
+      const unknown = { ...plan, unexpected: true }
+      expect(() => provider.prepare('files', unknown)).toThrow('只接受 files 和 projectRoot')
+      await expect(projectFileOperations.snapshot(unknown, f.context)).rejects.toThrow(
+        '只接受 files 和 projectRoot'
+      )
+      const unknownEntry = { files: [{ ...plan.files[0], unexpected: true }] }
+      expect(() => provider.prepare('files', unknownEntry)).toThrow('含未知字段')
+      await expect(projectFileOperations.snapshot(unknownEntry, f.context)).rejects.toThrow(
+        '含未知字段'
+      )
+      for (const projectRoot of ['', '../relative'])
+        await expect(
+          projectFileOperations.snapshot({ ...plan, projectRoot }, f.context)
+        ).rejects.toThrow('项目绝对路径')
+      for (const projectRoot of ['', '../relative', null, 123]) {
+        const invalid = { ...plan, projectRoot }
+        expect(() => provider.prepare('files', invalid)).toThrow('项目绝对路径')
+      }
+      expect(reads).not.toHaveBeenCalled()
+    } finally {
+      reads.mockRestore()
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test('cross-project operations require host authorization and preserve root-bound undo', async () => {
   const a = await mkdtemp(join(tmpdir(), 'route-a-'))
