@@ -10,7 +10,7 @@ import type { SkillEnvironmentLease, SkillRegistryApi, SkillSessionApi } from '.
 /** 宿主允许模型按需加载本机已安装的 Skill；显式选择只决定预加载项。 */
 export interface SkillSessionOptions {
   /** 本机安装库，加载时重新核对固定代次。 */
-  readonly registry: SkillRegistryApi
+  readonly registry: Pick<SkillRegistryApi, 'list' | 'acquire'>
   /** 工作区默认项与显式选择；其余安装项保留按需加载资格。 */
   readonly selection?: readonly SkillSelection[]
 }
@@ -59,7 +59,7 @@ export interface NpmSkillInstallerOptions {
 /** 已选环境中的宿主能力只通过 Kernel 模块公开。 */
 export interface SkillCapabilityModuleOptions {
   /** 每次调用重新查询当前授权。 */
-  readonly registry: SkillRegistryApi
+  readonly registry: Pick<SkillRegistryApi, 'assertGranted'>
   /** 当前会话持有的安装代次和依赖集合。 */
   readonly lease: SkillEnvironmentLease
   /** 按需模式的发现目录和加载所有者；不提供时沿用固定授权租约。 */

@@ -33,7 +33,6 @@ declare module 'velaros:features' {
     readonly enabled: boolean
     readonly builtin: boolean
     readonly grants: readonly string[]
-    readonly distributionId?: string
   }
 
   /** 根据稳定身份选择能力。 */

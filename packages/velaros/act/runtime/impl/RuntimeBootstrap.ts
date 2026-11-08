@@ -224,22 +224,29 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
               skill.grants.filter((name) => name.startsWith('project:language:'))
             )
           )
+          const selectedOwners = new Map<string, (typeof languageOwners)[number]>()
           for (const grant of languageGrants) {
+            const owners = languageOwners.filter((skill) => skill.grants.includes(grant))
             const checks = await Promise.allSettled(
-              languageOwners
-                .filter((skill) => skill.grants.includes(grant))
-                .map((skill) =>
-                  options.skills!.registry.assertGranted(
-                    skill.manifest.name,
-                    skill.generation,
-                    grant
-                  )
-                )
+              owners.map((skill) =>
+                options.skills!.registry.assertGranted(skill.manifest.name, skill.generation, grant)
+              )
             )
-            if (!checks.some((check) => check.status === 'fulfilled'))
+            context.abortSignal.throwIfAborted()
+            const available = owners.filter((_, index) => checks[index]!.status === 'fulfilled')
+            if (isEmpty(available))
               throw new AppError('PERMISSION', `语言 Skill 授权已失效：${grant}`)
+            const owner =
+              available.find((candidate) =>
+                options.skills?.session?.skills.some(
+                  (active) =>
+                    active.manifest.name === candidate.manifest.name &&
+                    active.generation === candidate.generation
+                )
+              ) ?? available[0]!
+            selectedOwners.set(`${owner.manifest.name}\0${owner.generation}`, owner)
           }
-          for (const owner of languageOwners)
+          for (const owner of selectedOwners.values())
             await options.skills?.session?.activate(owner.manifest.name, context.abortSignal)
           return query(input, context)
         },

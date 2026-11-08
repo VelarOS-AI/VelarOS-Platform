@@ -1,8 +1,7 @@
-import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { NodeRuntimeEnvironment, NodeRuntimeLease } from '@velaros-ai/script'
 
-import type { SkillEnvironmentLease, SkillRegistryApi } from '../contract/provides.js'
+import type { SkillEnvironmentLease } from '../contract/provides.js'
 import type { SkillSessionOptions } from '../contract/requires.js'
 import type { SkillActivation } from '../types/skills.js'
 import { freezeSkillData } from '../utils/manifest.js'
@@ -24,7 +23,7 @@ class SkillSession implements SkillSessionApi {
   private readonly leases: SkillEnvironmentLease[]
 
   public constructor(
-    private readonly registry: SkillRegistryApi,
+    private readonly registry: SkillSessionOptions['registry'],
     public readonly catalog: readonly SkillActivation[],
     private current: SkillEnvironmentLease
   ) {
@@ -57,12 +56,14 @@ class SkillSession implements SkillSessionApi {
           grants: skill.grants,
         }))
       )
+      // 取得租约就先接管所有权；取消时释放失败仍留在会话中，关闭可以重试。
+      this.leases.push(next)
       if (signal.aborted || this.closed) {
         await next.release()
+        this.leases.pop()
         signal.throwIfAborted()
         throw new AppError('CLOSED', 'Skill 会话已关闭')
       }
-      this.leases.push(next)
       this.current = next
       return next.skills.find((skill) => skill.manifest.name === name)!
     })
@@ -99,10 +100,18 @@ class SkillSession implements SkillSessionApi {
     this.closed = true
     this.releasing ??= this.pending
       .then(async () => {
-        while (!isEmpty(this.leases)) {
-          await this.leases[0]!.release()
-          this.leases.shift()
+        let failure: { error: unknown } | undefined
+        for (let index = 0; index < this.leases.length;) {
+          try {
+            await this.leases[index]!.release()
+            this.leases.splice(index, 1)
+          } catch (error) {
+            // 失败者留在原所有权账本中；继续收尾其他租约，最后原样报告首个失败。
+            failure ??= { error }
+            index += 1
+          }
         }
+        if (failure) throw failure.error
       })
       .finally(() => {
         this.releasing = undefined

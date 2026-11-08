@@ -305,6 +305,105 @@ test('INV-9 按需会话发现全部 Skill，未勾选也能加载，重复并�
   expect(await Bun.file(join(loaded[0]!.directory, 'SKILL.md')).exists()).toBe(false)
 })
 
+test('INV-9 取消加载的新租约释放失败后仍由会话持有，关闭重试再允许回收', async () => {
+  const f = await fixture()
+  const installed = await f.registry.install(
+    { directory: await source(f.root, 'cancelled-lease') },
+    new AbortController().signal
+  )
+  const abort = new AbortController()
+  let releases = 0
+  const session = await createSkillSession({
+    registry: {
+      list: () => f.registry.list(),
+      acquire: async (selection) => {
+        const lease = await f.registry.acquire(selection)
+        if (!selection?.length) return lease
+        abort.abort(new Error('loading cancelled'))
+        return {
+          ...lease,
+          release: async () => {
+            releases += 1
+            if (releases === 1) throw new Error('lease release failed')
+            await lease.release()
+          },
+        }
+      },
+    },
+  })
+  try {
+    await expect(session.activate('cancelled-lease', abort.signal)).rejects.toThrow(
+      'lease release failed'
+    )
+    expect(session.skills).toHaveLength(0)
+    await f.registry.remove('cancelled-lease')
+    await f.registry.collect()
+    expect(await Bun.file(join(installed.directory, 'index.mjs')).exists()).toBe(true)
+  } finally {
+    await session.release()
+  }
+  expect(releases).toBe(2)
+  await f.registry.collect()
+  expect(await Bun.file(join(installed.directory, 'index.mjs')).exists()).toBe(false)
+})
+
+test('INV-9 关闭时首个租约释放失败仍收尾其余租约，失败所有者下次可重试', async () => {
+  const f = await fixture()
+  const installed = await f.registry.install(
+    { directory: await source(f.root, 'release-owners') },
+    new AbortController().signal
+  )
+  const originalFailure = new Error('first lease release failed')
+  const attempts: number[] = []
+  let initialEnvironment = ''
+  const session = await createSkillSession({
+    registry: {
+      list: () => f.registry.list(),
+      acquire: async (selection) => {
+        const lease = await f.registry.acquire(selection)
+        const owner = attempts.length
+        attempts.push(0)
+        if (owner === 0) initialEnvironment = lease.environment.id
+        return {
+          ...lease,
+          release: async () => {
+            attempts[owner] = attempts[owner]! + 1
+            if (owner === 0 && attempts[owner] === 1) throw originalFailure
+            await lease.release()
+          },
+        }
+      },
+    },
+  })
+  await session.activate('release-owners', new AbortController().signal)
+  const activeEnvironment = session.environment.id
+  await f.registry.remove('release-owners')
+  const first = session.release()
+  expect(session.release()).toBe(first)
+  expect(
+    await first.then(
+      () => undefined,
+      (error: unknown) => error
+    )
+  ).toBe(originalFailure)
+  expect(attempts).toEqual([1, 1])
+  await expect(session.acquireRuntime(new AbortController().signal)).rejects.toThrow('已关闭')
+  await f.registry.collect()
+  expect(await Bun.file(join(installed.directory, 'index.mjs')).exists()).toBe(false)
+  expect(
+    await Bun.file(join(f.store, 'environments', activeEnvironment, 'package.json')).exists()
+  ).toBe(false)
+  expect(
+    await Bun.file(join(f.store, 'environments', initialEnvironment, 'package.json')).exists()
+  ).toBe(true)
+  await session.release()
+  expect(attempts).toEqual([2, 1])
+  await f.registry.collect()
+  expect(
+    await Bun.file(join(f.store, 'environments', initialEnvironment, 'package.json')).exists()
+  ).toBe(false)
+})
+
 test('INV-1 依赖安装失败与取消都保留原来的安装版本', async () => {
   const f = await fixture({
     install: async () => {

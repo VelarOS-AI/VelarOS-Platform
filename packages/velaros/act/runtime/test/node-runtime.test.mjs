@@ -27,6 +27,7 @@ import {
   builtinSkillDirectories,
   BuiltinSkillNames,
   createSkillRegistry,
+  createSkillSession,
   skillComposition,
 } from '../../../dist/skills/index.js'
 
@@ -807,8 +808,9 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
   )
   assert(events.some((event) => event.type === 'program' && event.kind === 'execute'))
   const trace = await runtime.trace('native', { fullContent: true })
-  assert.equal(trace.turns[0].executions[0].language, 'node')
-  assert.equal(trace.turns[1].executions[0].language, 'node')
+  assert.equal(trace.turns[0].executions[0].source, commandProgram("printf '7' > input.txt"))
+  assert.equal(trace.turns[1].executions[0].source, nodeSource)
+  assert.match(trace.turns[1].executions[0].processOutput, /42/)
   await runtime.close()
   runtime = await createRuntime({
     ...options,
@@ -2656,4 +2658,198 @@ test('host project bindings compose independently with selected Skills', async (
     }),
     /未绑定/
   )
+})
+
+async function languageOwnerFixture(t, owners) {
+  const f = await fixture(t)
+  const store = join(f.root, 'language-skills')
+  await mkdir(store)
+  const registry = createSkillRegistry({
+    directory: store,
+    nodeVersion: process.versions.node,
+    packages: nodeRuntimePackages.defaults(),
+    lock: createExclusiveSqliteLock(() => new DatabaseSync(join(store, 'lock.sqlite'))),
+    installer: {
+      install: async () => {
+        throw Error('unexpected install')
+      },
+    },
+  })
+  const install = async (name, grants, version = '1.0.0') => {
+    const directory = join(f.root, `${name}-${version}`)
+    await mkdir(directory)
+    await writeFile(
+      join(directory, 'package.json'),
+      JSON.stringify({ name, version, agentSkill: { hostCapabilities: grants } })
+    )
+    return registry.install({ directory }, new AbortController().signal)
+  }
+  for (const [name, grants] of Object.entries(owners)) await install(name, grants)
+  const skills = await createSkillSession({ registry })
+  const queries = []
+  let runtime
+  try {
+    runtime = await createRuntime({
+      workspace: f.cwd,
+      node: {
+        cwd: f.node.cwd,
+        directory: f.node.directory,
+        authorize: f.node.authorize,
+        execute: f.node.execute.bind(f.node),
+        runtime: skills.environment,
+        acquireRuntime: (signal) => skills.acquireRuntime(signal),
+      },
+      project: {
+        code: {
+          isAvailable: () => true,
+          query: async (input, context) => {
+            queries.push(context)
+            assert.equal(context.project.getRootPath(), await realpath(f.cwd))
+            assert.equal(context.sessionId, 'language-owners')
+            assert.equal(context.abortSignal.aborted, false)
+            return { action: input.action, revision: 'language-owner-fixture' }
+          },
+        },
+      },
+      dataDir: join(f.root, 'state'),
+      skills: { registry, lease: skills, session: skills },
+      agents: false,
+      search: false,
+    })
+  } catch (error) {
+    await skills.release()
+    throw error
+  }
+  const session = await runtime.openSession('language-owners')
+  await session.context.append({ kind: 'user', body: 'Verify current language grant owners' })
+  return {
+    registry,
+    skills,
+    queries,
+    install,
+    query: async (expectedError) => {
+      const result = await session.execute({
+        source:
+          "import {analyze} from 'velaros:code';let result;try {result={value:await analyze({intent:'cycles'})}}catch(error){result={error:{code:error.code,message:error.message}}}export default result;",
+      })
+      assert.equal(result.result.failed, undefined, JSON.stringify(result))
+      if (expectedError)
+        assert.equal(result.rawValue?.error?.code, expectedError, JSON.stringify(result))
+      else {
+        assert.equal(result.rawValue?.error, undefined, JSON.stringify(result))
+        assert(result.rawValue?.value, JSON.stringify(result))
+      }
+      return result.rawValue
+    },
+    close: async () => {
+      await runtime.close()
+      await skills.release()
+    },
+  }
+}
+
+test('shared language grants keep the loaded valid owner after another owner is revoked', async (t) => {
+  const f = await languageOwnerFixture(t, {
+    'language-owner-a': ['project:language:jsts'],
+    'language-owner-b': ['project:language:jsts'],
+  })
+  try {
+    await f.skills.activate('language-owner-b', new AbortController().signal)
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    f.skills.activate = async (name, signal) => {
+      activations.push({ name, signal })
+      return activate(name, signal)
+    }
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner-b']
+    )
+    assert.equal(activations[0].signal, f.queries[0].abortSignal)
+    await f.registry.remove('language-owner-a')
+    activations.length = 0
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner-b']
+    )
+    assert.equal(activations[0].signal, f.queries[1].abortSignal)
+    await f.registry.remove('language-owner-b')
+    activations.length = 0
+    // ProjectCodeOperations 经 projectFailure 把根 PERMISSION 转成公开的项目原因码。
+    const denied = await f.query('PERMISSION_DENIED')
+    assert.match(
+      denied.error.message,
+      /^语言 Skill 授权已失效：project:language:jsts（调用 [\da-f-]+:\d+，效果 none）$/u
+    )
+    assert.deepEqual(activations, [])
+    assert.equal(f.queries.length, 2)
+  } finally {
+    await f.close()
+  }
+})
+
+test('language grants validate before activation, deduplicate an owner and preserve generation conflicts', async (t) => {
+  const grants = ['project:language:jsts', 'project:language:python']
+  const f = await languageOwnerFixture(t, { 'language-owner': grants })
+  try {
+    const assertGranted = f.registry.assertGranted.bind(f.registry)
+    const checks = []
+    f.registry.assertGranted = async (...args) => {
+      await assertGranted(...args)
+      checks.push(args[2])
+    }
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    let replaceBeforeActivation = false
+    f.skills.activate = async (name, signal) => {
+      assert.deepEqual(checks, grants)
+      activations.push({ name, signal })
+      if (replaceBeforeActivation) await f.install(name, grants, '2.0.0')
+      return activate(name, signal)
+    }
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner']
+    )
+    assert.equal(activations[0].signal, f.queries[0].abortSignal)
+    checks.length = 0
+    activations.length = 0
+    replaceBeforeActivation = true
+    await f.query('CONFLICT')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner']
+    )
+    assert.equal(f.queries.length, 1)
+  } finally {
+    await f.close()
+  }
+})
+
+test('a revoked later language grant prevents activation of an earlier valid owner', async (t) => {
+  const f = await languageOwnerFixture(t, {
+    'language-owner-a': ['project:language:jsts'],
+    'language-owner-b': ['project:language:python'],
+  })
+  try {
+    await f.registry.remove('language-owner-b')
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    f.skills.activate = async (name, signal) => {
+      activations.push(name)
+      return activate(name, signal)
+    }
+    const denied = await f.query('PERMISSION_DENIED')
+    assert.match(
+      denied.error.message,
+      /^语言 Skill 授权已失效：project:language:python（调用 [\da-f-]+:\d+，效果 none）$/u
+    )
+    assert.deepEqual(activations, [])
+    assert.equal(f.queries.length, 0)
+  } finally {
+    await f.close()
+  }
 })

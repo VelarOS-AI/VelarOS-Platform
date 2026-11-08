@@ -24,7 +24,6 @@ export interface FeatureSummary extends FeatureDefinition {
   readonly enabled: boolean
   readonly builtin: boolean
   readonly grants: readonly string[]
-  readonly distributionId?: string
 }
 
 /** @AgentView 本轮能力加载结果，资源路径由宿主提供，额外文件按需读取。 */
