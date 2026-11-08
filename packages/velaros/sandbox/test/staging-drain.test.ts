@@ -28,7 +28,7 @@ test('parallel staging drains pending writes before failure cleanup', async () =
     }}));
     try {
       const { applyMirrorChanges, scanTree } = await import(${JSON.stringify(moduleUrl)});
-      const manifest = {version: 1, record: {id: 'fixture', source, root}, files: {}, mirror: await scanTree(root)};
+      const manifest = {version: 2, record: {id: 'fixture', source, root}, files: {}, mirror: await scanTree(root)};
       let failure;
       try { await applyMirrorChanges(manifest, {created: ['a', 'b'], modified: [], deleted: []}); }
       catch (error) { failure = {message: error.message, outcome: error.context.executionOutcome}; }

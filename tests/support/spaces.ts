@@ -119,6 +119,7 @@ export function systemSpace(input: {
     return input.sandbox
   }
   const sandboxPort: SandboxSurfacePort = {
+    getSandboxRecord: (sandboxId, signal) => sandboxHost().getSandboxRecord(sandboxId, signal),
     createSandbox: (options) => sandboxHost().createSandbox(options),
     diffSandbox: (options) => sandboxHost().diffSandbox(options),
     applySandbox: (options) => sandboxHost().applySandbox(options),

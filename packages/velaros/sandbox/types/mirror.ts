@@ -10,7 +10,7 @@ import type { SandboxRecord } from './rehearsal-sandbox.js'
 export interface SandboxFileStamp {
   size: number
   mtimeMs: number
-  /** 普通文件内容版本；旧清单缺省时沿用元数据比较。 */
+  /** 普通文件必须有内容版本；符号链接只记录 link，不读取链接目标。 */
   contentVersion?: string
   mode: number
   link?: string
@@ -24,7 +24,7 @@ export type SandboxStampTable = Record<string, SandboxFileStamp>
  * files 是创建时源目录里每个文件的印记（落回前核对源目录有没有变过），mirror 是刚复制完镜像里每个条目的印记（算镜像相对创建时的变化）；两边修改时间不同，所以分两张表。
  */
 export interface SandboxManifest {
-  version: 1
+  version: 2
   record: SandboxRecord
   files: SandboxStampTable
   mirror: SandboxStampTable
@@ -45,4 +45,8 @@ export interface LocalSandboxEntry {
   directory: string
   /** 专属的受约束执行器，约束钉在镜像根。 */
   runner: ConfinedShellRunnerApi
+  /** 句柄关闭时取消准备阶段；已经开始的提交仍由操作自己收敛。 */
+  controller: AbortController
+  /** 正在借用镜像的操作；目录删除必须等它们全部收束。 */
+  operations: Set<Promise<unknown>>
 }

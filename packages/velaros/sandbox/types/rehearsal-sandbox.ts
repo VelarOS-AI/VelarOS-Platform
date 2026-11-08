@@ -13,7 +13,7 @@ export interface SandboxCreateOptions {
   ignored?: SandboxIgnoredMode
 }
 
-/** @AgentView 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 */
+/** @AgentView 一个沙箱：id 就是目录名，root 是镜像根，source 是被镜像的真实目录；只有经 sandbox.run 发起的命令才由此沙箱约束。 */
 export interface SandboxRecord {
   id: string
   root: string
@@ -61,7 +61,7 @@ export interface SandboxDiff {
   omittedDiffs: number
   note?: string
   /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在这之后又变过就整批不落。 */
-  fingerprint?: string
+  fingerprint: string
 }
 
 /** 落回源目录的选项：paths 只落这些相对路径，不给就全部；fingerprint 是落回前核对的那份差量的指纹，给了就先核对，镜像又变过就整批不落。 */

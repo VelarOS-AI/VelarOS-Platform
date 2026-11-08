@@ -11,7 +11,7 @@ declare module 'velaros:sandbox' {
 
   /**
    * 在镜像里跑一条命令，工作目录钉在镜像根。命令自己失败（非零退出、超时）是正常回执、不抛错，照 success 判。
-   * 危险命令（递归删除、丢未提交改动的 git 这类）照常先问用户，用户不点头就抛错、命令不跑。
+   * 危险命令（递归删除这类）照常先问用户，用户不点头就抛错、命令不跑。
    * 镜像里连不上网，除非建沙箱时把 network 开了。
    */
   export function run(input: SandboxRunInput): Promise<SandboxRunResult>
@@ -39,7 +39,7 @@ declare module 'velaros:sandbox' {
     ignored?: SandboxIgnoredMode
   }
 
-  /** 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 */
+  /** 一个沙箱：id 就是目录名，root 是镜像根，source 是被镜像的真实目录；只有经 sandbox.run 发起的命令才由此沙箱约束。 */
   interface SandboxRecord {
     id: string
     root: string
@@ -91,7 +91,7 @@ declare module 'velaros:sandbox' {
     omittedDiffs: number
     note?: string
     /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在这之后又变过就整批不落。 */
-    fingerprint?: string
+    fingerprint: string
   }
 
   /** 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部。 */

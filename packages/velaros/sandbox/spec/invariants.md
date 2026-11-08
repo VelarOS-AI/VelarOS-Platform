@@ -27,9 +27,10 @@ system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（
 | INV-8 | 差量与输出不折叠：`diff` 的三列永远完整，新增与修改的文本文件都附统一差量（`paths` 只要其中几个），镜像里命令的输出整份交回；只守内存的上限（单文件、单次差量总量、输出各一条），超出的点名没附差量或标 truncated，看多少由程序定 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | 本机演练沙箱里的命令一律受进程约束：`velaros:sandbox` 的 run（宿主端口的 `runInSandbox`）钉在镜像根，只能写镜像和沙箱自己的临时目录，写到源目录会失败；没有约束后端的宿主建不出沙箱（`SHELL_CONFINEMENT_UNAVAILABLE`），基目录下不留没有约束的副本；清单读不出来时拒绝执行（`NOT_FOUND`），不退回裸进程 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 落回只写清单记过的文件：源目录里任何一处自建沙箱以来变过就整批不落（`SANDBOX_CONFLICT`，not-applied，冲突列在 message 与 context 里）；任何一层的 `.git`（含嵌套仓库）永远不落 | 测试 | `spec/acceptance.test.ts` |
-| INV-11 | 丢弃沙箱只删沙箱基目录下面正好一层的目录：id 不合形状、这一项是符号链接、路径解开链接后不在基目录之下或就是基目录本身，一律拒绝；本来就不在的沙箱 removed 为 false，不算错 | 测试 | `spec/acceptance.test.ts` |
+| INV-11 | 丢弃沙箱只删沙箱基目录下面正好一层的目录：id 不合形状、这一项是符号链接、路径解开链接后不在基目录之下或就是基目录本身，一律拒绝；先拒绝新操作并等待已有操作及进程真实排空，清理失败保留 owner 和目录供重试；本来就不在的沙箱 removed 为 false，不算错 | 测试 | `spec/acceptance.test.ts`、`test/owner-lifecycle.test.ts` |
 | INV-12 | 镜像仓库推不出去：镜像里每个仓库（含嵌套仓库、子模块）的每个远端都被改成无效的推送地址，节头写法（CRLF、大小写、尾随空白、旧式 `[remote.x]`）不影响；指向源目录外真实仓库的 `.git` 链接文件不进镜像；网络缺省切断 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 落回只落核对过的那份差量：核对之后镜像又变过就整批不落（`SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 message 与 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-15 | 只读取当前格式清单，普通文件必须带完整内容版本；活动句柄读清单后核对源与镜像身份，磁盘改写不能切换已核权源。创建和重启加载共享宿主容量，返回记录为独立快照；关闭停止准入并保留未完成 owner。准备遍历与 IO 响应取消，已经开始提交后仍如实收敛写入事实 | 测试 | `test/owner-lifecycle.test.ts`、`test/preparation-cancel.test.ts`、`test/foundation-staging.test.ts` |
 
 2026-09-30 基础修复：INV-3 明确免人工确认仍要求空间路径核权；项目端口对 diff/run/apply/discard 的已知 ID 每次核对真实源目录，apply 进入项目写门。准备过程可取消，首个目标提交开始后按实际写入报告。新增回归见项目 `test/foundation-safety.test.ts`。

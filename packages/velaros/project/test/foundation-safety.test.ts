@@ -64,6 +64,7 @@ test('all project sandbox handle operations reject a known foreign source', asyn
   await mkdir(current)
   let effects = 0
   const host = {
+    getSandboxRecord: async () => ({ source: foreign }),
     diffSandbox: async () => ({
       sandboxId: 'known-id',
       source: foreign,
@@ -93,6 +94,7 @@ test('all project sandbox handle operations reject a known foreign source', asyn
     signal
   )
   for (const invoke of [
+    () => port.getSandboxRecord('known-id'),
     () => port.diffSandbox({ sandboxId: 'known-id' }),
     () => port.applySandbox({ sandboxId: 'known-id' }),
     () => port.runInSandbox({ sandboxId: 'known-id', command: 'true' }),
@@ -268,4 +270,43 @@ test('a missing sandbox is an idempotent discard without dispatching a delete', 
   )
   expect(await port.discardSandbox('known-id')).toEqual({ sandboxId: 'known-id', removed: false })
   expect(deletes).toBe(0)
+})
+
+test('sandbox metadata rechecks the current project without scanning the mirror', async () => {
+  const narrowRoot = join(root, 'narrow')
+  await mkdir(narrowRoot)
+  let projectRoot = root
+  let metadataReads = 0
+  let scans = 0
+  let runs = 0
+  const host = {
+    getSandboxRecord: async () => {
+      metadataReads += 1
+      return { source: root }
+    },
+    diffSandbox: async () => {
+      scans += 1
+      throw new AppError('INVARIANT', 'metadata does not require a mirror scan')
+    },
+    runInSandbox: async () => {
+      runs += 1
+      return {}
+    },
+  } as unknown as RehearsalSandboxHostPort
+  const port = projectCapabilityPorts.sandbox(
+    { getRootPath: () => projectRoot, sandbox: host } as ProjectHostPort,
+    new AbortController().signal
+  )
+  expect(await port.getSandboxRecord('known-id')).toMatchObject({ source: root })
+  projectRoot = narrowRoot
+  await expect(port.getSandboxRecord('known-id')).rejects.toMatchObject({ code: 'PERMISSION' })
+  await expect(port.runInSandbox({ sandboxId: 'known-id', command: 'pwd' })).rejects.toMatchObject({
+    code: 'PERMISSION',
+  })
+  const cancelled = new AbortController()
+  cancelled.abort()
+  await expect(port.getSandboxRecord('known-id', cancelled.signal)).rejects.toBeDefined()
+  expect(metadataReads).toBe(3)
+  expect(scans).toBe(0)
+  expect(runs).toBe(0)
 })

@@ -18,8 +18,6 @@ export const RehearsalSandboxLimits = Object.freeze({
   diffFileChars: 5_000_000,
   /** 一次 diff 的文本差量总共最多多少字符，同样只为守住内存；装不下的文件不附差量，用 paths 分几次看。 */
   diffTotalChars: 20_000_000,
-  /** apply 一次最多点名多少个路径。 */
-  applyPaths: 500,
   /** 沙箱 id 最长多少字符。 */
   idChars: 64,
   /** 拒绝落回时报错里最多点名几条路径。 */

@@ -53,32 +53,32 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
     const authorize = async (sandboxId: string, signal: AbortSignal) => {
       signal.throwIfAborted()
       const host = sandbox()
-      const record = host.getSandboxRecord
-        ? await host.getSandboxRecord(sandboxId, signal)
-        : await host.diffSandbox({ sandboxId, textDiffs: false }, signal)
+      const record = await host.getSandboxRecord(sandboxId, signal)
       await source(record.source)
       signal.throwIfAborted()
-      return host
+      return { host, record }
     }
     return {
+      getSandboxRecord: async (sandboxId, signal = abortSignal) =>
+        (await authorize(sandboxId, signal)).record,
       createSandbox: async (options, signal = abortSignal) => {
         const resolved = await source(options?.source)
         signal.throwIfAborted()
         return sandbox().createSandbox({ ...options, source: resolved }, signal)
       },
       diffSandbox: async (options, signal = abortSignal) => {
-        const host = await authorize(options.sandboxId, signal)
+        const { host } = await authorize(options.sandboxId, signal)
         return host.diffSandbox(options, signal)
       },
       applySandbox: (options, signal = abortSignal) =>
         this.gate.run(project.getRootPath(), true, signal, async () => {
-          const host = await authorize(options.sandboxId, signal)
+          const { host } = await authorize(options.sandboxId, signal)
           return host.applySandbox(options, signal)
         }),
       discardSandbox: async (sandboxId, signal = abortSignal) => {
         let host: RehearsalSandboxHostPort
         try {
-          host = await authorize(sandboxId, signal)
+          host = (await authorize(sandboxId, signal)).host
         } catch (error) {
           signal.throwIfAborted()
           if (AppError.from(error).code === 'NOT_FOUND') return { sandboxId, removed: false }
@@ -87,7 +87,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
         return host.discardSandbox(sandboxId, signal)
       },
       runInSandbox: async (options, signal = abortSignal) => {
-        const host = await authorize(options.sandboxId, signal)
+        const { host } = await authorize(options.sandboxId, signal)
         return host.runInSandbox(options, signal)
       },
       resolveSource: (requested) => source(requested),

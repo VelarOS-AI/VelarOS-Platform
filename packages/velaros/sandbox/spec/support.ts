@@ -92,10 +92,11 @@ export function systemSandboxSpace(
 ) {
   const asked: string[] = []
   const port: SandboxSurfacePort = {
-    createSandbox: (create) => host.createSandbox(create),
-    diffSandbox: (diff) => host.diffSandbox(diff),
-    applySandbox: (apply) => host.applySandbox(apply),
-    discardSandbox: (sandboxId) => host.discardSandbox(sandboxId),
+    getSandboxRecord: (sandboxId, signal) => host.getSandboxRecord(sandboxId, signal),
+    createSandbox: (create, signal) => host.createSandbox(create, signal),
+    diffSandbox: (diff, signal) => host.diffSandbox(diff, signal),
+    applySandbox: (apply, signal) => host.applySandbox(apply, signal),
+    discardSandbox: (sandboxId, signal) => host.discardSandbox(sandboxId, signal),
     runInSandbox: (run, abortSignal) => host.runInSandbox(run, abortSignal),
     resolveSource: async (source) => resolve(options.cwd, source ?? '.'),
   }

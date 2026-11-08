@@ -47,7 +47,7 @@ for (const mutation of ['source', 'mirror', 'staged', 'cancel-before-rename', 'n
       }));
       try {
         const { applyMirrorChanges, scanTree } = await import(${JSON.stringify(mirrorModule)});
-        const manifest = { version: 1, record: { id: 'fixture', source, root }, files: await scanTree(source), mirror: {} };
+        const manifest = { version: 2, record: { id: 'fixture', source, root }, files: await scanTree(source), mirror: {} };
         let outcome;
         try {
           outcome = { value: await applyMirrorChanges(manifest, {created: [], modified: ['note.txt'], deleted: []}, controller.signal) };
