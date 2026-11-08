@@ -1,12 +1,54 @@
 import { describe, expect, test } from 'bun:test'
 
 import { archive, journey, trial } from '../spec/support.js'
-import { labWire, RunArchiveSchemaId } from '../src/index.js'
+import { AgentLabLimits, labWire, RunArchiveSchemaId } from '../src/index.js'
 
 describe('public protocol', () => {
   test('accepts versioned continuous journeys and strict v3 archives', () => {
     expect(labWire.parseJourney(journey('journey-a', 2)).legs).toHaveLength(2)
     expect(labWire.parseRunArchive(archive()).manifest.schema).toBe(RunArchiveSchemaId)
+  })
+
+  test('uses the dedicated portable run directory identity without trimming or rewriting it', () => {
+    for (const runId of [
+      'r',
+      'run-1._ok',
+      'CON-note',
+      'COM0',
+      'LPT10',
+      'run_',
+      'run-',
+      '8edc8579-2e61-4e42-937b-3bb0563a4fb7',
+      'r'.repeat(AgentLabLimits.runIdChars),
+    ])
+      expect(labWire.parseRunArchive(archive({ runId })).manifest.runId).toBe(runId)
+
+    for (const runId of [
+      '',
+      '.',
+      '..',
+      'run:one',
+      '../run',
+      'run/one',
+      'run\\one',
+      'run.',
+      ' run',
+      'run ',
+      'run\n',
+      'CON',
+      'con.txt',
+      'PRN',
+      'aux.log',
+      'NUL.data',
+      'COM1',
+      'com9.log',
+      'LPT1',
+      'lpt9.txt',
+      'run+one',
+      '中文',
+      'r'.repeat(AgentLabLimits.runIdChars + 1),
+    ])
+      expect(() => labWire.parseRunArchive(archive({ runId }))).toThrow()
   })
 
   test('rejects duplicate leg and criterion identities', () => {

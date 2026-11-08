@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -23,6 +23,28 @@ async function withDirectory(verify: (root: string) => Promise<void>): Promise<v
 }
 
 describe('current archive boundaries and reports', () => {
+  test('rejects nonportable run directories before IO and preserves valid identity bytes', async () => {
+    await withDirectory(async (root) => {
+      for (const runId of ['run:one', 'run.', ' run', 'run ', '../escape']) {
+        await assert.rejects(labArchives.writeRunArchive(root, archive({ runId })), {
+          name: 'ZodError',
+        })
+        expect(await readdir(root)).toEqual([])
+      }
+      for (const runId of ['run-1._ok', '8edc8579-2e61-4e42-937b-3bb0563a4fb7']) {
+        const value = archive({ runId })
+        const path = await labArchives.writeRunArchive(root, value)
+        expect(path).toBe(join(root, runId, 'report.json'))
+        expect(await labArchives.readRunArchive(path)).toEqual(value)
+      }
+      const source = join(root, 'invalid.json')
+      const bytes = JSON.stringify(archive({ runId: 'bad:identity' }))
+      await writeFile(source, bytes)
+      await assert.rejects(labArchives.readRunArchive(source), { name: 'ZodError' })
+      expect(await readFile(source, 'utf8')).toBe(bytes)
+    })
+  })
+
   test('round-trips a strict v3 archive without rewriting its bytes', async () => {
     await withDirectory(async (root) => {
       const value = archive({ score: null })

@@ -39,6 +39,7 @@ import {
 } from '../utils/journey.js'
 import { createUnobservedObservation, normalizeObservation } from '../utils/measure/normalize.js'
 import { journeySpecSchema } from '../utils/wire/journey.js'
+import { runIdSchema } from '../utils/wire/primitives.js'
 
 import { BudgetLedger } from './BudgetLedger.js'
 
@@ -141,7 +142,7 @@ class JourneyRunner implements JourneyRunnerApi {
     }
 
     const now = options.now ?? Date.now
-    const runId = (options.createRunId ?? randomUUID)()
+    const runId = runIdSchema.parse((options.createRunId ?? randomUUID)())
     const startedAt = now()
     let preflightFailure: string | null = null
     const capabilities = await options.driver.capabilities().catch((error: unknown) => {

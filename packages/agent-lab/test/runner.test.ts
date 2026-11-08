@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict'
+
 import { describe, expect, test } from 'bun:test'
 
 import { FullCapabilities, journey, observation, trial } from '../spec/support.js'
@@ -8,6 +10,7 @@ import type {
   VerifierRegistryApi,
 } from '../src/index.js'
 import {
+  AgentLabLimits,
   createDetectorRegistry,
   createVerifierRegistry,
   journeyRunner,
@@ -68,6 +71,54 @@ function successfulDriver(prompts: string[], sessions: string[]): LabDriver {
 }
 
 describe('continuous journey runner', () => {
+  test('rejects invalid generated run identities before any driver interaction', async () => {
+    const prompts: string[] = []
+    const sessions: string[] = []
+    const effects: string[] = []
+    const driver = successfulDriver(prompts, sessions)
+    const identity = driver.identity
+    const openSession = driver.openSession
+    driver.capabilities = async () => {
+      effects.push('capabilities')
+      return FullCapabilities
+    }
+    driver.identity = async () => {
+      effects.push('identity')
+      return identity()
+    }
+    driver.openSession = async (spec) => {
+      effects.push('openSession')
+      return openSession(spec)
+    }
+    const verifiers = createVerifierRegistry()
+    verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+    const options = {
+      jobId: 'job',
+      suiteId: 'suite',
+      trial: trial(),
+      journey: journey(),
+      driver,
+      detectors: createDetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    }
+    for (const runId of ['run:one', 'run.', 'CON', ' run', 'run ']) {
+      await assert.rejects(journeyRunner.runJourney({ ...options, createRunId: () => runId }), {
+        name: 'ZodError',
+      })
+      expect(effects).toEqual([])
+      expect(prompts).toEqual([])
+      expect(sessions).toEqual([])
+    }
+    const runId = 'r'.repeat(AgentLabLimits.runIdChars)
+    const result = await journeyRunner.runJourney({ ...options, createRunId: () => runId })
+    expect(result.manifest.runId).toBe(runId)
+    expect(result.legs[0]?.passed).toBe(true)
+    expect(prompts).toEqual(['prompt 1'])
+  })
+
   test('advances every leg through one persistent native session', async () => {
     const prompts: string[] = []
     const sessions: string[] = []

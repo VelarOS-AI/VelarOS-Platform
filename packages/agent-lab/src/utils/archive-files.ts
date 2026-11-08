@@ -6,24 +6,12 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
-import { AgentLabLimits } from '../contract/constants.js'
 import type { DiscoveredRunArchive } from '../types/agent-lab.js'
 
 import { runArchiveSchema } from './wire/journey.js'
 
-/** run id 会当目录名用：只许字母数字开头，后面只许字母数字与 `. _ : -`，长度按常量表的上限卡。 */
-const SafeRunIdPattern = new RegExp(
-  `^[A-Za-z0-9][A-Za-z0-9._:-]{0,${AgentLabLimits.runIdChars - 1}}$`
-)
-
-/** 校验一个 run id 能不能当目录名；不能就当场报错，不去碰文件系统。 */
-export function assertSafeRunId(runId: string): void {
-  if (!SafeRunIdPattern.test(runId)) throw new Error(`run id 不安全，不能当目录名: ${runId}`)
-}
-
-/** 一份运行归档在归档根下的路径：`<root>/<runId>/report.json`。 */
+/** 当前 schema 已校验的运行归档路径：`<root>/<runId>/report.json`。 */
 export function runArchivePath(root: string, runId: string): string {
-  assertSafeRunId(runId)
   return join(resolve(root), runId, 'report.json')
 }
 
