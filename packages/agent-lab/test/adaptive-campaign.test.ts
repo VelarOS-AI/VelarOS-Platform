@@ -62,6 +62,70 @@ function fixedFailure(classification: CampaignRootCauseClass, proofTaskIds: read
 }
 
 describe('adaptive real-task campaign', () => {
+  test('rejects duplicate revision claims before sampling or a blocked-failure short circuit', () => {
+    const cases = [task('a'), task('b')]
+    const failures = adaptiveCampaign.recordFailure({
+      failures: [],
+      key: 'revision:fixture',
+      classification: 'evaluation-design',
+      capability: 'system.a',
+      taskId: 'a',
+      detail: 'unresolved fixture',
+      now: 1,
+    })
+    for (const revision of ['r1', 'r2']) {
+      const claims = [
+        { taskId: 'a', revision: 'r1' },
+        { taskId: 'a', revision },
+        { taskId: 'b', revision: 'r1' },
+      ]
+      for (const revisions of [claims, [...claims].reverse()]) {
+        for (const pendingFailures of [[], failures]) {
+          expect(() =>
+            adaptiveCampaign.selectTasks({
+              cases,
+              revisions,
+              evidence: [],
+              failures: pendingFailures,
+              limit: 2,
+            })
+          ).toThrow('每条战役用例必须且只能有一个修订版')
+        }
+      }
+    }
+    for (const revisions of [
+      [{ taskId: 'a', revision: 'r1' }],
+      [
+        { taskId: 'a', revision: 'r1' },
+        { taskId: 'unknown', revision: 'r1' },
+      ],
+    ])
+      expect(() =>
+        adaptiveCampaign.selectTasks({ cases, revisions, evidence: [], failures: [], limit: 2 })
+      ).toThrow()
+
+    const selection = adaptiveCampaign.selectTasks({
+      cases,
+      revisions: cases.map((entry) => ({ taskId: entry.id, revision: 'r2' })),
+      evidence: [
+        { taskId: 'a', taskRevision: 'r1', outcome: 'pass', failureKey: null, updatedAt: 99 },
+        { taskId: 'a', taskRevision: 'r2', outcome: 'pass', failureKey: null, updatedAt: 1 },
+        {
+          taskId: 'a',
+          taskRevision: 'r2',
+          outcome: 'fail',
+          failureKey: 'revision:fixture',
+          updatedAt: 2,
+        },
+        { taskId: 'b', taskRevision: 'r2', outcome: 'pass', failureKey: null, updatedAt: 1 },
+      ],
+      failures: [],
+      limit: 2,
+    })
+    expect(selection.reusedTaskIds).toEqual(['b'])
+    expect(selection.selected.map((entry) => entry.id)).toEqual(['a'])
+  })
+
   test('reuses current passes and chooses diverse unseen evidence', () => {
     const cases = [
       task('a'),

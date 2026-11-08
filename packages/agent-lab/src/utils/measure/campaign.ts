@@ -84,7 +84,8 @@ export function selectAdaptiveCampaignTasks(
   input: AdaptiveCampaignInput
 ): AdaptiveCampaignSelection {
   const revisions = new Map(input.revisions.map((entry) => [entry.taskId, entry.revision]))
-  if (revisions.size !== input.cases.length) throw new Error('每条战役用例必须且只能有一个修订版')
+  if (input.revisions.length !== input.cases.length || revisions.size !== input.cases.length)
+    throw new Error('每条战役用例必须且只能有一个修订版')
   const ids = new Set(input.cases.map((task) => task.id))
   if (ids.size !== input.cases.length) throw new Error('战役用例的 id 必须唯一')
   for (const id of ids) {
