@@ -34,9 +34,6 @@ describe('跨平台兼容层', () => {
       args: ['-lc', 'echo ready'],
     })
     expect(macOS.getProcessTreeKillCommandSpec(42, 'SIGKILL')).toBeNull()
-    expect(macOS.getDefaultAppDataPath('VelarOS', { homeDir: '/Users/example' })).toBe(
-      '/Users/example/Library/Application Support/VelarOS'
-    )
 
     expect(currentPlatform.getPlatform()).toBe(process.platform)
   })
@@ -51,6 +48,8 @@ describe('跨平台兼容层', () => {
     const windows = createPlatform({ platform: 'win32' })
     expect(windows.relativePathTextInside('c:\\WORK\\app\\a', 'C:/work/app')).toBe('a')
     expect(windows.isPathTextInside('C:work\\app', 'C:\\')).toBe(false)
+    expect(windows.isPathTextInside('C:', 'C:\\')).toBe(false)
+    expect(windows.isPathTextInside('C:\\work', 'C:')).toBe(false)
     expect(
       createPlatform({ platform: 'darwin' }).isPathTextInside('/Work/App', '/work/app', {
         caseSensitive: true,

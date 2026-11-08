@@ -8,7 +8,6 @@ export type { PlatformCompatibilityApi } from './impl/PlatformCompatibility.js'
 export { createPlatform, currentPlatform } from './impl/PlatformCompatibility.js'
 export type { VelarOSSharedResourcesApi } from './impl/VelarOSSharedResources.js'
 export type {
-  DefaultAppDataPathOptions,
   PathTextContainmentOptions,
   PlatformCompatibilityOptions,
   ShellCommandSpecOptions,

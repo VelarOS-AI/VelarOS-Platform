@@ -6,13 +6,11 @@
 import { isEmpty, isNotNull, isPlainObject } from '@velaros-ai/core'
 
 import type {
-  DefaultAppDataPathOptions,
   PathTextContainmentOptions,
   PlatformCompatibilityOptions,
   ShellCommandSpecOptions,
 } from '../types/options.js'
 import type {
-  BackgroundShellLaunchOptions,
   CommandSpec,
   DirectorySymlinkType,
   EditorCommandDefinition,
@@ -28,7 +26,6 @@ import {
   isPathTextSeparator,
   isWindowsAbsolutePathText,
   preferredPosixShellPath,
-  quotePosixSingle,
   quoteShellArgument,
   readCurrentProcess,
   readPathEnvironmentValue,
@@ -38,7 +35,7 @@ import {
 } from '../utils/platform.js'
 
 /**
- * 跨平台兼容层：同一个问题按平台给出统一答案——路径文本怎么比、shell 怎么调、进程怎么查怎么杀、应用和数据目录在哪。
+ * 跨平台兼容层：同一个问题按平台给出统一答案——路径文本怎么比、shell 怎么调、进程怎么查怎么杀、文件与应用怎么打开。
  *
  * `currentPlatform` 是按当前进程创建的一份，要按别的平台或环境变量回答时用 `createPlatform(options)`。产品壳和本包都用它，不自己再判断平台。
  * 构造时可以指定平台和环境变量，在一台机器上算出另一个平台的答案。只算文本和命令规格，不读写磁盘、不启动进程，渲染进程也能用。
@@ -114,8 +111,6 @@ export interface PlatformCompatibilityApi {
 
   /** 启动子进程时是否放进独立的进程组：POSIX 是，便于整组终止；Windows 否。 */
   shouldUseDetachedProcessGroup(): boolean
-  /** 发信号时用的 pid：POSIX 用负数表示整个进程组，Windows 原样返回。 */
-  getProcessKillPid(pid: number): number
   /** 这个错误是否表示「目标进程已经不在了」（ESRCH）；终止进程时据此把竞态当成已经退出。 */
   isProcessMissingError(error: unknown): boolean
   /** 给人看的终止命令：Windows 用 taskkill 终止整棵进程树（force 时加 /F），其他平台用 kill -TERM 或 kill -KILL。 */
@@ -124,12 +119,8 @@ export interface PlatformCompatibilityApi {
     force?: boolean,
     options?: ShellCommandSpecOptions
   ): Nullable<string>
-  /** 按命令行文本兜底终止的命令（pkill -f，只取命令前 120 个字符）；Windows 没有，返回 null。 */
-  getFallbackTerminateCommand(command: string): Nullable<string>
   /** Windows 上终止整棵进程树的 taskkill 启动规格；不是 Windows 或 pid 不合法时返回 null。 */
   getProcessTreeKillCommandSpec(pid: number, signal: NodeJS.Signals): Nullable<CommandSpec>
-  /** 在后台启动一条 shell 命令、把输出追加进日志文件并打印 pid 的命令文本（nohup）；Windows 原样返回命令。 */
-  getBackgroundShellLaunchCommand(options: BackgroundShellLaunchOptions): Nullable<string>
 
   // 读系统信息用的平台命令
 
@@ -159,8 +150,6 @@ export interface PlatformCompatibilityApi {
     path: string,
     editor: EditorCommandDefinition
   ): Nullable<CommandSpec>
-  /** 应用数据目录的默认位置：Windows 在 APPDATA，macOS 在 ~/Library/Application Support，Linux 在 XDG_CONFIG_HOME 或 ~/.config。 */
-  getDefaultAppDataPath(appName: string, options?: DefaultAppDataPathOptions): string
   /** 目录符号链接用哪种类型：Windows 用 junction（不需要管理员权限），其他平台用 dir。 */
   getDirectorySymlinkType(): DirectorySymlinkType
   /** 所有窗口都关掉之后怎么办：macOS 保持应用运行，其他平台调用 quit 退出。 */
@@ -359,10 +348,6 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
     return !this.isWindows()
   }
 
-  public getProcessKillPid(pid: number): number {
-    return this.isWindows() ? pid : -pid
-  }
-
   /** Node 通常把 ESRCH 放在 code 上，少数宿主和测试替身只留下正负 errno 3；统一在这里认，调用方不各自解释进程竞态。 */
   public isProcessMissingError(error: unknown): boolean {
     if (!isPlainObject(error)) return false
@@ -382,26 +367,12 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
     return force ? `kill -KILL ${pid}` : `kill -TERM ${pid}`
   }
 
-  public getFallbackTerminateCommand(command: string): Nullable<string> {
-    if (this.isWindows()) return null
-    const normalized = command.replace(/\s+/g, ' ').trim().slice(0, 120)
-    return normalized ? `pkill -f ${quotePosixSingle(normalized)}` : null
-  }
-
   public getProcessTreeKillCommandSpec(pid: number, signal: NodeJS.Signals): Nullable<CommandSpec> {
     if (!this.isWindows() || !Number.isInteger(pid) || pid <= 0) return null
     return {
       file: 'taskkill',
       args: ['/PID', String(pid), '/T', ...(signal === 'SIGKILL' ? ['/F'] : [])],
     }
-  }
-
-  public getBackgroundShellLaunchCommand(options: BackgroundShellLaunchOptions): Nullable<string> {
-    if (this.isWindows()) return options.command
-    const quotedShell = quotePosixSingle(options.shellPath)
-    const quotedLogPath = quotePosixSingle(options.logPath)
-    const quotedCommand = quotePosixSingle(`exec ${options.command}`)
-    return `nohup ${quotedShell} -lc ${quotedCommand} >> ${quotedLogPath} 2>&1 & printf "${options.pidMarker}%s\\n" "$!"`
   }
 
   public getProcessListCommandSpec(): Nullable<CommandSpec> {
@@ -492,24 +463,6 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
       }
     if (editor.command) return { file: editor.command, args: [path] }
     return null
-  }
-
-  public getDefaultAppDataPath(appName: string, options: DefaultAppDataPathOptions = {}): string {
-    const env = options.env ?? this.env
-    const homeDir = options.homeDir?.trim()
-
-    if (this.isWindows()) {
-      const root =
-        env.APPDATA?.trim() || (homeDir ? this.joinPathText(homeDir, 'AppData', 'Roaming') : '')
-      return root ? this.joinPathText(root, appName) : appName
-    }
-    if (this.isMacOS())
-      return homeDir
-        ? this.joinPathText(homeDir, 'Library', 'Application Support', appName)
-        : appName
-    const root =
-      env.XDG_CONFIG_HOME?.trim() || (homeDir ? this.joinPathText(homeDir, '.config') : '')
-    return root ? this.joinPathText(root, appName) : appName
   }
 
   public getDirectorySymlinkType(): DirectorySymlinkType {
