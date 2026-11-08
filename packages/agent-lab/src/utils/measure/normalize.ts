@@ -9,11 +9,36 @@ import type {
 } from '../../contract/constants.js'
 import { ObservationFaces } from '../../contract/constants.js'
 import type {
+  JsonObject,
+  JsonValue,
   Observation,
   ToolCallRecord,
   TranscriptBlock,
   TurnRecord,
 } from '../../types/agent-lab.js'
+import { canonicalJson } from '../canonical-json.js'
+
+/** JSON 对象才有操作与页身份；数组和 null 不是工具参数对象。 */
+function isJsonObject(value: JsonValue): value is JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** 重试必须有已知参数；空参数打断连续段，不拿缺失参数猜同一次操作。 */
+export function retryCallKey(call: ToolCallRecord): string | null {
+  if (call.input === null) return null
+  const input = canonicalJson(call.input)
+  return input === '{}' ? null : `${call.name}\u0000${input}`
+}
+
+/** 宿主目录工具的 read 页身份；find 与无关参数不改变目录页计数。 */
+export function catalogReadPageKey(
+  call: ToolCallRecord,
+  catalogToolNames: ReadonlySet<string>
+): string | null {
+  if (!catalogToolNames.has(call.name) || !isJsonObject(call.input) || call.input.op !== 'read')
+    return null
+  return canonicalJson(call.input.ids ?? call.input.id ?? '')
+}
 
 /** 按 `id` 去重，保留第一次出现的那条。 */
 function deduplicateById<T extends { readonly id: string }>(items: readonly T[]): readonly T[] {

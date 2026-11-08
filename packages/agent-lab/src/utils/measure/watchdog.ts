@@ -11,28 +11,35 @@ import type {
 import type { ResolvedDetectorSettings, WatchdogSignal } from '../../types/internal.js'
 import { canonicalJson } from '../canonical-json.js'
 
-import { collectToolCalls, normalizeObservation } from './normalize.js'
+import {
+  catalogReadPageKey,
+  collectToolCalls,
+  normalizeObservation,
+  retryCallKey,
+} from './normalize.js'
 
 /** 数出这一刻的三类打转信号：同一工具连续重复、同一目录页重复读、单轮工具调用密度。 */
 function signalCounts(
   observation: Observation,
   settings: ResolvedDetectorSettings
 ): readonly WatchdogSignal[] {
+  if (observation.coverage.turns !== 'full') return []
   const { thresholds } = settings
   const catalogToolNames = new Set(settings.catalogToolNames)
   const calls = collectToolCalls(observation)
   const repeatCounts = new Map<string, number>()
   const catalogCounts = new Map<string, number>()
-  let previousRetryKey: string | null = null
-  let consecutiveRetryCount = 0
+  let retryRun: { key: string; firstCallId: string; count: number } | null = null
   for (const call of calls) {
-    const input = canonicalJson(call.input)
-    const retryKey = `${call.name}\u0000${input}`
-    consecutiveRetryCount = retryKey === previousRetryKey ? consecutiveRetryCount + 1 : 1
-    repeatCounts.set(retryKey, Math.max(repeatCounts.get(retryKey) ?? 0, consecutiveRetryCount))
-    previousRetryKey = retryKey
-    if (catalogToolNames.has(call.name))
-      catalogCounts.set(input, (catalogCounts.get(input) ?? 0) + 1)
+    const key = retryCallKey(call)
+    if (key === null) retryRun = null
+    else {
+      if (retryRun !== null && retryRun.key === key) retryRun.count += 1
+      else retryRun = { key, firstCallId: call.id, count: 1 }
+      repeatCounts.set(canonicalJson([retryRun.key, retryRun.firstCallId]), retryRun.count)
+    }
+    const page = catalogReadPageKey(call, catalogToolNames)
+    if (page !== null) catalogCounts.set(page, (catalogCounts.get(page) ?? 0) + 1)
   }
 
   const signals: WatchdogSignal[] = []
@@ -42,7 +49,7 @@ function signalCounts(
       key: `retry:${key}`,
       count,
       abortAt: thresholds.retryAbort,
-      reason: `同一工具与参数在本次等待窗口连续重复 ${count} 次`,
+      reason: `同一工具与参数连续重复 ${count} 次`,
     })
   }
   for (const [key, count] of catalogCounts) {
@@ -51,7 +58,7 @@ function signalCounts(
       key: `toolmap:${key}`,
       count,
       abortAt: thresholds.toolMapReadAbort,
-      reason: `同一工具目录页在本次等待窗口读取 ${count} 次`,
+      reason: `同一工具目录页累计读取 ${count} 次`,
     })
   }
   for (const turn of normalizeObservation(observation).turns) {
@@ -60,7 +67,7 @@ function signalCounts(
       key: `turn:${turn.id}`,
       count: turn.toolCalls.length,
       abortAt: thresholds.turnDensityAbort,
-      reason: `单轮工具调用在本次等待窗口达到 ${turn.toolCalls.length} 次`,
+      reason: `单轮工具调用达到 ${turn.toolCalls.length} 次`,
     })
   }
   return signals
@@ -79,11 +86,14 @@ export function createWatchdogBaseline(
   settings: ResolvedDetectorSettings
 ): WatchdogBaseline {
   return {
-    counts: Object.fromEntries(
-      signalCounts(observation, settings)
-        .filter((signal) => activeDetectorIds.has(signal.detectorId))
-        .map((signal) => [signal.key, signal.count])
-    ),
+    counts:
+      observation.coverage.turns === 'full'
+        ? Object.fromEntries(
+            signalCounts(observation, settings)
+              .filter((signal) => activeDetectorIds.has(signal.detectorId))
+              .map((signal) => [signal.key, signal.count])
+          )
+        : null,
     findingKeys: findings
       .filter((finding) => activeDetectorIds.has(finding.detectorId))
       .map(findingKey),
@@ -101,11 +111,17 @@ export function selectAbortCandidate(
   activeDetectorIds: ReadonlySet<string>,
   settings: ResolvedDetectorSettings
 ): WatchdogAbort | null {
-  for (const signal of signalCounts(observation, settings).filter((item) =>
-    activeDetectorIds.has(item.detectorId)
-  )) {
-    const delta = signal.count - (baseline.counts[signal.key] ?? 0)
-    if (delta >= signal.abortAt) return { detectorId: signal.detectorId, reason: signal.reason }
+  if (baseline.counts !== null) {
+    for (const signal of signalCounts(observation, settings).filter((item) =>
+      activeDetectorIds.has(item.detectorId)
+    )) {
+      const delta = signal.count - (baseline.counts[signal.key] ?? 0)
+      if (delta >= signal.abortAt)
+        return {
+          detectorId: signal.detectorId,
+          reason: `${signal.reason}（当前等待窗口新增 ${delta} 次）`,
+        }
+    }
   }
   const baselineFindings = new Set(baseline.findingKeys)
   const fatal = findings.find(

@@ -524,7 +524,8 @@ export interface BuiltinDetectorOptions {
 
 /** 进入一次等待窗口前记下的基线：窗口内只看增量，不把上一段攒的次数算到这一段头上。 */
 export interface WatchdogBaseline {
-  readonly counts: Readonly<Record<string, number>>
+  /** 完整观测才有计数基线；null 表示无法证明本窗口新增了多少，不是空历史。 */
+  readonly counts: Readonly<Record<string, number>> | null
   readonly findingKeys: readonly string[]
 }
 

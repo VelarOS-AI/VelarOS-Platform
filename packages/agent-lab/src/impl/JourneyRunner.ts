@@ -20,7 +20,6 @@ import type {
   RunArchive,
   SessionHandle,
   SettleOutcome,
-  WatchdogBaseline,
 } from '../types/agent-lab.js'
 import type { RunJourneyOptions } from '../types/options.js'
 import { resolveBudget } from '../utils/budget.js'
@@ -204,12 +203,16 @@ class JourneyRunner implements JourneyRunnerApi {
             const baseline = normalizeObservation(await options.driver.collect(openSession, 'idle'))
             ledger.observe(baseline)
             const legLedger = ledger.beginLeg(baseline, legStartedAt)
-            let watchdogBaseline: WatchdogBaseline | null = null
+            const activeWatchdogDetectorIds = new Set(journey.gatingDetectorIds)
+            const watchdogBaseline = options.detectors.watchdogBaseline(
+              baseline,
+              options.detectors.detect(baseline, { trial: options.trial, journey, leg }),
+              activeWatchdogDetectorIds
+            )
             // 用一个容器装：中止是在 onSample 回调里定的，闭包外面要读得到它。
             const interruption: {
               outcome: Extract<SettleOutcome, { kind: 'aborted' | 'budget-exhausted' }> | null
             } = { outcome: null }
-            const activeWatchdogDetectorIds = new Set(journey.gatingDetectorIds)
 
             const initialBudgetLimit =
               legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget)
@@ -251,14 +254,6 @@ class JourneyRunner implements JourneyRunnerApi {
                     if (capabilities.canAbortMidRun)
                       await options.driver.abort(openSession, abort.reason)
                     return { kind: 'abort', ...abort }
-                  }
-                  if (!watchdogBaseline) {
-                    watchdogBaseline = options.detectors.watchdogBaseline(
-                      observation,
-                      sampleFindings,
-                      activeWatchdogDetectorIds
-                    )
-                    return { kind: 'continue' }
                   }
                   const candidate = options.detectors.watchdogAbort(
                     observation,
