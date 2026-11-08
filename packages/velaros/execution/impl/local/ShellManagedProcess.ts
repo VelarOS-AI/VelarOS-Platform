@@ -7,7 +7,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
-import { isNumber } from '@velaros-ai/core'
+import { isFalse, isNumber } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ShellTerminalProcess } from '../../contract/requires.js'
@@ -132,7 +132,7 @@ export class ShellManagedProcess implements ManagedShellProcess {
       } finally {
         retryTimers.dispose()
       }
-      return this.exited
+      return this.exited && isFalse(this.result?.cleanupIncomplete)
     }
     this.requestStop(requestedSignal)
     const result = await this.completion

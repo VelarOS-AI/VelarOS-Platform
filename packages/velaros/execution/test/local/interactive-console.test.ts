@@ -14,9 +14,12 @@ import type {
 import type { LocalShellHostApi } from '../../impl/local/LocalShellHost.js'
 import { createLocalShellHost } from '../../impl/local/LocalShellHost.js'
 import { shellProcessManager } from '../../impl/local/ShellProcessManager.js'
-import type { ShellConsoleOutputEvent } from '../../types/shell-command.js'
+import type {
+  ShellBackgroundTaskRecord,
+  ShellConsoleOutputEvent,
+} from '../../types/shell-command.js'
 import { plainTerminalText, readBoundedOutputSince } from '../../utils/output.js'
-import { plainTerminalText } from '../../utils/output.js'
+import { terminateProcessTree } from '../../utils/process.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
 /**
@@ -74,6 +77,17 @@ class FakeTerminal implements ShellTerminalProcess {
 /** 等一小会儿，给子进程写输出、响应信号的时间。 */
 const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** 只把进程不存在视为退出；权限或其他系统错误不能冒充回收成功。 */
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false
+    throw error
+  }
+}
+
 /** 一直读控制台的增量输出，直到看到想要的那段或超时；返回到目前为止读到的全部文本。 */
 async function readUntil(
   kernel: LocalShellHostApi,
@@ -94,7 +108,7 @@ async function readUntil(
   throw new Error(`控制台在 ${timeoutMs}ms 内没有出现「${needle}」，读到的是：${text}`)
 }
 
-/** 一直等到任务不再是 running。 */
+/** 等到完整收尾；unknown 仍可能是根进程已退、继承管道尚未关闭。 */
 async function waitUntilExited(
   kernel: LocalShellHostApi,
   taskId: string,
@@ -105,13 +119,82 @@ async function waitUntilExited(
   while (Date.now() < deadline) {
     const [task] = await kernel.listBackgroundTasks({ taskId })
     status = task?.status ?? 'unknown'
-    if (status !== 'running') return status
+    if (status === 'exited') return status
     await tick(25)
   }
   return status
 }
 
 describe('交互式命令的控制台', () => {
+  test.skipIf(process.platform !== 'win32')(
+    'INV-19 Windows 管道中断终止真实父子进程并等待继承的输出管道关闭',
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'velaros-console-tree-中文 '))
+      const script = join(directory, 'parent.cjs')
+      const kernel = createLocalShellHost({ cwd: directory })
+      let pids: number[] = []
+      const states: ShellBackgroundTaskRecord[] = []
+      try {
+        await writeFile(
+          script,
+          `
+const { spawn } = require('node:child_process')
+const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+  stdio: ['ignore', 'inherit', 'inherit'], windowsHide: true,
+})
+child.once('spawn', () => process.stdout.write(JSON.stringify({ parent: process.pid, child: child.pid }) + '\\nREADY\\n'))
+setInterval(() => {}, 1000)
+`
+        )
+        const started = await kernel.runCommand('managed parent and child', {
+          nativeCommand: { file: process.execPath, args: [script] },
+          background: true,
+          interactive: true,
+          sessionId: 'console-owner',
+          onBackgroundTaskState: (task) => {
+            states.push(task)
+          },
+        })
+        const taskId = started.backgroundProcess!.taskId!
+        expect(started.backgroundProcess!.console!.channel).toBe('pipe')
+        const output = await readUntil(kernel, taskId, 'READY')
+        const ids = /\{"parent":(\d+),"child":(\d+)\}/u.exec(output.text)
+        expect(ids).not.toBeNull()
+        pids = [Number(ids![1]), Number(ids![2])]
+        expect(pids.every(processExists)).toBe(true)
+        await expect(
+          kernel.interruptConsole({ taskId, sessionId: 'other-session' })
+        ).rejects.toMatchObject({ code: 'PERMISSION' })
+        expect(pids.every(processExists)).toBe(true)
+
+        const interrupted = await kernel.interruptConsole({ taskId, sessionId: 'console-owner' })
+        expect(interrupted).toMatchObject({ accepted: true, status: 'exited' })
+        expect(interrupted.message).toContain('终止受管进程树')
+        const [task] = await kernel.listBackgroundTasks({ taskId })
+        expect(task).toMatchObject({
+          status: 'exited',
+          cleanupIncomplete: false,
+          console: { acceptsInput: false },
+        })
+        expect(task!.finishedAt).toBeNumber()
+        expect(states.map((state) => state.status)).toEqual(['running', 'exited'])
+        expect(await kernel.readConsoleOutput({ taskId })).toMatchObject({
+          status: 'exited',
+          acceptsInput: false,
+        })
+        const deadline = Date.now() + 5_000
+        while (pids.some(processExists) && Date.now() < deadline) await tick(25)
+        expect(pids.filter(processExists)).toEqual([])
+      } finally {
+        await kernel.dispose()
+        for (const pid of pids)
+          if (processExists(pid)) await terminateProcessTree(pid, 'SIGKILL', { platform: 'win32' })
+        await rm(directory, { recursive: true, force: true })
+      }
+    },
+    20_000
+  )
+
   test('cursor 之后的增量输出如实给出，缓冲区挤掉的部分报成 droppedChars', () => {
     // 一共产生了 10 个字符，缓冲区只留下末尾 4 个。
     const since = readBoundedOutputSince('6789', 10, 8)

@@ -37,6 +37,10 @@ try {
 
 共享登录环境由应用创建并负责关闭，工作区宿主借用它。执行结束或取消时回收所属进程树；Windows 使用 Job Object，交互终端由 PTY 提供者管理。输出按字节接收后解码 UTF-8，并如实保留退出、截断和清理状态。
 
+控制台中断在 PTY 中发送 Ctrl+C，在 POSIX 管道中发送 SIGINT；Windows 管道没有终端软中断，核对受管身份后强制终止进程树并等待退出及管道关闭。根进程退出但管道仍未收齐，以及有界清理未完成，任务状态均为 `unknown`；只有真实、完整的收尾回执才报告 `exited`。未确认任务保留其资源归属，不计入可淘汰的已结束历史。
+
+宿主可通过每次命令的 `onBackgroundTaskState` 观察后台任务登记与真实有界收尾；回调在记录写入后、历史裁剪前收到独立副本，任务很快完成也不会漏掉终态。观察方失败不改变进程事实，也不阻断收尾。`dispose()` 等待实际收尾；未确认任务保留记录并以 `PLATFORM` 失败，失败后仍可查询和重试，不以清空任务表冒充回收完成。
+
 `createNpmClient` 使用宿主提供的 Node、npm CLI、私有缓存和 ShellHostPort 查询 registry、安装或按锁文件恢复依赖；沿用宿主约束、输出、取消与进程树回收。Skill 安装和 agent 自管环境共用此执行机制。
 
 本机命令回执的 `ownership.cleanupScope` 声明实际清理边界：POSIX 为原进程组，Windows 原生 Job 宿主为 Job，Windows 回退为当前可见进程树。`detachedDescendants: unknown` 表示脱组后代的收束未确认，`cleanupIncomplete: false` 和根命令退出 0 均不能证明它们已结束。长期工作使用受管后台任务的身份、输出和停止回执；进程组清理不承担未登记后台服务的生命周期。

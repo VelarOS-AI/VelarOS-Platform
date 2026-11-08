@@ -4,16 +4,23 @@
  * 本机实现（`./local` 入口：本机宿主、受约束执行器）的承诺也在这里验收，用的是真宿主、真进程（INV-11～INV-16）。
  */
 import { existsSync } from 'node:fs'
-import { mkdtemp, realpath } from 'node:fs/promises'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
+import { createPlatform } from '@velaros-ai/core/platform'
+
+import type { ShellTerminalFactory } from '../contract/requires'
+import { ShellCommandRunner } from '../impl/local/ShellCommandRunner'
+import type { ManagedShellProcess } from '../impl/local/ShellManagedProcess'
+import type { ShellProcessManagerApi } from '../impl/local/ShellProcessManager'
 import { shellProcessManager } from '../impl/local/ShellProcessManager'
-import type { ShellProcessConfinementEvidence } from '../index'
+import type { ShellResolverApi } from '../impl/local/ShellResolver'
+import { shellResolver } from '../impl/local/ShellResolver'
+import type { ShellBackgroundTaskRecord, ShellProcessConfinementEvidence } from '../index'
 import {
   shellCommandApproval,
   ShellCommandOperationKind,
@@ -22,8 +29,58 @@ import {
 } from '../index'
 import { createConfinedShellRunner, createLocalShellHost, createShellEnvironment } from '../local'
 import { buildConfinedSpawnSpec } from '../utils/confinement'
+import { terminateProcessTree } from '../utils/process'
+import { ShellTuning } from '../utils/tuning'
 
 import { canConfine, fakeChild } from './support'
+
+/** 真子进程照常退出，只推迟向受管 owner 交付 close，精确覆盖退出与管道收尾之间的边界。 */
+function delayedCloseRunner(drainTimeoutMs: number): {
+  runner: ShellCommandRunner
+  closed: Promise<void>
+  owned(): ManagedShellProcess
+  release(): void
+} {
+  const closed = Promise.withResolvers<void>()
+  let observed!: ReturnType<typeof fakeChild>
+  let managed!: ManagedShellProcess
+  let exit!: { code: Nullable<number>; signal: Nullable<NodeJS.Signals> }
+  const processes: ShellProcessManagerApi = {
+    manage: (child, options) => {
+      observed = Object.assign(fakeChild(), { pid: child.pid })
+      managed = shellProcessManager.manage(observed, {
+        ...options,
+        platform: 'win32',
+        drainTimeoutMs,
+        terminate: (signal) =>
+          terminateProcessTree(child.pid!, signal, { platform: process.platform }),
+      })
+      child.once('exit', (code, signal) => observed.emit('exit', code, signal))
+      child.once('close', (code, signal) => {
+        exit = { code, signal }
+        closed.resolve()
+      })
+      return managed
+    },
+    manageTerminal: shellProcessManager.manageTerminal.bind(shellProcessManager),
+    find: shellProcessManager.find.bind(shellProcessManager),
+    captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
+    resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
+    stopAll: shellProcessManager.stopAll.bind(shellProcessManager),
+  }
+  return {
+    runner: new ShellCommandRunner({
+      platform: process.platform,
+      platformTools: createPlatform({ platform: process.platform, env: process.env }),
+      confinement: { mode: 'danger-full-access', workspaceRoot: process.cwd() },
+      shells: shellResolver,
+      processes,
+    }),
+    closed: closed.promise,
+    owned: () => managed,
+    release: () => observed.emit('close', exit.code, exit.signal),
+  }
+}
 
 describe('只读与危险判定', () => {
   test('INV-1 白名单命令一旦带写盘参数，整条掉出只读', () => {
@@ -473,6 +530,226 @@ describe('本机宿主：进程生命周期', () => {
     expect(child.stdout!.destroyed).toBe(true)
     expect(await owned.stop('SIGKILL')).toBe(false)
   })
+
+  for (const cleanupIncomplete of [false, true]) {
+    test(`INV-19 后台任务只按真实完整 close 报 exited（清理未完成=${cleanupIncomplete}）`, async () => {
+      const f = delayedCloseRunner(cleanupIncomplete ? 15 : 5_000)
+      const states: ShellBackgroundTaskRecord[] = []
+      try {
+        const started = await f.runner.run('controlled close', process.cwd(), {
+          background: true,
+          interactive: true,
+          sessionId: 'close-owner',
+          onBackgroundTaskState: (task) => {
+            states.push(task)
+          },
+          nativeCommand: {
+            file: process.execPath,
+            args: ['-e', 'setTimeout(() => process.exit(7), 100)'],
+          },
+        })
+        const taskId = started.backgroundProcess!.taskId!
+        await f.closed
+        expect(f.owned().exited).toBe(true)
+        expect(f.runner.listTasks({ taskId })[0]!.status).toBe('unknown')
+        expect(f.runner.listTasks({ onlyRunning: true })).toEqual([])
+        const interrupted = await f.runner.interruptConsole({ taskId, sessionId: 'close-owner' })
+        expect(interrupted).toMatchObject({ accepted: false, status: 'unknown' })
+        expect(interrupted.message).toContain('尚未确认')
+
+        if (!cleanupIncomplete) f.release()
+        const result = await f.owned().completion
+        expect(result.exitCode).toBe(7)
+        expect(result.cleanupIncomplete).toBe(cleanupIncomplete)
+        const [task] = f.runner.listTasks({ taskId })
+        expect(task).toMatchObject({
+          status: cleanupIncomplete ? 'unknown' : 'exited',
+          exitCode: 7,
+          cleanupIncomplete,
+          console: { acceptsInput: false },
+        })
+        expect(task!.finishedAt).toBeNumber()
+        expect(states.map((state) => state.status)).toEqual([
+          'running',
+          cleanupIncomplete ? 'unknown' : 'exited',
+        ])
+        if (cleanupIncomplete) {
+          f.release()
+          expect(f.runner.listTasks({ taskId })[0]!.status).toBe('unknown')
+        }
+      } finally {
+        if (f.runner.listTasks().some((task) => task.cleanupIncomplete))
+          await expect(f.runner.dispose()).rejects.toMatchObject({ code: 'PLATFORM' })
+        else await f.runner.dispose()
+      }
+    }, 15_000)
+  }
+
+  test('INV-19 宿主释放仍等待根进程退出后的管道收尾', async () => {
+    const f = delayedCloseRunner(5_000)
+    try {
+      await f.runner.run('dispose drain', process.cwd(), {
+        background: true,
+        nativeCommand: {
+          file: process.execPath,
+          args: ['-e', 'setTimeout(() => process.exit(7), 100)'],
+        },
+      })
+      await f.closed
+      let disposed = false
+      const disposing = f.runner.dispose().then(() => {
+        disposed = true
+      })
+      await Promise.resolve()
+      expect(disposed).toBe(false)
+      f.release()
+      await disposing
+      expect(disposed).toBe(true)
+    } finally {
+      await f.runner.dispose()
+    }
+  }, 15_000)
+
+  test('INV-19 已结束历史达到保留上限也不能淘汰清理未确认的任务', async () => {
+    // 本用例只验证任务回执；先真实选定一次 shell，批量假任务不重复启动 shell 自检进程。
+    const ready = await shellResolver.resolveReady()
+    const shells: ShellResolverApi = {
+      resolve: shellResolver.resolve.bind(shellResolver),
+      resolveReady: async () => ready,
+      resolveCommand: shellResolver.resolveCommand.bind(shellResolver),
+      inspectPath: shellResolver.inspectPath.bind(shellResolver),
+      refreshWindowsEnvironment: shellResolver.refreshWindowsEnvironment.bind(shellResolver),
+    }
+    let nextPid = 10_000_000
+    const terminal: ShellTerminalFactory = {
+      spawn: () => ({
+        pid: nextPid++,
+        onData: () => ({ dispose: () => {} }),
+        onExit: () => ({ dispose: () => {} }),
+        write: () => {},
+        resize: () => {},
+        kill: () => {},
+      }),
+    }
+    let created = 0
+    let stopAttempts = 0
+    const processes: ShellProcessManagerApi = {
+      manage: shellProcessManager.manage.bind(shellProcessManager),
+      manageTerminal: (terminal) => {
+        const result = {
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          aborted: false,
+          spawnError: null,
+          cleanupIncomplete: created++ === 0,
+        }
+        return {
+          identity: `managed:fixture-${terminal.pid}`,
+          pid: terminal.pid,
+          child: null,
+          exited: true,
+          result,
+          completion: Promise.resolve(result),
+          stop: async () => {
+            if (result.cleanupIncomplete && ++stopAttempts === 1)
+              throw new AppError('PLATFORM', 'fixture termination failed')
+            return !result.cleanupIncomplete
+          },
+        }
+      },
+      find: shellProcessManager.find.bind(shellProcessManager),
+      captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
+      resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
+      stopAll: shellProcessManager.stopAll.bind(shellProcessManager),
+    }
+    const runner = new ShellCommandRunner({
+      platform: process.platform,
+      platformTools: createPlatform({ platform: process.platform, env: process.env }),
+      confinement: { mode: 'danger-full-access', workspaceRoot: process.cwd() },
+      shells,
+      processes,
+      terminal,
+    })
+    const observed: Array<{ id: string; status: ShellBackgroundTaskRecord['status'] }> = []
+    const observe = (task: ShellBackgroundTaskRecord): void => {
+      observed.push({ id: task.id, status: task.status })
+      // 观察方故意改副本，不能阻止 owner 写终态或裁剪真实完成历史。
+      task.status = 'running'
+      task.ports.push(4321)
+      task.console!.acceptsInput = true
+    }
+    try {
+      const first = await runner.run('unconfirmed fixture', process.cwd(), {
+        background: true,
+        interactive: true,
+        onBackgroundTaskState: observe,
+      })
+      const unknownId = first.backgroundProcess!.taskId!
+      for (let index = 0; index <= ShellTuning.command.finishedTasks; index++)
+        await runner.run('completed fixture', process.cwd(), {
+          background: true,
+          interactive: true,
+          onBackgroundTaskState: observe,
+        })
+      expect(runner.listTasks({ taskId: unknownId })[0]).toMatchObject({
+        status: 'unknown',
+        cleanupIncomplete: true,
+      })
+      expect(runner.listTasks().filter((task) => task.status === 'exited')).toHaveLength(
+        ShellTuning.command.finishedTasks
+      )
+      expect(observed).toHaveLength((ShellTuning.command.finishedTasks + 2) * 2)
+      expect(observed.filter((task) => task.status === 'exited')).toHaveLength(
+        ShellTuning.command.finishedTasks + 1
+      )
+      expect(
+        runner.listTasks().every((task) => task.ports.length === 0 && !task.console!.acceptsInput)
+      ).toBe(true)
+      await expect(runner.dispose()).rejects.toMatchObject({ code: 'PLATFORM' })
+      expect(runner.listTasks()).toHaveLength(1)
+      expect(runner.listTasks({ taskId: unknownId })[0]!.status).toBe('unknown')
+      await expect(runner.dispose()).rejects.toMatchObject({ code: 'PLATFORM' })
+      expect(stopAttempts).toBe(2)
+      expect(runner.listTasks({ taskId: unknownId })[0]!.cleanupIncomplete).toBe(true)
+    } finally {
+      if (runner.listTasks().some((task) => task.cleanupIncomplete))
+        await expect(runner.dispose()).rejects.toMatchObject({ code: 'PLATFORM' })
+      else await runner.dispose()
+    }
+  }, 15_000)
+
+  for (const observerFailure of ['throw', 'reject', 'pending'] as const) {
+    test(`INV-20 状态观察方不能阻碍真实进程收尾（${observerFailure}）`, async () => {
+      const f = delayedCloseRunner(5_000)
+      let observations = 0
+      try {
+        await f.runner.run('observer isolation', process.cwd(), {
+          background: true,
+          nativeCommand: {
+            file: process.execPath,
+            args: ['-e', 'setTimeout(() => process.exit(7), 100)'],
+          },
+          onBackgroundTaskState: () => {
+            observations++
+            if (observerFailure === 'throw') throw new AppError('INTERNAL', 'observer threw')
+            if (observerFailure === 'reject')
+              return Promise.reject(new AppError('INTERNAL', 'observer rejected'))
+            return new Promise<void>(() => {})
+          },
+        })
+        expect(observations).toBe(1)
+        await f.closed
+        f.release()
+        await f.owned().completion
+        expect(observations).toBe(2)
+        await f.runner.dispose()
+        expect(f.runner.listTasks()).toEqual([])
+      } finally {
+        await f.runner.dispose()
+      }
+    }, 15_000)
+  }
 })
 
 describe('本机宿主：shell 的选择', () => {

@@ -132,7 +132,8 @@ export interface ShellCommandRunnerApi {
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
   /**
    * 给控制台发中断：终端里写一个 Ctrl+C，由终端发给它的前台进程组（交互 shell 里正在跑的那条命令也收得到）；
-   * 管道下 POSIX 向进程组发 SIGINT，Windows 退回按进程树终止。进程已经退出时不抛错，`accepted` 为 false。
+   * 管道下 POSIX 向进程组发 SIGINT；Windows 强制终止受管进程树并等待真实收尾，不承诺软中断。
+   * 进程已经退出或收尾尚未确认时不抛错，`accepted` 为 false。
    */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
   /** 改控制台的终端尺寸；列数、行数不是正整数时抛 VALIDATION。管道后面的任务没有尺寸、进程已经退出时不抛错，`accepted` 为 false。 */
@@ -145,7 +146,7 @@ export interface ShellCommandRunnerApi {
     request: ShellConsoleWatchRequest,
     listener: (event: ShellConsoleOutputEvent) => void
   ): () => void
-  /** 停掉这个执行器启动过、还没退出的全部后台进程。 */
+  /** 等待已登记后台进程的真实收尾；未确认任务保留并抛错，后续仍可复核或重试。 */
   dispose(): Promise<void>
 }
 
@@ -269,7 +270,12 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const signal = request.force ? 'SIGKILL' : 'SIGTERM'
     const statusBefore = this.resolveTaskStatus(task)
     let terminated = false
-    let message = statusBefore === 'running' ? '后台进程已发送终止信号。' : '后台进程已经不在运行。'
+    let message =
+      statusBefore === 'running'
+        ? '后台进程已发送终止信号。'
+        : statusBefore === 'unknown'
+          ? '后台进程的退出与管道收尾尚未确认。'
+          : '后台进程已经不在运行。'
 
     if (statusBefore === 'running') {
       try {
@@ -279,6 +285,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         terminated = await owned.stop(signal)
         if (!terminated && !owned.exited)
           throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
+        if (!terminated) message = '后台进程退出与管道收尾尚未确认。'
       } catch (error) {
         if (!this.options.platformTools.isProcessMissingError(error)) {
           // 身份核对失败（PERMISSION）和期限内没退出（PLATFORM）各有自己的错误码，原样抛出，调用方才分得开。
@@ -397,7 +404,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         message: '这条后台任务不是交互式的，没有可以中断的控制台。',
       }
     if (status !== 'running')
-      return { taskId: task.id, accepted: false, status, message: '进程已经不在运行，不用再中断。' }
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message:
+          status === 'unknown' ? '进程退出与管道收尾尚未确认。' : '进程已经不在运行，不用再中断。',
+      }
 
     // 只中断自己启动的那个进程：pid 可能已经被系统复用，身份对不上就什么都不发。
     const owned = this.executions.get(task.id)
@@ -416,7 +429,18 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       return { taskId: task.id, accepted: true, status, message: '已发送中断（Ctrl+C）。' }
     }
 
-    // POSIX 向整个进程组发 SIGINT；Windows 没有 SIGINT，退回按进程树终止。
+    // Windows 管道没有终端 Ctrl+C；复用持有进程身份、有界终止与管道收尾的受管入口。
+    if (this.options.platform === 'win32') {
+      const report = await this.terminateTask({ ...request, force: true })
+      return {
+        taskId: report.taskId,
+        accepted: report.terminated,
+        status: report.statusAfter,
+        message: report.terminated ? '已终止受管进程树并关闭控制台。' : report.message,
+      }
+    }
+
+    // POSIX 管道向整个进程组发 SIGINT；PTY 上面的分支仍由终端处理 Ctrl+C。
     const delivered = await terminateProcessTree(task.pid, 'SIGINT', {
       platform: this.options.platform,
     })
@@ -470,14 +494,25 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   }
 
   public async dispose(): Promise<void> {
-    await Promise.allSettled(
-      [...this.executions.values()]
-        .filter((entry) => !entry.exited)
-        .map((entry) => entry.stop('SIGKILL'))
+    const outcomes = await Promise.allSettled(
+      [...this.executions].map(async ([taskId, owned]) => {
+        const stopped = await owned.stop('SIGKILL')
+        if (!stopped)
+          throw new AppError('PLATFORM', `后台任务 ${taskId} 的退出与管道收尾尚未确认。`)
+        this.tasks.delete(taskId)
+        this.executions.delete(taskId)
+        this.consoles.delete(taskId)
+      })
     )
-    this.tasks.clear()
-    this.executions.clear()
-    this.consoles.clear()
+    const failures = outcomes.flatMap((outcome) =>
+      outcome.status === 'rejected' ? [outcome.reason] : []
+    )
+    if (failures.length)
+      throw new AppError(
+        'PLATFORM',
+        '后台任务尚未全部完整收尾，保留未确认记录。',
+        new AggregateError(failures, '后台任务清理尚未完成')
+      )
   }
 
   /**
@@ -627,7 +662,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     command: string,
     cwd: string,
     prepared: PreparedShellCommand,
-    options: ShellRunCommandOptions,
+    options: ShellRunCommandOptions & ShellRunCommandHooks,
     startedAt: number,
     abortSignal?: AbortSignal
   ): Promise<ShellBackgroundProcessInfo> {
@@ -707,7 +742,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     void owned.completion
       .then((result) => {
         flush()
-        this.tasks.set(taskId, {
+        const settled: ShellBackgroundTaskRecord = {
           ...task,
           status: result.cleanupIncomplete ? 'unknown' : 'exited',
           recentOutput,
@@ -717,11 +752,31 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
           finishedAt: Date.now(),
           updatedAt: Date.now(),
           console: closedConsole,
-        })
+        }
+        this.tasks.set(taskId, settled)
+        this.publishTaskState(taskId, options.onBackgroundTaskState)
         this.pruneFinishedTasks()
       })
       .catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
+    // 先登记 owner 的完成处理，再让观察方重入停止；快完成也不能在 dispose 后补写回已移除记录。
+    this.publishTaskState(taskId, options.onBackgroundTaskState)
     return backgroundProcess
+  }
+
+  /** 观察方不持有任务账本，不能改 owner 的记录或用异步等待拖住真实进程收尾。 */
+  private publishTaskState(
+    taskId: string,
+    observer: ShellRunCommandHooks['onBackgroundTaskState']
+  ): void {
+    if (!observer) return
+    const task = this.tasks.get(taskId)!
+    try {
+      void Promise.resolve(observer(structuredClone(task))).catch((error: unknown) =>
+        log.warn('后台任务状态观察失败', { taskId: task.id, error })
+      )
+    } catch (error) {
+      log.warn('后台任务状态观察失败', { taskId: task.id, error })
+    }
   }
 
   /**
@@ -808,10 +863,10 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     return { owned, flush: () => undefined }
   }
 
-  /** 已结束的任务只留最近 ShellTuning.command.finishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
+  /** 已确认完整收尾的任务只留最近几条；unknown 是未解决的资源事实，不能当历史记录清掉。 */
   private pruneFinishedTasks(): void {
     const finished = [...this.tasks.values()]
-      .filter((task) => task.status !== 'running')
+      .filter((task) => this.resolveTaskStatus(task) === 'exited')
       .sort((a, b) => (a.finishedAt ?? a.updatedAt) - (b.finishedAt ?? b.updatedAt))
     for (const task of finished.slice(
       0,
@@ -867,7 +922,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   /** 后台任务此刻的状态：受管进程还在就看它是否退出、收尾是否完整；已经不在登记里时看任务有没有记下结束时间。 */
   private resolveTaskStatus(task: ShellBackgroundTaskRecord): ShellBackgroundTaskStatus {
     const owned = this.executions.get(task.id)
-    if (!owned) return task.finishedAt ? 'exited' : 'unknown'
-    return owned.result?.cleanupIncomplete ? 'unknown' : owned.exited ? 'exited' : 'running'
+    if (!owned) return task.finishedAt && !task.cleanupIncomplete ? 'exited' : 'unknown'
+    if (owned.result?.cleanupIncomplete || (owned.exited && !owned.result)) return 'unknown'
+    return owned.exited ? 'exited' : 'running'
   }
 }

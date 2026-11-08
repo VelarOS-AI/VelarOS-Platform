@@ -7,6 +7,7 @@ import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'no
 import { isAbsolute, join, resolve } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { createPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
@@ -108,8 +109,9 @@ export interface LocalShellHostApi extends ShellHostPort {
    */
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
   /**
-   * 给控制台发中断，相当于用户按 Ctrl+C：终端里写一个 Ctrl+C，由终端发给前台进程组；管道下 POSIX 向整个进程组发 SIGINT，
-   * Windows 上退回按进程树终止。任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
+   * 请求中断控制台：终端里写一个 Ctrl+C，由终端发给前台进程组；管道下 POSIX 向整个进程组发 SIGINT，
+   * Windows 管道强制终止受管进程树并等待真实收尾，不承诺软中断。任务不存在、不属于请求里的会话时抛错；
+   * 进程已经退出或收尾尚未确认时不抛错，结果里 `accepted` 为 false。
    */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
   /**
@@ -125,7 +127,7 @@ export interface LocalShellHostApi extends ShellHostPort {
     request: ShellConsoleWatchRequest,
     listener: (event: ShellConsoleOutputEvent) => void
   ): () => void
-  /** 释放：停掉这个宿主启动过、还没退出的全部后台进程。 */
+  /** 释放：等待两个执行器的实际收尾；失败保留未确认任务并抛错，仍可复核和重试。 */
   dispose(): Promise<void>
 }
 
@@ -396,7 +398,19 @@ export class LocalShellHost implements LocalShellHostApi {
   }
 
   public async dispose(): Promise<void> {
-    await Promise.all([this.commands.dispose(), this.observationCommands.dispose()])
+    const outcomes = await Promise.allSettled([
+      this.commands.dispose(),
+      this.observationCommands.dispose(),
+    ])
+    const failures = outcomes.flatMap((outcome) =>
+      outcome.status === 'rejected' ? [outcome.reason] : []
+    )
+    if (failures.length)
+      throw new AppError(
+        'PLATFORM',
+        '宿主进程尚未全部完整收尾。',
+        new AggregateError(failures, '宿主进程清理尚未完成')
+      )
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */

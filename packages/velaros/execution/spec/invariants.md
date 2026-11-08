@@ -17,3 +17,7 @@
 
 | INV-17 | 宿主共享的登录环境支持合并并发读取、按代次刷新、返回独立副本；旧刷新不覆盖新快照。注入同一环境的本机宿主在原生命令与环境体检中使用该快照，工作区释放不关闭借用的环境；环境 owner 释放时中止读取并等待收尾 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 宿主前台命令按 UTF-8 写入标准输入并发送 EOF（包括空串）；输入端提前关闭不产生未处理异常，超时继续按受管进程收尾。后台与一次性 stdin 同传时在启动前拒绝。原生命令 env 的 undefined 删除该键，覆盖仅影响本次命令，不修改借用环境快照 | 测试 | `spec/acceptance.test.ts` |
+| INV-19 | 后台任务的 exited 只来自真实完整收尾；根进程退出但管道未关闭、或 cleanupIncomplete 均为 unknown，未解决记录不作为已结束历史淘汰。Windows 管道中断核对受管身份后强制终止进程树并等待收尾；PTY 保留 Ctrl+C，POSIX 管道保留 SIGINT | 测试 | `spec/acceptance.test.ts` |
+| INV-20 | 后台任务登记与有界收尾的观察在记录写入后、历史裁剪前交付独立副本；快完成不会漏终态，观察方修改副本、同步抛错或异步失败/等待不改变 owner 事实、不阻断真实释放。dispose 等待真实收尾，保留并报告未确认任务，失败后可查询和重试 | 测试 | `spec/acceptance.test.ts` |
+
+Windows 真实父子进程与继承管道的中断回归，以及 PTY、POSIX 的既有行为，另由 [`test/local/interactive-console.test.ts`](../test/local/interactive-console.test.ts) 覆盖。

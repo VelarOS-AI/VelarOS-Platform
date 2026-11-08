@@ -52,6 +52,11 @@ export interface ShellHostPort {
 export interface ShellRunCommandHooks {
   /** 前台命令跑着时每吐出一段输出（stdout、stderr 按到达顺序）就回调一次；后台命令不回调。 */
   onOutput?: (text: string, stream?: 'stdout' | 'stderr') => void
+  /**
+   * 后台任务登记与真实有界收尾写入后、历史裁剪前同步交付独立记录副本。
+   * 收尾可能是 exited 或清理未确认的 unknown；观察方的失败不会阻断进程释放，也不等待观察方的异步工作。
+   */
+  onBackgroundTaskState?: (task: ShellBackgroundTaskRecord) => void
 }
 
 // ── 本机宿主 ────────────────────────────────────────────────────

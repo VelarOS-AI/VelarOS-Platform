@@ -402,7 +402,7 @@ export interface ShellConsoleInputRequest {
   submit?: boolean
 }
 
-/** 给控制台发中断（SIGINT，相当于用户按 Ctrl+C）的请求。 */
+/** 请求中断控制台：PTY 为 Ctrl+C，POSIX 管道为 SIGINT，Windows 管道强制终止受管进程树。 */
 export interface ShellConsoleInterruptRequest {
   taskId: string
   sessionId?: string

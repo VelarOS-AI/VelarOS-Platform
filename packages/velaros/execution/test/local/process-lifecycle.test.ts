@@ -90,3 +90,32 @@ test('status remains unconfirmed between root exit and the final close receipt',
     'exited'
   )
 })
+
+for (const lateClose of [false, true]) {
+  test(`a termination retry cannot turn an incomplete receipt into success (late close=${lateClose})`, async () => {
+    const child = fakeChild()
+    let terminations = 0
+    const owned = shellProcessManager.manage(child, {
+      platform: 'win32',
+      terminationDeadlineMs: 10,
+      terminate: async () => {
+        terminations++
+        if (terminations > 1) {
+          child.emit('exit', null, 'SIGKILL')
+          if (lateClose) child.emit('close', null, 'SIGKILL')
+        }
+        return true
+      },
+    })
+    expect(await owned.stop('SIGKILL')).toBe(false)
+    const incomplete = await owned.completion
+    expect(incomplete.cleanupIncomplete).toBe(true)
+    expect(owned.exited).toBe(false)
+    // 重试中观察到根进程退出，不足以撤销之前未确认的整棵树/继承管道回执。
+    expect(await owned.stop('SIGKILL')).toBe(false)
+    expect(terminations).toBe(2)
+    expect(owned.exited).toBe(true)
+    expect(owned.result).toBe(incomplete)
+    expect(await owned.stop('SIGKILL')).toBe(false)
+  })
+}
