@@ -15,12 +15,13 @@ class FakeOutput {
     this.listeners.push(listener)
   }
 
-  public emit(value: string): void {
+  public emit(value: Buffer | string): void {
     for (const listener of this.listeners) listener(value)
   }
 }
 
 class FakeProcess implements ComputerSidecarProcess {
+  private readonly exits: Array<(code: Nullable<number>) => void> = []
   public readonly stdout = new FakeOutput()
   public readonly stderr = new FakeOutput()
   public readonly requests: ComputerHelperRequest[] = []
@@ -29,24 +30,39 @@ class FakeProcess implements ComputerSidecarProcess {
       const request = JSON.parse(chunk) as ComputerHelperRequest
       this.requests.push(request)
       const response = this.respond(request)
-      queueMicrotask(() => this.stdout.emit(`${JSON.stringify(response)}\n`))
+      queueMicrotask(() => {
+        const line = `${JSON.stringify(response)}\n`
+        if (this.fragmented)
+          for (const byte of Buffer.from(line)) this.stdout.emit(Buffer.from([byte]))
+        else this.stdout.emit(line)
+      })
     },
     end: () => undefined,
   }
 
   public constructor(
-    private readonly respond: (request: ComputerHelperRequest) => ComputerHelperResponse
+    private readonly respond: (request: ComputerHelperRequest) => ComputerHelperResponse,
+    private readonly fragmented = false
   ) {}
 
   public on(
-    _event: 'error' | 'exit',
-    _listener: ((error: Error) => void) | ((code: Nullable<number>) => void)
-  ): void {}
+    event: 'error' | 'exit',
+    listener: ((error: Error) => void) | ((code: Nullable<number>) => void)
+  ): void {
+    if (event === 'exit') this.exits.push(listener as (code: Nullable<number>) => void)
+  }
+
+  public exit(code: number): void {
+    for (const listener of this.exits) listener(code)
+  }
 
   public kill(_signal?: NodeJS.Signals): void {}
 }
 
-function createManager(respond: (request: ComputerHelperRequest) => ComputerHelperResponse) {
+function createManager(
+  respond: (request: ComputerHelperRequest) => ComputerHelperResponse,
+  fragmented = false
+) {
   let process: FakeProcess | undefined
   const manager = createComputerRuntime({
     resolveHelper: () => ({
@@ -57,7 +73,7 @@ function createManager(respond: (request: ComputerHelperRequest) => ComputerHelp
       version: 'test',
     }),
     spawnProcess: () => {
-      process = new FakeProcess(respond)
+      process = new FakeProcess(respond, fragmented)
       queueMicrotask(() => process?.stdout.emit('{"id":0,"ok":true,"result":{"ready":true}}\n'))
       return process
     },
@@ -66,6 +82,66 @@ function createManager(respond: (request: ComputerHelperRequest) => ComputerHelp
 }
 
 describe('computer sidecar screenshot binding', () => {
+  test('key requests use the current keys field without a legacy alias', async () => {
+    const harness = createManager((request) => ({
+      id: request.id,
+      ok: true,
+      result: { pressed: ['ctrl', 'enter'] },
+    }))
+    try {
+      expect(await harness.manager.key('ctrl+enter')).toEqual({ pressed: ['ctrl', 'enter'] })
+      expect(harness.readProcess()?.requests).toEqual([
+        { id: 1, command: 'key', payload: { keys: 'ctrl+enter' } },
+      ])
+    } finally {
+      harness.manager.dispose()
+    }
+  })
+
+  test('EOF rejects an incomplete UTF-8 character instead of replacing it', async () => {
+    const harness = createManager((request) => {
+      const process = harness.readProcess()!
+      process.stdout.emit(Buffer.from([0xe4]))
+      process.exit(0)
+      return { id: request.id, ok: true, result: [] }
+    })
+    try {
+      await expect(harness.manager.windows()).rejects.toMatchObject({ code: 'PROTOCOL' })
+    } finally {
+      harness.manager.dispose()
+    }
+  })
+
+  test.each(['stdout', 'stderr'] as const)(
+    'invalid UTF-8 on %s rejects this generation and permits a fresh start',
+    async (stream) => {
+      let corrupt = true
+      const harness = createManager((request) => {
+        if (corrupt) {
+          corrupt = false
+          harness.readProcess()![stream].emit(Buffer.from([0xff]))
+        }
+        return { id: request.id, ok: true, result: [] }
+      })
+      try {
+        await expect(harness.manager.windows()).rejects.toMatchObject({ code: 'PROTOCOL' })
+        expect(await harness.manager.windows()).toEqual([])
+      } finally {
+        harness.manager.dispose()
+      }
+    }
+  )
+
+  test('UTF-8 response fragments preserve Unicode window and control text', async () => {
+    const result = [{ id: 'window_test', title: '中文窗口😀', processId: 1 }]
+    const harness = createManager((request) => ({ id: request.id, ok: true, result }), true)
+    try {
+      expect(await harness.manager.windows()).toEqual(result)
+    } finally {
+      harness.manager.dispose()
+    }
+  })
+
   test('forwards primary-display snapshot binding in the click wire payload', async () => {
     const harness = createManager((request) => ({
       id: request.id,

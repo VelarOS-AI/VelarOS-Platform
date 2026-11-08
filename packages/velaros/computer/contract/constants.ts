@@ -9,7 +9,7 @@
  * 随本单元发布的 helper 资产（`runtime/` 里各平台的 Python 脚本）的版本：宿主的安装器按它判断装过的那份要不要重装。
  * 改了 helper 脚本就升这个号。
  */
-export const ComputerHelperVersion = '0.4.0' as const
+export const ComputerHelperVersion = '0.4.1' as const
 
 /**
  * 随插件分发的桌面控制平台包在磁盘上的布局。

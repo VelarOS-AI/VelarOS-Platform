@@ -3,6 +3,24 @@ import { expect, test } from 'bun:test'
 import type { ComputerOperationContext } from '../contract/requires'
 import { computerOperations } from '../impl/ComputerOperations'
 
+test('cancelled screenshot response cannot deliver a late attachment', async () => {
+  const abort = new AbortController()
+  const attached: unknown[] = []
+  const ctx = {
+    abortSignal: abort.signal,
+    attachImage: (image: unknown) => attached.push(image),
+    computer: {
+      ensureAvailable: async () => ({ available: true }),
+      screenshot: async () => {
+        abort.abort()
+        return { base64: 'late-pixels', format: 'jpeg' }
+      },
+    },
+  } as unknown as ComputerOperationContext
+  await expect(computerOperations.screenshot(ctx)).rejects.toBeDefined()
+  expect(attached).toEqual([])
+})
+
 test.each(['typeText', 'key'])(
   'cancelled availability check prevents %s dispatch',
   async (operation) => {

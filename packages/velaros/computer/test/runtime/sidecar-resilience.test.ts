@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../index'
 import { createComputerRuntime } from '../../index'
+import { spawnComputerHelperProcess } from '../../utils/process'
 
 /** POSIX 断管用 sh，恢复时序用跨平台 Node；故障均经真实子进程管道触发。 */
 const posixTest = process.platform === 'win32' ? test.skip : test
@@ -30,6 +34,48 @@ function delay(ms: number): Promise<void> {
 }
 
 describe('computer sidecar 韧性', () => {
+  test('默认启动器在 stdout 和 stderr 排空之后才通知进程退出', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'computer-close-'))
+    const helper = join(root, 'helper.cjs')
+    let child: ComputerSidecarProcess | undefined
+    try {
+      await writeFile(
+        helper,
+        'process.stdout.write("x".repeat(262144)); process.stderr.write("诊断😀".repeat(65536));'
+      )
+      child = spawnComputerHelperProcess({
+        ...HelperSpec,
+        pythonCommand: process.execPath,
+        helperScript: helper,
+        runtimeDir: root,
+      })
+      let stdoutBytes = 0
+      let stderrBytes = 0
+      child.stdout.on('data', (chunk) => {
+        stdoutBytes += Buffer.byteLength(chunk)
+      })
+      child.stderr.on('data', (chunk) => {
+        stderrBytes += Buffer.byteLength(chunk)
+      })
+      await new Promise<void>((resolve, reject) => {
+        child!.on('error', reject)
+        child!.on('exit', (code) => {
+          try {
+            expect(code).toBe(0)
+            expect(stdoutBytes).toBe(262144)
+            expect(stderrBytes).toBe(Buffer.byteLength('诊断😀') * 65536)
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        })
+      })
+    } finally {
+      child?.kill()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   posixTest('helper 关掉 stdin 后写请求不会变成宿主的未捕获异常', async () => {
     const uncaught: unknown[] = []
     const onUncaught = (error: unknown) => {

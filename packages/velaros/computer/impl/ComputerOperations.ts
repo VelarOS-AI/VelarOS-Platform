@@ -368,6 +368,7 @@ export class ComputerOperations implements ComputerOperationsApi {
     if (!attach) throw new AppError('PLATFORM', '这个宿主没有把图交给模型的通道，screenshot 用不了')
     await requireComputerAvailable(ctx)
     const { base64, format, ...snapshot } = await ctx.computer.screenshot(ctx.abortSignal)
+    ctx.abortSignal.throwIfAborted()
     attach({
       mediaType: `image/${format}`,
       data: base64,
