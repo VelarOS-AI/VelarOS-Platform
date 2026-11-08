@@ -1,8 +1,8 @@
 # Runtime assurance and observability
 
 VelarOS separates authority, observability, and operating-system enforcement. A diagnostic JSON object
-does not grant authority, an approval does not prove confinement, and an audit fingerprint is not a
-replacement for the exact request it identifies.
+does not grant authority, an approval does not prove confinement, and an audit fingerprint cannot
+reconstruct the request it identifies.
 
 ## Kernel composition: inspect, never patch
 
@@ -18,11 +18,11 @@ not silently extend that remote protocol.
 
 ## Model requests: compile the actual next frame
 
-`ProviderRequestCompiler` in Model compiles the actual next request, including the five context partitions, ordered history, instructions and native image parts. It checks the complete request budget and produces an auditable provider projection. Raw accepted responses, scripts and invocation receipts remain traceable through `runtime.trace`.
+`ProviderRequestCompiler` in Model compiles the actual next request, including the five context partitions, ordered history, instructions and native image parts. It checks the complete request budget before sending. The full request and accepted history prefix remain in memory; persisted model records contain a bounded v3 `requestAudit`, fingerprints and the actual published `frameRef`, rather than a complete provider request or image copy. Original inputs, accepted responses, scripts and invocation receipts remain separately traceable through `runtime.trace`; `fullContent` does not recreate unarchived request bodies.
 
 Act supports native JSON tools and framed text through the same Runtime. The selected transport controls request tools, instructions and decoding; executable programs are accepted only after the complete response passes validation. Business operations are discovered through the current host catalog and module contracts. See [the actual runtime chain](platform-runtime.md) and [text protocol](scriptact-text-protocol.md).
 
-Observability cannot alter authority. Debug snapshots and traces may contain user or model content; hosts control access, retention and export redaction. Credentials and executable clients are not trace payloads. Request fingerprints identify evidence and do not replace the underlying request or grant permission.
+Observability cannot alter authority. Debug snapshots and traces may contain user or model content; hosts control access, retention and export redaction. Credentials and executable clients are not trace payloads. Request fingerprints identify content; they do not prove that a complete request was retained or grant permission.
 
 ## System processes: approval is not confinement
 

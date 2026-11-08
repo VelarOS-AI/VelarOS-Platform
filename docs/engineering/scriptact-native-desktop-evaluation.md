@@ -1,5 +1,7 @@
 # ScriptAct Desktop 原生评测
 
+本文记录 `.velaros-workspace/bench/native-desktop-20261003/` 对应的原生配对评测协议，其中模型、任务与指标阈值属于该评测，不代表当前发布的默认配置。实际运行入口与设置生命周期以 [controller](../../scripts/agent/native-desktop/controller.mjs) 和 [client](../../scripts/agent/native-desktop/client.mjs) 为准；当前通用验收方法见 [评测规范](scriptact-acceptance-criteria.md)。
+
 目标：在实际 VelarOS Desktop 的项目会话中，使用 macOS 原生环境持续进行 ScriptAct 与同期 Codex 的配对评测、诊断和修复。先保证稳定性与完成质量，再控制解题速度，在这些约束内降低完整费用。
 
 ## 执行协议
@@ -8,7 +10,7 @@
 - Codex 使用本机官方 CLI，首批固定 0.159.2。每个候选冻结实际可执行文件、Desktop 与 Platform 的运行产物摘要和模型配置。
 - 双方精确模型为 `gpt-5.6-sol`，推理档位 `high`，通过同一签名计量网关访问 `https://ai.hedgeho9.cn/v1`。每个任务、参与者、尝试具有独立身份，真实请求不允许静默换模型。
 - 模型总容量与实际工作窗口分别冻结。工作窗口从所有已装配 Agent 产物的 `ContextPlanTuning` 取得；各副本必须一致，Codex 的输入整理阈值使用同一窗口。付费前核对策略文件摘要，收尾时核对每个 ScriptAct 宿主帧的实际输入上限与 Codex 启动参数；缺少证据或不一致时记为基础设施故障并停止比较。相同窗口不表示两套系统的整理算法相同。
-- 用户授权 ScriptAct 完全访问：由主进程读取设置，`workspaceSandboxEnabled=false`、`permissionConfirmationMode=never-ask`。Codex 使用相应本机完全访问模式。任务用独立工作树防止改动混合，工作树不是操作系统隔离边界。
+- 评测需要用户授权的完全访问与无人值守执行时，由本次 run 显式持有临时 `permissionConfirmationMode=never-ask` 设置，收尾只恢复自己仍持有的改动；用户期间改过的设置保留。模型配置只改 provider/model，按本次临时 key 核对后恢复，不整份回写用户设置。Codex 使用相应本机完全访问模式。任务用独立工作树防止改动混合，工作树不是操作系统隔离边界。
 - 每题固定源仓库提交、初始文件状态、题目、依赖锁、测试与验收条件。双方使用相同 macOS 工具链和条件；复用 Git 对象与包管理器下载缓存，可写依赖、构建输出、端口与进程按任务分开。
 - 最多两个 Agent 执行槽；先以一组配对验收，增加并发前验证主进程、工作区、消息流与费用归属。排队任务仍显示为独立会话。
 - 环境准备与判分阶段不调用模型。付费前先确认环境可启动、测试能实际执行且基线行为与题目一致。任务环境故障单列，原失败保留。

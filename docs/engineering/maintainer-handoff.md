@@ -107,7 +107,7 @@ bun run check:package-pack -- velaros
 
 `bun pm pack` 的目标由当前工作目录决定。仓库安全入口负责切换到目标包、建立独占临时目录、限制执行时间并回收进程组；新流程复用 [safe-package-pack.mjs](../../scripts/release/safe-package-pack.mjs)。
 
-发布流程由维护者本机执行，GitHub Actions 中的工作流是禁用的策略哨兵。正式发布要求干净工作树，以及官方远端 tag、本地 tag 和 HEAD 的身份一致；步骤及恢复规则见 [本机发布](local-package-release.md)。根版本用于整列 tag，各包按自己的版本发布，`velaros.platform` 表示兼容代。
+GitHub Actions 的 [CI](../../.github/workflows/ci.yml) 在 main 推送、PR 和手动触发时执行 `bun run check`；[发布工作流](../../.github/workflows/release-packages.yml) 从 main 手动调度，检出指定 tag 后运行 `release:github`。只有 [CodeQL 工作流](../../.github/workflows/codeql.yml) 是禁用的策略哨兵。正式发布仍要求干净工作树，以及官方远端 tag、本地 tag 和 HEAD 的身份一致；步骤及恢复规则见 [发布流程](local-package-release.md)。根版本用于整列 tag，各包按自己的版本发布，`velaros.platform` 表示兼容代。
 
 Git 推送、包发布和消费者升级是三个独立阶段。交付推送后核对本地 SHA、远端分支 SHA 和追踪分支差异；上传文档本身不会更新已安装的包。
 
