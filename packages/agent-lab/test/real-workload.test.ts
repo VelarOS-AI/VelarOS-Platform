@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import { archive } from '../spec/support.js'
-import type { RealTaskAssessment } from '../src/index.js'
+import type { PromoteRealTaskCaseInput, RealTaskAssessment } from '../src/index.js'
 import {
   labArchives,
   labReports,
@@ -410,34 +410,9 @@ describe('real workload evaluation', () => {
     expect(assessment.findings.some((finding) => finding.class === 'redundant-call')).toBeTrue()
   })
 
-  test('requires reviewed acceptance evidence before promotion', () => {
+  test('requires reviewed acceptance gates across promotion, parsing and real case files', async () => {
     const input = record()
-    expect(() =>
-      realTaskWorkload.promoteCase(input, {
-        id: 'case-1',
-        workspace: {
-          adapter: 'git',
-          parameters: { sourcePath: '/private/source' },
-          reference: 'abc123',
-          digest: null,
-        },
-        coverage: {
-          capability: 'project.persistence',
-          objective: 'repair persisted state without corrupting unrelated records',
-          archetype: 'recover',
-          dataShapes: ['structured'],
-          risk: 'reversible-write',
-          lifecycle: 'multi-step',
-          path: 'failure-recovery',
-          interaction: 'autonomous',
-          modelRequirement: 'text',
-          dailyWeight: 1,
-        },
-        acceptance: [],
-        privacy: { classification: 'redacted', reviewNote: 'reviewed' },
-      })
-    ).toThrow('至少要有一条可判定的验收合同')
-    const promoted = realTaskWorkload.promoteCase(input, {
+    const options: PromoteRealTaskCaseInput = {
       id: 'case-1',
       workspace: {
         adapter: 'git',
@@ -465,11 +440,51 @@ describe('real workload evaluation', () => {
           parameters: { argv: ['bun', 'test'] },
           gate: true,
         },
+        {
+          id: 'diagnostic',
+          kind: 'command',
+          description: 'collect diagnostics',
+          parameters: { argv: ['bun', '--version'] },
+          gate: false,
+        },
       ],
       privacy: { classification: 'redacted', reviewNote: 'reviewed' },
       createdAt: 40,
-    })
+    }
+    const promoted = realTaskWorkload.promoteCase(input, options)
     expect(promoted.origin).toEqual({ kind: 'observed', recordId: input.id })
+    expect(labWire.parseRealTaskCase(promoted)).toEqual(promoted)
+    expect(labWire.parseAcceptanceContract(options.acceptance[1]).gate).toBe(false)
+
+    const root = await mkdtemp(join(tmpdir(), 'agent-lab-case-gates-'))
+    try {
+      const invalidPlans = [
+        [],
+        options.acceptance.map((contract) => ({ ...contract, gate: false })),
+      ]
+      for (const [index, acceptance] of invalidPlans.entries()) {
+        expect(() => realTaskWorkload.promoteCase(input, { ...options, acceptance })).toThrow(
+          '验收门'
+        )
+        const invalid = { ...promoted, acceptance }
+        expect(() => labWire.parseRealTaskCase(invalid)).toThrow('验收门')
+        const existing = await readdir(root)
+        await assert.rejects(
+          labArchives.writeRealTaskCase(join(root, 'published.json'), invalid),
+          /验收门/
+        )
+        expect(await readdir(root)).toEqual(existing)
+        const source = join(root, `invalid-${index}.json`)
+        const bytes = JSON.stringify(invalid)
+        await writeFile(source, bytes)
+        await assert.rejects(labArchives.readRealTaskCase(source), /验收门/)
+        expect(await readFile(source, 'utf8')).toBe(bytes)
+      }
+      const path = await labArchives.writeRealTaskCase(join(root, 'valid.json'), promoted)
+      expect(await labArchives.readRealTaskCase(path)).toEqual(promoted)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test('keeps unrun and void work in the verified coverage denominator', () => {

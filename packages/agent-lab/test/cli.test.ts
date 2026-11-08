@@ -26,6 +26,73 @@ async function withDirectory(verify: (root: string) => Promise<void>): Promise<v
 }
 
 describe('public CLI', () => {
+  test('validates a real case gate plan and preserves rejected case bytes', async () => {
+    await withDirectory(async (root) => {
+      const value = {
+        schema: 'agent-lab/real-task-case@3',
+        id: 'case-gates',
+        version: 1,
+        createdAt: 1,
+        origin: { kind: 'observed', recordId: 'record-1' },
+        title: 'Verify a real file',
+        prompt: 'Read the file and verify its state.',
+        source: 'user',
+        surface: 'project',
+        coverage: {
+          capability: 'project.files',
+          objective: 'verify a file without changing it',
+          archetype: 'inspect',
+          dataShapes: ['text'],
+          risk: 'read-only',
+          lifecycle: 'single-turn',
+          path: 'happy',
+          interaction: 'autonomous',
+          modelRequirement: 'text',
+          dailyWeight: 1,
+        },
+        workspace: { adapter: 'manual', parameters: {}, reference: 'fixture-v1', digest: null },
+        acceptance: [
+          {
+            id: 'truth',
+            kind: 'file',
+            description: 'actual file state',
+            parameters: {},
+            gate: true,
+          },
+          {
+            id: 'diagnostic',
+            kind: 'file',
+            description: 'file metadata',
+            parameters: {},
+            gate: false,
+          },
+        ],
+        privacy: { classification: 'shareable', reviewNote: 'synthetic fixture' },
+        labels: [],
+      }
+      const path = join(root, 'case.json')
+      for (const acceptance of [
+        [],
+        value.acceptance.map((contract) => ({ ...contract, gate: false })),
+      ]) {
+        const bytes = JSON.stringify({ ...value, acceptance })
+        await writeFile(path, bytes)
+        const result = await agentLabCli.run(['validate', 'case', path], options)
+        expect(result.exitCode).toBe(1)
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toContain('验收门')
+        expect(await readFile(path, 'utf8')).toBe(bytes)
+      }
+      const bytes = JSON.stringify(value)
+      await writeFile(path, bytes)
+      const result = await agentLabCli.run(['validate', 'case', path], options)
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toBe('')
+      expect(result.stdout).toContain('valid case:')
+      expect(await readFile(path, 'utf8')).toBe(bytes)
+    })
+  })
+
   test('exposes standard help without requiring implementation knowledge', async () => {
     for (const argument of ['--help', '-h', 'help']) {
       const result = await agentLabCli.run([argument], options)
