@@ -10,7 +10,12 @@ import { createRuntime } from '@velaros-ai/velaros'
 const runtime = await createRuntime({
   workspace: '/absolute/project',
   dataDir: '/absolute/state',
-  model: { provider: 'openai', model: 'your-model', apiKey: process.env.API_KEY },
+  model: {
+    provider: 'openai',
+    model: 'your-model',
+    apiKey: process.env.API_KEY,
+    baseURL: 'https://api.example.com/v1', // 换成实际模型服务地址
+  },
 })
 try {
   const session = await runtime.openSession('main')
@@ -23,8 +28,7 @@ try {
 }
 ```
 
-默认执行环境为 Node.js ESM，预装命令、文件、源码、网页、CSV、日期、校验与 ZIP 的成熟 npm 库（见 [Script 默认库](../script/README.md)）。模型通过 `exec({code})` 运行程序，文件操作使用 Node 标准库。项目工作区按需提供 `velaros:project` 的版本核对、原子提交和冲突撤回；应用能力通过运行目录中的 `index.json` 和操作声明发现。
-
+默认执行环境为 Node.js ESM。文件、目录与 JSON 使用 Node 标准库；基础 npm 包与按需工具链见 [Script 默认库](../script/README.md)。模型通过 `exec({code})` 运行程序。项目工作区按需提供 `velaros:project` 的版本核对、原子提交和冲突撤回；应用能力通过运行目录中的 `index.json` 和操作声明发现。
 
 ## 入口
 
@@ -39,7 +43,7 @@ try {
 | [sandbox](sandbox/README.md) | `@velaros-ai/velaros/sandbox` | 演练沙箱 `velaros:sandbox`：在镜像里先跑，看过差量再落回 |
 | [project](project/README.md) | `@velaros-ai/velaros/project` | 受项目治理的文件 `velaros:project` 与问代码 `velaros:code`，连同项目内核与语言服务 |
 | [computer](computer/README.md) | `@velaros-ai/velaros/computer` | 桌面控制 `velaros:computer`：截主屏、鼠标、键盘 |
-| [memory](memory/README.md) | `@velaros-ai/velaros/memory` | 长期记忆库：一个作用域一个目录的 Markdown，会话开场的索引 |
+| [memory](memory/README.md) | `@velaros-ai/velaros/memory` | 长期记忆库：按作用域保存、列出与删除 Markdown 条目 |
 | [office](office/README.md) | `@velaros-ai/velaros/office` | 办公文档 `velaros:office`：Word、PowerPoint、Excel 与 PDF 的生成、读取、转换与预览 |
 | [browser](browser/README.md) | `@velaros-ai/velaros/browser` | 浏览器 `velaros:browser`、`velaros:devtools`、`velaros:cdp`，连同 CDP 驱动与 Electron 会话运行时 |
 | [web](web/README.md) | `@velaros-ai/velaros/web` | 网上查资料 `velaros:web`：搜索引擎搜、把网页读成文字，都在宿主给的不显示页面里跑 |
