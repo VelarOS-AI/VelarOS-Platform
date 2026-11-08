@@ -1,15 +1,15 @@
 // 用途：通过正式 Desktop Hook 与调试追踪入口驱动本机评测，保留任务身份和完整记录。
 import { createHash, randomUUID } from 'node:crypto'
-import { readFile, writeFile, rename } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+
+import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
 import { connectDebugger, readDebuggerSnapshot } from './debugger.mjs'
 
 export const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 
-export async function privateJson(path, value) {
-  const temporary = path + '.' + randomUUID() + '.writing'
-  await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
-  await rename(temporary, path)
+export function privateJson(path, value) {
+  return writeJsonFileAtomically(path, value, { mode: 0o600, space: 2, trailingNewline: true })
 }
 
 export async function desktopClient(endpointFile) {
@@ -56,7 +56,6 @@ export async function configureModel(hook, settingsFile, { baseURL, apiKey, mode
     op: 'patch',
     patch: {
       providerRuntimeConfigs,
-      advancedRuntime: { workspaceSandboxEnabled: false, permissionConfirmationMode: 'never-ask' },
     },
   })
   const saved = JSON.parse(
@@ -92,6 +91,42 @@ export async function restoreModel(hook, settingsFile, priorConfigs, expectedKey
     },
   })
   return 'restored'
+}
+
+/** 无人值守评测显式持有临时权限；恢复只处理本次仍持有的字段。 */
+export async function prepareUnattendedPermissions(hook) {
+  const { config } = await hook({ kind: 'config_op', key: 'system', op: 'get' })
+  const original = config.advancedRuntime.permissionConfirmationMode
+  let requested = false
+  return {
+    async enable() {
+      if (original === 'never-ask') return
+      // 写入可能已生效而回执失败，调用方必须先持有恢复动作再启用。
+      requested = true
+      await hook({
+        kind: 'config_op',
+        key: 'system',
+        op: 'patch',
+        patch: { advancedRuntime: { permissionConfirmationMode: 'never-ask' } },
+      })
+    },
+    async restore() {
+      if (!requested) return 'unchanged'
+      const { config: current } = await hook({ kind: 'config_op', key: 'system', op: 'get' })
+      if (current.advancedRuntime.permissionConfirmationMode !== 'never-ask') {
+        requested = false
+        return 'user_configuration_preserved'
+      }
+      await hook({
+        kind: 'config_op',
+        key: 'system',
+        op: 'patch',
+        patch: { advancedRuntime: { permissionConfirmationMode: original } },
+      })
+      requested = false
+      return 'restored'
+    },
+  }
 }
 
 /** 控制器只读真实页面，调用与调试面板相同的 IPC，不构造另一套 Runtime。 */

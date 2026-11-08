@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { runCodex } from './codex.mjs'
+import { runNativeCodex } from './controller.mjs'
 import { createOwnedWorkspaceProcessGuard } from './owned-processes.mjs'
 
 const alive = (pid) => {
@@ -28,10 +28,8 @@ for (const mode of ['completion', 'cancellation'])
     },
     async (t) => {
       const root = await mkdtemp(join(tmpdir(), 'owned-codex-'))
-      let processGuard
       let unrelated
       t.after(async () => {
-        await processGuard?.stop()
         unrelated?.kill('SIGKILL')
         await rm(root, { recursive: true, force: true })
       })
@@ -44,11 +42,6 @@ for (const mode of ['completion', 'cancellation'])
         stdio: 'ignore',
       })
       await once(unrelated, 'spawn')
-      processGuard = createOwnedWorkspaceProcessGuard({
-        workspace,
-        directory,
-        resourceId: 'owned-fixture',
-      })
       const executable = join(root, 'fake-codex')
       const pidFile = join(directory, 'service.pid')
       const readyFile = join(directory, 'ready')
@@ -66,7 +59,8 @@ process.stdin.resume();process.stdin.on('end',()=>{
         { mode: 0o700 }
       )
       const cancellation = new AbortController()
-      const running = runCodex({
+      const running = runNativeCodex({
+        resourceId: 'owned-fixture',
         executable,
         workspace,
         directory,
@@ -75,7 +69,6 @@ process.stdin.resume();process.stdin.on('end',()=>{
         model: 'fixture',
         prompt: 'test',
         timeoutMs: 5000,
-        processGuard,
         signal: cancellation.signal,
       })
       if (mode === 'cancellation') {
@@ -104,9 +97,25 @@ process.stdin.resume();process.stdin.on('end',()=>{
           (action) => action.pid === pid && action.signal === 'SIGKILL'
         )
       )
-      assert.equal((await processGuard.stop()).scopeEmpty, true)
     }
   )
+
+test(
+  'owned workspace cleanup has a stable result when reused',
+  { skip: process.platform !== 'darwin' },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), 'owned-idle-workspace-'))
+    t.after(() => rm(root, { recursive: true, force: true }))
+    const guard = createOwnedWorkspaceProcessGuard({
+      workspace: root,
+      directory: root,
+      resourceId: 'idle-fixture',
+    })
+    const first = await guard.stop()
+    assert.equal(first.scopeEmpty, true)
+    assert.equal(await guard.stop(), first)
+  }
+)
 
 test(
   'An already occupied workspace is refused without signaling its existing process',
@@ -129,6 +138,15 @@ test(
           directory: root,
           resourceId: 'occupied-fixture',
         }),
+      /already has live processes/u
+    )
+    await assert.rejects(
+      runNativeCodex({
+        resourceId: 'occupied-fixture',
+        workspace: root,
+        directory: root,
+        executable: process.execPath,
+      }),
       /already has live processes/u
     )
     assert.equal(alive(child.pid), true)
