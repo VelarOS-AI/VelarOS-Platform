@@ -221,6 +221,8 @@ export class FileStore implements FileStoreApi {
         adapterIds: [],
       }
     }
+    if (!st.isFile())
+      throw new ProjectError('NOT_SUPPORTED', `目标不是普通文件或目录：${rel}`, { path: rel })
     let content: string | undefined
     let textEncoding: Nullable<TextEncoding> = null
     let binary: boolean
@@ -563,16 +565,14 @@ export class FileStore implements FileStoreApi {
       }
     }
 
-    // 复用 snapshot 已做的 bigint stat：snapshot 已携带 size / mtimeMs / isDirectory，
-    // 不再为 stat 结果重复发一次 stat() 系统调用。snapshot 把存在的非目录项一律按文件读取，
-    // 因此走到这里的「存在且非目录」项即视作常规文件（fifo 等异常项在 snapshot 读取阶段已退化为 missing）。
+    // snapshot 已确认是普通文件或目录，复用它的元数据，不再发一次 stat() 系统调用。
     const kind = snap.isDirectory ? 'directory' : 'file'
     const sizeBytes = snap.size
     const mtimeMs = snap.mtimeMs
     const estimatedTokens = kind === 'file' ? estimateTokensFromBytes(sizeBytes) : null
 
     if (kind !== 'file') {
-      warnings.push(kind === 'directory' ? '目标是目录。' : '目标不是常规文件。')
+      warnings.push('目标是目录。')
       return {
         path: snap.path,
         absolutePath: snap.absPath,

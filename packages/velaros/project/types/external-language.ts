@@ -20,8 +20,10 @@ export interface ExternalLanguagePendingResponse {
 
 /** 一个在等 `publishDiagnostics` 的文件。 */
 export interface ExternalLanguagePendingDiagnostics {
-  /** 收到诊断（或超时、进程挂掉）时兑现。 */
+  /** 收到诊断或等待超时时兑现。 */
   readonly resolve: (value: readonly ExternalLanguageDiagnostic[]) => void
+  /** 取消、关闭或进程故障时拒绝，不把未完成查询伪装成空诊断。 */
+  readonly reject: (error: Error) => void
   /** 等待超时定时器的租约，兑现时要取消。 */
   readonly timer: TimerLease
 }

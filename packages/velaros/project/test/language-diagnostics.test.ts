@@ -192,6 +192,21 @@ afterAll(async () => {
 })
 
 describe('language_diagnostics 标准库定位', () => {
+  test('UTF-16 源码按真实正文诊断，不把编码字节误读成语法错误', async () => {
+    const path = join(root, 'src', 'encoded.ts')
+    await writeFile(
+      path,
+      Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(TypedSource, 'utf16le')])
+    )
+    try {
+      const result = await diagnose({ path: 'src/encoded.ts' })
+      expect(errorCodes(result)).toEqual([['src/encoded.ts', 2322]])
+      expectNoStandardLibraryNoise(result)
+    } finally {
+      await rm(path, { force: true })
+    }
+  })
+
   test('报出真实类型错误，且不误报标准库全局名', async () => {
     const result = await diagnose({ path: 'src/typed.ts' })
 
@@ -338,6 +353,7 @@ describe('language_diagnostics 目录扫描', () => {
       const onlyVue = await diagnose({ path: 'src', extensions: ['vue'], language: 'jsts' })
       expect(onlyVue.scannedFiles).toBe(0)
       expect(onlyVue.note).toContain('extensions 里没有 JavaScript/TypeScript 扩展名')
+      expect(onlyVue.note).toContain('（vue）')
     } finally {
       await rm(join(root, 'src', 'comp.vue'), { force: true })
       await rm(join(root, 'src', 'data.json'), { force: true })

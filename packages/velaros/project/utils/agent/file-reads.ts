@@ -85,10 +85,12 @@ export async function readFiles(
       windows.push(await presentFileRead(ctx, read, range))
       remaining -= [...(read.content ?? '')].length
     } catch (error) {
+      ctx.abortSignal.throwIfAborted()
       if (files.length === 1) throw error
       issues.push(issueOf(file.path, error))
     }
   }
+  ctx.abortSignal.throwIfAborted()
   const read: ProjectReadResult = { files: await editableProjectWindows(ctx, windows) }
   if (!isEmpty(issues)) read.issues = issues
   return read

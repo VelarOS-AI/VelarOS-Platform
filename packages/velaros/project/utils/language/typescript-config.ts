@@ -12,6 +12,7 @@ import {
   isTrue,
   toNullable,
 } from '@velaros-ai/core'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import type {
   ParseTypeScriptConfig,
@@ -63,7 +64,7 @@ export function extensionWithDot(path: string): string {
 export function safeReadFile(path: string): Nullable<string> {
   try {
     if (!existsSync(path) || !statSync(path).isFile()) return null
-    return readFileSync(path, 'utf8')
+    return textCodec.decode(readFileSync(path))?.content ?? null
   } catch {
     // arch-guard:silent-catch-ok safe 前缀语义：文件不可读按缺席处理
     return null

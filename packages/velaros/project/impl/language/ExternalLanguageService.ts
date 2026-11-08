@@ -74,6 +74,8 @@ export interface ExternalLanguageServiceApi {
 class ExternalLanguageService implements ExternalLanguageServiceApi {
   private readonly clients = new Map<string, ExternalLanguageServerClientApi>()
   private readonly unavailable = new Map<string, string>()
+  private readonly starting = new Map<string, Promise<void>>()
+  private stopping?: Promise<void>
   /** 最近一次 diagnostics() 里等到超时的文件数：结果是否完整全看它。 */
   private diagnosticsTimedOutFiles = 0
 
@@ -89,13 +91,15 @@ class ExternalLanguageService implements ExternalLanguageServiceApi {
 
   public status(): ExternalLanguageStatus {
     const clients = [...this.clients.values()]
+    const statuses = clients.map((client) => client.status())
     const errors = [...this.unavailable.values()]
-    const ready = clients.some((client) => client.status().state === 'ready')
+    const ready = statuses.some((status) => status.state === 'ready')
+    const failing = statuses.find((status) => status.state === 'error')
     return {
-      state: ready ? 'ready' : !isEmpty(errors) ? 'unavailable' : 'idle',
+      state: ready ? 'ready' : failing ? 'error' : !isEmpty(errors) ? 'unavailable' : 'idle',
       server: clients.map((client) => client.spec.id).join(', ') || 'external',
-      openFiles: clients.reduce((total, client) => total + client.status().openFiles, 0),
-      error: ready ? null : toNullable(errors.at(-1)),
+      openFiles: statuses.reduce((total, status) => total + status.openFiles, 0),
+      error: ready ? null : toNullable(failing?.error ?? errors.at(-1)),
       diagnosticsTimedOutFiles: this.diagnosticsTimedOutFiles,
       diagnosticsComplete: this.diagnosticsTimedOutFiles === 0,
     }
@@ -161,9 +165,26 @@ class ExternalLanguageService implements ExternalLanguageServiceApi {
     return client.locations('textDocument/references', file, line, column, signal)
   }
 
-  public async stop(): Promise<void> {
-    await Promise.all([...this.clients.values()].map((client) => client.stop()))
-    this.clients.clear()
+  public stop(): Promise<void> {
+    if (this.stopping) return this.stopping
+    const clients = [...this.clients]
+    const stopping = (async () => {
+      try {
+        const outcomes = await Promise.allSettled(clients.map(([, client]) => client.stop()))
+        for (const [index, outcome] of outcomes.entries())
+          if (outcome.status === 'fulfilled') {
+            const [id, client] = clients[index]!
+            if (this.clients.get(id) === client) this.clients.delete(id)
+          }
+        await Promise.allSettled([...this.starting.values()])
+        const failed = outcomes.find((outcome) => outcome.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+      } finally {
+        this.stopping = undefined
+      }
+    })()
+    this.stopping = stopping
+    return stopping
   }
 
   /** 取这个文件的语言服务；一个都起不来就抛，说清是没登记规格还是本机没装。 */
@@ -187,27 +208,44 @@ class ExternalLanguageService implements ExternalLanguageServiceApi {
     file: string,
     signal?: AbortSignal
   ): Promise<Nullable<ExternalLanguageServerClientApi>> {
+    signal?.throwIfAborted()
+    if (this.stopping) throw new AppError('CLOSED', '语言服务正在关闭。')
     const extension = extname(file).toLowerCase()
     const candidates = this.specs.filter((spec) => spec.extensions.includes(extension))
     for (const spec of candidates) {
       const existing = this.clients.get(spec.id)
-      if (existing) return existing
+      if (existing) {
+        await this.starting.get(spec.id)
+        signal?.throwIfAborted()
+        if (this.clients.get(spec.id) !== existing) throw new AppError('CLOSED', '语言服务已关闭。')
+        return existing
+      }
       if (this.unavailable.has(spec.id)) continue
       const client = new ExternalLanguageServerClient(this.projectRoot, spec)
+      this.clients.set(spec.id, client)
+      const starting = client.start(signal)
+      this.starting.set(spec.id, starting)
       try {
-        await client.start(signal)
-        this.clients.set(spec.id, client)
+        await starting
+        signal?.throwIfAborted()
+        if (this.clients.get(spec.id) !== client) throw new AppError('CLOSED', '语言服务已关闭。')
         return client
       } catch (error) {
         let failure = `${spec.id}：${errorMessage(error)}`
         log.debug('语言服务启动失败，准备清理子进程。', { error, server: spec.id })
         try {
           await client.stop()
+          if (this.clients.get(spec.id) === client) this.clients.delete(spec.id)
         } catch (stopError) {
           failure = `${failure}；清理时又失败：${errorMessage(stopError)}`
           log.debug('语言服务启动失败后的清理也未完成。', { error: stopError, server: spec.id })
+          throw new AppError('UNAVAILABLE', failure, stopError)
         }
+        signal?.throwIfAborted()
+        if (error instanceof AppError && error.code === 'CLOSED') throw error
         this.unavailable.set(spec.id, failure)
+      } finally {
+        if (this.starting.get(spec.id) === starting) this.starting.delete(spec.id)
       }
     }
     return null

@@ -96,7 +96,6 @@ export interface ProjectQueriesDependencies {
 
 export class ProjectQueries implements ProjectQueriesApi {
   private targets = new Map<string, ResolvedTarget>()
-  private evidence = new Map<string, EvidencePack>()
   constructor(private readonly dependencies: ProjectQueriesDependencies) {}
 
   /** 扫描工作区并返回文件快照列表。 */
@@ -653,8 +652,6 @@ export class ProjectQueries implements ProjectQueriesApi {
         evidenceId: (sanitizedByContextProvider as EvidencePack).evidenceId ?? evidenceId,
       }
     }
-    this.evidence.set(evidenceId, pack)
-    capInsertionOrderedMap(this.evidence, ProjectTuning.queries.retainedEvidence)
     this.dependencies.journal.record({
       actor: 'system',
       action: 'build_evidence',

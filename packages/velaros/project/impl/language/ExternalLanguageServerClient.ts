@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 
 import { isArray, isNull, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { textCodec } from '@velaros-ai/core/text-files'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
@@ -38,7 +39,7 @@ const log = Log.tag('ExternalLanguageServerClient')
  * 一个外部语言服务进程的 stdio JSON-RPC 客户端：拉起、握手、开文档、问一件事、收摊。
  *
  * 实例由 `ExternalLanguageService` 按规格各造一个，所以这里不给单例。所有等待都有超时租约，
- * 进程挂掉时在等的请求一律被拒、在等的诊断一律按空结果收尾，不会把调用方吊死。
+ * 进程退出后先排空管道里的回执，close 时拒绝剩余等待；主动关闭立即拒绝等待者。
  */
 export interface ExternalLanguageServerClientApi {
   /** 这个客户端对应的语言服务规格。 */
@@ -64,13 +65,14 @@ export interface ExternalLanguageServerClientApi {
     column: number,
     signal?: AbortSignal
   ): Promise<readonly ExternalLanguageLocation[]>
-  /** 走 shutdown / exit 握手关掉进程；握手不成就终止它，最后一定释放定时器。 */
+  /** 走 shutdown / exit 并等待管道 close；清理未完成则抛错，保留进程身份与租约供重试。 */
   stop(): Promise<void>
 }
 
 /** 一个外部语言服务进程的客户端，见接口说明；由 `ExternalLanguageService` 按规格各造一个。 */
 export class ExternalLanguageServerClient implements ExternalLanguageServerClientApi {
   private child: Nullable<ChildProcessWithoutNullStreams> = null
+  private childClosed?: Promise<void>
   private readonly timers = new TimerScope({ name: 'ExternalLanguageServerClient' })
   private sequence = 0
   private stdout = Buffer.alloc(0)
@@ -79,6 +81,9 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   private readonly documents = new Map<string, ExternalLanguageOpenDocument>()
   private state: ExternalLanguageStatus['state'] = 'idle'
   private error: Nullable<string> = null
+  private starting?: Promise<void>
+  private stopping?: Promise<void>
+  private closed = false
 
   /** 握手时报给语言服务的客户端身份，与 VelarOS 的版本无关，不随发版变。 */
   private static readonly clientInfo = { name: 'VelarOS Agent Host', version: '0.1.0' }
@@ -104,25 +109,69 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   }
 
   public async start(signal?: AbortSignal): Promise<void> {
+    if (this.closed) throw new AppError('CLOSED', `语言服务 ${this.spec.id} 已关闭。`)
+    if (this.starting) return this.starting
     if (this.child) return
+    this.starting = this.startChild(signal)
+    try {
+      await this.starting
+    } finally {
+      this.starting = undefined
+    }
+  }
+
+  private async startChild(signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) throw abortError()
+    this.state = 'idle'
+    this.error = null
     const child = spawn(this.spec.command, [...this.spec.args], {
       cwd: resolve(this.projectRoot),
       env: { ...process.env },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     this.child = child
-    child.stdout.on('data', (chunk: Buffer) => this.consumeStdout(chunk))
+    let processError: Nullable<Error> = null
+    const recordFailure = (error: Error): void => {
+      if (this.child !== child) return
+      processError = error
+      if (!this.closed) {
+        this.state = 'error'
+        this.error = error.message
+      }
+    }
+    // close 晚于 exit：两条输出管道都排空后才释放进程身份；关闭握手前就登记，早退也不会错过。
+    this.childClosed = new Promise<void>((resolveClosed) => {
+      child.once('close', () => {
+        if (this.child === child) {
+          this.fail(processError ?? new AppError('CLOSED', `语言服务 ${this.spec.id} 已关闭。`))
+          this.child = null
+          this.documents.clear()
+          this.stdout = Buffer.alloc(0)
+          if (this.closed) {
+            this.state = 'idle'
+            this.error = null
+            if (!this.stopping) this.timers.dispose()
+          }
+        }
+        resolveClosed()
+      })
+    })
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (this.child === child) this.consumeStdout(chunk)
+    })
     child.stderr.on('data', (chunk: Buffer) => {
       const message = chunk.toString('utf8').trim()
       if (message)
         this.error = message.slice(0, DevelopmentTuning.externalLanguageServer.stderrChars)
     })
-    child.once('error', (error) => this.fail(error))
+    child.stdin.on('error', (error) => {
+      recordFailure(error)
+    })
+    child.once('error', (error) => {
+      recordFailure(error)
+    })
     child.once('exit', (code, exitSignal) => {
-      if (this.child !== child) return
-      this.child = null
-      this.fail(
+      recordFailure(
         new AppError(
           'CLOSED',
           `语言服务 ${this.spec.id} 已退出（${code ?? exitSignal ?? '原因未知'}）。`
@@ -148,6 +197,8 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
       },
       signal
     )
+    if (this.closed || this.child !== child)
+      throw new AppError('CLOSED', `语言服务 ${this.spec.id} 已关闭。`)
     this.notify('initialized', {})
     this.state = 'ready'
     this.error = null
@@ -159,6 +210,7 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   ): Promise<ExternalLanguageDiagnosticsOutcome> {
     const uri = pathToFileURL(file).href
     let timedOut = false
+    let cancelWaiting = (): void => {}
     const waiting = new Promise<ExternalLanguageDiagnosticsOutcome['diagnostics']>(
       (resolveDone, reject) => {
         if (signal?.aborted) {
@@ -180,8 +232,10 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
           else resolveDone(value)
         }
         const onAbort = (): void => finish([], abortError())
+        cancelWaiting = () => finish([])
         const pending: ExternalLanguagePendingDiagnostics = {
           resolve: finish,
+          reject: (error) => finish([], error),
           timer: this.timers.after(
             DevelopmentTuning.externalLanguageServer.diagnosticsTimeoutMs,
             () => {
@@ -197,8 +251,13 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
         signal?.addEventListener('abort', onAbort, { once: true })
       }
     )
-    await this.open(file)
-    return { diagnostics: await waiting, timedOut }
+    // 等待与打开文档同时接入同一个 Promise，读取失败或取消都不会留下无人接收的 rejection。
+    try {
+      const [diagnostics] = await Promise.all([waiting, this.open(file)])
+      return { diagnostics, timedOut }
+    } finally {
+      cancelWaiting()
+    }
   }
 
   public async hover(
@@ -240,8 +299,19 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   }
 
   public async stop(): Promise<void> {
+    if (this.stopping) return this.stopping
+    this.closed = true
+    this.fail(new AppError('CLOSED', `语言服务 ${this.spec.id} 已关闭。`))
+    this.stopping = this.stopChild()
+    try {
+      await this.stopping
+    } finally {
+      this.stopping = undefined
+    }
+  }
+
+  private async stopChild(): Promise<void> {
     const child = this.child
-    this.child = null
     this.state = 'idle'
     if (!child) {
       this.timers.dispose()
@@ -261,20 +331,41 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
       child.kill('SIGTERM')
     }
     child.stdin.end()
-    await Promise.race([
-      new Promise<void>((resolveDone) => child.once('exit', () => resolveDone())),
-      this.timers.sleep(DevelopmentTuning.externalLanguageServer.shutdownTimeoutMs, {
-        label: `${this.spec.id}.stop`,
-      }),
-    ])
+    if (await this.waitForClose()) {
+      this.timers.dispose()
+      return
+    }
     if (isNull(child.exitCode) && isNull(child.signalCode)) child.kill('SIGKILL')
-    this.timers.dispose()
+    if (await this.waitForClose()) {
+      this.timers.dispose()
+      return
+    }
+    this.state = 'error'
+    this.error = `语言服务 ${this.spec.id} 的进程或输出管道尚未关闭，清理未完成。`
+    throw new AppError('UNAVAILABLE', this.error)
+  }
+
+  /** 每阶段只等一个有界租约；超时不等于关闭，仍保留真实 child 等待 close 或供下一次清理。 */
+  private async waitForClose(): Promise<boolean> {
+    const deadline = this.timers.child(`${this.spec.id}.stop`)
+    try {
+      return await Promise.race([
+        this.childClosed!.then(() => true),
+        deadline
+          .sleep(DevelopmentTuning.externalLanguageServer.shutdownTimeoutMs)
+          .then(() => false),
+      ])
+    } finally {
+      deadline.dispose()
+    }
   }
 
   /** 首次打开发 didOpen，之后每次同步正文发 didChange 并把版本号加一。 */
   private async open(file: string): Promise<void> {
     const uri = pathToFileURL(file).href
-    const text = await readFile(file, 'utf8')
+    const decoded = textCodec.decode(await readFile(file))
+    if (!decoded) throw new AppError('VALIDATION', `语言服务只接受可无损解码的文本文件：${file}`)
+    const text = decoded.content
     const current = this.documents.get(file)
     if (!current) {
       this.documents.set(file, { languageId: this.spec.languageId, version: 1 })
@@ -293,6 +384,10 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   /** 发一条请求；进程没起来就直接拒。 */
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     const child = this.child
+    if (this.closed || this.state === 'error')
+      return Promise.reject(
+        new AppError('CLOSED', this.error ?? `语言服务 ${this.spec.id} 已关闭。`)
+      )
     if (!child)
       return Promise.reject(new AppError('UNAVAILABLE', `语言服务 ${this.spec.id} 没有在运行。`))
     return this.requestWithChild(child, method, params, signal)
@@ -341,6 +436,8 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   /** 发一条通知（不等回执）；进程没起来就抛。 */
   private notify(method: string, params: unknown): void {
     const child = this.child
+    if (this.closed || this.state === 'error')
+      throw new AppError('CLOSED', this.error ?? `语言服务 ${this.spec.id} 已关闭。`)
     if (!child) throw new AppError('UNAVAILABLE', `语言服务 ${this.spec.id} 没有在运行。`)
     notifyLanguageServer(child, method, params)
   }
@@ -400,16 +497,17 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
           return normalized ? [normalized] : []
         })
       : []
-    for (const pending of this.pendingDiagnostics.get(uri) ?? []) pending.resolve(diagnostics)
+    for (const pending of [...(this.pendingDiagnostics.get(uri) ?? [])])
+      pending.resolve(diagnostics)
   }
 
-  /** 进程出错或退出：在等的请求全部拒掉，在等的诊断按空结果收尾。 */
+  /** 管道关闭或主动取消时拒掉剩余等待者；每个等待者释放自己的租约与监听。 */
   private fail(error: Error): void {
-    this.state = 'error'
-    this.error = error.message
+    this.state = this.closed ? 'idle' : 'error'
+    this.error = this.closed ? null : error.message
     for (const pending of this.responses.values()) pending.reject(error)
     for (const entries of this.pendingDiagnostics.values()) {
-      for (const pending of entries) pending.resolve([])
+      for (const pending of [...entries]) pending.reject(error)
     }
   }
 }

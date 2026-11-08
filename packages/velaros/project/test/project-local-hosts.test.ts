@@ -1,7 +1,5 @@
 /**
- * 项目端口接真的本机宿主：`ProjectHostPort` 跑命令、管后台任务的四件来自本机 shell 宿主（`@velaros-ai/velaros/execution/local`），
- * 演练沙箱来自本机演练沙箱（`@velaros-ai/velaros/sandbox/local`）——产品装项目空间时就是这样接的。
- * 命令真在项目里跑、越界的工作目录一个进程都不起；沙箱真镜像项目，镜像里的命令写不到项目里，落回不问人。
+ * 项目端口接真的本机演练沙箱（`@velaros-ai/velaros/sandbox/local`）：镜像里的命令写不到项目里，落回不问人。
  */
 
 import { existsSync } from 'node:fs'
@@ -11,8 +9,6 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import type { LocalShellHostApi } from '@velaros-ai/velaros/execution'
-import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import type { LocalSandboxHostApi } from '@velaros-ai/velaros/sandbox'
 import { createLocalSandboxHost } from '@velaros-ai/velaros/sandbox/local'
 
@@ -25,26 +21,20 @@ const canConfine =
     ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
 
 let root = ''
-let outside = ''
 let sandboxBase = ''
-let shellHost: LocalShellHostApi
 let sandboxHost: LocalSandboxHostApi
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'project-local-hosts-'))
-  outside = await mkdtemp(join(tmpdir(), 'project-local-hosts-outside-'))
   sandboxBase = await mkdtemp(join(tmpdir(), 'project-local-hosts-sandboxes-'))
-  shellHost = createLocalShellHost({ cwd: root })
   sandboxHost = createLocalSandboxHost({ baseDir: sandboxBase })
 })
 afterEach(async () => {
   for (const record of sandboxHost.listSandboxes()) await sandboxHost.discardSandbox(record.id)
   await sandboxHost.dispose()
-  await shellHost.dispose()
-  for (const directory of [root, outside, sandboxBase])
-    await rm(directory, { recursive: true, force: true })
+  for (const directory of [root, sandboxBase]) await rm(directory, { recursive: true, force: true })
 })
 
-/** 项目宿主：命令与后台任务交给本机 shell 宿主，沙箱交给本机演练沙箱。 */
+/** 项目宿主的沙箱交给本机演练沙箱。 */
 async function projectOnLocalHosts(options: { approve?: boolean } = {}) {
   const harness = await createProjectPortsHarness(root, {
     approve: options.approve,

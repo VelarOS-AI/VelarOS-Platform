@@ -349,8 +349,10 @@ describe('TransactionValidation', () => {
       { id: 'first', ok: true },
       { id: 'second', ok: true },
     ])
-    // 保持抽取前语义：只有 registered validators 汇总 toolRequirements。
-    expect(result.toolRequirements).toBeUndefined()
+    expect(result.toolRequirements).toEqual([
+      { kind: 'missing-command', command: 'first' },
+      { kind: 'missing-command', command: 'second' },
+    ])
   })
 
   test('propagates dependency failures without wrapping them', async () => {

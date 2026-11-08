@@ -135,8 +135,6 @@ export const ProjectTuning = Object.freeze({
     searchResults: 50,
     /** 解析出的目标最多留多少个，超过从最早的淘汰。 */
     retainedTargets: 500,
-    /** 证据包最多留多少个，超过从最早的淘汰。 */
-    retainedEvidence: 500,
     /** 证据包的新鲜窗口没给前后行数时，目标前后各带几行。 */
     evidenceWindowLines: 5,
     /** 证据包的新鲜窗口最多读多少字节。 */

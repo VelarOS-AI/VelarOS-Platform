@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { textCodec } from '@velaros-ai/core/text-files'
 
 import { ProjectFileLimits, ProjectPolicyDefaults } from '../contract/constants'
+import { readFiles } from '../utils/agent/file-reads'
 import { projectSourceLines } from '../utils/agent/source-window'
 
 import { failureOf, projectToolFixture } from './support/tools'
@@ -266,6 +267,24 @@ describe('read 的窗口', () => {
 })
 
 describe('批量读', () => {
+  test('最后一项读取被取消时整次终止，不回报普通文件 issue', async () => {
+    await writeFile(join(root, 'first.txt'), 'first\n')
+    const { kernel, context } = await projectToolFixture({ root })
+    const controller = new AbortController()
+    context.abortSignal = controller.signal
+    const read = kernel.read.bind(kernel)
+    kernel.read = async (input) => {
+      if (input.path === 'last.txt') {
+        controller.abort()
+        controller.signal.throwIfAborted()
+      }
+      return read(input)
+    }
+    await expect(
+      readFiles({ files: [{ path: 'first.txt' }, { path: 'last.txt' }] }, context)
+    ).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   test('每个文件的 range 各管各的，读不到的只进 issues，不吞掉别的窗口', async () => {
     await writeFile(join(root, 'a.ts'), 'a1\na2\na3')
     await writeFile(join(root, 'b.ts'), 'b1\nb2\nb3')

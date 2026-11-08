@@ -46,7 +46,7 @@ export function executableCandidates(
 
 /**
  * 把裸命令名解析成 PATH 里的绝对路径；带路径分隔符或绝对路径的命令是调用方点名的那一个，原样交回（返回 undefined）。
- * PATH 里找不到也返回 undefined，调用方照旧把原名交给子进程，失败仍按「命令缺失」处理。
+ * PATH 里找不到也返回 undefined；Windows 调用方必须在启动前按命令缺失处理，避免重新引入 cwd 搜索。
  */
 export function resolveExecutableInPath(
   command: string,

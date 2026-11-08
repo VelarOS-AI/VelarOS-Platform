@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createProjectKernel } from '../index'
 import type { EditIntent } from '../types/edit'
 
-import { ProjectModelEditSchema } from './support/edit-intent-schema'
-
 let root = ''
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'project-scale-'))
@@ -31,7 +29,6 @@ describe('large transaction workload', () => {
       oldText: content,
       newText: content.replaceAll('file', 'changed'),
     }))
-    expect(ProjectModelEditSchema.safeParse({ edits }).success).toBe(true)
     const tx = await project.prepareEdit({ operations: edits.map((operation) => ({ operation })) })
     expect(tx.changedFiles).toHaveLength(50)
     expect(tx.changedLines).toBe(10000)

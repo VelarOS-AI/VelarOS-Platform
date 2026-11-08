@@ -115,6 +115,11 @@ export class TransactionValidation implements TransactionValidationApi {
         allPassed = allPassed && adapterResult.ok
         result.diagnostics.push(...adapterResult.diagnostics)
         result.checks.push(...adapterResult.checks)
+        if (adapterResult.toolRequirements?.length)
+          result.toolRequirements = [
+            ...(result.toolRequirements ?? []),
+            ...adapterResult.toolRequirements,
+          ]
       }
     }
 
