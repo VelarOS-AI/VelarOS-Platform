@@ -122,7 +122,7 @@ export interface ActContextPort {
       signal: AbortSignal
     ): Promise<{ body: string; prompt: string }>
     /** 只发布选中的最终正文与证明；租约仍在响应接纳后消费。 */
-    publish(body: string, signal: AbortSignal): Promise<void>
+    publish(body: string, signal: AbortSignal): Promise<void | ContextRef>
   }>
   /**
    * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。

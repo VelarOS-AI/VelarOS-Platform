@@ -1,4 +1,4 @@
-import type { ContextCompletionResult, ContextProjection } from '@velaros-ai/context'
+import type { ContextCompletionResult, ContextProjection, ContextRef } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
@@ -212,6 +212,8 @@ export interface ActEvent {
 
 /** 一帧编译好的请求，连同它的投影与段状态。 */
 export type ActComposedFrame = {
+  /** 真正发布的帧审计；宿主未持久化帧时缺席，不能用试算结果代替。 */
+  readonly frameRef?: ContextRef
   readonly projection: ContextProjection
   readonly segment?: ActFrameSegment
   /** 本次运行里连续没有进展的步数。 */

@@ -3807,7 +3807,7 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
       // The rejected response cannot be executed or become repair history.
       expect(executed).toBe(1)
       expect(sent.every((prompt) => !prompt.includes('unaccepted response'))).toBe(true)
-      expect(requests[1].estimate.tokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
+      expect(requests[1].requestAudit.inputTokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
       expect(responses[1].status).toBe('rejected')
       if (mode !== 'provider-reject')
         expect(responses[1].usage).toEqual({ inputTokens: 1000, outputTokens: 1 })
@@ -3817,8 +3817,8 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
         // The learned growth is 900 / 11000 with a separately rounded fixed reserve.
         const slope = (1000 - 100) / (12000 - 1000)
         const overhead = Math.ceil((100 - slope * 1000) * 1.1)
-        expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
-        expect(requests[2].request.compiledPrompt).toContain('synthetic invalid intent')
+        expect(requests[2].requestAudit.inputTokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
+        expect(sent[2]).toContain('synthetic invalid intent')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       } else if (mode === 'overflow' || mode === 'window') {
         expect(calls).toBe(2)
@@ -3826,7 +3826,7 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
       } else if (mode === 'provider-reject') {
         expect(calls).toBe(3)
         expect(folds).toBe(1)
-        expect(requests[2].estimate.basis).not.toContain('校准')
+        expect(requests[2].requestAudit.basis).not.toContain('校准')
         expect(responses[1]).not.toHaveProperty('usage')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       } else {
