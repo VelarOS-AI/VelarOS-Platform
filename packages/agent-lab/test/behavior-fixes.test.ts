@@ -98,6 +98,59 @@ describe('归档里的 harness 版本', () => {
 })
 
 describe('段预算的口径', () => {
+  test('send、等待或采集失败仍保留本段真实开始时间和释放事实', async () => {
+    for (const phase of ['send', 'waitSettled', 'collect'] as const) {
+      const clock = { value: 100 }
+      const startedAt = clock.value
+      const driver = clockedDriver(clock, 2_000)
+      const failure = new Error(`${phase} failed after work`)
+      const closed: string[] = []
+      driver[phase] = async () => {
+        clock.value += 3_000
+        throw failure
+      }
+      driver.closeSession = async (session) => {
+        closed.push(session.id)
+      }
+      const result = await journeyRunner.runJourney({
+        jobId: 'job',
+        suiteId: 'suite',
+        trial: trial(),
+        journey: journey(),
+        driver,
+        detectors: createDetectorRegistry(),
+        verifiers: passingVerifiers(),
+        workspaceRoot: null,
+        sourceCommit: null,
+        consumerCommit: null,
+        now: () => clock.value,
+      })
+      const elapsed = phase === 'collect' ? 5_000 : 3_000
+      expect(result.legs).toHaveLength(1)
+      const leg = result.legs[0]!
+      expect(leg.startedAt).toBe(startedAt)
+      expect(leg.finishedAt).toBe(startedAt + elapsed)
+      expect(leg.finishedAt - leg.startedAt).toBe(elapsed)
+      expect(leg.settleOutcome).toEqual({
+        kind: 'unavailable',
+        cause: 'harness-failure',
+        detail: failure.message,
+      })
+      expect(leg.passed).toBeNull()
+      expect(result.drops).toEqual([
+        {
+          trialId: trial().id,
+          legId: leg.legId,
+          cause: 'harness-failure',
+          detail: failure.message,
+        },
+      ])
+      expect(result.manifest.usage.wallClockMs).toBe(elapsed)
+      expect(result.manifest.exitReason).toBe('harness-failure')
+      expect(closed).toEqual(['session'])
+    }
+  })
+
   test('第二段按本段用时判，不再被整程用时判成超预算', async () => {
     const clock = { value: 0 }
     const definition = journey('journey-a', 2)

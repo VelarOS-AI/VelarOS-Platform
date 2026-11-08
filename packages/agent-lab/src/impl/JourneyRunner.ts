@@ -198,8 +198,8 @@ class JourneyRunner implements JourneyRunnerApi {
       const openSession = session
       try {
         for (const leg of journey.legs) {
+          const legStartedAt = now()
           try {
-            const legStartedAt = now()
             const legBudget: Budget = resolveBudget(journey.budget, leg.budget)
             // 段预算按本段计（与驱动等待的计时口径一致），整程预算仍按整程累计比。
             const legLedger = ledger.beginLeg()
@@ -316,7 +316,6 @@ class JourneyRunner implements JourneyRunnerApi {
             }
           } catch (error) {
             const detail = error instanceof Error ? error.message : String(error)
-            const legStartedAt = now()
             const observation = createUnobservedObservation('idle')
             const settleOutcome: SettleOutcome = {
               kind: 'unavailable',
