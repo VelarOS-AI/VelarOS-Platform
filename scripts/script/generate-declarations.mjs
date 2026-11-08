@@ -6,12 +6,24 @@
 //
 // 双向守 `@AgentView`：闭包里没标的要你标，标了不在闭包里的要你删。这样标记不可能过期——
 // 加一个字段引用了新类型，门禁当场告诉你「它进模型可观测面了」。
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { isUtf8 } from 'node:buffer'
+import { createHash, randomUUID } from 'node:crypto'
+import {
+  closeSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
-import { createHash } from 'node:crypto'
 import { operationContract, operationSchema } from './operation-contracts.mjs'
 
 import { GovernedModules } from '../ownership/governed-modules.mjs'
@@ -28,8 +40,11 @@ import {
 
 const Here = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(Here, '../..')
-const ShouldWrite = process.argv.includes('--write')
-const RequestedModules = readModuleOptions()
+const {
+  write: ShouldWrite,
+  modules: RequestedModules,
+  out: OutputOption,
+} = readOptions(process.argv.slice(2))
 const IsPartial = RequestedModules.length > 0
 const NativeSurfacePath = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
 const AllSurfaces = [...CodeSurfaces, ...StandardSurfaces]
@@ -63,25 +78,35 @@ function surfacePath(surface) {
   )
 }
 
-function readModuleOptions() {
-  const modules = []
-  for (let index = 2; index < process.argv.length; index++) {
-    if (process.argv[index] !== '--module') continue
-    const value = process.argv[++index]
-    if (!value || value.startsWith('--')) {
-      process.stderr.write('--module 需要一个登记的 namespace；多个模块请重复 --module\n')
-      process.exit(1)
+/** 包脚本固定传入 --write；Bun run 的分隔符由 Bun 消费，不在这里跳过任意参数。 */
+function readOptions(args) {
+  const options = { write: false, modules: [], out: null }
+  for (let index = 0; index < args.length; index++) {
+    const option = args[index]
+    if (option === '--write') {
+      if (options.write) throw new Error('不允许重复 --write')
+      options.write = true
+      continue
     }
-    modules.push(value)
+    if (option !== '--module' && option !== '--out')
+      throw new Error(`未知参数：${option}；仅支持 --write、--module <namespace>、--out <目录>`)
+    if (option === '--out' && options.out !== null) throw new Error('不允许重复 --out')
+    const value = args[++index]
+    if (!value || value.startsWith('-'))
+      throw new Error(
+        option === '--module' ? '--module 需要一个登记的 namespace' : '--out 需要一个目录'
+      )
+    if (option === '--module') options.modules.push(value)
+    else options.out = value
   }
-  return [...new Set(modules)]
+  options.modules = [...new Set(options.modules)]
+  return options
 }
 
 /**
  * 产物目录。`--out <目录>` 可以改到别处：验证新格式时不该碰真基线，
  * 尤其是有人正在并行改那几份产物的时候。
  */
-const OutputOption = readOutOption()
 const OutputDirectory = resolve(RepoRoot, OutputOption ?? 'baselines/script')
 const selectedNames = [...SelectedCodeSurfaces, ...SelectedStandardSurfaces].map(
   (surface) => surface.namespace
@@ -105,22 +130,448 @@ if (OutputOption && IsPartial && RequestedModules.includes('native-tools')) {
   process.exit(1)
 }
 
-function readOutOption() {
-  const index = process.argv.indexOf('--out')
-  if (index < 0) return null
-  const value = process.argv[index + 1]
-  if (!value || value.startsWith('--')) {
-    process.stderr.write('--out 需要一个目录\n')
-    process.exit(1)
-  }
-  return value
-}
-
 /** 随包发布的那份（contract/surface.ts）的文件头；所有权门禁认这一行，手写的合同文件冒充不了。 */
 const SurfaceFileHeader = [
   '// 本文件由 scripts/script/generate-declarations.mjs 从能力包源码生成，不要手改。',
   '// 模型面的声明与代码模版随包发布：空间挂这件能力时把它交给代码面的门，宿主不必另找一份。改了源码里带 @AgentView 的东西或模版，`bun run generate:script` 重算。',
 ].join('\n')
+
+/** 发布对象限于登记的合同根和直接 baseline；每级路径都拒绝链接及特殊文件。 */
+function regularPath(path, directory = false) {
+  const absolute = resolve(path)
+  let current = parse(absolute).root
+  for (const part of absolute.slice(current.length).split(sep).filter(Boolean)) {
+    current = join(current, part)
+    let stat
+    try {
+      stat = lstatSync(current)
+    } catch (error) {
+      if (error.code === 'ENOENT') continue
+      throw error
+    }
+    const isDirectory = current !== absolute || directory
+    if (stat.isSymbolicLink() || !(isDirectory ? stat.isDirectory() : stat.isFile()))
+      throw new Error(`生成路径必须是普通${isDirectory ? '目录' : '文件'}，不能是链接：${current}`)
+  }
+  try {
+    const stat = lstatSync(absolute)
+    if (stat.isSymbolicLink() || !(directory ? stat.isDirectory() : stat.isFile()))
+      throw new Error(`生成路径必须是普通${directory ? '目录' : '文件'}，不能是链接：${absolute}`)
+    return stat
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+/** 正式路径按 relative 核边界，不能用字符串前缀把相邻目录当作子目录。 */
+function repositoryPath(...parts) {
+  const path = resolve(RepoRoot, ...parts)
+  const child = relative(RepoRoot, path)
+  if (!child || isAbsolute(child) || child === '..' || child.startsWith(`..${sep}`))
+    throw new Error(`生成路径超出仓库：${path}`)
+  return path
+}
+
+/** namespace 同时成为直接文件名；不接受路径、盘符或任意长度的名称。 */
+function baselinePath(namespace, directory = OutputDirectory) {
+  if (!/^[a-z][a-z0-9-]{0,127}$/u.test(namespace))
+    throw new Error(`无效的生成 namespace：${namespace}`)
+  const path = resolve(directory, `${namespace}.d.ts`)
+  if (dirname(path) !== resolve(directory)) throw new Error(`baseline 超出目录：${path}`)
+  return path
+}
+
+/** 记录发布前的字节和文件身份；内容相同也不能覆盖已经换过所有者的文件。 */
+function artifactState(path) {
+  const stat = regularPath(path)
+  return { path, stat, bytes: stat ? readFileSync(path) : null }
+}
+
+/** 先解码当前生成器使用的静态字面量；旧产物从不 import、eval 或执行。 */
+function staticData(node, freeze = false) {
+  if (ts.isAsExpression(node)) {
+    if (node.type.getText() !== 'const') throw new Error('只接受生成的 as const')
+    return staticData(node.expression, freeze)
+  }
+  if (freeze && ts.isCallExpression(node)) {
+    if (
+      !ts.isPropertyAccessExpression(node.expression) ||
+      !ts.isIdentifier(node.expression.expression) ||
+      node.expression.expression.text !== 'Object' ||
+      node.expression.name.text !== 'freeze' ||
+      node.arguments.length !== 1 ||
+      node.typeArguments?.length
+    )
+      throw new Error('只接受生成的 Object.freeze 字面量')
+    return staticData(node.arguments[0])
+  }
+  if (ts.isStringLiteral(node)) return node.text
+  if (ts.isNumericLiteral(node)) return Number(node.text)
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null
+  if (
+    ts.isPrefixUnaryExpression(node) &&
+    node.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(node.operand)
+  )
+    return -Number(node.operand.text)
+  if (ts.isArrayLiteralExpression(node)) return node.elements.map((item) => staticData(item))
+  if (ts.isObjectLiteralExpression(node)) {
+    const value = Object.create(null)
+    for (const item of node.properties) {
+      if (
+        !ts.isPropertyAssignment(item) ||
+        !(ts.isIdentifier(item.name) || ts.isStringLiteral(item.name))
+      )
+        throw new Error('生成对象只能包含静态属性，不能有 spread、getter 或引用')
+      const key = item.name.text
+      if (Object.hasOwn(value, key)) throw new Error(`生成对象有重复属性：${key}`)
+      // methods 是生成器唯一嵌套冻结的属性。
+      value[key] = staticData(item.initializer, key === 'methods')
+    }
+    return value
+  }
+  throw new Error('生成所有权不能包含动态表达式或可执行语句')
+}
+
+/** 一份声明只证明自己的 ambient module，不能从注释猜 namespace。 */
+function declarationIdentity(text) {
+  const file = ts.createSourceFile('owned.d.ts', text, ts.ScriptTarget.Latest, true)
+  const [module] = file.statements
+  if (
+    file.parseDiagnostics.length ||
+    file.statements.length !== 1 ||
+    !ts.isModuleDeclaration(module) ||
+    module.modifiers?.length !== 1 ||
+    module.modifiers[0].kind !== ts.SyntaxKind.DeclareKeyword ||
+    !ts.isStringLiteral(module.name) ||
+    !module.body ||
+    !ts.isModuleBlock(module.body)
+  )
+    throw new Error('生成声明必须恰有一个 ambient module')
+  if (
+    module.body.statements.some(
+      (statement) =>
+        !(
+          ts.isInterfaceDeclaration(statement) ||
+          ts.isTypeAliasDeclaration(statement) ||
+          (ts.isFunctionDeclaration(statement) && !statement.body) ||
+          (ts.isVariableStatement(statement) &&
+            statement.declarationList.declarations.every((item) => !item.initializer))
+        )
+    )
+  )
+    throw new Error('生成声明只能包含类型和无实现的签名')
+  const specifier = module.name.text
+  const namespace =
+    specifier === 'velaros'
+      ? 'velaros'
+      : specifier.startsWith(CapabilityModulePrefix)
+        ? specifier.slice(CapabilityModulePrefix.length)
+        : ''
+  baselinePath(namespace)
+  return {
+    namespace,
+    specifier,
+    methods: module.body.statements
+      .filter(ts.isFunctionDeclaration)
+      .map((method) => method.name?.text),
+  }
+}
+
+/** marker 只证明所有权根；无 marker 的 baseline 仍需和这里的声明逐字配对。 */
+function surfaceOwnership(state) {
+  if (!isUtf8(state.bytes)) throw new Error(`生成 surface 不是 UTF-8：${state.path}`)
+  const text = state.bytes.toString('utf8').replace(/\r\n/g, '\n')
+  if (!text.startsWith(`${SurfaceFileHeader}\n\n`))
+    throw new Error(`surface 缺少完整生成标记：${state.path}`)
+  const file = ts.createSourceFile(state.path, text, ts.ScriptTarget.Latest, true)
+  if (file.parseDiagnostics.length || !file.statements.length)
+    throw new Error(`生成 surface 语法无效：${state.path}`)
+  const owners = []
+  const constants = new Set()
+  for (const statement of file.statements) {
+    if (
+      !ts.isVariableStatement(statement) ||
+      statement.modifiers?.length !== 1 ||
+      statement.modifiers[0].kind !== ts.SyntaxKind.ExportKeyword ||
+      !(statement.declarationList.flags & ts.NodeFlags.Const) ||
+      statement.declarationList.declarations.length !== 1
+    )
+      throw new Error(`生成 surface 只能有 export const：${state.path}`)
+    const declaration = statement.declarationList.declarations[0]
+    if (
+      !ts.isIdentifier(declaration.name) ||
+      !declaration.initializer ||
+      declaration.type ||
+      constants.has(declaration.name.text)
+    )
+      throw new Error(`生成常量身份不唯一：${state.path}`)
+    const constant = declaration.name.text
+    constants.add(constant)
+    const value = staticData(declaration.initializer, true)
+    if (typeof value === 'string') {
+      if (!ts.isStringLiteral(declaration.initializer))
+        throw new Error(`标准声明必须是字符串常量：${constant}`)
+      const identity = declarationIdentity(value)
+      const standard = StandardSurfaces.find((entry) => entry.namespace === identity.namespace)
+      if (standard && (standard.constant !== constant || standard.specifier !== identity.specifier))
+        throw new Error(`标准生成常量身份不符：${constant}`)
+      owners.push({ ...identity, declarations: value })
+      continue
+    }
+    if (
+      state.path === NativeSurfacePath &&
+      /^Native(?:Execution|Observation|Blob|Done)Schema$/u.test(constant)
+    ) {
+      if (
+        !ts.isAsExpression(declaration.initializer) ||
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value) ||
+        value.type !== 'object'
+      )
+        throw new Error(`native schema 不是生成对象：${constant}`)
+      continue
+    }
+    if (
+      !ts.isCallExpression(declaration.initializer) ||
+      !ts.isObjectLiteralExpression(declaration.initializer.arguments[0])
+    )
+      throw new Error(`能力面必须是生成的冻结对象：${constant}`)
+    const methods = declaration.initializer.arguments[0].properties.find(
+      (item) => ts.isPropertyAssignment(item) && item.name.text === 'methods'
+    )
+    if (!methods || !ts.isCallExpression(methods.initializer))
+      throw new Error(`能力方法必须是生成的冻结数组：${constant}`)
+    const keys = [
+      'specifier',
+      'namespace',
+      'methods',
+      'declarations',
+      'template',
+      'revision',
+      'operations',
+    ]
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Object.keys(value).length !== keys.length ||
+      keys.some((key) => !Object.hasOwn(value, key)) ||
+      typeof value.declarations !== 'string' ||
+      typeof value.template !== 'string'
+    )
+      throw new Error(`生成能力面形状无效：${state.path}`)
+    const identity = declarationIdentity(value.declarations)
+    if (
+      value.namespace !== identity.namespace ||
+      value.specifier !== identity.specifier ||
+      constant !== surfaceConstantName(identity.namespace)
+    )
+      throw new Error(`生成能力 namespace/specifier/常量身份不符：${state.path}`)
+    if (
+      !Array.isArray(value.methods) ||
+      value.methods.some((method) => typeof method !== 'string') ||
+      new Set(value.methods).size !== value.methods.length ||
+      !value.operations ||
+      Array.isArray(value.operations) ||
+      JSON.stringify([...value.methods].sort()) !== JSON.stringify([...identity.methods].sort()) ||
+      JSON.stringify([...value.methods].sort()) !==
+        JSON.stringify(Object.keys(value.operations).sort()) ||
+      value.revision !== createHash('sha256').update(JSON.stringify(value.operations)).digest('hex')
+    )
+      throw new Error(`生成能力方法或 revision 不符：${state.path}`)
+    owners.push({ ...identity, declarations: value.declarations })
+  }
+  return owners
+}
+
+/** 全量只查治理合同根；局部只查所选物理 surface，--out 不读取正式所有权。 */
+function existingArtifacts() {
+  const states = new Map()
+  const owners = new Map()
+  const removals = []
+  if (OutputOption) return { states, removals }
+  const activePaths = new Set([...AllSurfaces.map(surfacePath), NativeSurfacePath])
+  const activeNames = new Set(AllSurfaces.map((surface) => surface.namespace))
+  const candidates = IsPartial
+    ? selectedPaths
+    : new Set([
+        ...GovernedModules.map((module) =>
+          repositoryPath('packages', module.directory, module.contract, 'surface.ts')
+        ),
+        ...activePaths,
+      ])
+  for (const path of [...candidates].sort()) {
+    repositoryPath(relative(RepoRoot, path))
+    const state = artifactState(path)
+    states.set(path, state)
+    if (!state.bytes) continue
+    const identities = surfaceOwnership(state)
+    for (const owner of identities) {
+      if (owners.has(owner.namespace))
+        throw new Error(`生成 namespace 有多个所有者：${owner.namespace}`)
+      owners.set(owner.namespace, { ...owner, state })
+      if (IsPartial && !activeNames.has(owner.namespace))
+        throw new Error(
+          `所选共享 surface 含退役 namespace ${owner.namespace}；必须先全量生成，局部零写入`
+        )
+    }
+    if (!IsPartial && !activePaths.has(path))
+      removals.push({ ...state, kind: 'surface', bytes: null })
+  }
+  if (IsPartial) return { states, removals }
+  const directory = repositoryPath('baselines/script')
+  const unproven = []
+  if (regularPath(directory, true)) {
+    for (const name of readdirSync(directory)
+      .filter((name) => name.endsWith('.d.ts'))
+      .sort()) {
+      const namespace = name.slice(0, -5)
+      const path = baselinePath(namespace, directory)
+      const state = artifactState(path)
+      states.set(path, state)
+      if (activeNames.has(namespace)) continue
+      const owner = owners.get(namespace)
+      if (!owner || !state.bytes.equals(Buffer.from(owner.declarations, 'utf8'))) {
+        unproven.push(path)
+        continue
+      }
+      removals.push({ ...state, kind: 'baseline', bytes: null })
+    }
+  }
+  if (unproven.length) {
+    for (const item of removals)
+      process.stdout.write(`可证明退役（本批未发布）：${relative(RepoRoot, item.path)}\n`)
+    throw new Error(`登记表之外的声明无法证明生成归属，必须逐字配对：\n${unproven.join('\n')}`)
+  }
+  return { states, removals }
+}
+
+/** compare→rename 不提供跨进程 CAS；共享生成窗口中仍在发布前核对每份旧身份和字节。 */
+function assertUnchanged(state) {
+  const current = artifactState(state.path)
+  if (
+    Boolean(current.stat) !== Boolean(state.stat) ||
+    (state.stat &&
+      (current.stat.dev !== state.stat.dev ||
+        current.stat.ino !== state.stat.ino ||
+        current.stat.mtimeMs !== state.stat.mtimeMs ||
+        !current.bytes.equals(state.bytes)))
+  )
+    throw new Error(`生成目标在发布前已变化：${state.path}`)
+}
+
+/** 同目录独占暂存并 flush；不会直接 truncate 正式文件。 */
+function stageArtifact(path, bytes, mode) {
+  regularPath(dirname(path), true)
+  mkdirSync(dirname(path), { recursive: true })
+  regularPath(dirname(path), true)
+  const temporary = join(
+    dirname(path),
+    `.${basename(path)}.generate-${process.pid}-${randomUUID()}`
+  )
+  const fd = openSync(temporary, 'wx', mode === undefined ? 0o666 : mode & 0o777)
+  const errors = []
+  try {
+    writeFileSync(fd, bytes)
+    fsyncSync(fd)
+  } catch (error) {
+    errors.push(error)
+  }
+  try {
+    closeSync(fd)
+  } catch (error) {
+    errors.push(error)
+  }
+  if (errors.length) {
+    try {
+      unlinkSync(temporary)
+    } catch (error) {
+      errors.push(error)
+    }
+    throw new AggregateError(errors, `生成暂存失败：${temporary}`)
+  }
+  return temporary
+}
+
+// 私有文件操作口只用于同文件真实发布回归的确定性故障；不是 CLI 或产品注入面。
+const publishFileSystem = { renameSync, unlinkSync, stageArtifact }
+
+/** 单文件替换原子；普通 I/O 失败尽力恢复本批，崩溃/断电没有跨文件事务保证。 */
+function publishArtifacts(plan, io = publishFileSystem) {
+  const staged = new Map()
+  const backups = new Map()
+  const changed = []
+  const retained = new Set()
+  let failure
+  try {
+    for (const item of plan) assertUnchanged(item.previous)
+    for (const item of plan) {
+      if (item.bytes)
+        staged.set(item.path, io.stageArtifact(item.path, item.bytes, item.previous.stat?.mode))
+      if (item.previous.bytes)
+        backups.set(
+          item.path,
+          io.stageArtifact(item.path, item.previous.bytes, item.previous.stat.mode)
+        )
+    }
+    for (const item of plan) assertUnchanged(item.previous)
+    // 先保留无 marker baseline 的名字，才允许重生共享 surface 或移走孤立所有权根。
+    const ordered = [
+      ...plan.filter((item) => !item.bytes && item.kind === 'baseline'),
+      ...plan.filter((item) => item.bytes),
+      ...plan.filter((item) => !item.bytes && item.kind === 'surface'),
+    ]
+    for (const item of ordered) {
+      assertUnchanged(item.previous)
+      const change = { ...item, backup: backups.get(item.path), published: undefined }
+      if (item.bytes) {
+        io.renameSync(staged.get(item.path), item.path)
+        staged.delete(item.path)
+      } else {
+        io.renameSync(item.path, change.backup)
+      }
+      changed.push(change)
+      change.published = artifactState(item.path)
+    }
+  } catch (error) {
+    const errors = [error]
+    for (const item of changed.reverse()) {
+      try {
+        if (!item.published) throw new Error(`无法确认发布后的目标身份：${item.path}`)
+        assertUnchanged(item.published)
+        if (item.backup) {
+          io.renameSync(item.backup, item.path)
+          backups.delete(item.path)
+        } else io.unlinkSync(item.path)
+      } catch (rollback) {
+        if (item.backup) retained.add(item.backup)
+        errors.push(
+          new Error(`回滚失败，保留当前目标和可用备份：${item.path}`, { cause: rollback })
+        )
+      }
+    }
+    failure = new AggregateError(errors, '生成发布失败；已尝试回滚，不能视为仓库原子提交')
+  }
+  const cleanupErrors = []
+  for (const temporary of [...staged.values(), ...backups.values()].filter(
+    (path) => !retained.has(path)
+  )) {
+    try {
+      io.unlinkSync(temporary)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  if (failure || cleanupErrors.length)
+    throw new AggregateError(
+      [...(failure ? [failure] : []), ...cleanupErrors],
+      '生成发布或清理失败；检查剩余差量和 .generate 备份'
+    )
+}
 
 /** 内置泛型与类型参数：它们从 lib 来，不该也不可能在包里找到声明。 */
 const BuiltinTypeNames = new Set([
@@ -973,122 +1424,78 @@ if (!OutputOption && IncludeNative) {
   )
   nativeSurfaceBlocks.set(NativeSurfacePath, [declarations.join('\n').trimEnd()])
 }
+// 先收旧所有权，再生成内存计划；任何校验或暂存失败都不先发布一部分产物。
+const previousArtifacts = existingArtifacts()
+const publishPlan = []
 const marked = new Set()
 const generated = new Map()
+const generatedStandard = new Map()
+function planArtifact(path, text, label) {
+  const previous = previousArtifacts.states.get(path) ?? artifactState(path)
+  previousArtifacts.states.set(path, previous)
+  if (previous.bytes?.toString('utf8').replace(/\r\n/g, '\n') === text) return
+  publishPlan.push({ path, bytes: Buffer.from(text, 'utf8'), previous })
+  process.stdout.write(
+    ShouldWrite
+      ? `更新：${relative(RepoRoot, path)}\n`
+      : `✗ ${label}: 生成物与源码不一致；随包 surface 与声明须用 bun run generate:script 重算。\n`
+  )
+}
 for (const surface of SelectedCodeSurfaces) {
   const result = generate(surface)
   generated.set(surface.namespace, result)
   for (const name of result.marked) marked.add(name)
-  const outputPath = resolve(OutputDirectory, `${surface.namespace}.d.ts`)
-
-  if (result.problems.length > 0) {
+  if (result.problems.length) {
     failed = true
     process.stdout.write(`✗ ${surface.namespace}:\n  - ${result.problems.join('\n  - ')}\n`)
-    continue
-  }
-  if (ShouldWrite) {
-    mkdirSync(OutputDirectory, { recursive: true })
-    writeFileSync(outputPath, result.text)
+  } else {
+    planArtifact(baselinePath(surface.namespace), result.text, surface.namespace)
     process.stdout.write(
-      `✓ ${surface.namespace}: ${result.methodCount} 个方法、${result.typeCount} 个类型，${result.text.length} 字符\n`
+      `✓ ${surface.namespace}: ${result.methodCount} 个方法、${result.typeCount} 个类型\n`
     )
-    continue
   }
-
-  const current = ts.sys.fileExists(outputPath)
-    ? readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n')
-    : null
-  if (current === result.text) {
-    process.stdout.write(
-      `✓ ${surface.namespace}: ${result.methodCount} 个方法、${result.typeCount} 个类型，与源码一致\n`
-    )
-    continue
-  }
-  failed = true
-  process.stdout.write(
-    `✗ ${surface.namespace}: 生成物与源码不一致。你改的是模型可观测面——先看清楚改了什么，再 \`bun run generate:script\` 重算并提交。\n`
-  )
 }
-
-const generatedStandard = new Map()
 for (const entry of SelectedStandardSurfaces) {
   const result = generateStandard(entry)
   generatedStandard.set(entry.namespace, result)
   for (const name of result.marked) marked.add(name)
-  const outputPath = resolve(OutputDirectory, `${entry.namespace}.d.ts`)
-  if (result.problems.length > 0) {
+  if (result.problems.length) {
     failed = true
     process.stdout.write(`✗ ${entry.specifier}:\n  - ${result.problems.join('\n  - ')}\n`)
-    continue
-  }
-  if (ShouldWrite) {
-    mkdirSync(OutputDirectory, { recursive: true })
-    writeFileSync(outputPath, result.text)
+  } else {
+    planArtifact(baselinePath(entry.namespace), result.text, entry.namespace)
     process.stdout.write(
-      `✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型，${result.text.length} 字符\n`
-    )
-    continue
-  }
-  const current = ts.sys.fileExists(outputPath)
-    ? readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n')
-    : null
-  if (current === result.text) {
-    process.stdout.write(
-      `✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型，与源码一致\n`
-    )
-    continue
-  }
-  failed = true
-  process.stdout.write(
-    `✗ ${entry.specifier}: 生成物与源码不一致。你改的是模型可观测面——先看清楚改了什么，再 \`bun run generate:script\` 重算并提交。\n`
-  )
-}
-
-// 声明随包发布：每件能力在自己包的 contract/surface.ts 里带一份（模块名、放出去的方法、完整声明），
-// 空间挂它时交给代码面的门；和上面那份 baselines 是同一份。写到别的目录（--out）时不碰包里的文件。
-// 局部生成失败时不发布残缺的共享文件。全量路径保留原有行为。
-if (!OutputOption && !(IsPartial && failed)) {
-  for (const [path, text] of surfaceModules()) {
-    const current = ts.sys.fileExists(path)
-      ? readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
-      : null
-    if (current === text) continue
-    if (ShouldWrite) {
-      writeFileSync(path, text)
-      process.stdout.write(`✓ ${path.slice(RepoRoot.length + 1)}：随包发布的模型面已更新\n`)
-      continue
-    }
-    failed = true
-    process.stdout.write(
-      `✗ ${path.slice(RepoRoot.length + 1)} 与生成的声明不一致；\`bun run generate:script\` 重算并提交\n`
+      `✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型\n`
     )
   }
 }
-
+if (!OutputOption)
+  for (const [path, text] of surfaceModules()) planArtifact(path, text, relative(RepoRoot, path))
 const stray = IsPartial ? [] : findStrayTags(marked)
-if (stray.length > 0) {
+if (stray.length) {
   failed = true
   process.stdout.write(
-    `✗ 这些类型标了 ${AgentViewTag} 却不在任何模型面上；删掉标记，免得它烂成装饰：\n  - ${stray.join('\n  - ')}\n`
+    `✗ 这些类型标了 ${AgentViewTag} 却不在任何模型面上：\n  - ${stray.join('\n  - ')}\n`
   )
 }
-
-// 登记表里没有的命名空间，产物也不该留着：模型会读到一件已经不存在的能力。
-const expected = new Set(
-  [...CodeSurfaces, ...StandardSurfaces].map((surface) => `${surface.namespace}.d.ts`)
-)
-const leftovers =
-  !IsPartial && ts.sys.directoryExists(OutputDirectory)
-    ? ts.sys
-        .readDirectory(OutputDirectory, ['.d.ts'])
-        .map((path) => path.slice(OutputDirectory.length + 1))
-        .filter((name) => !expected.has(name))
-    : []
-if (leftovers.length > 0) {
-  failed = true
+// --out 不读取正式旧 surface，也没有 prune 权限，即使指向正式 baseline 目录。
+if (OutputOption && !IsPartial && regularPath(OutputDirectory, true)) {
+  const expected = new Set(AllSurfaces.map((surface) => `${surface.namespace}.d.ts`))
+  const extras = readdirSync(OutputDirectory).filter(
+    (name) => name.endsWith('.d.ts') && !expected.has(name)
+  )
+  if (extras.length) {
+    failed = true
+    process.stdout.write(`✗ --out 目录有登记表之外的声明（不会删除）：${extras.join('、')}\n`)
+  }
+}
+for (const removal of previousArtifacts.removals) {
+  const previous = previousArtifacts.states.get(removal.path)
+  publishPlan.push({ path: removal.path, bytes: null, kind: removal.kind, previous })
   process.stdout.write(
-    `✗ ${OutputDirectory} 里有登记表之外的声明：${leftovers.join('、')}；那件能力已经不在了，删掉它\n`
+    `退役：${relative(RepoRoot, removal.path)}；正式全量 bun run generate:script 删除\n`
   )
 }
-
-if (failed) process.exit(1)
+publishPlan.sort((left, right) => left.path.localeCompare(right.path))
+if (failed || (!ShouldWrite && publishPlan.length)) process.exit(1)
+if (ShouldWrite && publishPlan.length) publishArtifacts(publishPlan)
