@@ -12,6 +12,7 @@ import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKerne
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
 import { KernelService } from '../../../src/impl/serve/KernelService'
+import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const directories: string[] = []
@@ -23,6 +24,56 @@ afterEach(async () => {
 })
 
 describe('mods RPC', () => {
+  test('the real in-process service rejects all three mod operations without a catalog', async () => {
+    const service = new KernelService({
+      host: new KernelModuleHost({ apiVersion: 1 }),
+      kernelVersion: '0.3.0-test',
+    })
+    const client = new KernelClient(new InProcessKernelTransport(service))
+    try {
+      await service.start()
+      await expect(client.listMods()).rejects.toMatchObject({ code: 'MODS_UNAVAILABLE' })
+      await expect(client.setModEnabled('missing-pack', true)).rejects.toMatchObject({
+        code: 'MODS_UNAVAILABLE',
+      })
+      await expect(client.installModFromDirectory('missing-pack')).rejects.toMatchObject({
+        code: 'MODS_UNAVAILABLE',
+      })
+    } finally {
+      await client.dispose()
+      await service.dispose()
+    }
+  })
+
+  test('a real available ModStore retains empty lists and unknown-pack false results', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-mods-empty-'))
+    directories.push(root)
+    const booted = await bootKernelDaemon({
+      kernelVersion: '0.3.0-test',
+      modsRoot: root,
+      paths: createDefaultKernelDaemonPaths('mods-empty', root),
+      modules: [],
+    })
+    const client = booted.createClient()
+    try {
+      expect(await client.listMods()).toEqual({ protocolVersion: KernelProtocolVersion, packs: [] })
+      expect(await client.setModEnabled('missing-pack', true)).toEqual({
+        protocolVersion: KernelProtocolVersion,
+        ok: false,
+        reloadRequired: true,
+      })
+      expect(await client.setModEnabled('missing-pack', false)).toEqual({
+        protocolVersion: KernelProtocolVersion,
+        ok: false,
+        reloadRequired: true,
+      })
+      expect(await client.listMods()).toEqual({ protocolVersion: KernelProtocolVersion, packs: [] })
+    } finally {
+      await client.dispose()
+      await booted.stop()
+    }
+  })
+
   test('lists, installs, and toggles packs through KernelClient', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-mods-rpc-'))
     directories.push(root)
@@ -62,6 +113,7 @@ describe('mods RPC', () => {
     const booted = await bootKernelDaemon({
       kernelVersion: '0.3.0-test',
       modsRoot: root,
+      paths: createDefaultKernelDaemonPaths('mods-rpc', root),
       modules: [
         kernelModules.define({
           manifest: {

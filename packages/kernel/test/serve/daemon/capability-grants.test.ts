@@ -4,6 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import type { KernelModuleDefinition } from '../../../src/contract/requires'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
@@ -15,6 +17,7 @@ import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServ
 import { KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import { KernelService } from '../../../src/impl/serve/KernelService'
+import type { ScopeRef } from '../../../src/utils/wire/capability'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const Token = kernelModules.token('test.grants')
@@ -68,16 +71,19 @@ function createService(): KernelService {
   })
 }
 
-function callRequest(sessionId: string, operation = 'read') {
+function sessionRequest(scope: ScopeRef | null = null, operation = 'read') {
   return {
     protocolVersion: KernelProtocolVersion,
     callId: `call-${operation}`,
-    sessionId,
     capabilityId: Token.id,
     operation,
-    scope: null,
+    scope,
     input: null,
   } as const
+}
+
+function callRequest(sessionId: string, operation = 'read') {
+  return { ...sessionRequest(null, operation), sessionId }
 }
 
 describe('capability session bind', () => {
@@ -134,6 +140,110 @@ describe('capability session bind', () => {
     })
 
     await service.dispose()
+  })
+
+  for (const field of ['id', 'ownerModuleId', 'kind'] as const) {
+    test(`keeps the admitted scope after the returned session ${field} is mutated`, async () => {
+      const service = createService()
+      const client = new KernelClient(new InProcessKernelTransport(service))
+      try {
+        await service.start()
+        const admittedScope = {
+          id: 'scope-original',
+          ownerModuleId: 'module.grants',
+          kind: 'document',
+        }
+        const requestedScope = { ...admittedScope }
+        const session = await client.openCapabilitySession({
+          requires: [{ capabilityId: Token.id, operations: ['read'], scope: requestedScope }],
+        })
+        expect(await session.call(sessionRequest(admittedScope))).toMatchObject({
+          status: 'ok',
+          output: 'granted-output',
+        })
+
+        // 原请求已被 Service schema 复制；这一控制案例不能代替返回值的别名反例。
+        const inputChange = `input-changed-${field}`
+        expect(Reflect.set(requestedScope, field, inputChange)).toBeTrue()
+        expect(
+          await session.call(sessionRequest({ ...admittedScope, [field]: inputChange }))
+        ).toMatchObject({
+          status: 'error',
+          error: { code: 'CAPABILITY_NOT_GRANTED' },
+        })
+        expect(await session.call(sessionRequest(admittedScope))).toMatchObject({ status: 'ok' })
+
+        const returnedScope = session.requires[0]?.scope
+        expect(returnedScope).toEqual(admittedScope)
+        expect(returnedScope).not.toBe(requestedScope)
+        if (returnedScope === null || returnedScope === undefined)
+          throw new AppError('INVARIANT', '测试会话必须返回已准入的 scope')
+        const responseChange = `response-changed-${field}`
+        expect(Reflect.set(returnedScope, field, responseChange)).toBeTrue()
+        expect(
+          await session.call(sessionRequest({ ...admittedScope, [field]: responseChange }))
+        ).toMatchObject({
+          status: 'error',
+          error: { code: 'CAPABILITY_NOT_GRANTED' },
+        })
+        expect(await session.call(sessionRequest(admittedScope))).toMatchObject({
+          status: 'ok',
+          output: 'granted-output',
+        })
+      } finally {
+        await client.dispose()
+        await service.dispose()
+      }
+    })
+  }
+
+  test('retains null scope and operation meanings while isolating the returned operation list', async () => {
+    const service = createService()
+    const client = new KernelClient(new InProcessKernelTransport(service))
+    try {
+      await service.start()
+      const scope: ScopeRef = { id: 'scope-exact', ownerModuleId: 'module.grants', kind: null }
+      const unrestricted = await client.openCapabilitySession({
+        requires: [{ capabilityId: Token.id, operations: null, scope: null }],
+      })
+      expect(await unrestricted.call(sessionRequest())).toMatchObject({
+        status: 'ok',
+        output: 'granted-output',
+      })
+      expect(await unrestricted.call(sessionRequest(scope, 'write'))).toMatchObject({
+        status: 'ok',
+        output: 'write-output',
+      })
+
+      const restricted = await client.openCapabilitySession({
+        requires: [{ capabilityId: Token.id, operations: ['read'], scope }],
+      })
+      expect(await restricted.call(sessionRequest(scope))).toMatchObject({ status: 'ok' })
+      expect(await restricted.call(sessionRequest())).toMatchObject({
+        status: 'error',
+        error: { code: 'CAPABILITY_NOT_GRANTED' },
+      })
+      expect(await restricted.call(sessionRequest({ ...scope, kind: 'document' }))).toMatchObject({
+        status: 'error',
+        error: { code: 'CAPABILITY_NOT_GRANTED' },
+      })
+      const operations = restricted.requires[0]?.operations
+      expect(operations).toEqual(['read'])
+      if (operations === null || operations === undefined)
+        throw new AppError('INVARIANT', '测试会话必须返回受限操作列表')
+      operations.push('write')
+      expect(await restricted.call(sessionRequest(scope, 'write'))).toMatchObject({
+        status: 'error',
+        error: { code: 'CAPABILITY_NOT_GRANTED' },
+      })
+      expect(await restricted.call(sessionRequest(scope))).toMatchObject({
+        status: 'ok',
+        output: 'granted-output',
+      })
+    } finally {
+      await client.dispose()
+      await service.dispose()
+    }
   })
 
   test('isolates sessions across RPC connections', async () => {
