@@ -139,6 +139,7 @@ export async function assertBytesOnDisk(
  * 原子替换一个文件的全部字节：沿符号链接找到真正的文件（链接本身不动），已有的只接受普通文件、拒绝多硬链接的（替换会把它和其余链接拆开）；
  * prepare 在建临时文件之前算出要写的字节，它抛错时磁盘一个字节都不动；在同目录写完整临时文件、fsync、改名覆盖，再 fsync 目录（Windows 不做这一步）。
  * 已有文件精确恢复它的权限位，新文件用 mode 并精确设上（不给就由 umask 定）；给了 expected 时，写前与改名前各核对一次磁盘上的字节。
+ * rename 是可见提交点；之后目录 fsync 或收尾失败仍抛错，不回滚已发布的目标，也不把失败解释为尚未写入。
  */
 export async function replaceFileAtomically(
   path: string,
