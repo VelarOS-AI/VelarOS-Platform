@@ -571,7 +571,7 @@ describe('搜索', () => {
     }
   })
 
-  test('INV-4 并行搜索只探测 Google 一次，旧冷却即使无法回写也不滑动延长', async () => {
+  test('INV-4 并行搜索只探测 Google 一次，保留每次请求自己的搜索词', async () => {
     const parallel = webSpace({
       sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
     })
@@ -581,22 +581,29 @@ describe('搜索', () => {
     ])
     expect(results.map((result) => result.query)).toEqual(['one', 'two'])
     expect(parallel.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+  })
+
+  test('INV-4 读取宿主保存的期限不改写它，只有本次来源失败才写入新期限', async () => {
     const clock = fakeClock()
-    const legacy = webSpace({
+    const until = clock.now() + 2 * WebTuning.search.googleBlockedBackoffMs
+    const space = webSpace({
       clock,
-      backoff: { stored: { google: clock.now() + 12 * 60 * 60_000 }, writeFails: true },
+      backoff: { stored: { google: until } },
       sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
     })
-    expect((await legacy.operations.search({ query: 'cooldown' }, legacy.context)).engine).toBe(
+    expect((await space.operations.search({ query: 'cooldown' }, space.context)).engine).toBe(
       'bing'
     )
+    expect(space.record.backoffWrites).toEqual([])
     clock.advance(WebTuning.search.googleBlockedBackoffMs + 1)
-    expect((await legacy.operations.search({ query: 'probe' }, legacy.context)).engine).toBe(
-      'google'
+    expect((await space.operations.search({ query: 'still cooling' }, space.context)).engine).toBe(
+      'bing'
     )
-    expect((await legacy.operations.search({ query: 'probe again' }, legacy.context)).engine).toBe(
-      'google'
-    )
+    expect(space.record.backoffWrites).toEqual([])
+    clock.advance(until - clock.now())
+    expect((await space.operations.search({ query: 'probe' }, space.context)).engine).toBe('google')
+    expect(space.record.backoffWrites).toEqual([])
+    expect(space.record.opened).toBe(space.record.closed)
   })
 
   test('INV-5 两边都搜不了抛 WEB_SEARCH_FAILED，写明两边各自为什么；Bing 明说没有结果交回空的 results', async () => {
