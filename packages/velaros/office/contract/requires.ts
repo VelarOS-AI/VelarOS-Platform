@@ -5,7 +5,7 @@
  * - 资源端口 `OfficeResourcePort`：可选。宿主自己的插件登记表经它把额外资源根与停用开关交进来。
  * - 环境变量：可选，全部登记在 `contract/constants.ts` 的 `OfficeEnvironmentVariables`。
  *
- * 这里的每个接口都必须从根入口导出。
+ * 每个接口从本单元对应的公开入口导出；资源端口与定位器配置归 `./office/locator`。
  */
 
 import type {

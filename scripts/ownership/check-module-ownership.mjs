@@ -15,7 +15,7 @@
 //      分包：types、impl、utils 文件多时可以按域开子目录，每个子目录至少直接放 3 个源文件；分层可以按子目录登记（以 / 结尾）。
 //   6. 对外入口由合同控制：入口文件只有转发语句；导出的类型只能来自 provides、requires、公开的 types 文件、常量表派生的别名，或 provides 登记的类上方接口；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
-//      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
+//      provides 与 requires 里的每个声明都从本模块已登记的公开入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
 //      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与 src 根上的入口文件一一对应，编译目标是 dist/<名>.js 与 dist/<名>.d.ts。
 //   7. 会被渲染进程加载的入口，整条值引用链里不许出现 Node 内置模块。
 //   8. 环境变量：代码里出现的每个 VELAROS_*（以及登记在 environmentPrefixes 里的别人的前缀）名字都登记在常量表的环境变量表里，登记了的都有人用。
@@ -1394,7 +1394,9 @@ for (const module of selectedModules) {
       )
     }
   }
-  const rootEntryPath = entryFileOfSubpath(unitSubpath ?? '.')
+  const publicEntryPaths = new Set(subpaths.map(entryFileOfSubpath))
+  const isPubliclyExported = (record) =>
+    !!record && [...record.entries].some((entry) => publicEntryPaths.has(entry))
   const exported = new Map() // 声明 → { name, isValue, entries }
   for (const file of exportFiles) {
     const sourceFile = program.getSourceFile(file)
@@ -1498,9 +1500,9 @@ for (const module of selectedModules) {
       if (!(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement))) continue
       publicDeclarations.push(statement)
       const record = exported.get(statement)
-      if (!record || !record.entries.has(rootEntryPath)) {
+      if (!isPubliclyExported(record)) {
         fail(
-          `${label}: ${shortPath(file)} 的 ${statement.name.text} 没有从根入口导出；产品面和注入面的每个接口都要出包`
+          `${label}: ${shortPath(file)} 的 ${statement.name.text} 没有从本模块已登记的公开入口导出；产品面和注入面的每个接口都要出包`
         )
       }
       rootReferences.push({ node: statement, owner: statement.name.text })
@@ -1522,8 +1524,8 @@ for (const module of selectedModules) {
     publicDeclarations.push(statement)
     registeredStatements.add(statement)
     const record = exported.get(statement)
-    if (!record || !record.entries.has(rootEntryPath))
-      fail(`${label}: provides.ts 登记的 ${exportedName} 没有从根入口导出`)
+    if (!isPubliclyExported(record))
+      fail(`${label}: provides.ts 登记的 ${exportedName} 没有从本模块已登记的公开入口导出`)
     rootReferences.push({ node: statement, owner: exportedName })
   }
   // 从公开面的根出发，求它们引用到的契约数据的闭包；顺带拦住公开接口引用内部接口

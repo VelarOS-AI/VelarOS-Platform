@@ -98,6 +98,10 @@
       "types": "./dist/office/contracts.d.ts",
       "import": "./dist/office/contracts.js"
     },
+    "./office/locator": {
+      "types": "./dist/office/locator.d.ts",
+      "import": "./dist/office/locator.js"
+    },
     "./office/renderer": {
       "types": "./dist/office/renderer.d.ts",
       "import": "./dist/office/renderer.js"

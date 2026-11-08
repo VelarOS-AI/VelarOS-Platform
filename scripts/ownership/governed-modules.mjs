@@ -528,7 +528,7 @@ export const GovernedModules = [
     impl: 'office/impl',
     utils: 'office/utils',
     tuning: 'tuning.ts',
-    // 根入口要 docx / exceljs / pdfjs 与磁盘，渲染入口要 canvas 与 pdfjs，都只给 Node；渲染进程只能加载可移植数据
+    // 文档和渲染入口加载对应引擎；locator 只做本机资源定位。这三类只给 Node，可移植数据才供渲染进程加载。
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'OfficeEnvironmentVariables',
     // 空间端口：九个操作经 ctx.office 调它；每个方法都必须有操作在调

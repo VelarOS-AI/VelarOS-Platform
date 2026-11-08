@@ -8,13 +8,12 @@
 import { createCapabilityModule } from '@velaros-ai/velaros'
 import { AppError } from '@velaros-ai/core/error'
 import {
-  createMarkItDownLocator,
   officeOperations,
   type OfficeOperationContext,
-  type OfficeResourcePort,
   type OfficeSpacePort,
 } from '@velaros-ai/velaros/office'
 import { OfficeErrorCodes, VelarOfficeModule } from '@velaros-ai/velaros/office/contracts'
+import { createMarkItDownLocator, type OfficeResourcePort } from '@velaros-ai/velaros/office/locator'
 
 // 宿主给：工作区根，与探测命令、按原生 argv 跑命令的那一份（LibreOffice、LaTeX、MarkItDown 都经它起进程）
 declare const workspaceRoot: string
@@ -67,8 +66,9 @@ console.log(page.width, page.height, page.pageCount, page.buffer.byteLength)
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros/office` | Node | `officeOperations`、MarkItDown 定位器 `createMarkItDownLocator`、空间端口 `OfficeSpacePort`、资源端口与调用上下文 |
+| `@velaros-ai/velaros/office` | Node | 文档操作、工作区端口与调用上下文 |
 | `@velaros-ai/velaros/office/contracts` | 任何进程 | 错误码 `OfficeErrorCodes`、环境变量表 `OfficeEnvironmentVariables`、上限表、入参与回执、模型面 `VelarOfficeModule` |
+| `@velaros-ai/velaros/office/locator` | Node | 按宿主资源根与停用状态定位 MarkItDown，不加载文档和图形运行时 |
 | `@velaros-ai/velaros/office/renderer` | Node（Document Renderer） | `officeDocumentRenderer`：解析预览、拼预览 HTML、画预览 PNG、渲染 PDF 单页；宿主产品不引它 |
 
 ## 约定
