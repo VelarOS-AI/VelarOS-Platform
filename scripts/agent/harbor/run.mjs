@@ -10,6 +10,10 @@ import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import { createTraceExporter, snapshot } from './trace-export.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
 
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 // 这是正式 Runtime 的无人值守宿主；任务正文直接来自 Harbor，验收由 Harbor 在运行结束后执行。
 export async function runTask({
   instruction,
@@ -23,12 +27,6 @@ export async function runTask({
 }) {
   await mkdir(output, { recursive: true })
   const host = createLocalShellHost({ cwd: workspace })
-  let discovery
-  let shellInspection
-  const inspect = async () => {
-    discovery = await discoverProjectCommands(workspace)
-    shellInspection = await host.inspectEnvironment(discovery.commands)
-  }
   const denied = async () => {
     throw new Error('Interactive approval is unavailable in this benchmark run')
   }
@@ -38,11 +36,19 @@ export async function runTask({
     failure = null
   const modelName = model.model ?? model.id
   let traceExporter
-  const cancel = () => session?.cancel()
+  let executionError
+  const cancellation = new AbortController()
+  const cancel = () => {
+    cancellation.abort()
+    session?.cancel()
+  }
   process.on('SIGTERM', cancel)
   process.on('SIGINT', cancel)
   try {
-    await inspect()
+    const discovery = await discoverProjectCommands(workspace)
+    cancellation.signal.throwIfAborted()
+    const shellInspection = await host.inspectEnvironment(discovery.commands)
+    cancellation.signal.throwIfAborted()
     runtime = await createRuntime({
       workspace,
       dataDir: join(output, 'state'),
@@ -86,7 +92,9 @@ export async function runTask({
         'Complete the task autonomously in this isolated environment. Inspect the project, make the necessary changes, and verify the result using its normal development tools. No user is available for follow-up questions. Preserve unrelated files. Do not inspect hidden evaluation tests, solutions, reward files, or benchmark infrastructure. Use Node.js with Execa for commands and project for transactional edits.',
       limits: { turns, timeoutMs, outputTokens: 32768, safetyTokens: 2048 },
     })
+    cancellation.signal.throwIfAborted()
     session = await runtime.openSession(`harbor-task-${randomUUID()}`)
+    cancellation.signal.throwIfAborted()
     traceExporter = createTraceExporter({
       trace: (query) => runtime.trace(session.id, query),
       output,
@@ -95,6 +103,7 @@ export async function runTask({
       identity,
       model: modelName,
     })
+    cancellation.signal.throwIfAborted()
     for await (const event of session.submit(instruction)) {
       await appendFile(join(output, 'events.jsonl'), JSON.stringify(event) + '\n')
       if (event.type === 'state') {
@@ -109,26 +118,48 @@ export async function runTask({
       if (event.type === 'turn') await traceExporter.export({ status, failure })
     }
   } catch (error) {
-    failure = error instanceof Error ? error.message : String(error)
+    executionError = { error }
+    failure = errorMessage(error)
     status = 'failed'
     session?.cancel()
   } finally {
+    const primaryFailure = failure
+    const cleanupFailures = []
+    const finish = async (stage, action) => {
+      try {
+        await action()
+      } catch (error) {
+        cleanupFailures.push({ stage, error })
+        failure ??= errorMessage(error)
+        status = 'failed'
+      }
+    }
     try {
       // Settle cancellation and foreground receipts before the authoritative
       // snapshot; runtime storage remains readable until runtime.close().
-      try {
-        await session?.close()
-      } catch (error) {
-        failure ??= error instanceof Error ? error.message : String(error)
-        status = 'failed'
-      }
-      if (traceExporter) await traceExporter.export({ final: true, status, failure })
-      else await snapshot(join(output, 'status.json'), { status, failure })
+      await finish('session.close', () => session?.close())
+      await finish('trace.export', () =>
+        traceExporter
+          ? traceExporter.export({ final: true, status, failure })
+          : snapshot(join(output, 'status.json'), { status, failure })
+      )
+      await finish('runtime.close', () => runtime?.close())
+      await finish('host.dispose', () => host.dispose())
     } finally {
-      await runtime?.close()
-      await host.dispose()
       process.off('SIGTERM', cancel)
       process.off('SIGINT', cancel)
+    }
+    if (cleanupFailures.length) {
+      const errors = cleanupFailures.map(({ error }) => error)
+      if (executionError) errors.unshift(executionError.error)
+      else if (primaryFailure !== null) errors.unshift(primaryFailure)
+      throw new AggregateError(
+        errors,
+        [
+          ...(primaryFailure === null ? [] : ['Task failed: ' + primaryFailure]),
+          ...cleanupFailures.map(({ stage, error }) => stage + ': ' + errorMessage(error)),
+        ].join('; ')
+      )
     }
   }
   return { status, failure }

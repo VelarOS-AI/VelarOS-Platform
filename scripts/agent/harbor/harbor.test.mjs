@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 
 import { BudgetLedger, budgetServer, usageCost } from './budget-proxy.mjs'
 import { toTrajectory } from './atif.mjs'
@@ -12,11 +15,198 @@ import { runTask } from './run.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 
+const execute = promisify(execFile)
+
 async function directory(t) {
   const path = await mkdtemp(join(tmpdir(), 'scriptact-harbor-'))
   t.after(() => rm(path, { recursive: true, force: true }))
   return path
 }
+
+async function taskLifecycle(t, scenario) {
+  const workspace = await directory(t)
+  const ports = pathToFileURL(join(workspace, 'ports.mjs')).href
+  const loader = pathToFileURL(join(workspace, 'loader.mjs')).href
+  const runner = new URL('./run.mjs', import.meta.url).href
+  await writeFile(
+    new URL(ports),
+    `
+const scenario = ${JSON.stringify(scenario)};
+export const calls = [], snapshots = [], failures = new Map();
+async function step(stage) {
+  calls.push(stage);
+  if (scenario.cancelAt === stage) await new Promise(resolve => setImmediate(() => {
+    process.emit(scenario.signal);
+    resolve();
+  }));
+  if (scenario.throwAt?.includes(stage)) {
+    const error = Object.assign(new Error(stage + ' failed'), { stage });
+    failures.set(stage, error);
+    throw error;
+  }
+}
+export async function discoverProjectCommands() {
+  await step('discover');
+  return { commands: [], coverage: {} };
+}
+export function createLocalShellHost() {
+  calls.push('host.create');
+  return {
+    async inspectEnvironment() { await step('inspect'); return { shell: {}, commands: [], shells: [] }; },
+    async dispose() { await step('host.dispose'); },
+  };
+}
+export function createNodeExecutionEnvironment() { return {}; }
+export async function createRuntime(options) {
+  await step('createRuntime');
+  return {
+    async openSession() {
+      await step('openSession');
+      return {
+        id: 'fixture-session',
+        cancel() { calls.push('session.cancel'); },
+        async close() { await step('session.close'); },
+        async *submit() {
+          await step('submit');
+          yield* options.model.stream();
+        },
+      };
+    },
+    async close() { await step('runtime.close'); },
+  };
+}
+export function createTraceExporter() {
+  return { async export(value) {
+    snapshots.push(value);
+    await step(value.final ? 'trace.final' : 'trace.progress');
+  } };
+}
+export async function snapshot(_path, value) { snapshots.push(value); await step('status.snapshot'); }
+`
+  )
+  await writeFile(
+    new URL(loader),
+    `
+const runner = ${JSON.stringify(runner)}, ports = ${JSON.stringify(ports)};
+const dependencies = new Set(['@velaros-ai/velaros', '@velaros-ai/velaros/execution/local', './tool-discovery.mjs', './trace-export.mjs']);
+export function resolve(specifier, context, next) {
+  return context.parentURL === runner && dependencies.has(specifier)
+    ? { url: ports, shortCircuit: true } : next(specifier, context);
+}
+`
+  )
+  const worker = join(workspace, 'worker.mjs')
+  await writeFile(
+    worker,
+    `
+import { register } from 'node:module';
+register(${JSON.stringify(loader)}, import.meta.url);
+const { runTask } = await import(${JSON.stringify(runner)});
+const { calls, snapshots, failures } = await import(${JSON.stringify(ports)});
+const signals = ['SIGTERM', 'SIGINT'];
+const before = signals.map(signal => process.listenerCount(signal));
+let outcome;
+try {
+  const result = await runTask({
+    instruction: 'fixture task', workspace: ${JSON.stringify(workspace)}, output: ${JSON.stringify(join(workspace, 'output'))},
+    model: { id: 'fixture', async *stream() { calls.push('model.request'); yield { type: 'state', status: 'completed' }; } },
+  });
+  outcome = { result };
+} catch (error) {
+  outcome = { error: { name: error.name, message: error.message, errors: error.errors?.map(cause => ({
+    message: cause.message, stage: cause.stage, original: failures.get(cause.stage) === cause,
+  })) } };
+}
+process.stdout.write(JSON.stringify({ ...outcome, calls, snapshots, before, after: signals.map(signal => process.listenerCount(signal)) }));
+`
+  )
+  const result = await execute(process.execPath, [worker], { timeout: 10000 })
+  return JSON.parse(result.stdout)
+}
+
+for (const cancelAt of ['discover', 'inspect', 'createRuntime', 'openSession'])
+  for (const signal of ['SIGTERM', 'SIGINT'])
+    test(`startup ${signal} during ${cancelAt} cannot submit a model request`, async (t) => {
+      const observed = await taskLifecycle(t, { cancelAt, signal })
+      assert.equal(observed.result.status, 'failed')
+      assert.match(observed.result.failure, /abort/iu)
+      assert(!observed.calls.includes('submit'))
+      assert(!observed.calls.includes('model.request'))
+      assert.equal(observed.calls.filter((call) => call === 'host.dispose').length, 1)
+      assert.equal(
+        observed.calls.includes('runtime.close'),
+        ['createRuntime', 'openSession'].includes(cancelAt)
+      )
+      assert.equal(observed.calls.includes('session.close'), cancelAt === 'openSession')
+      assert.equal(observed.snapshots.at(-1).status, 'failed')
+      assert.deepEqual(observed.after, observed.before)
+    })
+
+test('task execution failures retain the existing failed result after ordered cleanup', async (t) => {
+  const observed = await taskLifecycle(t, { throwAt: ['submit'] })
+  assert.deepEqual(observed.result, { status: 'failed', failure: 'submit failed' })
+  assert.deepEqual(observed.calls.slice(-4), [
+    'session.close',
+    'trace.final',
+    'runtime.close',
+    'host.dispose',
+  ])
+  assert.deepEqual(observed.after, observed.before)
+})
+
+test('runtime close failure still disposes its host and removes both signal listeners', async (t) => {
+  const observed = await taskLifecycle(t, { throwAt: ['runtime.close'] })
+  assert.equal(observed.error.name, 'AggregateError')
+  assert.deepEqual(observed.error.errors, [
+    { message: 'runtime.close failed', stage: 'runtime.close', original: true },
+  ])
+  assert.deepEqual(observed.calls.slice(-4), [
+    'session.close',
+    'trace.final',
+    'runtime.close',
+    'host.dispose',
+  ])
+  assert.deepEqual(observed.after, observed.before)
+})
+
+test('session close failure rejects explicitly and marks the authoritative trace failed', async (t) => {
+  const observed = await taskLifecycle(t, { throwAt: ['session.close'] })
+  assert.equal(observed.error.name, 'AggregateError')
+  assert.deepEqual(
+    observed.error.errors.map(({ stage }) => stage),
+    ['session.close']
+  )
+  assert.equal(observed.snapshots.at(-1).status, 'failed')
+  assert.equal(observed.snapshots.at(-1).failure, 'session.close failed')
+  assert.equal(observed.calls.at(-1), 'host.dispose')
+  assert.deepEqual(observed.after, observed.before)
+})
+
+test('execution and all cleanup failures preserve their original causes and stages', async (t) => {
+  const stages = ['submit', 'session.close', 'trace.final', 'runtime.close', 'host.dispose']
+  const observed = await taskLifecycle(t, { throwAt: stages })
+  assert.equal(observed.error.name, 'AggregateError')
+  assert.deepEqual(
+    observed.error.errors.map(({ stage }) => stage),
+    stages
+  )
+  assert(observed.error.errors.every(({ original }) => original))
+  for (const stage of stages) assert(observed.error.message.includes(stage + ' failed'))
+  assert.deepEqual(observed.after, observed.before)
+})
+
+test('startup and status snapshot failures cannot bypass the host cleanup', async (t) => {
+  const stages = ['discover', 'status.snapshot', 'host.dispose']
+  const observed = await taskLifecycle(t, { throwAt: stages })
+  assert.equal(observed.error.name, 'AggregateError')
+  assert.deepEqual(
+    observed.error.errors.map(({ stage }) => stage),
+    stages
+  )
+  assert(observed.error.errors.every(({ original }) => original))
+  assert(!observed.calls.includes('createRuntime'))
+  assert.deepEqual(observed.after, observed.before)
+})
 
 test('campaign reserves before dispatch, preserves uncertain charges across restart and prevents double owners', async (t) => {
   const path = await directory(t)
@@ -453,14 +643,19 @@ test('the first model request reports the shell that the local host will actuall
       limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 12000 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
-        observed = request.compiledPrompt.includes(inspection.shell.path)
+        const frame = JSON.parse(
+            request.materials.find((item) => item.origin === 'runtime-view').text
+          ),
+          shell = JSON.parse(frame.partitions.runtime.environment.shell)
+        observed = shell.path === inspection.shell.path
         for (const command of inspection.commands) {
-          assert(request.compiledPrompt.includes(command.name))
-          if (command.path) assert(request.compiledPrompt.includes(command.path))
+          const actual = shell.commands.find((item) => item.name === command.name)
+          assert(actual, command.name)
+          assert.equal(actual.available, command.available)
+          assert.equal(actual.path, command.path)
         }
-        assert(request.compiledPrompt.includes('pathEntries'))
-        assert(request.compiledPrompt.includes('available'))
-        assert(request.compiledPrompt.includes('commandDiscovery'))
+        assert.deepEqual(shell.pathEntries, inspection.shell.pathEntries)
+        assert(shell.commandDiscovery)
         assert.match(request.instructions, /Node.js/u)
         assert.match(request.instructions, /index.json/u)
         const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。/)[1]
@@ -470,7 +665,7 @@ test('the first model request reports the shell that the local host will actuall
       },
     },
   })
-  assert.equal(result.status, 'completed')
+  assert.equal(result.status, 'completed', result.failure)
   assert(observed, 'The first request must disclose the actual executable shell path')
 })
 
@@ -504,13 +699,14 @@ test('a candidate working window reaches real context planning and remains bound
     })
     assert.equal(result.status, 'completed', result.failure)
     const traces = await readTraceArtifact(join(output, 'traces.json'))
-    const request = JSON.parse(traces.traces[0].request.body).request
-    assert.equal(request.contextStatus.inputLimit, expected)
+    const request = JSON.parse(traces.traces[0].request.body)
+    assert.equal(request.context.inputLimit, expected)
+    assert(!Object.hasOwn(request, 'request'))
   }
 })
 
 test(
-  'Harbor host runs real project edits and shell through ScriptAct and archives full traces',
+  'Harbor host runs real project commits and Node commands through ScriptAct and archives full traces',
   { timeout: 30000 },
   async (t) => {
     const workspace = await directory(t)
@@ -530,7 +726,7 @@ test(
           type: 'text',
           text:
             calls === 1
-              ? `${marker} execute\nimport {read,edit} from 'velaros:project';import {execaCommand} from 'execa';import {output} from 'velaros';await read({files:[{path:'value.txt'}]});await edit({steps:[{action:'replace',path:'value.txt',oldText:'before',newText:'after'}]});console.log((await execaCommand('printf passed > command.txt',{shell:true})).exitCode);\n${marker}\n`
+              ? `${marker} execute\nimport {readFile} from 'node:fs/promises';import {commit} from 'velaros:project';import {execa} from 'velaros:npm/execa';import {output} from 'velaros';const before=await readFile('value.txt','utf8');output(await commit({changes:[{path:'value.txt',before,after:before.replace('before','after')}]}));output((await execa(process.execPath,['-e',"require('node:fs').writeFileSync('command.txt','passed')"],{stdin:'ignore',timeout:10000})).exitCode);\n${marker}\n`
               : calls === 2
                 ? `${marker} execute\nimport { output } from 'velaros'; output('missing closing marker');`
                 : `Done.\n${marker} done`,
@@ -569,9 +765,21 @@ test(
     assert.equal(trajectory.agent.name, 'velaros-scriptact')
     assert(
       trajectory.steps.some((step) =>
-        step.tool_calls?.some((call) => call.function_name === 'velaros:project.edit')
+        step.tool_calls?.some((call) => call.function_name === 'velaros:project.commit')
       )
     )
+    const traces = await readTraceArtifact(join(output, 'traces.json')),
+      commit = traces.traces
+        .flatMap((trace) => trace.invocations)
+        .map((record) => JSON.parse(record.body))
+        .find(
+          (call) =>
+            call.prepared.binding.moduleId === 'velaros:project' &&
+            call.prepared.operation === 'commit'
+        )
+    assert.equal(commit.receipt.outcome, 'succeeded')
+    assert.equal(commit.receipt.effect, 'committed')
+    assert.equal(commit.receipt.value.status, 'applied')
     assert(trajectory.steps.some((step) => step.extra?.request))
     assert.equal(cacheKeys.size, 1)
     let nextCacheKey
@@ -744,8 +952,8 @@ test('a discovery-only candidate keeps project, npm and images available without
         if (calls === 3) assert(request.images.some((image) => image.data === png))
         const scripts = [
           `import {modules} from 'velaros:system'; import {output} from 'velaros';
-const project = await modules.describe({module:'velaros:project',exports:['read']});
-const {execa} = await import('execa');
+const project = await modules.describe({module:'velaros:project',exports:['commit']});
+const {execa} = await import('velaros:npm/execa');
 const images = await modules.describe({module:'velaros:images',exports:['view']});
 if (!project.declarations || typeof execa !== 'function' || !images.declarations) throw 'Discovery failed';
 output({marker:'DISCOVERY_OK',images:images.declarations});`,

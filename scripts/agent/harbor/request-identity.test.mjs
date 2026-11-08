@@ -21,10 +21,14 @@ const owner = {
 test('Python and gateway agree on signed attempt credentials and reject tampering', () => {
   const code =
     'import json, sys; from request_identity import attempt_credential; print(attempt_credential(json.loads(sys.argv[1]), "fixture-secret"))'
-  const result = spawnSync('python3', ['-c', code, JSON.stringify(owner)], {
-    cwd: import.meta.dirname,
-    encoding: 'utf8',
-  })
+  const result = spawnSync(
+    process.platform === 'win32' ? 'python' : 'python3',
+    ['-c', code, JSON.stringify(owner)],
+    {
+      cwd: import.meta.dirname,
+      encoding: 'utf8',
+    }
+  )
   assert.equal(result.status, 0, result.stderr)
   const token = result.stdout.trim()
   assert.equal(token, attemptCredential(owner, 'fixture-secret'))
