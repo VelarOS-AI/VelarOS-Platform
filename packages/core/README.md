@@ -69,3 +69,4 @@ Result.match(saved, {
 - `code` 是开放字符串：`ErrorCode` 列出通用码（`VALIDATION`、`NOT_FOUND`、`CONFLICT`、`CANCELLED`、`LIMIT` 等），领域码写在各包自己的常量表里；判断失败看 `code`，不看文字。
 - 错误过 IPC 只带 `code`、`message`、`context`（`toJSON` / `AppError.fromJSON`，`Result` 就是这么传的）；`withFields` 挂的字段和 `cause` 过不去，要过边界的细节放进 `context`。
 - 只收无领域语义、至少被两个不相邻领域复用的原语，`check:core-semantic-vocabulary` 拦领域词回流；有领域语义的放回拥有它的包。
+- 日常日志隔离单个输出端的同步与异步故障；显式 `Log.flush()` / `Log.dispose()` 等全部输出端收尾，失败聚合上抛，刷新失败也不会跳过回收。

@@ -93,7 +93,9 @@ export interface GlobalLog {
   removeTransport(id: string): boolean
   hasTransport(id: string): boolean
   listTransports(): string[]
+  /** 等待已接受的写入与全部输出端刷新；刷新失败聚合上抛。 */
   flush(): Promise<void>
+  /** 完成全部刷新和回收，即使某一端失败也不跳过其余端口；失败聚合上抛。 */
   dispose(): Promise<void>
 }
 

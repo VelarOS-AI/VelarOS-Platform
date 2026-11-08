@@ -1,4 +1,4 @@
-import { isBoolean, isPresent } from '../typeGuards.js'
+import { isPresent } from '../typeGuards.js'
 import { isEmpty } from '../utils/array.js'
 
 import { LogAssertionError, LogError } from './errors.js'
@@ -7,7 +7,6 @@ import {
   detectEnvironment,
   detectLevel,
   detectPlatform,
-  filterDefined,
   formatConsoleTag,
   isPromiseLike,
   LEVEL_TO_CONSOLE_METHOD,
@@ -120,18 +119,6 @@ export class LogRuntime implements GlobalLog {
     })
   }
 
-  public init(options: boolean | Partial<LogRuntimeOptions>): void {
-    if (isBoolean(options)) {
-      this.configure({
-        environment: options ? 'development' : 'production',
-        level: options ? 'debug' : 'info',
-      })
-      return
-    }
-
-    this.configure(options)
-  }
-
   public configure(options: Partial<LogRuntimeOptions>): void {
     this.state = resolveState({
       ...this.state,
@@ -194,7 +181,7 @@ export class LogRuntime implements GlobalLog {
     if (!isPresent(transport)) return false
 
     this.transports.delete(id)
-    this.track(transport.dispose?.(), transport.id)
+    this.observeTransport(transport.id, () => transport.dispose?.())
     return true
   }
 
@@ -207,28 +194,16 @@ export class LogRuntime implements GlobalLog {
   }
 
   public async flush(): Promise<void> {
-    const pending = Array.from(this.pendingTasks)
-    if (!isEmpty(pending)) {
-      await Promise.allSettled(pending)
-    }
-
-    const flushTasks = filterDefined(
-      Array.from(this.transports.values(), (transport) => transport.flush?.())
-    )
-    if (!isEmpty(flushTasks)) {
-      await Promise.allSettled(flushTasks)
-    }
+    const failures = await this.flushTransports()
+    if (!isEmpty(failures)) throw new AggregateError(failures, '日志输出端刷新失败')
   }
 
   public async dispose(): Promise<void> {
-    await this.flush()
-
-    const disposeTasks = filterDefined(
-      Array.from(this.transports.values(), (transport) => transport.dispose?.())
-    )
-    if (!isEmpty(disposeTasks)) {
-      await Promise.allSettled(disposeTasks)
-    }
+    const failures = [
+      ...(await this.flushTransports()),
+      ...(await this.settleTransports('dispose')),
+    ]
+    if (!isEmpty(failures)) throw new AggregateError(failures, '日志输出端回收失败')
   }
 
   public createAssertionError(
@@ -300,9 +275,33 @@ export class LogRuntime implements GlobalLog {
 
   private dispatch(record: LogRecord): void {
     for (const transport of this.transports.values()) {
-      if (!shouldDispatch(record, transport)) continue
-      this.track(transport.write(record), transport.id)
+      this.observeTransport(transport.id, () => {
+        if (shouldDispatch(record, transport)) return transport.write(record)
+      })
     }
+  }
+
+  /** 日常日志与移除操作不把输出端的故障传播给业务调用方。 */
+  private observeTransport(transportId: string, operation: () => void | Promise<void>): void {
+    try {
+      this.track(operation(), transportId)
+    } catch (error) {
+      this.reportTransportFailure(transportId, error)
+    }
+  }
+
+  /** 等已接受的写入收束，再由各输出端报告其刷新结果。 */
+  private async flushTransports(): Promise<unknown[]> {
+    await Promise.allSettled([...this.pendingTasks])
+    return this.settleTransports('flush')
+  }
+
+  /** 同步抛错与异步拒绝都只属于该输出端，其他输出端仍要完成收尾。 */
+  private async settleTransports(operation: 'flush' | 'dispose'): Promise<unknown[]> {
+    const results = await Promise.allSettled(
+      [...this.transports.values()].map(async (transport) => transport[operation]?.())
+    )
+    return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
   }
 
   private writeToConsole(record: LogRecord): void {
@@ -330,17 +329,21 @@ export class LogRuntime implements GlobalLog {
     this.pendingTasks.add(pending)
     pending
       .catch((error) => {
-        if (!prepareConsoleStream('error')) return
-        try {
-          console.error('[ERR] [LogRuntime] transport failed', { transportId, error })
-        } catch {
-          markConsoleStreamFaulted('error')
-          // 同 writeToConsole：控制台写入失败（EIO/EPIPE）不再向上抛。
-        }
+        this.reportTransportFailure(transportId, error)
       })
       .finally(() => {
         this.pendingTasks.delete(pending)
       })
+  }
+
+  private reportTransportFailure(transportId: string, error: unknown): void {
+    if (!prepareConsoleStream('error')) return
+    try {
+      console.error('[ERR] [LogRuntime] transport failed', { transportId, error })
+    } catch {
+      markConsoleStreamFaulted('error')
+      // 同 writeToConsole：控制台写入失败（EIO/EPIPE）不再向上抛。
+    }
   }
 }
 
