@@ -9,7 +9,7 @@
 | INV-19 | 公开破坏性变更需要主版本和基线 | 门禁 | `check:agent-public-api` |
 | INV-29 | 不响应取消的驱动不能无限阻塞循环 | 测试 | `spec/acceptance.test.ts` |
 | INV-30 | 并发额度在派发前占位；子任务不占写入范围 | 测试 | `spec/acceptance.test.ts` |
-| INV-31 | 子任务身份和配额可重启恢复；启动中的引导等待运行接纳并服从调用者与父运行取消，收束后拒绝引导并指向显式 resume，不隐式重开或返还预算 | 测试 | `spec/acceptance.test.ts` |
+| INV-31 | 子任务身份和配额可重启恢复；返回句柄与宿主回调的 job/结果引用不暴露调度器内部可变身份；启动中的引导等待运行接纳并服从调用者与父运行取消，收束后拒绝引导并指向显式 resume，不隐式重开或返还预算 | 测试 | `spec/acceptance.test.ts` |
 | INV-32 | 父取消传播并保留部分结果 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 并发失败不覆盖已完成任务的事实 | 测试 | `spec/acceptance.test.ts` |
 | INV-34 | 一个收尾阶段失败仍尝试其余阶段，完成事件等待收尾成功 | 测试 | `spec/acceptance.test.ts` |

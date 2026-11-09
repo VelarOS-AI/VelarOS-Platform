@@ -2429,6 +2429,64 @@ test('closing a consumer during thinking releases the view without accepting lat
   await service.close()
 })
 
+test('interaction views preserve pending identity while retaining opaque detail', async () => {
+  const f = runFixture()
+  const finish = Promise.withResolvers<void>()
+  const preview = Promise.withResolvers<void>()
+  const interacting = Promise.withResolvers<{ id: string; runId: string }>()
+  const open = f.options.protocol.open
+  f.options.protocol.open = () => ({
+    ...open(),
+    push: (text) => [{ type: 'text', text }],
+  })
+  f.options.model.stream = async function* () {
+    yield { type: 'text', text: 'preview' }
+    await finish.promise
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const running = (async () => {
+    for await (const event of service.submit('interaction')) {
+      if (event.type === 'text') preview.resolve()
+      if (event.type === 'interaction') {
+        interacting.resolve({ id: event.request.id, runId: event.request.runId })
+        Object.assign(event.request, { id: 'event-mutation', runId: 'foreign-run' })
+      }
+    }
+  })()
+  let answer: Promise<unknown> | undefined
+  try {
+    await preview.promise
+    const detail = { render: () => 'opaque host value' }
+    answer = service.request(
+      'input',
+      'Confirm the current run',
+      new AbortController().signal,
+      detail
+    )
+    void answer.catch(() => {})
+    const identity = await interacting.promise
+    const state = await service.inspect()
+    expect(state.pending[0]).toMatchObject(identity)
+    expect(state.pending[0]!.detail).toBe(detail)
+    Object.assign(state.pending[0]!, { id: 'snapshot-mutation', runId: 'foreign-run' })
+    await service.answer({ ...identity, value: 'accepted' })
+    expect(await answer).toBe('accepted')
+    expect((await service.inspect()).pending).toEqual([])
+    expect(
+      (await service.events()).find((item) => item.event.type === 'interaction')?.event
+    ).toMatchObject({
+      type: 'interaction',
+      request: identity,
+    })
+  } finally {
+    service.cancel()
+    finish.resolve()
+    await Promise.allSettled([running, answer])
+    await service.close()
+  }
+})
+
 test('interaction allocation cannot outlive its cancelled run or attach to the next run', async () => {
   const f = runFixture()
   const finish = Promise.withResolvers<void>()
@@ -2885,6 +2943,93 @@ function child(block = false): ActChildSession {
     async close() {},
   }
 }
+
+test('INV-31 child handles and host callbacks cannot rewrite supervisor ownership', async () => {
+  const store = storage()
+  const signal = new AbortController().signal
+  let deliveries = 0
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 1,
+    maxChildren: 1,
+    async open(job) {
+      Object.assign(job, {
+        id: 'open-mutation',
+        parentSessionId: 'foreign-open',
+        sessionId: 'foreign-open',
+      })
+      Object.assign(job.collaboration!, { plannedWrites: ['open-mutation'] })
+      return child(true)
+    },
+    async deliver(job, payload) {
+      deliveries++
+      const producer = job.sessionId
+      const original = { ...payload }
+      Object.assign(job, {
+        id: 'delivery-mutation',
+        parentSessionId: 'foreign-delivery',
+        sessionId: 'foreign-delivery',
+      })
+      Object.assign(job.collaboration!, { plannedWrites: ['delivery-mutation'] })
+      Object.assign(payload, { sessionId: 'foreign-payload', id: 'payload-mutation' })
+      return {
+        ref: { sessionId: 'p', id: `delivery-${deliveries}` },
+        schemaVersion: 1,
+        kind: 'agent',
+        sessionId: producer,
+        status: 'partial',
+        payload: original,
+        artifacts: [],
+        omittedScripts: 0,
+      }
+    },
+  })
+  try {
+    const started = await supervisor.start(
+      'p',
+      {
+        task: 'first phase',
+        profile: 'read',
+        collaboration: { root: 'C:/Repo', plannedWrites: ['src'] },
+      },
+      signal
+    )
+    const id = started.id
+    const sessionId = started.sessionId
+    for (const phase of ['start', 'resume']) {
+      const handle =
+        phase === 'start'
+          ? started
+          : await supervisor.resume('p', id, { input: 'second phase' }, signal)
+      expect(handle.parentSessionId).toBe('p')
+      Object.assign(handle, {
+        id: 'handle-mutation',
+        parentSessionId: 'foreign-handle',
+        sessionId: 'foreign-handle',
+      })
+      Object.assign(handle.collaboration!, { plannedWrites: ['handle-mutation'] })
+      expect(await supervisor.status('p', id)).toMatchObject({
+        id,
+        sessionId,
+        parentSessionId: 'p',
+        collaboration: { plannedWrites: ['src'] },
+      })
+      expect(await supervisor.cancel('p', id)).toMatchObject({
+        id,
+        sessionId,
+        parentSessionId: 'p',
+        status: 'cancelled',
+        result: { sessionId: 'p' },
+      })
+    }
+    expect(deliveries).toBe(2)
+    expect(supervisor.pending('p')).toBe(false)
+    for (const foreign of ['foreign-open', 'foreign-delivery', 'foreign-payload', 'foreign-handle'])
+      expect(await store.load(foreign)).toBeNull()
+  } finally {
+    await supervisor.close()
+  }
+})
 
 test('INV-38 child delivery bounds embedded history and never turns an unfinished end into completion', async () => {
   const store = storage()

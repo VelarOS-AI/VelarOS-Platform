@@ -308,7 +308,8 @@ class ActRunService implements ActRunServiceApi {
       Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支')
     })
     try {
-      await this.emit({ type: 'interaction', runId, request })
+      // 交互身份由本运行持有；detail 仍是不透明宿主值，不新增深复制要求。
+      await this.emit({ type: 'interaction', runId, request: { ...request } })
       return await waiting
     } finally {
       this.pending.delete(request.id)
@@ -393,7 +394,7 @@ class ActRunService implements ActRunServiceApi {
       id: this.runId,
       sessionId: this.options.sessionId,
       status: this.status,
-      pending: [...this.pending.values()].map((item) => item.request),
+      pending: [...this.pending.values()].map((item) => ({ ...item.request })),
     }
   }
   private async saveState(): Promise<void> {

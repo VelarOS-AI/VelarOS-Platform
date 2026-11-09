@@ -111,7 +111,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       this.assertAvailable(job)
       await this.save(job)
       this.launch(job, input.task, input, signal)
-      return job
+      return structuredClone(job)
     })
   }
   public async resume(
@@ -154,7 +154,7 @@ class AgentSupervisor implements AgentSupervisorApi {
         { task: input.input, profile: job.profile, materials: input.materials },
         signal
       )
-      return job
+      return structuredClone(job)
     })
   }
   public async status(parent: string, id: string): Promise<AgentJob> {
@@ -310,7 +310,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       let omittedEvents = 0
       let diagnostic: Optional<string>
       try {
-        live.session = await this.options.open(job, request, controller.signal)
+        live.session = await this.options.open(structuredClone(job), request, controller.signal)
         controller.signal.throwIfAborted()
         let ended = false
         for await (const event of live.session.submit(input, controller.signal)) {
@@ -391,7 +391,9 @@ class AgentSupervisor implements AgentSupervisorApi {
           })
           live.job = { ...live.job, result: result.ref }
           if (this.options.deliver)
-            Object.assign(live.job, { delivery: await this.options.deliver(live.job, result.ref) })
+            Object.assign(live.job, {
+              delivery: await this.options.deliver(structuredClone(live.job), { ...result.ref }),
+            })
           await this.save(live.job)
         } catch (error) {
           this.failures.set(job.sessionId, { parent: job.parentSessionId, error })

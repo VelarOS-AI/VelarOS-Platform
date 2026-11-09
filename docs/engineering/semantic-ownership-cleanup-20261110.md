@@ -26,3 +26,10 @@ Agent 旧实现的 start/resume 返回初始 job，后续交互、回答和终�
 重验证只使用原共享锁，完成后正常释放；未跑全量/供应商/跨 OS 或旧发行矩阵。日志在本工作树 `.velaros-workspace/semantic-ownership-20261110/`，四批独立提交，仍不合 main、不发版。
 
 下一组审查范围：运行事件重放、状态 inspect 与存储 owner 的交接，以及调度取消/结果交付失败归集；先核对真实调用链，不把未审范围写成既定缺陷。
+
+| 独立批次 | 提交 | 定向场景 |
+| --- | --- | --- |
+| R2 owner 纠正 | `3529a98e` | 9 |
+| A1 元数据 | 本批 `fix(agent): isolate scheduler and interaction identity views` | 5 |
+| S1 控制准入 | 待提交 | 2 |
+| C1 恢复释放 | 待提交 | 3 |
