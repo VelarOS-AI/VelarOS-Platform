@@ -1,3 +1,4 @@
+import { AppError } from '../error'
 import { isNumber, isObject } from '../typeGuards'
 
 /** 宿主提供的独立 SQLite 连接；必须以零等待打开，不能和业务事务共用。 */
@@ -34,10 +35,9 @@ class ExclusiveSqliteLock implements ExclusiveSqliteLockApi {
       try {
         this.release()
       } catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          'SQLite lock acquisition and cleanup failed'
-        )
+        throw AppError.withFields('UNAVAILABLE', 'SQLite lock acquisition and cleanup failed', {
+          errors: [error, cleanupError],
+        })
       }
       const code = isObject(error) && 'code' in error ? error.code : undefined
       const errcode = isObject(error) && 'errcode' in error ? error.errcode : undefined

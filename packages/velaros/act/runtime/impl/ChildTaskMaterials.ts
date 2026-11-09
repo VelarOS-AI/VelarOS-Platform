@@ -145,7 +145,9 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
       try {
         await this.close()
       } catch (cleanup) {
-        throw new AggregateError([error, cleanup], '父任务材料建立和清理失败')
+        throw AppError.withFields('UNAVAILABLE', '父任务材料建立和清理失败', {
+          errors: [error, cleanup],
+        })
       }
       throw error
     }

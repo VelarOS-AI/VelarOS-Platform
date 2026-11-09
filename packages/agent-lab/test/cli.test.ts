@@ -115,8 +115,8 @@ describe('public CLI', () => {
   test('reports a current archive with unknown values through the real file boundary', async () => {
     await withDirectory(async (root) => {
       await labArchives.writeRunArchive(root, archive({ score: null }))
-      const output = join(root, 'report.html')
-      const result = await agentLabCli.run(['report', root, '--output', output], {
+      const output = join(root, 'report=a=b.html')
+      const result = await agentLabCli.run(['report', root, `--output=${output}`], {
         ...options,
         now: () => 1,
       })

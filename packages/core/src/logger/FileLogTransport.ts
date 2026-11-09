@@ -33,31 +33,63 @@ export function resolveDatedLogFilePath(filePath: string, timestamp = new Date()
 /** 将记录固化为一行 JSON，错误、BigInt 和循环引用均可写入。 */
 function serializeRecord(record: LogRecord): string {
   const seen = new WeakSet<object>()
-  const snapshot =
-    record.kind === 'message' && record.error instanceof Error
-      ? { ...record, error: errorRecord(record.error) }
-      : record
+  const snapshot = snapshotErrors(record)
   return JSON.stringify(snapshot, (_key, value: unknown) => {
     if (typeof value === 'bigint' || typeof value === 'symbol') return String(value)
     if (typeof value === 'function') return `[Function ${value.name || 'anonymous'}]`
     if (value && typeof value === 'object') {
       if (seen.has(value)) return '[Circular]'
       seen.add(value)
-      if (value instanceof Error) return errorRecord(value)
+      if (value instanceof Error) return snapshotErrors(value)
     }
     return value
   })
 }
 
-/** 固定错误的诊断字段，避免自定义 toJSON 丢掉堆栈与原因。 */
-function errorRecord(error: Error): Record<string, unknown> {
-  return {
-    ...error,
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-    cause: error.cause,
+/** 在 toJSON 之前固定嵌套错误诊断；未知类和带访问器的普通容器保持原序列化行为。 */
+function snapshotErrors(value: unknown, copies = new WeakMap<object, unknown>()): unknown {
+  if (!value || typeof value !== 'object') return value
+  if (copies.has(value)) return copies.get(value)
+  const error = value instanceof Error
+  const array = Array.isArray(value)
+  const prototype = Object.getPrototypeOf(value)
+  if (!error && !array && prototype !== Object.prototype && prototype !== null) return value
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  // 不为遍历数据容器调用 getter；JSON.stringify 仍按原先规则处理这些容器。
+  if (!error && Object.values(descriptors).some((descriptor) => !('value' in descriptor)))
+    return value
+  const snapshot: unknown[] | Record<string, unknown> = array
+    ? []
+    : Object.create(error ? null : prototype)
+  if (array) snapshot.length = value.length
+  copies.set(value, snapshot)
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (!descriptor.enumerable || !('value' in descriptor) || (error && key === 'toJSON')) continue
+    Object.defineProperty(snapshot, key, {
+      value: snapshotErrors(descriptor.value, copies),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    })
   }
+  if (error) {
+    // Error 的固定诊断字段沿用原读取合同，其余属性只读取数据描述符。
+    Object.assign(snapshot, {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      cause: snapshotErrors(value.cause, copies),
+    })
+    const errors = descriptors.errors
+    if (errors && 'value' in errors)
+      Object.defineProperty(snapshot, 'errors', {
+        value: snapshotErrors(errors.value, copies),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+  }
+  return snapshot
 }
 
 /**

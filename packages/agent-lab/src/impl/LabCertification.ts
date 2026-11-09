@@ -14,6 +14,7 @@ import {
   integrityChecks,
   journeyChecks,
 } from '../utils/measure/certification.js'
+import { assertUniqueRunIds } from '../utils/measure/statistics.js'
 
 /**
  * 第三方执行体与 mod 的认证出口：一份策略、一批归档，出一份可核的报告。
@@ -26,6 +27,7 @@ export interface LabCertificationApi {
 
 class LabCertification implements LabCertificationApi {
   public certify(input: CertificationInput): CertificationReport {
+    assertUniqueRunIds([...input.archives, ...(input.baselineArchives ?? [])])
     const subjectArchives = input.archives.filter(
       (archive) => archive.manifest.executor.executorId === input.subjectExecutorId
     )

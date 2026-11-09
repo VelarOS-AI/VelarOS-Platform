@@ -165,7 +165,7 @@ class JourneyRunner implements JourneyRunnerApi {
     let session: SessionHandle | null = null
     let environmentReady = false
 
-    if (preflightFailure) {
+    if (preflightFailure !== null) {
       drops.push({
         trialId: options.trial.id,
         legId: null,

@@ -349,6 +349,10 @@ export class BrowserInteractionEngine
     if (externalSession) return super.clickCoordinates(sessionId, context, options, abortSignal)
 
     const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
+    const driver = this.electronKernel.wrapPageDriver(sessionId, session)
+    if (!driver.clickCoordinates) {
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持坐标点击。')
+    }
     const point = await this.clampViewportPoint(session, options.x, options.y)
     const { x, y } = point
     const button = options.button ?? 'left'
@@ -358,7 +362,7 @@ export class BrowserInteractionEngine
     // 页面内虚拟指针完全受控；实际输入经 driver（CDP 优先）投递，不受外部遮挡影响。
     await this.animateVirtualPointer(session, pointerPath, false)
     this.focusWebContents(session)
-    await this.electronKernel.wrapPageDriver(sessionId, session).clickCoordinates?.({
+    await driver.clickCoordinates({
       x,
       y,
       button,

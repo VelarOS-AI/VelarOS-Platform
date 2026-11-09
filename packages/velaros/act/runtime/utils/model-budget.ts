@@ -98,9 +98,10 @@ export async function* reservedModelStream(
       try {
         await parent.releaseModel('context', tokens, requestId, true)
       } catch (release) {
-        const failure = Object.assign(
-          new AggregateError([error, release], '模型调用未派发，但预算归还失败'),
-          { code: 'MODEL_RESERVATION_RELEASE' }
+        const failure = AppError.withFields(
+          'MODEL_RESERVATION_RELEASE',
+          '模型调用未派发，但预算归还失败',
+          { errors: [error, release] }
         )
         reject(failure)
         throw failure

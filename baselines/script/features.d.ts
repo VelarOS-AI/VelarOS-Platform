@@ -8,19 +8,19 @@ declare module 'velaros:features' {
    */
   export function list(): Promise<readonly FeatureSummary[]>
 
-  /** 按身份加载本轮可用能力的完整 Skill 说明和资源目录。新 npm 包从下一次程序执行生效。
+  /** 按身份加载本轮可用能力的完整 Skill 说明和资源目录。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
    */
   export function load(input: FeatureIdInput): Promise<FeatureLoaded>
 
-  /** 静态校验 Feature、Codex Skill 或 Markdown；不执行来源代码、不安装依赖。
+  /** 静态校验 Feature、Codex Skill 或 Markdown；path 最多 4096 个字符。不执行来源代码、不安装依赖。
    */
   export function validate(input: FeaturePathInput): Promise<FeatureDefinition>
 
-  /** 安装或升级本机来源，发布前由宿主确认；依赖脚本默认关闭。
+  /** 安装或升级本机来源，path 最多 4096 个字符；发布前由宿主确认，依赖脚本默认关闭。
    */
   export function install(input: FeatureInstallInput): Promise<FeatureSummary>
 
-  /** 卸载能力并撤销后续调用；在途执行及后台任务持有的文件继续受租约保护。
+  /** 卸载能力并撤销后续调用，id 最多 214 个字符；在途执行及后台任务持有的文件继续受租约保护。
    */
   export function remove(input: FeatureIdInput): Promise<void>
 

@@ -475,3 +475,56 @@ void test('dispose removes the shared Session download listener and subframe fai
   assert.equal(session.listenerCount('will-download'), 0)
   assert.equal(session.listenerCount('select-webauthn-account'), 0)
 })
+
+void test('page replacement revokes owned listeners and remounting the same WebContents does not duplicate dialogs', () => {
+  const harness = createHarness()
+  const first = harness.webContents
+  const second = new FakeWebContents('https://second.test/')
+  let hostEvents = 0
+  const hostListener = () => {
+    hostEvents += 1
+  }
+  first.on('dom-ready', hostListener)
+  try {
+    harness.manager.attachWebContents('session-1', second)
+    assert.equal(first.listenerCount('dialog'), 0)
+    assert.equal(first.listenerCount('dom-ready'), 1)
+    harness.manager.attachWebContents('session-1', first)
+    assert.equal(first.listenerCount('dialog'), 1)
+    let decisions = 0
+    first.emit('dialog', {}, { type: 'confirm', message: 'Continue?' }, () => {
+      decisions += 1
+    })
+    const broker = harness.manager.getPendingEventsBroker()
+    assert.equal(broker.listPendingEvents('session-1').length, 1)
+    broker.resolveDialog({ sessionId: 'session-1', accept: false })
+    assert.equal(decisions, 1)
+    harness.manager.closeSession('session-1')
+    assert.equal(first.listenerCount('dialog'), 0)
+    first.emit('dom-ready')
+    assert.equal(hostEvents, 1)
+  } finally {
+    harness.manager.dispose()
+    first.off('dom-ready', hostListener)
+  }
+})
+
+void test('an in-flight window event cannot attach a popup to a retired binding after the host remounts the same page', () => {
+  const harness = createHarness()
+  const page = harness.webContents
+  const retired = harness.manager.getSession('session-1')
+  const popup = new FakeBrowserWindow(new FakeWebContents('about:blank'))
+  page.prependOnceListener('did-create-window', () => {
+    harness.manager.closeSession('session-1')
+    harness.manager.attachWebContents('session-1', page)
+  })
+  try {
+    // EventEmitter 已复制旧 listener；off 不会把本轮发射快照里的旧回调撤回。
+    page.emit('did-create-window', popup, createWindowOpenDetails({ url: 'about:blank' }))
+    assert.notEqual(harness.manager.getSession('session-1'), retired)
+    assert.equal(popup.destroyCount, 1)
+    assert.equal(page.listenerCount('did-create-window'), 1)
+  } finally {
+    harness.manager.dispose()
+  }
+})

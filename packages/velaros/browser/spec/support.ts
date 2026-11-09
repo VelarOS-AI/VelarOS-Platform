@@ -631,7 +631,7 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
         eventId: input.eventId ?? pending.id,
         action: input.action,
         savePath: input.savePath ?? null,
-        state: input.action === 'accept' ? 'completed' : 'cancelled',
+        state: input.action === 'accept' ? 'accepted' : 'cancelled',
       }
     },
     handlePermission: async (input) => {

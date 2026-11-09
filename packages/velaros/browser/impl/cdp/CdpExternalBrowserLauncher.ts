@@ -129,6 +129,11 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
   private readonly env: CdpExternalBrowserLaunchEnv
   /** 连着的浏览器，按浏览器级 WebSocket 地址记。 */
   private readonly browsers = new Map<string, CdpExternalBrowserLauncherBrowser>()
+  /** 页面建立与驱动物理排空都归所在浏览器；连接和自有 profile 最后释放。 */
+  private readonly browserPages = new Map<
+    CdpExternalBrowserLauncherBrowser,
+    { drivers: Set<CdpBrowserPageDriver>; pending: Set<Promise<void>> }
+  >()
   /** 找浏览器的排队：一次只找一个。 */
   private acquiring: Promise<unknown> = Promise.resolve()
   private disposed = false
@@ -161,9 +166,9 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
   }
 
   public dispose(): void {
+    if (this.disposed) return
     this.disposed = true
     for (const [url, browser] of [...this.browsers]) {
-      browser.connection.dispose()
       this.forget(url, browser)
     }
   }
@@ -314,36 +319,54 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       ...(options.env ?? {}),
     }
 
-    await this.unlink(devToolsActivePortPath(userDataDir, platform)).catch(() => {
-      // arch-guard:silent-catch-ok 启动前清理允许文件不存在；新浏览器会写入自己的端口文件。
-    })
-    const child = this.spawn(
-      executablePath,
-      buildLaunchArgs(userDataDir, options, {
-        env: launchEnv,
-        platform,
-      }),
-      {
-        detached: platform !== 'win32',
-        env: launchEnv,
-        stdio: ['ignore', 'ignore', 'pipe'],
-      }
-    )
-    const stderr = captureChromeStderr(child)
-
+    let child: Nullable<CdpExternalBrowserChildProcess> = null
+    let connection: Nullable<CdpBrowserConnectionApi> = null
+    let spawnError: Nullable<AppError> = null
+    const assertSpawn = (): void => {
+      if (spawnError) throw spawnError
+      if (this.disposed) throw new AppError('EXECUTION_ABORTED', '外部浏览器启动器已经释放。')
+    }
     try {
+      await this.unlink(devToolsActivePortPath(userDataDir, platform)).catch(() => {
+        // arch-guard:silent-catch-ok 启动前清理允许文件不存在；新浏览器会写入自己的端口文件。
+      })
+      assertSpawn()
+      child = this.spawn(
+        executablePath,
+        buildLaunchArgs(userDataDir, options, {
+          env: launchEnv,
+          platform,
+        }),
+        {
+          detached: platform !== 'win32',
+          env: launchEnv,
+          stdio: ['ignore', 'ignore', 'pipe'],
+        }
+      )
+      child.once?.('error', (error) => {
+        spawnError = new AppError(
+          'UNAVAILABLE',
+          `无法启动外部浏览器：${AppError.from(error).message}`,
+          error
+        )
+        this.log.debug('外部浏览器子进程报告错误', { error: spawnError.message })
+      })
+      const stderr = captureChromeStderr(child)
       const activePort = await this.waitForDevToolsActivePort(
         child,
         userDataDir,
         platform,
         timeoutMs,
-        stderr
+        stderr,
+        assertSpawn
       )
+      assertSpawn()
       const url = buildBrowserWebSocketUrl(activePort)
-      const connection = await new CdpBrowserConnection().connect(url, {
+      connection = await new CdpBrowserConnection().connect(url, {
         createSocket: this.createSocket,
         timeoutMs: BrowserTuning.externalBrowser.connectTimeoutMs,
       })
+      assertSpawn()
       this.log.info('拉起了外部浏览器', { userDataDir, url, temporary: ownsUserDataDir })
       return await this.remember(url, {
         connection,
@@ -353,7 +376,13 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
         platform,
       })
     } catch (error) {
-      this.disposeLaunchedBrowser(child, temporaryUserDataDir, platform)
+      connection?.dispose()
+      this.disposeLaunchedBrowser(
+        child,
+        temporaryUserDataDir,
+        platform,
+        Boolean(spawnError && !isPresent(child?.pid))
+      )
       throw error
     }
   }
@@ -371,6 +400,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       throw new AppError('EXECUTION_ABORTED', '外部浏览器启动器已经释放。')
     }
     this.browsers.set(url, browser)
+    this.browserPages.set(browser, { drivers: new Set(), pending: new Set() })
     browser.connection.onClose(() => this.forget(url, browser))
     if (browser.downloadPath) {
       await browser.connection.setDownloadBehavior(browser.downloadPath).catch((error) => {
@@ -387,8 +417,50 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
   private forget(url: string, browser: CdpExternalBrowserLauncherBrowser): void {
     if (this.browsers.get(url) !== browser) return
     this.browsers.delete(url)
-    if (browser.child)
-      this.disposeLaunchedBrowser(browser.child, browser.temporaryUserDataDir, browser.platform)
+    const pages = this.browserPages.get(browser)
+    for (const driver of [...(pages?.drivers ?? [])]) driver.dispose()
+    const closeBrowser = (): void => {
+      this.browserPages.delete(browser)
+      browser.connection.dispose()
+      if (browser.child)
+        this.disposeLaunchedBrowser(browser.child, browser.temporaryUserDataDir, browser.platform)
+    }
+    if (pages?.pending.size)
+      void Promise.allSettled([...pages.pending])
+        .then(closeBrowser)
+        .catch((error) => {
+          this.log.error('页面排空后的外部浏览器释放失败', { error: AppError.from(error).message })
+        })
+    else closeBrowser()
+  }
+
+  private requireBrowserPages(browser: CdpExternalBrowserLauncherBrowser): {
+    drivers: Set<CdpBrowserPageDriver>
+    pending: Set<Promise<void>>
+  } {
+    const pages = this.browserPages.get(browser)
+    if (this.disposed || browser.connection.isClosed() || !pages)
+      throw new AppError('EXECUTION_ABORTED', '外部浏览器启动器或连接已经释放。')
+    return pages
+  }
+
+  /** 派生驱动也复用这一份登记；解除登记不关闭它借用的目标标签页。 */
+  private registerDriver(
+    browser: CdpExternalBrowserLauncherBrowser,
+    driver: CdpBrowserPageDriver
+  ): () => void {
+    const pages = this.requireBrowserPages(browser)
+    let settled!: () => void
+    const pending = new Promise<void>((resolve) => {
+      settled = resolve
+    })
+    pages.drivers.add(driver)
+    pages.pending.add(pending)
+    return () => {
+      pages.drivers.delete(driver)
+      pages.pending.delete(pending)
+      settled()
+    }
   }
 
   /** 在浏览器里另开一个标签页，挂上会话、建驱动；交回的 dispose 只关这一页。 */
@@ -396,17 +468,35 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     browser: CdpExternalBrowserLauncherBrowser,
     options: CdpExternalBrowserLaunchOptions
   ): Promise<CdpExternalBrowserSession> {
+    const pageOwners = this.requireBrowserPages(browser)
     const { connection } = browser
+    let settled!: () => void
+    const opening = new Promise<void>((resolve) => {
+      settled = resolve
+    })
+    pageOwners.pending.add(opening)
     const url = options.url?.trim() || 'about:blank'
-    const targetId = await connection.createPage(url)
+    let targetId: Nullable<string> = null
+    let driver: Nullable<CdpBrowserPageDriver> = null
+    let transport: Nullable<Awaited<ReturnType<CdpBrowserConnectionApi['attach']>>> = null
     try {
+      targetId = await connection.createPage(url)
+      this.requireBrowserPages(browser)
       // 标签页目录只列这一页所在的浏览器上下文：用户自己的 Chrome 里别的配置、无痕窗口的标签页不给模型看。
       const pages = await connection.listPageTargets()
+      this.requireBrowserPages(browser)
       const browserContextId = pages.find((page) => page.targetId === targetId)?.browserContextId
-      const driver = new CdpBrowserPageDriver({
-        transport: await connection.attach(targetId),
+      transport = await connection.attach(targetId)
+      this.requireBrowserPages(browser)
+      const ownedTargetId = targetId
+      driver = new CdpBrowserPageDriver({
+        transport,
         initialUrl: URL.canParse(url) ? new URL(url).href : url,
         downloadPath: browser.downloadPath,
+        onDriverCreated: (created) => this.registerDriver(browser, created),
+        onDispose: () => {
+          void connection.closePage(ownedTargetId)
+        },
         targets: {
           targetId,
           list: () => connection.listPageTargets(browserContextId),
@@ -414,19 +504,21 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
         },
       })
       this.log.debug('给会话开了新标签页', { targetId, url })
-      let disposed = false
+      const pageDriver = driver
       return {
-        driver,
-        dispose: () => {
-          if (disposed) return
-          disposed = true
-          driver.dispose()
-          void connection.closePage(targetId)
-        },
+        driver: pageDriver,
+        dispose: () => pageDriver.dispose(),
       }
     } catch (error) {
-      void connection.closePage(targetId)
+      if (driver) driver.dispose()
+      else {
+        transport?.dispose()
+        if (targetId) void connection.closePage(targetId)
+      }
       throw error
+    } finally {
+      pageOwners.pending.delete(opening)
+      settled()
     }
   }
 
@@ -453,17 +545,20 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     userDataDir: string,
     platform: NodeJS.Platform,
     timeoutMs: number,
-    stderr: CdpChromeStderrDiagnostics
+    stderr: CdpChromeStderrDiagnostics,
+    assertSpawn: () => void
   ): Promise<CdpDevToolsActivePort> {
     const deadline = Date.now() + timeoutMs
 
     while (Date.now() <= deadline) {
+      assertSpawn()
       if (isPresent(child.exitCode)) {
         await this.sleep(0)
         throw new AppError('EXECUTION_FAILED', formatChromeEarlyExitMessage(child, stderr))
       }
 
       const activePort = await this.readDevToolsActivePort(userDataDir, platform)
+      assertSpawn()
       if (activePort) return activePort
 
       await this.sleep(BrowserTuning.externalBrowser.pollIntervalMs)
@@ -488,13 +583,15 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
   }
 
   private disposeLaunchedBrowser(
-    child: CdpExternalBrowserChildProcess,
+    child: Nullable<CdpExternalBrowserChildProcess>,
     tempUserDataDir: Nullable<string>,
-    platform: NodeJS.Platform
+    platform: NodeJS.Platform,
+    failedToSpawn = false
   ): void {
     // 进程已经退了就不再发信号：pid 可能已经被别的进程重用。
-    const running = !isPresent(child.exitCode)
-    if (!child.killed && running) {
+    const running =
+      child !== null && !failedToSpawn && !isPresent(child.exitCode) && !isPresent(child.signalCode)
+    if (child && !child.killed && running) {
       const killedProcessGroup = this.killLaunchedBrowserProcessGroup(child, platform)
       if (!killedProcessGroup) {
         child.kill('SIGTERM')
@@ -511,7 +608,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       })
     }
     // Chrome 退出途中还在往配置目录里写：等它退了再删，当场删会删不干净。
-    if (running && child.once) child.once('exit', remove)
+    if (running && child?.once) child.once('exit', remove)
     else remove()
   }
 

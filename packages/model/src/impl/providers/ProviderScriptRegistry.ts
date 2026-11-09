@@ -23,6 +23,7 @@ import type {
   ChatProviderId,
   ListProviderModelsRequest,
   ProviderModelCatalogEntry,
+  ProviderScriptDescriptor,
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
   ValidateProviderRuntimeRequest,
@@ -34,6 +35,7 @@ import type {
 } from '../../types/scripts'
 import { toPositiveInteger } from '../../utils/numbers'
 import {
+  createProviderScriptDescriptor,
   normalizeLoadedDefinition,
   normalizeProviderScriptManifest,
   normalizeProviderScriptModels,
@@ -107,6 +109,7 @@ export class ProviderScriptRegistry
   private loadState: 'unloaded' | 'loading' | 'loaded' | AppError = 'unloaded'
   private activeConfigPath: Nullable<string> = null
   private scripts = new Map<ChatProviderId, LoadedProviderScript>()
+  private readonly descriptors = new WeakMap<LoadedProviderScript, ProviderScriptDescriptor>()
   /**
    * 内存来源是**另一条生命周期**：磁盘来源由 config 决定，重配一次就该整批重来；
    * `registerSource()` 注册的来源只由调用方（插件安装链）增删，重配宿主不能把它清掉——
@@ -172,7 +175,8 @@ export class ProviderScriptRegistry
   }
 
   public supportsProvider(provider: ChatProviderId): boolean {
-    return !!this.getProviderScript(provider)
+    this.ensureLoaded()
+    return this.scripts.has(provider)
   }
 
   public getActiveConfigPath(): Nullable<string> {
@@ -180,18 +184,28 @@ export class ProviderScriptRegistry
     return this.activeConfigPath
   }
 
-  public getProviderScript(provider: ChatProviderId): Nullable<LoadedProviderScript> {
+  /** 同一加载代返回稳定的深冻结数据快照；需要编辑时由宿主先复制。 */
+  public getProviderScript(provider: ChatProviderId): Nullable<ProviderScriptDescriptor> {
     this.ensureLoaded()
-    return toNullable(this.scripts.get(provider))
+    const script = this.scripts.get(provider)
+    if (!script) return null
+
+    let descriptor = this.descriptors.get(script)
+    if (!descriptor) {
+      descriptor = createProviderScriptDescriptor(script.manifest)
+      this.descriptors.set(script, descriptor)
+    }
+    return descriptor
   }
 
   public listProviderManifests(): ProviderScriptManifest[] {
     this.ensureLoaded()
-    return [...this.scripts.values()].map((script) => script.manifest)
+    return structuredClone([...this.scripts.values()].map((script) => script.manifest))
   }
 
   public requireProviderScript(provider: ChatProviderId): LoadedProviderScript {
-    const script = this.getProviderScript(provider)
+    this.ensureLoaded()
+    const script = this.scripts.get(provider)
     if (!script) {
       throw new AppError(
         ModelErrorCodes.providerScriptInvalid,

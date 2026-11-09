@@ -251,23 +251,28 @@ export class LanguageQueries implements LanguageQueriesApi {
       services.map((service) => analyzeImpactWithService(service, input, ctx))
     )
     const limit = limitOf(input.limit)
+    const references = impacts.flatMap((impact) => impact.references)
+    const importers = impacts.flatMap((impact) => impact.importers)
     return {
       services: summarizeServices(services),
       symbol: input.symbol,
       languages: impacts,
       definitions: impacts.flatMap((impact) => impact.definitions),
       definitionCount: impacts.reduce((sum, impact) => sum + impact.definitionCount, 0),
-      references: impacts.flatMap((impact) => impact.references).slice(0, limit),
+      references: references.slice(0, limit),
       referenceCount: impacts.reduce((sum, impact) => sum + impact.referenceCount, 0),
       referenceCountIsLowerBound: optionalWhen(
         impacts.some((impact) => isTrue(impact.referenceCountIsLowerBound)),
         true
       ),
       referenceNote: joinLanguageNotes(impacts.map((impact) => impact.referenceNote)),
-      importers: impacts.flatMap((impact) => impact.importers).slice(0, limit),
+      importers: importers.slice(0, limit),
       importerCount: impacts.reduce((sum, impact) => sum + impact.importerCount, 0),
       relatedTestPaths: [...new Set(impacts.flatMap((impact) => impact.relatedTestPaths))],
-      truncated: impacts.some((impact) => impact.truncated),
+      truncated:
+        references.length > limit ||
+        importers.length > limit ||
+        impacts.some((impact) => impact.truncated),
     }
   }
 }

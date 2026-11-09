@@ -54,6 +54,40 @@ test('two files, concurrent retry, lost reply, restart and guarded undo', async 
   expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha')
   expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('user')
 })
+
+test('successful commit keeps its receipt and effect when the applied transaction leaves history', async () => {
+  const ctx = await reopen()
+  const kernel = await ctx.project.kernel()
+  const apply = kernel.applyEdit.bind(kernel)
+  const get = kernel.getTransaction.bind(kernel)
+  let evicted = false
+  kernel.getTransaction = (id) => (evicted ? undefined : get(id))
+  kernel.applyEdit = async (input, signal) => {
+    const result = await apply(input, signal)
+    evicted = true
+    return result
+  }
+  const commits: Array<Parameters<NonNullable<ProjectOperationContext['recordProjectCommit']>>[0]> =
+    []
+  const outcomes: string[] = []
+  ctx.recordProjectCommit = (commit) => commits.push(commit)
+  ctx.recordWriteOutcome = (outcome) => outcomes.push(outcome)
+  const result = await project.commit(
+    { requestId: 'evicted', changes: [{ path: 'receipt.txt', before: null, after: 'saved' }] },
+    ctx
+  )
+  expect(result.status).toBe('applied')
+  expect(result.changedFiles).toEqual(['receipt.txt'])
+  expect(result.changed).toBe(true)
+  expect(result.diff).toContain('+saved')
+  expect(result.newRevisions?.['receipt.txt']).toBeDefined()
+  expect(result.oldRevisions?.['receipt.txt']).toBeUndefined()
+  expect(commits).toHaveLength(1)
+  expect(commits[0].transactionId).toBe(result.changeRef)
+  expect(commits[0].changedFiles).toEqual(['receipt.txt'])
+  expect(outcomes).toEqual(['applied'])
+  expect(await readFile(join(root, 'receipt.txt'), 'utf8')).toBe('saved')
+})
 test('exact bytes distinguish BOM and empty from absent; conflict writes nothing', async () => {
   const ctx = await reopen()
   await writeFile(join(root, 'original.txt'), '\ufeffold\r\n')

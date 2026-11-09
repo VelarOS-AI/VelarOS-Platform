@@ -126,6 +126,8 @@ export interface BrowserPageDriverPdfOptions {
 export interface BrowserPageDriverFetchResourceOptions {
   url: string
   referer?: LooseOptional<string>
+  /** 宿主取消信号；驱动须中止实际传输与读取。 */
+  signal?: AbortSignal
 }
 
 export interface BrowserPageDriverFetchResourceResult {

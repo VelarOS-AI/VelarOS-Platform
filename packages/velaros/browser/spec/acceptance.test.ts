@@ -23,6 +23,7 @@ import {
   BrowserFetchLimits,
   BrowserInspectLimits,
   type BrowserLoginDetection,
+  browserOperations,
   BrowserPendingEventLimits,
   BrowserPerformanceLimits,
   BrowserProtocolLimits,
@@ -99,6 +100,12 @@ describe('浏览器单元的对外承诺', () => {
     expect(
       browserActionPolicy.check({ deny: ['network.configure'] }, { action: 'mouse.click' }).kind
     ).toBe('allow')
+    expect(
+      browserActionPolicy.check(
+        { allow: ['mouse.click'], default: 'allow' },
+        { action: 'network.configure' }
+      ).kind
+    ).toBe('deny')
   })
 
   test('INV-8 站点工作区是硬边界', async () => {
@@ -567,6 +574,26 @@ export const cookieCount = cookies.length
       key: 'Backspace',
     })
     expect(clearing.methods()).not.toContain('insertText')
+  })
+
+  test('INV-25 fill 准备期间取消后不再插入、退格或读取下一步状态', async () => {
+    for (const value of ['', 'replacement']) {
+      const harness = createHarness()
+      const controller = new AbortController()
+      const perform = harness.port.performTargetAction
+      harness.port.performTargetAction = async (options) => {
+        const result = await perform(options)
+        controller.abort()
+        return result
+      }
+      await expect(
+        browserOperations.fill(
+          { target: 'input[name=email]', value },
+          { ...harness.context, abortSignal: controller.signal }
+        )
+      ).rejects.toMatchObject({ name: 'AbortError' })
+      expect(harness.methods()).toEqual(['performTargetAction'])
+    }
   })
 
   test('INV-26 等待等到了交回值，等不到抛 TIMEOUT', async () => {

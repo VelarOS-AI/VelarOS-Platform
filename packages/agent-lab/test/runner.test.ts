@@ -71,6 +71,37 @@ function successfulDriver(prompts: string[], sessions: string[]): LabDriver {
 }
 
 describe('continuous journey runner', () => {
+  test('empty preflight diagnostics still reject the driver before opening a session', async () => {
+    const verifiers = createVerifierRegistry()
+    verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+    for (const phase of ['capabilities', 'identity'] as const) {
+      const driver = successfulDriver([], [])
+      driver[phase] = async () => {
+        // eslint-disable-next-line unicorn/error-message -- 空错误消息正是此预检回归的输入。
+        throw new Error('')
+      }
+      let opened = 0
+      driver.openSession = async () => {
+        opened++
+        throw new Error('preflight must prevent session creation')
+      }
+      const result = await journeyRunner.runJourney({
+        jobId: 'job',
+        suiteId: 'suite',
+        trial: trial(),
+        journey: journey(),
+        driver,
+        detectors: createDetectorRegistry(),
+        verifiers,
+        workspaceRoot: null,
+        sourceCommit: null,
+        consumerCommit: null,
+      })
+      expect(opened).toBe(0)
+      expect(result.legs).toEqual([])
+      expect(result.drops).toContainEqual(expect.objectContaining({ cause: 'agent-unavailable' }))
+    }
+  })
   test('rejects invalid generated run identities before any driver interaction', async () => {
     const prompts: string[] = []
     const sessions: string[] = []

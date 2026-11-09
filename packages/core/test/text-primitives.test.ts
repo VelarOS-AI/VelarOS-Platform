@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '../src/error'
+import { LogAssertionError, LogError } from '../src/logger'
+import { isString } from '../src/typeGuards'
 import { readErrnoCode } from '../src/utils/errors'
 import { stableStringify } from '../src/utils/json'
+import { optionalWhen } from '../src/utils/optionalWhen'
 import { clampToCodePointBoundary, takeTail, truncate } from '../src/utils/string'
 
 /** 是否含孤立代理项（`String.prototype.isWellFormed` 要 ES2024 的 lib，这里就地判定）。 */
@@ -83,8 +86,37 @@ describe('AppError 的字符串化截断', () => {
     expect(AppError.getMessage({ apiKey: 'sk-secret', other: 1 })).toContain('[redacted]')
   })
 
-  test('UNAVAILABLE 是一个可用的错误码', () => {
-    expect(new AppError('UNAVAILABLE', '语言服务没就绪').code).toBe('UNAVAILABLE')
+  test('AppError 保留真实子类和跨副本身份；未登记的自定义守卫返回 VALIDATION', () => {
+    const base = new AppError('UNAVAILABLE', '语言服务没就绪')
+    expect(base.code).toBe('UNAVAILABLE')
+    const cause = new Error('original cause')
+    const log = new LogError('Settings', '读取失败', { cause })
+    expect(log).toBeInstanceOf(AppError)
+    expect(AppError.from(log)).toBe(log)
+    expect(AppError.from(log).cause).toBe(cause)
+    expect(log.scope).toBe('Settings')
+    const assertion = new LogAssertionError('Settings', '缺少设置', { cause })
+    expect(assertion).toBeInstanceOf(LogError)
+    expect(AppError.from(assertion)).toBe(assertion)
+    expect(base).not.toBeInstanceOf(LogError)
+    expect(log).not.toBeInstanceOf(LogAssertionError)
+    const foreign = Object.assign(new Error('other copy'), {
+      name: 'AppError',
+      code: 'CONFLICT',
+      context: {},
+    })
+    expect(foreign).toBeInstanceOf(AppError)
+    expect(AppError.from(foreign) === foreign).toBe(true)
+    expect(optionalWhen(isString, 'registered')).toBe('registered')
+    const custom = (value: unknown): value is string => typeof value === 'string'
+    let failure: unknown
+    try {
+      optionalWhen(custom, 'unregistered')
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(AppError)
+    expect(failure).toMatchObject({ code: 'VALIDATION' })
   })
 })
 
@@ -125,7 +157,14 @@ describe('stableStringify', () => {
     expect(stableStringify([shared, shared], { rejectCircular: true })).toBe('[{"z":1},{"z":1}]')
     const circular: unknown[] = []
     circular.push(circular)
-    expect(() => stableStringify(circular, { rejectCircular: true })).toThrow(TypeError)
+    let failure: unknown
+    try {
+      stableStringify(circular, { rejectCircular: true })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(AppError)
+    expect(failure).toMatchObject({ code: 'VALIDATION' })
     expect(stableStringify(circular)).toBe('["[circular]"]')
   })
 

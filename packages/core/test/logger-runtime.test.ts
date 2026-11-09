@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 
 import { expect, spyOn, test } from 'bun:test'
 
+import { AppError } from '../src/error'
 import { createFileLogTransport } from '../src/logger/node'
 import { LogRuntime } from '../src/logger/runtime'
 
@@ -167,8 +168,12 @@ test('flush aggregates synchronous and asynchronous failures after every transpo
     },
   })
   const failure = await runtime.flush().catch((error: unknown) => error)
-  expect(failure).toBeInstanceOf(AggregateError)
-  expect((failure as AggregateError).errors).toEqual([syncFailure, asyncFailure])
+  expect(failure).toBeInstanceOf(AppError)
+  expect(failure).toMatchObject({ code: 'UNAVAILABLE' })
+  expect((failure as { errors: readonly unknown[] }).errors).toEqual([syncFailure, asyncFailure])
+  expect((failure as { errors: readonly unknown[] }).errors[0]).toBe(syncFailure)
+  expect((failure as { errors: readonly unknown[] }).errors[1]).toBe(asyncFailure)
+  expect((failure as AppError).cause).toBeUndefined()
   expect(healthyFlushed).toBe(true)
 })
 
@@ -224,8 +229,9 @@ test('dispose runs all cleanup after flush fails and waits for real asynchronous
   expect(completed).toBe(false)
   finish.open()
   const failure = await completion
-  expect(failure).toBeInstanceOf(AggregateError)
-  expect((failure as AggregateError).errors).toEqual([
+  expect(failure).toBeInstanceOf(AppError)
+  expect(failure).toMatchObject({ code: 'UNAVAILABLE' })
+  expect((failure as { errors: readonly unknown[] }).errors).toEqual([
     flushFailure,
     disposeFailure,
     asyncDisposeFailure,
@@ -243,8 +249,9 @@ test('runtime flush preserves a real file transport write failure', async () => 
   try {
     runtime.tag('test').info('cannot append to a directory')
     const failure = await runtime.flush().catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).errors).toHaveLength(1)
+    expect(failure).toBeInstanceOf(AppError)
+    expect(failure).toMatchObject({ code: 'UNAVAILABLE' })
+    expect((failure as { errors: readonly unknown[] }).errors).toHaveLength(1)
     expect(diagnostics).toHaveBeenCalledTimes(1)
     await runtime.dispose()
   } finally {

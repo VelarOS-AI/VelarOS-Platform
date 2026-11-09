@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 产品代码里抛的错都从 core 造：`new AppError(code, message)`、要挂字段用 `AppError.withFields`、
 // 取消与超时用 `createAbortError` / `createTimeoutError`（都在 @velaros-ai/core/error）。
-// 这道门按语法树找原生 `new Error(...)` / `Error(...)`；字符串与注释里的不算（注入隔离堆的代码片段、模型面模版）。
+// 这道门按语法树找原生错误构造和调用（含 globalThis 限定形式）；字符串与注释里的不算。
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -10,6 +10,30 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const NativeErrorNames = new Set([
+  'Error',
+  'AggregateError',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'EvalError',
+  'URIError',
+])
+
+function nativeErrorName(expression) {
+  while (ts.isParenthesizedExpression(expression)) expression = expression.expression
+  if (ts.isIdentifier(expression)) return expression.text
+  if (!ts.isPropertyAccessExpression(expression) && !ts.isElementAccessExpression(expression))
+    return undefined
+  let receiver = expression.expression
+  while (ts.isParenthesizedExpression(receiver)) receiver = receiver.expression
+  if (ts.isIdentifier(receiver) && receiver.text === 'globalThis') {
+    if (ts.isPropertyAccessExpression(expression)) return expression.name.text
+    if (expression.argumentExpression && ts.isStringLiteralLike(expression.argumentExpression))
+      return expression.argumentExpression.text
+  }
+  return undefined
+}
 
 // 产品源码：测试、夹具、vendor、示例、构建产物与生成物不算。
 const NotProductCode =
@@ -67,8 +91,7 @@ for (const file of files) {
   const visit = (node) => {
     const constructsError =
       (ts.isNewExpression(node) || ts.isCallExpression(node)) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'Error'
+      NativeErrorNames.has(nativeErrorName(node.expression))
     if (constructsError) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
       found.push({

@@ -595,7 +595,10 @@ class ComposedRuntime implements VelarosRuntime {
       const failures = settled.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : []
       )
-      if (!isEmpty(failures)) throw new AggregateError([error, ...failures], '子会话建立和清理失败')
+      if (!isEmpty(failures))
+        throw AppError.withFields('UNAVAILABLE', '子会话建立和清理失败', {
+          errors: [error, ...failures],
+        })
       throw error
     }
     this.sessions.set(job.sessionId, session)
@@ -650,7 +653,9 @@ class ComposedRuntime implements VelarosRuntime {
         result.status === 'rejected' ? [result.reason] : []
       )
       if (!isEmpty(failures))
-        throw new AggregateError([error, ...failures], '子会话启动失败且清理异常')
+        throw AppError.withFields('UNAVAILABLE', '子会话启动失败且清理异常', {
+          errors: [error, ...failures],
+        })
       throw error
     }
     const onEvent = this.options.agents?.onEvent
@@ -696,7 +701,10 @@ class ComposedRuntime implements VelarosRuntime {
           Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
           failures.push(error)
         }
-        if (!isEmpty(failures)) throw new AggregateError(failures, '子会话和父预算清理失败')
+        if (!isEmpty(failures))
+          throw AppError.withFields('UNAVAILABLE', '子会话和父预算清理失败', {
+            errors: [...failures],
+          })
       },
     }
   }
@@ -970,7 +978,9 @@ class ComposedRuntime implements VelarosRuntime {
     this.taskModels.clear()
     this.shutdownPhase = 'closed'
     if (!isEmpty(failures))
-      throw new AggregateError(failures, 'Runtime 关闭失败；已尝试释放全部资源')
+      throw AppError.withFields('UNAVAILABLE', 'Runtime 关闭失败；已尝试释放全部资源', {
+        errors: [...failures],
+      })
   }
 }
 

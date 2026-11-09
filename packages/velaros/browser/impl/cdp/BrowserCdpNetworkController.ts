@@ -499,7 +499,8 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
     if (this.networkRequests.size > BrowserTuning.cdp.networkRequestRecords) {
       const oldestRequestId = this.networkRequests.keys().next().value
-      this.clearNetworkRequest(oldestRequestId)
+      // 明细过期不代表请求已经结束；在飞身份只由实际完成/失败或 reset 收束。
+      if (oldestRequestId !== undefined) this.networkRequests.delete(oldestRequestId)
     }
   }
 
@@ -620,13 +621,6 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       }
       request.finishedTimestamp = normalizeNullableNumber(event.timestamp)
     }
-  }
-
-  private clearNetworkRequest(requestId: unknown): void {
-    if (!isNonBlankString(requestId)) return
-
-    this.settlePendingNetworkRequest(requestId)
-    this.networkRequests.delete(requestId)
   }
 
   private trackPendingNetworkRequest(requestId: string): void {

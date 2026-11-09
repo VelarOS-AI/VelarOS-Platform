@@ -11,7 +11,12 @@ import type {
 import type { CertificationCheck, RunArchive } from '../../types/agent-lab.js'
 import type { CertificationInput } from '../../types/options.js'
 
-import { checkComparability, compareExecutors, estimateReliability } from './statistics.js'
+import {
+  assertUniqueRunIds,
+  checkComparability,
+  compareExecutors,
+  estimateReliability,
+} from './statistics.js'
 
 /** 造一项检查结论。 */
 function check(
@@ -35,6 +40,7 @@ export function journeyChecks(
   policy: CertificationInput['policy'],
   archives: readonly RunArchive[]
 ): readonly CertificationCheck[] {
+  assertUniqueRunIds(archives)
   const checks: CertificationCheck[] = []
   for (const journeyId of policy.requiredJourneyIds) {
     const runs = archives.filter((archive) => archive.journey.id === journeyId)

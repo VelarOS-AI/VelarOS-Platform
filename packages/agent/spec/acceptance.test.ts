@@ -2657,8 +2657,10 @@ test('all cleanup stages are attempted when both execution and frame cleanup fai
   } catch (value) {
     error = value
   }
-  expect(error).toBeInstanceOf(AggregateError)
-  expect((error as AggregateError).errors).toHaveLength(2)
+  expect(error).toBeInstanceOf(AppError)
+  expect(error).toMatchObject({ code: 'UNAVAILABLE' })
+  expect((error as { errors: readonly unknown[] }).errors).toHaveLength(2)
+  expect((error as AppError).cause).toBeUndefined()
   expect(release).toBe(1)
   expect((await f.view.inspect())?.lease).toBeNull()
   await service.close()

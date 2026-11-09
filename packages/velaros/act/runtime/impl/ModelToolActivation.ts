@@ -277,6 +277,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
       failures.push(error)
     }
     if (failures.length === 1) throw failures[0]
-    if (!isEmpty(failures)) throw new AggregateError(failures, '模型工具预算结算失败')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '模型工具预算结算失败', { errors: [...failures] })
   }
 }

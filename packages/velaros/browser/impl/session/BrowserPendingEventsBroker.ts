@@ -329,33 +329,26 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     }
 
     entry.settled = true
+    try {
+      if (input.action === 'cancel') {
+        entry.item.cancel()
+      } else {
+        entry.item.setSavePath(savePath)
+        entry.item.resume()
+      }
+    } catch (error) {
+      entry.settled = false
+      throw error
+    }
     entry.timeout?.cancel()
     this.pendingDownloads.delete(entry.id)
-
-    if (input.action === 'cancel') {
-      entry.item.cancel()
-      return {
-        handled: true,
-        eventId: entry.id,
-        action: 'cancel',
-        savePath: null,
-        state: 'cancelled',
-      }
-    }
-
-    entry.item.setSavePath(savePath)
-    try {
-      entry.item.resume()
-    } catch (error) {
-      this.log.debug('恢复下载失败', { error: AppError.from(error).message })
-    }
 
     return {
       handled: true,
       eventId: entry.id,
-      action: 'accept',
-      savePath,
-      state: 'accepted',
+      action: input.action,
+      savePath: input.action === 'cancel' ? null : savePath,
+      state: input.action === 'cancel' ? 'cancelled' : 'accepted',
     }
   }
 

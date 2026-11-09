@@ -1,3 +1,4 @@
+import { AppError } from '../error.js'
 import { isPresent } from '../typeGuards.js'
 import { isEmpty } from '../utils/array.js'
 
@@ -195,7 +196,8 @@ export class LogRuntime implements GlobalLog {
 
   public async flush(): Promise<void> {
     const failures = await this.flushTransports()
-    if (!isEmpty(failures)) throw new AggregateError(failures, '日志输出端刷新失败')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '日志输出端刷新失败', { errors: [...failures] })
   }
 
   public async dispose(): Promise<void> {
@@ -203,7 +205,8 @@ export class LogRuntime implements GlobalLog {
       ...(await this.flushTransports()),
       ...(await this.settleTransports('dispose')),
     ]
-    if (!isEmpty(failures)) throw new AggregateError(failures, '日志输出端回收失败')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '日志输出端回收失败', { errors: [...failures] })
   }
 
   public createAssertionError(

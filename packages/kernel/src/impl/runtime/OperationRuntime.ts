@@ -734,10 +734,9 @@ class OperationRuntime implements OperationRuntimeApi {
     await this.kernel.dispose()
     this.leases.clear()
     if (!isEmpty(this.settlementFailures))
-      throw new AggregateError(
-        this.settlementFailures,
-        '调用回执持久化失败；保留的意图需要恢复核对'
-      )
+      throw AppError.withFields('UNAVAILABLE', '调用回执持久化失败；保留的意图需要恢复核对', {
+        errors: [...this.settlementFailures],
+      })
   }
 }
 

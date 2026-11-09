@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { AppError } from '../src/error'
 import { createExclusiveSqliteLock } from '../src/utils/ExclusiveSqliteLock'
 
 describe('exclusive SQLite lock lifecycle', () => {
@@ -51,18 +52,32 @@ describe('exclusive SQLite lock lifecycle', () => {
   test('failed cleanup is retryable and never becomes acquired ownership', () => {
     let opens = 0
     let closes = 0
+    const busy = Object.assign(new Error('busy'), { code: 'SQLITE_BUSY' })
+    const cleanup = new Error('close failed')
     const lock = createExclusiveSqliteLock(() => {
       opens++
       return {
         exec() {
-          if (opens === 1) throw Object.assign(new Error('busy'), { code: 'SQLITE_BUSY' })
+          if (opens === 1) throw busy
         },
         close() {
-          if (++closes === 1) throw new Error('close failed')
+          if (++closes === 1) throw cleanup
         },
       }
     })
-    expect(() => lock.acquire()).toThrow(AggregateError)
+    let failure: unknown
+    try {
+      lock.acquire()
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(AppError)
+    expect(failure).toMatchObject({ code: 'UNAVAILABLE' })
+    const errors = (failure as { errors: readonly unknown[] }).errors
+    expect(errors).toEqual([busy, cleanup])
+    expect(errors[0]).toBe(busy)
+    expect(errors[1]).toBe(cleanup)
+    expect((failure as AppError).cause).toBeUndefined()
     expect(lock.acquire()).toBe(true)
     expect(opens).toBe(2)
     expect(closes).toBe(2)

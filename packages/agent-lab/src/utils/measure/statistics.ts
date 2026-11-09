@@ -18,6 +18,16 @@ import { AgentLabTuning } from '../tuning.js'
 
 import { classifyRunArchiveOutcome, hasCompleteLegCoverage } from './coverage.js'
 
+/** 同一批证据每个 runId 只能出现一次；副本与重复加载不能充当独立尝试。 */
+export function assertUniqueRunIds(archives: readonly RunArchive[]): void {
+  const seen = new Set<string>()
+  for (const archive of archives) {
+    const id = archive.manifest.runId
+    if (seen.has(id)) throw new Error(`重复的 runId: ${id}`)
+    seen.add(id)
+  }
+}
+
 /** 完整旅程的加权得分；丢弃、不完整或任一段分数未知时保持 null，不把缺失补成 0。 */
 export function archiveCompletion(archive: RunArchive): number | null {
   if (archive.drops.length > 0 || !hasCompleteLegCoverage(archive)) return null
@@ -53,6 +63,7 @@ export function wilsonInterval(successes: number, attempts: number): IntervalEst
 
 /** 单次可靠性只认完整旅程的真实通过结论；失败计入尝试，丢弃和不可判单列。 */
 export function estimateReliability(archives: readonly RunArchive[]): ReliabilityEstimate {
+  assertUniqueRunIds(archives)
   const outcomes = archives.map((archive) => classifyRunArchiveOutcome(archive).outcome)
   const attempts = outcomes.filter((outcome) => outcome !== 'void').length
   const successes = outcomes.filter((outcome) => outcome === 'pass').length
@@ -66,6 +77,7 @@ export function estimateReliability(archives: readonly RunArchive[]): Reliabilit
 
 /** 失败形态分布：`unclassified` 单独数，不并进其它类。 */
 export function failureDistribution(archives: readonly RunArchive[]): FailureDistribution {
+  assertUniqueRunIds(archives)
   const byClass: Partial<Record<FailureClass, number>> = {}
   let classified = 0
   let unclassified = 0
@@ -87,10 +99,17 @@ export function failureDistribution(archives: readonly RunArchive[]): FailureDis
 
 /** 核对几份归档能不能放在一起比：任务、探测器集合、评测策略、预算与调用方提交号都得一样。 */
 export function checkComparability(archives: readonly RunArchive[]): ComparabilityResult {
+  assertUniqueRunIds(archives)
   if (archives.length < 2) return { comparable: false, reasons: ['至少要有两次运行才谈得上比较'] }
   const reasons = new Set<string>()
   const groups = new Map<string, RunArchive[]>()
+  const pairIdentities = new Set<string>()
   for (const archive of archives) {
+    const executorId = archive.manifest.executor.executorId
+    const identity = canonicalJson([executorId, pairedKey(archive)])
+    if (pairIdentities.has(identity))
+      reasons.add(`${executorId}: 同一配对键对应多次运行，无法唯一配对`)
+    pairIdentities.add(identity)
     const key = `${archive.journey.id}@${archive.journey.version}:${archive.manifest.trial.arm ?? 'default'}`
     const group = groups.get(key) ?? []
     group.push(archive)
@@ -156,6 +175,16 @@ function pairedKey(archive: RunArchive): string {
   return `${archive.journey.id}@${archive.journey.version}:${replicate.groupId}:${replicate.index}:${replicate.seed}`
 }
 
+/** 同一边的配对身份必须唯一；歧义键保留 null，不能按输入顺序挑一次运行。 */
+function indexPairedArchives(archives: readonly RunArchive[]): Map<string, RunArchive | null> {
+  const indexed = new Map<string, RunArchive | null>()
+  for (const archive of archives) {
+    const key = pairedKey(archive)
+    indexed.set(key, indexed.has(key) ? null : archive)
+  }
+  return indexed
+}
+
 /** 簇钥匙：同一条旅程加同一个实验臂算一簇，bootstrap 按簇重抽。 */
 function clusterKey(archive: RunArchive): string {
   return `${archive.journey.id}@${archive.journey.version}:${archive.manifest.trial.arm ?? 'default'}`
@@ -166,8 +195,8 @@ export function matchCompletionPairs(
   archivesA: readonly RunArchive[],
   archivesB: readonly RunArchive[]
 ): MatchedCompletionPairs {
-  const a = new Map(archivesA.map((archive) => [pairedKey(archive), archive]))
-  const b = new Map(archivesB.map((archive) => [pairedKey(archive), archive]))
+  const a = indexPairedArchives(archivesA)
+  const b = indexPairedArchives(archivesB)
   const keys = [...new Set([...a.keys(), ...b.keys()])].sort()
   const pairs: CompletionPair[] = []
   let droppedA = 0
@@ -235,9 +264,12 @@ export function compareExecutors(
   executorB: string,
   options: PairedComparisonOptions
 ): PairedComparison {
+  assertUniqueRunIds(archives)
   const archivesA = archives.filter((archive) => archive.manifest.executor.executorId === executorA)
   const archivesB = archives.filter((archive) => archive.manifest.executor.executorId === executorB)
-  const comparability = checkComparability([...archivesA, ...archivesB])
+  const comparability = checkComparability(
+    executorA === executorB ? archivesA : [...archivesA, ...archivesB]
+  )
   const matched = matchCompletionPairs(archivesA, archivesB)
   const minimumEffect = options.minimumEffect ?? 0
   const completionDifference = clusterBootstrap(

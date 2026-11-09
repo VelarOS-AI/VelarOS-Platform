@@ -8,9 +8,33 @@ import { describe, expect, test } from 'bun:test'
 import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 
 import { createLocalFileSearch } from '../impl/files/LocalFileSearch.js'
-import { shouldSkipProtectedSearchDirectory, shouldSkipSearchEntry } from '../utils/local-search.js'
+import {
+  buildLineMatcher,
+  shouldSkipProtectedSearchDirectory,
+  shouldSkipSearchEntry,
+} from '../utils/local-search.js'
 
 describe('Local file search visibility', () => {
+  test('逐行正则复用有界护栏，保留列号、大小写与 UTF-16 空匹配语义', () => {
+    const match = buildLineMatcher({ pattern: 'a', regex: true })
+    expect([...match('aAa', 2)]).toEqual([1, 2])
+    expect([...match('Aa', 5)]).toEqual([1, 2])
+    expect([...match('aAa', 0)]).toEqual([])
+    expect([
+      ...buildLineMatcher({ pattern: 'a', regex: true, caseSensitive: true })('AaA', 5),
+    ]).toEqual([2])
+    expect([...buildLineMatcher({ pattern: '', regex: true })('🙂b', 10)]).toEqual([1, 2, 3, 4])
+    expect([...buildLineMatcher({ pattern: 'a' })('aAa', 2)]).toEqual([1, 2, 3])
+    expect([...buildLineMatcher({ pattern: '' })('abc', 2)]).toEqual([])
+    let failure: unknown
+    try {
+      buildLineMatcher({ pattern: '(', regex: true })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toMatchObject({ code: 'VALIDATION' })
+  })
+
   test('owns generic search filtering without Workspace imports', () => {
     expect(shouldSkipSearchEntry('.git', true, false)).toBe(true)
     expect(shouldSkipSearchEntry('node_modules', true, true)).toBe(true)

@@ -247,7 +247,13 @@ class AgentSupervisor implements AgentSupervisorApi {
       .filter((x) => x.parent === parent)
       .map((x) => x.error)
     if (!isEmpty(failures))
-      throw new AggregateError(failures, `子运行收尾失败：${failures.map(String).join('; ')}`)
+      throw AppError.withFields(
+        'UNAVAILABLE',
+        `子运行收尾失败：${failures.map(String).join('; ')}`,
+        {
+          errors: [...failures],
+        }
+      )
   }
   public async close(): Promise<void> {
     this.closed = true
@@ -257,7 +263,13 @@ class AgentSupervisor implements AgentSupervisorApi {
     )
     const failures = [...this.failures.values()].map((x) => x.error)
     if (!isEmpty(failures))
-      throw new AggregateError(failures, `子运行收尾失败：${failures.map(String).join('; ')}`)
+      throw AppError.withFields(
+        'UNAVAILABLE',
+        `子运行收尾失败：${failures.map(String).join('; ')}`,
+        {
+          errors: [...failures],
+        }
+      )
   }
   private assertAvailable(job: AgentJob): void {
     if (

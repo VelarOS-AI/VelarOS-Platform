@@ -1368,8 +1368,10 @@ test('search cleanup attempts every release and preserves primary, budget and cl
   }
   await assert.rejects(f.search.run({ query: 'auth' }, f.call), (error) => {
     assert.equal(error.code, 'SEARCH_CLEANUP')
-    assert(error instanceof AggregateError)
+    assert(error instanceof AppError)
     assert.deepEqual(error.errors, [primary, budget, close])
+    assert(error.errors.every((item, index) => item === [primary, budget, close][index]))
+    assert.equal(error.cause, undefined)
     return true
   })
   assert.equal(f.closes, 1)
@@ -1632,15 +1634,21 @@ test('generic child calls share the cancelled-reservation guard and surface refu
   await entered.promise
   controller.abort()
   reserve.resolve()
-  await assert.rejects(
-    pending,
-    (error) => error.code === 'MODEL_RESERVATION_RELEASE' && error.errors.includes(failure)
-  )
+  await assert.rejects(pending, (error) => {
+    assert(error instanceof AppError)
+    assert.equal(error.code, 'MODEL_RESERVATION_RELEASE')
+    assert(error.errors.includes(failure))
+    assert.equal(error.cause, undefined)
+    return true
+  })
   assert.equal(f.counters.dispatched, 0)
   assert.equal(f.counters.released, 1)
-  await assert.rejects(driver.close(), (error) =>
-    error.errors.some((item) => item.code === 'MODEL_RESERVATION_RELEASE')
-  )
+  await assert.rejects(driver.close(), (error) => {
+    assert(error instanceof AppError)
+    assert.equal(error.code, 'UNAVAILABLE')
+    assert(error.errors.some((item) => item.code === 'MODEL_RESERVATION_RELEASE'))
+    return true
+  })
 })
 
 test('closing a search during estimation cancels late dispatch and keeps a failed release idempotent', async (t) => {

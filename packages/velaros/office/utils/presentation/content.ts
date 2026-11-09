@@ -8,7 +8,7 @@ import type {
   PresentationSlideInput,
   PresentationTemplate,
 } from '../../types/office.js'
-import { OfficeTuning } from '../tuning.js'
+import { officeError } from '../errors.js'
 
 import { buildTemplatePresentationSlide } from './templates.js'
 
@@ -28,7 +28,12 @@ export function parsePresentationContentToSlides(
   deckTitle?: string,
   template: PresentationTemplate = 'modern'
 ): PresentationSlideInput[] {
-  const sections = splitPresentationContent(content).slice(0, OfficeInputLimits.presentation.slides)
+  const sections = splitPresentationContent(content)
+  if (sections.length > OfficeInputLimits.presentation.slides)
+    throw officeError(
+      'VALIDATION',
+      `自动排版最多 ${OfficeInputLimits.presentation.slides} 页，请分成多份演示文稿。`
+    )
   return sections
     .map((section, index) => buildPresentationSlideFromLines(section, index, deckTitle, template))
     .filter((slide) => !isEmpty(slide.elements))
@@ -83,12 +88,18 @@ export function buildPresentationSlideFromLines(
     const bullet = line.match(/^[-*•]\s+(.+)$/)
     bodyLines.push(bullet?.[1] ? `• ${bullet[1].trim()}` : line)
   }
-  const title = (slideTitle || bodyLines.shift() || `第 ${index + 1} 页`).slice(
-    0,
-    OfficeInputLimits.shortFieldChars
-  )
-  // 自动模式限制单页正文长度，避免文字溢出幻灯片。
-  const body = bodyLines.join('\n').slice(0, OfficeTuning.presentation.slideBodyChars)
+  const title = slideTitle || bodyLines.shift() || `第 ${index + 1} 页`
+  if (title.length > OfficeInputLimits.titleChars)
+    throw officeError(
+      'VALIDATION',
+      `第 ${index + 1} 页标题超过 ${OfficeInputLimits.titleChars} 个字符，请缩短标题。`
+    )
+  const body = bodyLines.join('\n')
+  if (body.length > OfficeInputLimits.presentation.autoBodyChars)
+    throw officeError(
+      'VALIDATION',
+      `第 ${index + 1} 页正文超过 ${OfficeInputLimits.presentation.autoBodyChars} 个字符，请用 # 标题或 --- 分页。`
+    )
   return buildTemplatePresentationSlide({
     title,
     body,

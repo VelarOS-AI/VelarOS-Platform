@@ -885,6 +885,92 @@ describe('KernelModuleHost', () => {
     ).toThrow(KernelError)
   })
 
+  test('dispose drains admitted replacements during ready and old-generation cleanup', async () => {
+    for (const phase of ['ready', 'old-dispose'] as const) {
+      let enter!: () => void
+      let release!: () => void
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve
+      })
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let replacementContext: KernelModuleActivateContext | undefined
+      let oldDisposed = 0
+      let newDisposed = 0
+      const host = new KernelModuleHost({ apiVersion: 1 })
+      host.registerModule(
+        moduleDefinition({
+          id: 'module.closing-replacement',
+          provides: [ValueCapability],
+          activate(context) {
+            context.registerService(ValueCapability, { read: () => 'old' })
+            return {
+              async dispose() {
+                if (phase === 'old-dispose') {
+                  enter()
+                  await gate
+                }
+                oldDisposed++
+              },
+            }
+          },
+        })
+      )
+      await host.start()
+      const replacing = host
+        .replaceModule(
+          moduleDefinition({
+            id: 'module.closing-replacement',
+            version: '2.0.0',
+            provides: [ValueCapability],
+            activate(context) {
+              replacementContext = context
+              context.registerService(ValueCapability, { read: () => 'new' })
+              return {
+                async ready() {
+                  if (phase === 'ready') {
+                    enter()
+                    await gate
+                  }
+                },
+                dispose() {
+                  newDisposed++
+                },
+              }
+            },
+          })
+        )
+        .catch((error: unknown) => error)
+      await entered
+      let closed = false
+      const closing = host.dispose().then(() => {
+        closed = true
+      })
+      try {
+        await Promise.resolve()
+        expect(closed).toBe(false)
+        expect(replacementContext!.signal.aborted).toBe(true)
+        expect(newDisposed).toBe(0)
+        release()
+        const failure = await replacing
+        await closing
+        if (phase === 'ready') expect(failure).toBeInstanceOf(KernelError)
+        else expect(failure).toBeUndefined()
+        expect(oldDisposed).toBe(1)
+        expect(newDisposed).toBe(1)
+        expect(host.getOptionalService(ValueCapability)).toBeUndefined()
+        expect(() =>
+          replacementContext!.registerService(ValueCapability, { read: () => 'late' })
+        ).toThrow(KernelError)
+      } finally {
+        release()
+        await replacing
+        await closing
+      }
+    }
+  })
+
   test('rejects service resolution through the wrong capability version', async () => {
     const host = new KernelModuleHost({ apiVersion: 1 })
     host.registerModule(

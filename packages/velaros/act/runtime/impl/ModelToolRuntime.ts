@@ -299,7 +299,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
                 Log.tag('ActRuntime').debug('ModelToolRuntime 已进入异常处理或降级分支')
                 failures.push(release)
               }
-            if (failures.length > 1) throw new AggregateError(failures, '祖先预算预留回收失败')
+            if (failures.length > 1)
+              throw AppError.withFields('UNAVAILABLE', '祖先预算预留回收失败', {
+                errors: [...failures],
+              })
             throw error
           }
         },
@@ -315,7 +318,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先收尾占位转交失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先收尾占位转交失败', {
+              errors: [...failures],
+            })
         },
         dispatchModel: async (requestId) => {
           const failures = (
@@ -324,7 +330,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先模型派发登记失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先模型派发登记失败', {
+              errors: [...failures],
+            })
         },
         releaseModel: async (role, tokens, requestId, confirmedNotDispatched) => {
           const failures = (
@@ -340,7 +349,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先预算归还失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先预算归还失败', {
+              errors: [...failures],
+            })
         },
         recordUsage: async (input, output, requestId) => {
           {
@@ -492,7 +504,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       result.status === 'rejected' ? [result.reason] : []
     )
     if (failures.length === 1) throw failures[0]
-    if (!isEmpty(failures)) throw new AggregateError(failures, '祖先用量结算失败，持久回执可重试')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '祖先用量结算失败，持久回执可重试', {
+        errors: [...failures],
+      })
     const context = createContextRuntime({
       sessionId: receipt.rootSessionId,
       storage: this.options.storage,

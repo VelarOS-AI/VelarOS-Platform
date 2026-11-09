@@ -391,6 +391,7 @@ describe('动态目录与运行时能力快照', () => {
       throw new Error('script must not use HTTP')
     })
     const provider = 'fixture-script' as ChatProviderId
+    const listModels = spyOn(fixture.composition.providerScriptRegistry, 'listProviderModels')
     const register = (window: number, metadata = '{}') =>
       fixture.composition.providerScriptRegistry.registerSource({
         scriptPath: '/tmp/velaros-capability-script.cjs',
@@ -403,11 +404,15 @@ describe('动态目录与运行时能力快照', () => {
       })
     register(8192)
     expect((await fixture.resolve(fixture.request({ provider }))).contextWindow).toBe(8192)
+    expect((await fixture.resolve(fixture.request({ provider }))).contextWindow).toBe(8192)
+    expect(listModels).toHaveBeenCalledTimes(1)
     register(4096)
     expect((await fixture.resolve(fixture.request({ provider }))).contextWindow).toBe(4096)
+    expect(listModels).toHaveBeenCalledTimes(2)
     register(16384, '{contextWindow:2048,inputModalities:["text"]}')
     const runtime = await fixture.resolve(fixture.request({ provider }))
     expect(runtime.contextWindow).toBe(2048)
     expect(runtime.supportedInputModalities).toEqual(['text'])
+    listModels.mockRestore()
   })
 })

@@ -80,11 +80,31 @@ describe('state-like turn context sources supersede instead of accumulate', () =
   test('append still accumulates for event-like sources', () => {
     const ledger = new TurnContextLedger(SourceId, 100)
 
-    ledger.append({ label: '3 条运行错误', summaryText: 'x' })
+    const inspect = { tool: 'inspect', argsHint: { opaque: () => true } }
+    const first = ledger.append({ label: '3 条运行错误', summaryText: 'x', inspect })
+    first.seq = 999
+    first.summaryText = 'caller changed the returned body'
+    first.inspect!.tool = 'caller changed the returned tool'
+    inspect.tool = 'caller changed the input tool'
+    const snapshot = ledger.peek({ afterSeq: 0, generation: null })
+    expect(snapshot.deltas[0]).toMatchObject({
+      seq: 1,
+      summaryText: 'x',
+      inspect: { tool: 'inspect' },
+    })
+    expect(snapshot.deltas[0].inspect!.argsHint!.opaque).toBe(inspect.argsHint.opaque)
+    snapshot.deltas[0].label = 'caller changed a peek'
+    snapshot.deltas[0].seq = 1000
+    snapshot.deltas[0].inspect!.tool = 'caller changed the peek tool'
     ledger.append({ label: '运行错误已清零', summaryText: 'y' })
 
     // 事件型 source 的行为一个字都不能变。
     expect(peekLabels(ledger)).toEqual(['3 条运行错误', '运行错误已清零'])
+    expect(ledger.peek({ afterSeq: 0, generation: null }).deltas[0]).toMatchObject({
+      seq: 1,
+      summaryText: 'x',
+      inspect: { tool: 'inspect' },
+    })
   })
 
   test('replaceLatest only clears the source it is called on', () => {

@@ -171,7 +171,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
           ...value.invocations,
         ].reduce((sum, item) => sum + (item?.body?.length ?? 0), 0) +
         value.invocations.reduce(
-          (sum, item) => sum + item.summary.input.length + item.summary.output.length,
+          (sum, item) =>
+            sum +
+            item.summary.input.length +
+            item.summary.output.length +
+            (item.summary.projectChange?.diff.length ?? 0),
           0
         ) +
         value.executions.reduce(

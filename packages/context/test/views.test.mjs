@@ -395,15 +395,34 @@ test('A12: required goals remain complete before task completion', async (t) => 
   assert.equal((await f.view.complete()).completed, true)
 })
 
-test('INV-6 A19: source changes invalidate derived artifacts instead of promoting a model summary', async (t) => {
+test('INV-6 A19: derived artifacts reject stale dependencies; historical views still require current authorization', async (t) => {
   const f = await fixture(t)
   const first = await observe(f)
   await f.view.startStep('summarize')
   const artifact = await f.view.putArtifact('Summary of version one', [first.evidence[0].recovery])
-  await f.view.request({ kind: 'direct', target: { kind: 'artifact', ref: artifact } })
+  await f.view.request({
+    kind: 'direct',
+    target: { kind: 'artifact', ref: artifact },
+    time: { kind: 'historical' },
+  })
   await f.view.settle([])
+  const historical = await f.view.build({ maxChars: 12000 })
+  assert.equal(historical.evidence[0].freshness, 'historical')
   f.data.revision = 'v2'
   f.data.text = 'version two'
+  assert.equal(await f.view.validate(historical), true)
+  f.data.allowed = false
+  assert.equal(await f.view.validate(historical), false)
+  assert.deepEqual(await f.view.complete(), {
+    completed: false,
+    reason: 'STALE_VIEW',
+    recovery: 'refresh',
+  })
+
+  f.data.allowed = true
+  await f.view.startStep('check-current')
+  await f.view.request({ kind: 'direct', target: { kind: 'artifact', ref: artifact } })
+  await f.view.settle([])
   const view = await f.view.build({ maxChars: 12000 })
   assert.equal(view.evidence.length, 0)
   assert.equal(view.gaps[0].code, 'STALE_DEPENDENCY')

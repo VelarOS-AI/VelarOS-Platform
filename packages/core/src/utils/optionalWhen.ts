@@ -1,3 +1,4 @@
+import { AppError } from '../error'
 import {
   type VelarosRuntimeTypeGuardName,
   VelarosRuntimeTypeGuardNames,
@@ -13,7 +14,7 @@ import {
  *
  * 类型守卫与同参 identity 请写 **`optionalWhen(isString, value)`**（勿写 **`optionalWhen(isString(value), value)`**）。
  * 需要默认值时写 **`optionalWhen(isString, value, '')`**。
- * 只有 `TypeGuards` 里的 predicate 函数会被当作类型守卫执行；其它函数作为条件传入会抛错。
+ * 只有 `TypeGuards` 里的 predicate 函数会被当作类型守卫执行；其它函数作为条件传入会抛 VALIDATION。
  */
 type AnyFunction = (...args: any[]) => unknown
 type OptionalWhenTypeGuard<T> = (value: unknown) => value is T
@@ -71,7 +72,8 @@ export function optionalWhen<T, F = undefined>(
 ): T | F | undefined {
   if (typeof conditionOrGuard === 'function') {
     if (!isOptionalWhenTypeGuard<T>(conditionOrGuard)) {
-      throw new TypeError(
+      throw new AppError(
+        'VALIDATION',
         `optionalWhen 的守卫位只接受 TypeGuards 里的谓词函数，收到的是 ${describeOptionalWhenFunction(conditionOrGuard)}。`
       )
     }

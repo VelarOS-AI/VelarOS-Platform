@@ -21,6 +21,7 @@ import { isFalse, isNull, isUndefined, toNullable, toOptional } from '@velaros-a
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { memoryMaterialReference } from '../../runtime/utils/context-memory.js'
 import { StoreProjectionLimits } from '../contract/constants.js'
 import type { StoreConfiguration, StoreEntry, StoreFrame, StoreGrant } from '../types/store.js'
 import { assertStoreKey, storeDenied } from '../utils/store.js'
@@ -350,10 +351,8 @@ export class StoreSession implements StoreSessionApi {
   ): Promise<StoreObject> {
     assertStoreKey(await this.access(input.store), input.key, true)
     if (input.ref.sessionId !== this.id) throw storeDenied('只能共享当前会话已授权的原文')
-    const record = (await this.context.load(this.id))?.records.find(
-      (item) => item.ref.id === input.ref.id
-    )
-    if (!record) throw storeDenied('共享原文引用不存在')
+    const record = memoryMaterialReference(await this.context.load(this.id), this.id, input.ref)
+    if (!record) throw storeDenied('共享原文引用不在当前任务授权范围')
     const text = await this.context.get(this.id, record.objectId)
     if (isNull(text)) throw storeDenied('共享原文已经缺失')
     const namespace = this.materialScope(input.store, input.key)

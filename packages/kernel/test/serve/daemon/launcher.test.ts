@@ -271,4 +271,42 @@ describe('KernelLauncher', () => {
       code: 'LAUNCHER_DISPOSED',
     })
   })
+
+  test('a version resolved after disposal cannot spawn a Kernel', async () => {
+    const directory = await temporaryDirectory()
+    let enter!: () => void
+    let release!: () => void
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const child = new FakeChildProcess()
+    const launcher = new KernelLauncher({
+      paths: createDefaultKernelDaemonPaths('launcher-kernel', directory),
+      resolver: {
+        async resolveActiveVersion() {
+          enter()
+          await gate
+          return resolverFor().resolveActiveVersion()
+        },
+      },
+      spawnProcess: fakeSpawn(child),
+      startTimeoutMs: 0,
+    })
+    const starting = launcher.ensureRunning().catch((error: unknown) => error)
+    try {
+      await entered
+      await launcher.dispose()
+      release()
+      expect(await starting).toMatchObject({ code: 'LAUNCHER_DISPOSED' })
+      expect(child.unrefCalls).toBe(0)
+      expect(child.signals).toEqual([])
+    } finally {
+      release()
+      await starting
+      await launcher.dispose()
+    }
+  })
 })

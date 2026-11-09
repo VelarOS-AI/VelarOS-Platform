@@ -94,6 +94,7 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 不给 `environment` 时装配读一次 `process.env` 快照（各家 API Key 的变量名是清单里的 `defaultApiKeyEnv`）；不给 `providerScripts.configPaths` 时去工作目录与家目录的 `.velaros/dev.json` 找 provider script。
 - 受信 provider script 与宿主同权执行，只从 `.velaros/dev.json` 或 `providerScriptRegistry.registerSource` 登记，来源鉴权归调用方；用户上传的 JS 适配器跑在 VM 沙箱里。
 - provider script 的批量加载全部成功后才发布目录；加载失败会持续抛出同一错误，直到宿主显式 `reload`、`configureHost` 或 `configureSources`，读取不会自动重跑脚本。已发生的宿主副作用不由注册表回滚。
+- `providerScriptRegistry.getProviderScript` 只返回含 manifest 的深冻结数据快照，同一加载代的身份稳定；宿主需要编辑清单时先复制，执行定义与 helpers 只留在包内。
 - `providerModelCatalogService.validateProviderRuntime(request, signal?)` 与脚本注册表的 `validateProviderRuntime` / `listProviderModels` 接受可选取消信号。目录发现、凭据验证的期限与取消会传给脚本的 `signal`；共享目录查询只在最后一名等待者取消时中止底层操作，调用方取消保留原始原因。
 - Cloud 托管的 `velaros`、`velar-dev` 要在登录后各自 `velarCloudRuntime.registerProvider(id, { baseURL, fetch })`，退出或撤权时 `unregisterProvider`；宿主只注入带账户认证的 `fetch`，未注册就抛 `cloudNotConnected`，不回落 OpenRouter，两者也不互相顶替。
 - `agentModelRuntime` 的两个方法收 `unknown` 并当场收窄，不做业务回退；`resolveRoleRuntime` 的第二个参数签名上可选，实际必须给（各 provider 的运行配置与 OpenRouter 开关）。
