@@ -116,10 +116,14 @@ export function runtimeFrame(input) {
   }
 }
 
-/** 按真实编码布局读取正文，包括稳定区、当前 dynamic 与本帧协议。 */
+/** 按真实编码布局提取文字；保留稳定区、dynamic 与协议，图像仍在原多模态请求里。 */
 export function modelText(request) {
   return modelRequestEncoder
     .messages(request)
-    .map((item) => (typeof item.content === 'string' ? item.content : JSON.stringify(item.content)))
+    .flatMap(({ content }) =>
+      typeof content === 'string'
+        ? [content]
+        : content.filter((part) => part.type === 'text').map((part) => part.text)
+    )
     .join('\n')
 }

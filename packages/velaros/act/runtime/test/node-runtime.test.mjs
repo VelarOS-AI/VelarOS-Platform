@@ -17,10 +17,11 @@ import {
   nodeRuntimePackages,
 } from '@velaros-ai/script'
 
+import { ObservationLimits } from '../../../dist/act/runtime/contract/constants.js'
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
-import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
+import { memoryObservation, memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { executionPolicy } from '../../../dist/act/runtime/utils/execution-policy.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import { skillCapabilityModules } from '../../../dist/skills/index.js'
@@ -1364,6 +1365,13 @@ test('runtime delivers native output to the next model turn with a small standar
   )
   assert.equal(originalFrame.presentation, 'node')
   assert.ok(originalFrame.partitions.observation.read)
+  const support = f.node.observationSupport()
+  if (support.available) assert.equal(requests[0].dynamic, undefined)
+  else {
+    assert.ok(requests[0].dynamic)
+    assert.deepEqual(JSON.parse(requests[0].dynamic.text).current.availability, support)
+    assert.ok(requests[0].dynamic.text.length <= ObservationLimits.defaultChars)
+  }
   const ordinaryFrame = structuredClone(originalFrame)
   delete ordinaryFrame.presentation
   const compact = memoryPrompt(JSON.stringify(originalFrame))
@@ -1425,7 +1433,12 @@ test('runtime delivers native output to the next model turn with a small standar
   state.modelTool = {
     payload: { emptyArray: [], emptyObject: {}, zero: 0, off: false, missing: null },
   }
+  // 人工恢复帧只验证分区投影；不把它当成真实只读采集的隔离证据。
+  const observationFailure = 'observation-failure-detail-'.repeat(100)
+  recovery.partitions.observation.sourceRef = 'failed-observation-source'
+  recovery.partitions.observation.resultRef = 'failed-observation-result'
   recovery.partitions.observation.safety = ['observation-protection-missing']
+  recovery.partitions.observation.failure = observationFailure
   recovery.partitions.workspace.capsule.nextObjective = 'workspace-objective'
   const recovered = memoryPrompt(JSON.stringify(recovery))
   for (const important of [
@@ -1434,10 +1447,18 @@ test('runtime delivers native output to the next model turn with a small standar
     'pending-job',
     'goal-must-remain',
     'missing-page',
-    'observation-protection-missing',
     'workspace-objective',
   ])
     assert.ok(recovered.includes(important), important)
+  assert.ok(!recovered.includes('observation-protection-missing'))
+  assert.ok(!recovered.includes('observation-failure-detail-'))
+  const projectedObservation = memoryObservation(JSON.stringify(recovery))
+  assert.ok(projectedObservation.dynamic)
+  assert.equal(projectedObservation.dynamic.id, recovery.frameId)
+  assert.ok(projectedObservation.dynamic.text.length <= ObservationLimits.defaultChars)
+  const dynamicObservation = JSON.parse(projectedObservation.dynamic.text).current
+  assert.deepEqual(dynamicObservation.safety, ['observation-protection-missing'])
+  assert.equal(dynamicObservation.failure, observationFailure.slice(0, 256))
   const projectedState = JSON.parse(recovered.split('runtime：\n')[1].split('\n')[0])
   assert.deepEqual(projectedState.children, state.children)
   assert.deepEqual(projectedState.modelTool, state.modelTool)
