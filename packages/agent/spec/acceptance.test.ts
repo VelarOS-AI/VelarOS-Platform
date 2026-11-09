@@ -4038,11 +4038,11 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
     let folded = false
     let folds = 0
     let abortTimer: Optional<ReturnType<typeof setTimeout>>
-    const sent: string[] = []
+    const sent: ModelTurnRequest[] = []
     f.options.limits = { ...f.options.limits, timeoutMs: mode === 'timeout' ? 100 : 2000 }
     if (mode === 'window') f.options.frames.policy = { windowTokens: 2000 }
     f.options.model.estimate = async (request) => {
-      const repair = request.compiledPrompt?.includes('本帧上次响应未通过校验')
+      const repair = request.protocol?.includes('本帧上次响应未通过校验')
       if (repair && (mode === 'timeout' || mode === 'abort')) {
         if (mode === 'abort') abortTimer = setTimeout(() => controller.abort(), 20)
         return new Promise(() => {})
@@ -4056,7 +4056,7 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
     }
     f.options.model.stream = async function* (request) {
       calls++
-      sent.push(request.compiledPrompt!)
+      sent.push(request)
       if (mode === 'provider-reject' && calls === 2) {
         yield { type: 'error', code: 'context-limit', message: 'synthetic provider rejection' }
         return
@@ -4107,7 +4107,9 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
       )
       // The rejected response cannot be executed or become repair history.
       expect(executed).toBe(1)
-      expect(sent.every((prompt) => !prompt.includes('unaccepted response'))).toBe(true)
+      expect(
+        JSON.stringify(sent.map((request) => modelRequestEncoder.messages(request)))
+      ).not.toContain('unaccepted response')
       expect(requests[1].requestAudit.inputTokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
       expect(responses[1].status).toBe('rejected')
       if (mode !== 'provider-reject')
@@ -4119,7 +4121,7 @@ test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] 
         const slope = (1000 - 100) / (12000 - 1000)
         const overhead = Math.ceil((100 - slope * 1000) * 1.1)
         expect(requests[2].requestAudit.inputTokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
-        expect(sent[2]).toContain('synthetic invalid intent')
+        expect(sent[2]!.protocol).toContain('synthetic invalid intent')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       } else if (mode === 'overflow' || mode === 'window') {
         expect(calls).toBe(2)

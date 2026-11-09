@@ -108,7 +108,7 @@ try {
       limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 4096 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'local trace fixture' }),
       async *stream(request) {
-        const marker = [...request.compiledPrompt.matchAll(/当前帧标记：(@@\w+)。/gu)].at(-1)?.[1]
+        const marker = [...request.protocol.matchAll(/当前帧标记：(@@\w+)。/gu)].at(-1)?.[1]
         assert(marker, 'The formal Runtime supplies this frame marker')
         modelCalls += 1
         assert(modelCalls <= 2, 'The deterministic fixture must complete in two requests')

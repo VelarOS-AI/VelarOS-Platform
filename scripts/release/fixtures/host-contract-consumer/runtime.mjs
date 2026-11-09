@@ -17,7 +17,7 @@ async function probeRuntime(){
  const model={id:'packed-model',limits:{contextTokens:128000,inputTokens:110000,outputTokens:4096},estimate:async()=>({tokens:1000,precision:'estimate',basis:'fixture'}),async *stream(request){
   calls++
   if(hold){started();await new Promise(()=>{})}
-  const marker=request.compiledPrompt.match(/当前帧标记：(@@\w+)。/u)[1]
+  const marker=request.protocol.match(/当前帧标记：(@@\w+)。/u)[1]
   yield {type:'text',text:`packed complete\n${marker} done`};yield {type:'finish',reason:'stop'}
  }}
  const runtime=await createNodeRuntime({cwd:workspace,stateDirectory:join(root,'data'),binding:{executionIdentity:'packed-consumer',authorizationScope:'packed-consumer-policy-v1'},localHost:{processConfinement:{mode:'danger-full-access'}},protocol:{transport:'text'},stores:sessionId=>({scope:'session:'+sessionId}),model})

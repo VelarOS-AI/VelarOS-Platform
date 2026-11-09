@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 
@@ -961,8 +962,7 @@ test('default results preserve the durable history while cumulative runtime fram
     tokens: Math.ceil(
       JSON.stringify({
         instructions: request.instructions,
-        history: request.history,
-        prompt: request.compiledPrompt,
+        messages: modelRequestEncoder.messages(request),
       }).length / 4
     ),
     precision: 'exact',

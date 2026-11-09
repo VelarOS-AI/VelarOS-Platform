@@ -16,7 +16,7 @@ const model = {
   limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 4096 },
   estimate: async () => ({ tokens: 1000, precision: 'estimate', basis: 'installed-consumer' }),
   async *stream(request) {
-    const tag = [...request.compiledPrompt.matchAll(/当前帧标记：(@@\w+)。/gu)].at(-1)?.[1]
+    const tag = [...request.protocol.matchAll(/当前帧标记：(@@\w+)。/gu)].at(-1)?.[1]
     assert(tag, 'The real Runtime supplies the current text protocol marker')
     calls += 1
     if (phase === 'complete' && calls > 1) {

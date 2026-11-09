@@ -169,8 +169,12 @@ for (const explicit of [false, true])
     assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), '1,2,3,4,5,6,7,8,9,')
     let retained = 0
     let rebuilt = 0
-    const content = (request) =>
-      modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
+    const content = (request) => {
+      const { messages, retainablePrefixLength } = modelRequestEncoder.layout(request)
+      return messages
+        .slice(0, retainablePrefixLength)
+        .map(({ role, content }) => ({ role, content }))
+    }
     for (const [index, request] of requests.entries()) {
       const states = request.history.filter(
         (m) =>

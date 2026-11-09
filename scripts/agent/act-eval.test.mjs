@@ -15,9 +15,9 @@ const readonlyHostUnavailable =
   process.platform === 'win32'
     ? 'Windows has no default read-only process confinement backend; rejection is covered separately'
     : false
-/** 本帧会变的协议与阶段说明在最后一条消息末尾（系统提示在会话内不变）。 */
-const frameText = (request) => request.compiledPrompt ?? ''
-const marker = (request) => frameText(request).match(/当前帧标记：(@@\w+)。/u)[1]
+/** 本帧会变的协议与阶段说明从独立 protocol 读取，系统提示在会话内不变。 */
+const protocolText = (request) => request.protocol
+const marker = (request) => protocolText(request).match(/当前帧标记：(@@\w+)。/u)[1]
 const block = (request, kind, source) =>
   `${marker(request)} ${kind}()\n${source}\n${marker(request)}`
 const model = (stream) => ({
@@ -507,7 +507,7 @@ test(
 )
 
 test(
-  'Windows evaluation rejects a real commit without an available observation backend and preserves its source evidence',
+  'Windows evaluation rejects an unavailable observation during composite preflight without committing',
   { skip: process.platform !== 'win32' },
   async (t) => {
     let calls = 0
@@ -534,10 +534,10 @@ test(
     })
     const evidence = result.archive.legs[0].criteria[0].outcome.evidence
     assert.equal(result.summary.passed, false)
-    assert.equal(evidence.text, 'two\n')
+    assert.equal(evidence.text, 'one\n')
     assert.equal(evidence.protectedText, 'keep this\n')
-    assert.equal(evidence.commitCalls, 1)
-    assert.equal(evidence.successfulCommits, 1)
+    assert.equal(evidence.commitCalls, 0)
+    assert.equal(evidence.successfulCommits, 0)
     assert.equal(evidence.sawOne, false)
     assert.equal(evidence.sawTwo, false)
     assert.deepEqual(evidence.observations, [])
@@ -558,30 +558,29 @@ test(
       assert(frame.sequence < trace.request.sequence)
       const audit = JSON.parse(frame.body)
       assert.equal(frame.title, `context:frame:${audit.frameId}`)
-      if (!audit.observation.resultRef) continue
-      const record = trace.records.find((item) => item.ref.id === audit.observation.resultRef)
-      assert(record && !record.truncated)
-      const observation = JSON.parse(record.body)
-      if (observation.result.failed?.code !== 'SHELL_CONFINEMENT_UNAVAILABLE') continue
-      assert.equal(observation.mode, 'observe')
-      assert.equal(observation.checked, true)
-      assert.equal(record.title, `script:${observation.executionId}:result`)
-      assert(record.sequence < frame.sequence)
-      const source = trace.records.find((item) => item.ref.id === audit.observation.sourceRef)
-      assert(source && !source.truncated)
-      assert(
-        record.sources.some(
-          (ref) => ref.sessionId === source.ref.sessionId && ref.id === source.ref.id
-        )
-      )
-      assert.equal(JSON.parse(source.body).source.trim(), observe)
+      assert.deepEqual(trace.executions, [])
+      assert.deepEqual(trace.invocations, [])
+      assert.equal(trace.observation.registration, null)
+      assert.equal(trace.observation.run, null)
       assert.equal(observationEvidence(trace), null)
-      rejected.push(record.ref)
+      const decision = JSON.parse(trace.decision.body)
+      if (decision.status !== 'rejected') continue
+      assert.equal(decision.error.code, 'SCRIPT_PROTOCOL')
+      assert.match(
+        decision.error.message,
+        /只读程序观察不可用：.+；此入口只接受空源码与独立 history 或 clear:true 选项/u
+      )
+      assert(trace.response && !trace.response.truncated)
+      assert.deepEqual(decision.rawRef, trace.response.ref)
+      assert(trace.response.body.includes(observe))
+      assert(trace.response.body.includes("oldText:'one',newText:'two'"))
+      rejected.push(trace.decision.ref)
     }
     assert(
       rejected.length > 0,
-      'the archive must retain an actual read-only process rejection and its source'
+      'the archive must retain the unavailable observation preflight rejection and original composite source'
     )
+    assert.equal(result.summary.protocolRejections, rejected.length)
   }
 )
 
@@ -701,9 +700,9 @@ test(
       child = 0
     const driver = model(async function* (request) {
       let code
-      if (frameText(request).includes('你是上下文整理工具')) {
+      if (protocolText(request).includes('你是上下文整理工具')) {
         // 整理支线分两步：先提交补丁，受理后的下一帧再完成
-        if (frameText(request).includes('当前候选补丁已通过校验并受理'))
+        if (protocolText(request).includes('当前候选补丁已通过校验并受理'))
           yield { type: 'text', text: marker(request) + ' done' }
         else {
           const snapshot = JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
@@ -792,7 +791,7 @@ test(
     let main = 0,
       search = 0
     const driver = model(async function* (request) {
-      if (frameText(request).includes('你正在执行有界搜索')) {
+      if (protocolText(request).includes('你正在执行有界搜索')) {
         if (++search === 1)
           yield {
             type: 'text',
@@ -914,9 +913,9 @@ test(
     const seenGoals = new Set()
     const driver = model(async function* (request) {
       const view = frame(request)
-      if (frameText(request).includes('你是上下文整理工具')) {
+      if (protocolText(request).includes('你是上下文整理工具')) {
         // 整理支线分两步：先提交补丁，受理后的下一帧再完成
-        if (frameText(request).includes('当前候选补丁已通过校验并受理'))
+        if (protocolText(request).includes('当前候选补丁已通过校验并受理'))
           yield { type: 'text', text: marker(request) + ' done' }
         else {
           const snapshot = JSON.parse(view.partitions.task.goals[0].text).snapshot

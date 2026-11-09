@@ -747,20 +747,9 @@ test(
   }
 )
 
-/** 请求里实际发送的文字字符数。 */
+/** 请求指令及全部编码消息的字符计量。 */
 function requestSize(request) {
-  return (
-    request.instructions.length +
-    (request.compiledPrompt ?? '').length +
-    (request.history ?? []).reduce(
-      (sum, message) =>
-        sum +
-        (typeof message.content === 'string'
-          ? message.content.length
-          : JSON.stringify(message.content).length),
-      0
-    )
-  )
+  return request.instructions.length + JSON.stringify(modelRequestEncoder.messages(request)).length
 }
 /** 每轮净增长约 240 token，这个窗口大约在第 19 轮封一次段。 */
 const WINDOW = 9000

@@ -43,7 +43,7 @@ test('INV-28 a stale view returns feedback to the next round and a refreshed tas
     async () =>
       ++checks === 1 ? { completed: false, reason: 'STALE_VIEW', recovery: 'refresh' } : undefined,
     async function* (request) {
-      if (++calls === 2) assert.match(request.compiledPrompt, /STALE_VIEW/)
+      if (++calls === 2) assert.match(request.protocol, /STALE_VIEW/)
       yield* done(request)
     }
   )

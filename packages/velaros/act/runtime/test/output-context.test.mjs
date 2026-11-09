@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 
@@ -58,7 +60,7 @@ test(
     assert(f.requests.every((request) => (request.images?.length ?? 0) === 0))
   }
 )
-async function fixture(t, source, modelOverride, options = {}) {
+async function fixture(t, source, modelOverride, options = {}, registration = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const requests = []
   let reads = 0
@@ -103,7 +105,15 @@ async function fixture(t, source, modelOverride, options = {}) {
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
   await session.context.append({ kind: 'user', body: 'Observe current state' })
-  const initial = await session.observe({ source })
+  let initial
+  let registrationError
+  try {
+    initial = await session.observe({ source })
+  } catch (error) {
+    if (!registration.optional || !(error instanceof AppError) || error.code !== 'UNAVAILABLE')
+      throw error
+    registrationError = error
+  }
   const programs = new ProgramContext('root', session.context, storage)
   const maintenance = new ContextMaintenanceState('root', storage)
   async function run() {
@@ -134,6 +144,7 @@ async function fixture(t, source, modelOverride, options = {}) {
     memory,
     maintenance,
     initial,
+    registrationError,
     requests,
     run,
     project,
@@ -156,6 +167,29 @@ async function fixture(t, source, modelOverride, options = {}) {
     set value(v) {
       value = v
     },
+  }
+}
+async function assertUnavailableObservation(f) {
+  assert.ok(f.registrationError instanceof AppError)
+  assert.equal(f.registrationError.code, 'UNAVAILABLE')
+  assert.ok(f.registrationError.message.length > 0)
+  assert.equal(f.initial, undefined)
+  assert.equal((await f.programs.state()).observation, undefined)
+  assert.equal(f.reads, 0)
+  const records = (await f.storage.load('root')).records
+  assert.equal(records.filter((record) => record.title.startsWith('script:version:')).length, 0)
+  assert.equal(records.filter((record) => record.title.startsWith('script:execution:')).length, 0)
+  assert.equal(records.filter((record) => /^script:[^:]+:result$/u.test(record.title)).length, 0)
+  assert.equal((await createContextInvocationJournal(f.storage).list('root')).length, 0)
+  assert.ok(f.requests.length > 0)
+  for (const request of f.requests) {
+    assert.ok(request.dynamic)
+    assert.deepEqual(JSON.parse(request.dynamic.text).current.availability, {
+      available: false,
+      reason: f.registrationError.message,
+    })
+    assert.ok(!request.compiledPrompt.includes(f.registrationError.message))
+    assert.ok(!baseText(request).includes(f.registrationError.message))
   }
 }
 const source = `import {output} from 'velaros';import {read} from 'test:world';
@@ -1260,7 +1294,17 @@ test(
 )
 
 test('INV-23 late invalid metadata keeps source and all other changes unpublished', async (t) => {
-  const f = await fixture(t, source)
+  const f = await fixture(t, source, undefined, {}, { optional: true })
+  if (f.registrationError) {
+    await t.test('unavailable backend rejects observation before metadata staging', async () => {
+      await f.run()
+      await assertUnavailableObservation(f)
+      assert(
+        !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+      )
+    })
+    return
+  }
   await f.run()
   const note = await f.note()
   const snap = await f.maintenance.snapshot(10000, signal)
@@ -1282,9 +1326,7 @@ test('INV-23 late invalid metadata keeps source and all other changes unpublishe
   assert(
     !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
   )
-  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
-  if (!platformHasDefaultConfinement)
-    assert.match(f.requests[0].compiledPrompt, /SHELL_CONFINEMENT_UNAVAILABLE/)
+  assert.equal(f.reads, 1)
 })
 
 test(
@@ -1593,7 +1635,7 @@ test(
 )
 
 test('the parent model budget validator rejects a fully staged candidate before CAS publication', async (t) => {
-  const f = await fixture(t, source)
+  const f = await fixture(t, source, undefined, {}, { optional: true })
   await f.run()
   let previews = 0
   const state = new ContextMaintenanceState('root', f.storage, {
@@ -1610,9 +1652,8 @@ test('the parent model budget validator rejects a fully staged candidate before 
     { code: 'CONTEXT_BUDGET' }
   )
   assert.equal(previews, 2)
-  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
-  if (!platformHasDefaultConfinement)
-    assert.match(f.requests[0].compiledPrompt, /SHELL_CONFINEMENT_UNAVAILABLE/)
+  assert.equal(f.reads, f.registrationError ? 0 : 1)
+  if (f.registrationError) await assertUnavailableObservation(f)
   assert(
     !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
   )
