@@ -330,12 +330,14 @@ for (const [name, barrierMethod] of [
     let armed = false
     let closed = false
     let reads = 0
+    let closing
     for (const method of ['load', 'records', 'get', 'selectSnapshot']) {
       const read = storage[method].bind(storage)
       storage[method] = async (...args) => {
         reads++
         if (armed && method === barrierMethod) {
           armed = false
+          closing = runtime.close({ timeoutMs: 20 })
           entered.resolve()
           await release.promise
           order.push('read-resumed')
@@ -376,10 +378,12 @@ for (const [name, barrierMethod] of [
     assert.ok(task)
     const state = await storage.load(session.id)
     const turn = state.records.find((record) => record.title === 'model-request').ref.id
-    if (name.startsWith('runtime.')) {
-      await session.close()
-      assert.equal(runtime.getSession(session.id), undefined, 'runtime trace stays a cold read')
-    }
+    await session.close()
+    assert.equal(
+      runtime.getSession(session.id),
+      undefined,
+      'history reads do not reactivate a session'
+    )
     const lookups = {
       completedTask: () => session.completedTask(),
       taskMaterials: () => session.taskMaterials(task),
@@ -391,8 +395,11 @@ for (const [name, barrierMethod] of [
     armed = true
     const pending = lookups[name]()
     try {
-      await entered.promise
-      await assert.rejects(runtime.close({ timeoutMs: 20 }), {
+      await Promise.race([
+        entered.promise,
+        pending.then(() => assert.fail('the accepted read did not reach its storage barrier')),
+      ])
+      await assert.rejects(closing, {
         code: 'TIMEOUT',
         phase: 'sessions',
       })
@@ -409,6 +416,7 @@ for (const [name, barrierMethod] of [
       else if (name === 'trace') assert.equal(value.turnId, turn)
       else if (name === 'runtime.trace') assert.equal(value.turns[0].turnId, turn)
       else assert.deepEqual(value, [])
+      assert.equal(runtime.getSession(session.id), undefined)
     } finally {
       release.resolve()
       await Promise.allSettled([pending])
@@ -417,6 +425,144 @@ for (const [name, barrierMethod] of [
     assert.equal(closed, true)
     assert.deepEqual(order, ['read-resumed', 'storage-close'])
   })
+
+test('host material reads keep closed session history bound to the live Runtime authority', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  let modelCalls = 0
+  const runtime = await createRuntime({
+    storage,
+    runner: { run: async () => assert.fail('history reads must not execute programs') },
+    context: { maintenance: false },
+    model: {
+      id: 'closed-session-history',
+      limits,
+      estimate,
+      async *stream(request) {
+        modelCalls++
+        yield* done(request)
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('closed-history')
+  await submit(session, 'first fixed task')
+  const first = await session.completedTask()
+  const turn = (await storage.load(session.id)).records.find(
+    (record) => record.title === 'model-request'
+  ).ref.id
+  await submit(session, { text: 'second current task', task: 'new' })
+  const current = await session.completedTask()
+  await session.close()
+  const calls = modelCalls
+  assert.equal(runtime.getSession(session.id), undefined)
+  assert.equal((await session.completedTask()).taskId, current.taskId)
+  const materials = await session.taskMaterials(first)
+  assert.ok(materials.length && materials.every((record) => record.sequence <= first.through))
+  assert.equal((await session.readTaskMaterial(first, first.inputs[0])).text, 'first fixed task')
+  await assert.rejects(session.readTaskMaterial(first, current.inputs[0]), { code: 'VALIDATION' })
+  await assert.rejects(
+    session.readTaskMaterial(first, { ...first.inputs[0], sessionId: 'foreign' }),
+    { code: 'VALIDATION' }
+  )
+  assert.equal((await session.trace(turn)).turnId, turn)
+  assert.equal((await runtime.trace(session.id, { limit: 1 })).turns[0].turnId, turn)
+  assert.deepEqual(await runtime.traceBranches(session.id), [])
+  await assert.rejects(session.execute({ source: 'export default 1;' }), { code: 'CLOSED' })
+  const original = await storage.load(session.id)
+  const record = original.records.find((item) => item.title === 'runtime:binding')
+  const binding = JSON.parse(await storage.get(session.id, record.objectId))
+  const replaceBinding = async (document) => {
+    const state = await storage.load(session.id)
+    const body = JSON.stringify(document)
+    const objectId = await storage.put(session.id, body)
+    assert.ok(
+      await storage.compareAndSwap(session.id, state.version, {
+        ...state,
+        version: state.version + 1,
+        records: state.records.map((item) =>
+          item.ref.id === record.ref.id ? { ...item, objectId, chars: body.length } : item
+        ),
+      })
+    )
+  }
+  const lookups = [
+    () => session.completedTask(),
+    () => session.taskMaterials(first),
+    () => session.readTaskMaterial(first, first.inputs[0]),
+    () => session.trace(turn),
+    () => runtime.trace(session.id),
+    () => runtime.traceBranches(session.id),
+  ]
+  for (const field of ['executionIdentity', 'authorizationScope']) {
+    await replaceBinding({ ...binding, [field]: `${binding[field]}:changed` })
+    for (const lookup of lookups) await assert.rejects(lookup, { code: 'CONFLICT' })
+    await replaceBinding(binding)
+    assert.equal((await session.completedTask()).taskId, current.taskId)
+  }
+  assert.deepEqual((await runtime.trace('missing')).turns, [])
+  assert.deepEqual(await runtime.traceBranches('missing'), [])
+  assert.equal(await storage.load('missing'), null)
+  assert.equal(modelCalls, calls)
+  assert.equal(runtime.getSession(session.id), undefined, 'history reads never reopen execution')
+})
+
+test('host material reads reject admission from a synchronous model cancellation callback', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  const entered = Promise.withResolvers()
+  const selectSnapshot = storage.selectSnapshot.bind(storage)
+  let authorityReads = 0
+  storage.selectSnapshot = (sessionId, selections) => {
+    if (selections.some((item) => item.title === 'runtime:binding')) authorityReads++
+    return selectSnapshot(sessionId, selections)
+  }
+  // eslint-disable-next-line prefer-const -- 模型取消回调先声明，再绑定实际打开的会话句柄。
+  let session
+  let attempted
+  const runtime = await createRuntime({
+    storage,
+    runner: { run: async () => assert.fail('cancellation must not execute programs') },
+    context: { maintenance: false },
+    model: {
+      id: 'close-admission-reentrancy',
+      limits,
+      estimate,
+      async *stream(request, signal) {
+        const stopped = Promise.withResolvers()
+        const cancel = () => {
+          attempted = session.completedTask().then(
+            (value) => ({ value }),
+            (error) => ({ error })
+          )
+          stopped.resolve()
+        }
+        signal.addEventListener('abort', cancel, { once: true })
+        try {
+          entered.resolve()
+          await stopped.promise
+          signal.throwIfAborted()
+          yield* done(request)
+        } finally {
+          signal.removeEventListener('abort', cancel)
+        }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  session = await runtime.openSession('close-admission')
+  const running = submit(session, 'wait for Runtime close')
+  const settled = Promise.allSettled([running])
+  try {
+    await entered.promise
+    const before = authorityReads
+    await runtime.close()
+    assert.ok(attempted, 'the real model cancellation listener must run')
+    assert.equal((await attempted).error?.code, 'CLOSED')
+    assert.equal(authorityReads, before, 'reentrant history admission must not read storage')
+  } finally {
+    await runtime.close()
+    await settled
+  }
+})
 
 test('memory consolidation reads materials over multiple rounds and stages knowledge without writing', async () => {
   const { createMemoryConsolidation } = await import('../../../dist/act/runtime/index.js')

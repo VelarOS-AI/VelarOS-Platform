@@ -110,7 +110,7 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly memories = new Map<string, MemoryScopePort>()
   private readonly stores = new Map<string, StoreSessionApi>()
   private readonly openings = new Map<string, Promise<VelarosSession>>()
-  private readonly traceReads = new Set<Promise<unknown>>()
+  private readonly historyReads = new Set<Promise<unknown>>()
 
   private readonly binding: SessionExecutionBinding
   private readonly options: RuntimeBootstrapOptions
@@ -165,9 +165,11 @@ class ComposedRuntime implements VelarosRuntime {
         options: options.context?.maintenance,
         model: (id) => this.taskModels.get(id),
         open: async (id, model, tool, profile) => {
+          const rootSessionId = this.tools.rootSessionId(id)
           this.scopes.set(id, { kind: 'context' })
           const materials = this.kernel.describe(ContextMaterialsModuleId)
           const session = new RuntimeSession(id, {
+            readHistory: (read) => this.readHistory(rootSessionId, read),
             environment: options.environment,
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
@@ -251,9 +253,11 @@ class ComposedRuntime implements VelarosRuntime {
           return view
         },
         open: async (id, activation, profile) => {
+          const rootSessionId = this.tools.rootSessionId(id)
           this.scopes.set(id, { kind: 'search' })
           const evidence = this.kernel.describe(EvidenceModuleId)
           const session = new RuntimeSession(id, {
+            readHistory: (read) => this.readHistory(rootSessionId, read),
             environment: options.environment,
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
@@ -525,6 +529,7 @@ class ComposedRuntime implements VelarosRuntime {
       childLimits.timeoutMs,
       signal
     )
+    const rootSessionId = activity.binding.rootSessionId
     if (childStores) this.stores.set(job.sessionId, childStores)
     this.scopes.set(job.sessionId, { kind: 'agent', modules })
     this.taskModels.set(job.sessionId, profile.model)
@@ -542,6 +547,7 @@ class ComposedRuntime implements VelarosRuntime {
     try {
       parentTask = await materials?.open(job, activity.signal)
       session = new RuntimeSession(job.sessionId, {
+        readHistory: (read) => this.readHistory(rootSessionId, read),
         audience: 'worker',
         executionDepth: this.options.executionDepth,
         node: profile.node ? this.options.node : undefined,
@@ -833,6 +839,7 @@ class ComposedRuntime implements VelarosRuntime {
         this.tools.root(id)
         if (this.options.model) this.taskModels.set(id, this.options.model)
         session = new RuntimeSession(id, {
+          readHistory: (read) => this.readHistory(id, read),
           node: this.options.node,
           instructions: this.options.instructions,
           executionDepth: this.options.executionDepth,
@@ -887,25 +894,29 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
-    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
-    return this.trackTraceRead(
-      new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
+    const request = { ...input }
+    return this.readHistory(rootSessionId, () =>
+      new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(request)
     )
   }
 
   public async traceBranches(rootSessionId: string): Promise<ActTracePage['branches']> {
-    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
-    return this.trackTraceRead(
+    return this.readHistory(rootSessionId, () =>
       new RuntimeTrace(rootSessionId, this.options.storage, this.journal).branches()
     )
   }
 
-  private async trackTraceRead<T>(read: Promise<T>): Promise<T> {
-    this.traceReads.add(read)
+  private async readHistory<T>(rootSessionId: string, read: () => Promise<T>): Promise<T> {
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
+    const pending = Promise.resolve().then(async () => {
+      await this.binding.assertControl(rootSessionId)
+      return read()
+    })
+    this.historyReads.add(pending)
     try {
-      return await read
+      return await pending
     } finally {
-      this.traceReads.delete(read)
+      this.historyReads.delete(pending)
     }
   }
 
@@ -928,7 +939,7 @@ class ComposedRuntime implements VelarosRuntime {
     const timeoutMs = options.timeoutMs ?? ComposedRuntime.closeTimeoutMs
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0)
       throw new AppError('VALIDATION', '关闭等待时限必须是非负有限数字')
-    this.closing ??= this.shutdown()
+    this.closing ??= Promise.resolve().then(() => this.shutdown())
     const timers = new TimerScope({ name: 'ComposedRuntime.close' })
     let deadline: Optional<AbortSignal>
     try {
@@ -959,7 +970,7 @@ class ComposedRuntime implements VelarosRuntime {
     this.shutdownPhase = 'sessions'
     for (const result of await sessions)
       if (result.status === 'rejected') failures.push(result.reason)
-    await Promise.allSettled([...this.traceReads])
+    await Promise.allSettled([...this.historyReads])
     try {
       this.shutdownPhase = 'modules'
       await this.kernel.drain()

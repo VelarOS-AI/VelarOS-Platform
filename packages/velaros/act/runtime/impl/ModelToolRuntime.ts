@@ -57,6 +57,8 @@ export interface ModelToolRuntimeApi {
   root(sessionId: string): void
   /** 根会话资源已收束，撤回调度身份。 */
   releaseRoot(sessionId: string): void
+  /** 只解析当前已验证的活动归属或宿主根，装配者可保存该根用于后续存储授权。 */
+  rootSessionId(sessionId: string): string
   /** 在持久归属检查之后取得一次子会话活动权。 */
   begin(
     sessionId: string,
@@ -193,6 +195,13 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
   public releaseRoot(sessionId: string): void {
     this.roots.delete(sessionId)
     this.budgetRecoveredSequence.delete(sessionId)
+  }
+
+  public rootSessionId(sessionId: string): string {
+    const scope = this.active.get(sessionId)
+    if (scope) return scope.binding.rootSessionId
+    if (this.roots.has(sessionId)) return sessionId
+    throw new AppError('MODEL_TOOL_SCOPE', '会话没有已验证的根归属')
   }
 
   public descends(sessionId: string, ancestorId: string): boolean {
