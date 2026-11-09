@@ -16,6 +16,7 @@ import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 
 import { isPlainObject, Log, readErrnoCode } from '@velaros-ai/core'
 import { currentPlatform } from '@velaros-ai/core/platform'
+import { type ExpectedBytes, textFileIo } from '@velaros-ai/core/text-files'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import { OfficeErrorCodes } from '../contract/constants.js'
@@ -260,11 +261,25 @@ async function publishOfficeOutput(
 }
 
 /** 写入一个文件（二进制或文字）并交回写出的回执。 */
-export function writeOfficeFile(
+export async function writeOfficeFile(
   prepared: OfficePreparedOutput,
   data: Buffer | Uint8Array | string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expected?: ExpectedBytes
 ): Promise<OfficeWritten> {
+  if (expected) {
+    signal?.throwIfAborted()
+    await assertOfficePathInsideProject(prepared.rootPath, prepared.path, prepared.path)
+    if ((await resolveRealPath(prepared.path)) !== prepared.target)
+      throw officeError(
+        OfficeErrorCodes.pathOutsideProject,
+        `输出路径的真实目标已改变：${prepared.path}`
+      )
+    const bytes = typeof data === 'string' ? Buffer.from(data) : data
+    // 追加是读改写：复用 Core 的两次原字节核对、权限保留与原子替换，不把旧读取覆盖到新内容上。
+    await textFileIo.writeBytes(prepared.target, bytes, { expected, signal })
+    return { path: prepared.path, bytes: bytes.byteLength, created: false }
+  }
   return publishOfficeOutput(prepared, (path) => writeFile(path, data), signal)
 }
 

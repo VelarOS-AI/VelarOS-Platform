@@ -13,9 +13,6 @@ export function asRecord(value: unknown): Nullable<Record<string, unknown>> {
   return isRecord(value) ? value : null
 }
 
-/** 别名，语义同 {@link asRecord}。 */
-export { asRecord as readRecord }
-
 /** 读取裁剪后的非空字符串。 */
 export function readString(
   record: LooseOptional<Record<string, unknown>>,
@@ -66,9 +63,6 @@ export function readFirstString(...values: unknown[]): Nullable<string> {
 
   return null
 }
-
-/** 非 string → `''`；string → trim（可能为空串）。 */
-export { trimmedStringOrEmpty as coerceTrimmedString } from '../typeGuards'
 
 export function readNumber(
   record: LooseOptional<Record<string, unknown>>,

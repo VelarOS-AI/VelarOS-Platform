@@ -6,8 +6,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { BrowserCdpNetworkController } from '../../impl/cdp/BrowserCdpNetworkController.js'
 import { ElectronWebContentsBrowserPageDriver } from '../../impl/electron/ElectronWebContentsBrowserPageDriver.js'
 import { buildBrowserNetworkCaptureNotice } from '../../utils/diagnostics.js'
+import { BrowserTuning } from '../../utils/tuning.js'
 
 /** 最小 webContents 替身：只提供 debugger 与 URL。 */
 function createWebContents(options: { attachThrows?: boolean } = {}) {
@@ -42,6 +44,30 @@ function createDriver(webContents: unknown) {
 }
 
 void describe('内嵌页面的网络采集', () => {
+  void test('明细淘汰不把仍在飞的请求判为网络空闲', async () => {
+    const controller = new BrowserCdpNetworkController({
+      send: async () => ({}),
+      appendDiagnostic: () => undefined,
+      getCurrentUrl: () => 'https://example.test/',
+    })
+    try {
+      controller.handleCdpEvent('Network.requestWillBeSent', { requestId: 'long-running' })
+      for (let index = 0; index < BrowserTuning.cdp.networkRequestRecords; index += 1) {
+        const requestId = `finished-${index}`
+        controller.handleCdpEvent('Network.requestWillBeSent', { requestId })
+        controller.handleCdpEvent('Network.loadingFinished', { requestId })
+      }
+      await assert.rejects(controller.readNetworkRequestDetails({ requestId: 'long-running' }), {
+        code: 'NOT_FOUND',
+      })
+      assert.equal(await controller.waitForNetworkIdle({ idleMs: 5, timeoutMs: 30 }), false)
+      controller.handleCdpEvent('Network.loadingFinished', { requestId: 'long-running' })
+      assert.equal(await controller.waitForNetworkIdle({ idleMs: 5, timeoutMs: 100 }), true)
+    } finally {
+      controller.reset()
+    }
+  })
+
   void test('读诊断时按需建立采集，并回报「这次才开始」', async () => {
     const webContents = createWebContents()
     const driver = createDriver(webContents)

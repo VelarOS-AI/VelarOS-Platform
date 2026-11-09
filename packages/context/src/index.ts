@@ -16,11 +16,7 @@ export type {
 export type {
   ContextBuildOptions,
   ContextCompletionCommitPort,
-  ContextCompletionPort,
   ContextSourcePort,
-  ContextVerificationContext,
-  ContextVerificationExecution,
-  ContextVerificationSpec,
   ContextViewOptions,
 } from './contract/requires.js'
 export type {
@@ -30,9 +26,9 @@ export type {
 } from './contract/requires.js'
 export type { StoreStorage } from './contract/requires.js'
 export { createContextInvocationJournal } from './impl/ContextInvocationJournal.js'
-export { createContextReference } from './impl/ContextReferenceAllocator.js'
 export { createContextView } from './impl/ContextViewSession.js'
 export { createEvidenceAccess } from './impl/EvidenceAccess.js'
+export { createContextReference } from './impl/SessionContext.js'
 export { createContextRuntime } from './impl/SessionContext.js'
 export { createTurnContextAppendHub } from './impl/TurnContextAppendHub.js'
 export { createTurnContextSessionLedgers } from './impl/TurnContextSessionLedgers.js'
@@ -48,16 +44,11 @@ export type { ContextInputFile, ContextInputSummary, ContextUserInput } from './
 export type {
   ContextAppend,
   ContextArtifactProvenance,
-  ContextCompletionApplicability,
-  ContextCompletionBinding,
-  ContextCompletionRecord,
   ContextCompletionResult,
   ContextContent,
-  ContextDeliveryRequirement,
   ContextEvidence,
   ContextFeedback,
   ContextGap,
-  ContextHourlyUsage,
   ContextObjectCollection,
   ContextObjectCollectionResult,
   ContextProgress,
@@ -91,11 +82,6 @@ export type {
   ContextTaskUsage,
   ContextTextChange,
   ContextTime,
-  ContextVerificationArtifact,
-  ContextVerificationCheck,
-  ContextVerificationCost,
-  ContextVerificationFingerprint,
-  ContextVerificationReport,
   ContextViewForm,
   ContextViewLimits,
   ContextViewMetrics,
@@ -114,7 +100,6 @@ export type {
   ContextRecordSnapshot,
 } from './types/context.js'
 export type {
-  ContextLegacyModelUsage,
   ContextModelBudgetRequest,
   ContextModelBudgetState,
   ContextModelRequestIdentity,

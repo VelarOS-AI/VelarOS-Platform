@@ -20,3 +20,7 @@
 - 本机完整 Skill Bun 测试曾有 17 项通过、5 项失败；失败涉及 Windows 命名管道监听 ENOENT，不能将其记录为完整通过。对应运行链路另由 Desktop 的 Node 集成测试验证。
 
 本次交付 Velaros 0.6.4 的 Desktop 固定依赖快照，Platform 快照版本为 0.6.62。
+
+## 当前入口说明（2026-11-09）
+
+上文保留 2026-10-17 的实施与验证记录，不作为当前模型入口合同。当前产品能力管理与按需说明入口为 `velaros:features`；旧 `velaros:skills` 模型管理面、其专用上下文及 Registry 的 plugins 注入轨已退役。底层 Registry、SkillSession 的 catalog/activate/acquireRuntime、授权核对及真实租约继续使用，当前合同见 [Skill 运行环境](../architecture/skill-runtime.md)。

@@ -4,7 +4,6 @@
  * 这里是线格式的**单一来源**：`utils/wire/` 的 zod schema 逐个 `satisfies z.ZodType<…>` 对齐它们，走形就编译不过。
  */
 import type {
-  ArchiveShape,
   ArtifactProvenance,
   AttritionCause,
   CampaignFailureState,
@@ -76,7 +75,7 @@ export interface Budget {
   readonly legs: number | null
 }
 
-/** 已经用掉多少；`null` 表示这一维没观测到，不是 0。段数一定有值。 */
+/** 用量快照；manifest 是整程总量，原生采样是当前 send 段累计。`null` 是没观测到，不是 0。 */
 export interface BudgetUsage {
   readonly toolCalls: number | null
   readonly workingMs: number | null
@@ -307,7 +306,7 @@ export interface ArtifactReference {
   readonly provenance: ArtifactProvenance
 }
 
-/** 一次观测：这一刻驱动能看到的全部东西，以及每一面看到了多少。 */
+/** 会话累计观测：turns/usage 保持同一会话口径，不在每次 send 时清零；coverage 声明可见程度。 */
 export interface Observation {
   readonly phase: ObservationPhase
   readonly coverage: Readonly<Record<ObservationFace, ObservationCoverage>>
@@ -461,37 +460,17 @@ export interface RunArchive {
   readonly extensions: JsonObject
 }
 
-/** 读任意一代归档得到的视图：缺的字段一律是 `null`，不借 0 表达。 */
-export interface RunArchiveView {
-  readonly shape: ArchiveShape
-  readonly archive: RunArchive | null
-  readonly manifest: JsonObject | null
-  readonly runId: string | null
-  readonly sessionId: string | null
-  readonly rounds: readonly JsonValue[]
-  readonly passed: number | null
-  readonly total: number | null
-  readonly findings: readonly JsonValue[] | null
-  readonly drops: readonly JsonValue[] | null
-  readonly usage: JsonObject | null
-  readonly context: JsonObject | null
-  readonly raw: JsonValue | null
-  readonly errors: readonly string[]
-}
-
 /** 在一个目录里找到的一份归档。 */
 export interface DiscoveredRunArchive {
   readonly directory: string
   readonly path: string
-  readonly source: 'report' | 'progress'
-  readonly view: RunArchiveView
+  readonly archive: RunArchive
 }
 
-/** 一次归档发现的结果：找到哪些、跳过几个目录、哪些目录读不出来。 */
+/** 一次归档发现的结果；缺席 report.json 的目录计为跳过，其余读取错误直接抛出。 */
 export interface RunArchiveDiscovery {
   readonly archives: readonly DiscoveredRunArchive[]
   readonly skippedDirectories: number
-  readonly unreadableDirectories: readonly string[]
 }
 
 /** 一份归档折成真实任务覆盖统计认的那一种结局。 */
@@ -545,7 +524,8 @@ export interface BuiltinDetectorOptions {
 
 /** 进入一次等待窗口前记下的基线：窗口内只看增量，不把上一段攒的次数算到这一段头上。 */
 export interface WatchdogBaseline {
-  readonly counts: Readonly<Record<string, number>>
+  /** 完整观测才有计数基线；null 表示无法证明本窗口新增了多少，不是空历史。 */
+  readonly counts: Readonly<Record<string, number>> | null
   readonly findingKeys: readonly string[]
 }
 
@@ -555,9 +535,10 @@ export interface WatchdogAbort {
   readonly reason: string
 }
 
-/** 等待过程中的一次采样：这一刻的观测与用量。 */
+/** 等待过程中的一次采样：会话累计观测，配当前 send 段的原生累计用量。 */
 export interface WatchSample {
   readonly observation: Observation
+  /** 当前段累计，重复采样不相加；未知保持 null。运行器自己的完成段数不从此处复制。 */
   readonly usage: BudgetUsage
 }
 
@@ -577,6 +558,7 @@ export interface NativeExecutionState {
   readonly awaitingInput: boolean
   /** 执行体原生的单调完成栅栏，例如一个消息 id 或进程世代。 */
   readonly revision: string | null
+  /** 当前 send 段累计的用量，与 Observation 的会话累计口径不同。 */
   readonly usage: BudgetUsage
   readonly unavailable: { readonly detail: string } | null
 }
@@ -1090,10 +1072,10 @@ export interface RecordCampaignFailureInput {
   readonly now: number
 }
 
-/** 让一条失败账换状态要给的东西；状态机不允许的流转当场报错。 */
+/** 让一条失败账换状态要给的东西；closed 只由证明产生，状态机不允许的流转当场报错。 */
 export interface TransitionCampaignFailureInput {
   readonly failure: CampaignFailureRecord
-  readonly state: CampaignFailureState
+  readonly state: Exclude<CampaignFailureState, 'closed'>
   readonly classification?: CampaignRootCauseClass
   readonly rootCause?: string | null
   readonly fixReference?: string | null

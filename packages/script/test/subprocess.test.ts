@@ -7,7 +7,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+import { OperationLimits } from '@velaros-ai/kernel'
 
 import { NodeRuntimePackagePrefix } from '../src/contract/constants'
 import { createNodeCodeRunner } from '../src/impl/NodeCodeRunner'
@@ -324,6 +325,27 @@ try {
       )
       expect(launches).toBe(0)
     }))
+  for (const [cause, code, message] of [
+    [null, 'OPERATION_FAILED', 'null'],
+    [undefined, 'OPERATION_FAILED', 'undefined'],
+    ['host failed', 'OPERATION_FAILED', 'host failed'],
+    [new AppError('CONFLICT', 'host conflict'), 'CONFLICT', 'host conflict'],
+  ] as const)
+    test.skipIf(unsupportedBridge)(`进程口拒绝 ${message} 时仍返回失败回执`, () =>
+      fixture(async (cwd, directory) => {
+        const runner = createNodeCodeRunner({
+          cwd,
+          directory,
+          execute: async () => {
+            throw cause
+          },
+        })
+        const result = await runner.run(request(''), noCalls, log)
+        expect(result.ok).toBe(false)
+        expect(result.error?.code).toBe(code)
+        expect(result.error?.message).toContain(message)
+      })
+    )
   test('注入的进程收束失败不能报告成功', () =>
     fixture(async (cwd, directory) => {
       const runner = createNodeCodeRunner({
@@ -359,6 +381,32 @@ try {
       expect(await readFile(result.process!.logPath!, 'utf8')).toBe('persistent log')
       const [run] = await readdir(directory)
       expect(await readdir(join(directory, run!))).toEqual(['output.log'])
+    }))
+  test('注入回调的观察日志按小额度截存并取消，普通执行保留原日志额度', () =>
+    fixture(async (cwd, directory) => {
+      const limit = OperationLimits.observationChars * 4
+      const chunk = 'x'.repeat(limit + 1)
+      for (const mode of ['observe', 'execute'] as const) {
+        let cancelled = false
+        const runner = createNodeCodeRunner({
+          cwd,
+          directory,
+          execute: async (_request, output, signal) => {
+            // 只验证真实日志回调的机械截存，不启动 Node，也不证明操作系统只读隔离。
+            output(chunk, 'stdout')
+            cancelled = signal.aborted
+            return { exitCode: 0, signal: null, stdout: chunk, stderr: '', aborted: signal.aborted }
+          },
+        })
+        const result = await runner.run(request('', { mode }), noCalls, log)
+        const expected = mode === 'observe' ? limit : Buffer.byteLength(chunk)
+        expect(cancelled).toBe(mode === 'observe')
+        expect(result.ok).toBe(mode === 'execute')
+        expect(result.process?.logTruncated).toBe(mode === 'observe')
+        expect(result.process?.logBytes).toBe(expected)
+        expect((await readFile(result.process!.logPath!)).length).toBe(expected)
+        if (mode === 'observe') expect(result.error?.code).toBe('TOO_LARGE')
+      }
     }))
   it('真实 Node 同步失败、输出与 Execa heredoc 使用同一进程口', () =>
     fixture(async (cwd, directory) => {

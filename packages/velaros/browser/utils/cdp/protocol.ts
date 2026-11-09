@@ -25,3 +25,8 @@ export function pausedRequestUrl(params: unknown): string {
   if (!isPlainObject(params) || !isPlainObject(params.request)) return ''
   return isString(params.request.url) ? params.request.url : ''
 }
+
+/** Fetch 的 requestId 只在自己的 CDP 会话内有意义，主会话与子会话分别记账。 */
+export function pausedRequestKey(requestId: string, session: Optional<string>): string {
+  return JSON.stringify([session ?? null, requestId])
+}

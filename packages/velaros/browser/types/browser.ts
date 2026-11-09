@@ -66,22 +66,17 @@ export type BrowserSearchEngineId = 'google' | 'bing'
 export interface BrowserActionPolicyConfig {
   /** 没有命中 allow/deny 时的默认策略。 */
   default?: LooseOptional<'allow' | 'deny'>
-  /** 允许的动作类别。非空时未列入动作默认拒绝，除非 default=allow。 */
+  /** 允许的动作类别。非空时只放行列入的动作；default 只在允许表为空时参与判定。 */
   allow?: LooseOptional<string[]>
   /** 拒绝的动作类别；优先级高于 allow。 */
   deny?: LooseOptional<string[]>
 }
 
-/** @AgentView 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里），legacyWorkspaceRoots 是只读的旧工作区（读不到时依次往回找）。 */
+/** @AgentView 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里）。 */
 export interface BrowserSiteContext {
   url: string
   /** 站点工作区根：写入的唯一落点（粒度由宿主定）。 */
   workspaceRoot: string
-  /**
-   * 只读的历史工作区根（换粒度前留下的资产），按新到旧排列：写只写 workspaceRoot，读不到才依次回退。
-   * 不做一次性搬迁——回退读是幂等的，用户每碰一次旧资产就自然继续可用，新写入自动落到新位置。
-   */
-  legacyWorkspaceRoots?: readonly string[]
 }
 
 /** 每回合浏览器上下文快照里的 pending 阻塞事件计数。 */
@@ -744,7 +739,7 @@ export interface BrowserHandleDownloadOptions {
   savePath?: string
 }
 
-/** @AgentView 下载处理的结果：savePath 是存到的位置，state 是下载的最终状态。 */
+/** @AgentView 下载决策的处理结果：handled 表示决策已处理，state 为 accepted 表示接受保存请求，savePath 是请求的目标路径；这些字段均不代表文件已保存。 */
 export interface BrowserHandleDownloadResult {
   handled: boolean
   eventId: string

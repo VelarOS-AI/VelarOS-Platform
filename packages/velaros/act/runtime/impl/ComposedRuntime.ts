@@ -45,7 +45,6 @@ import {
   ModelToolLimits,
   VelarosAgentBudget,
   VelarosAgentRunLimits,
-  VelarosMainBudget,
   VelarosRunLimits,
 } from '../contract/constants.js'
 import type { VelarosRuntimeOptions } from '../contract/requires.js'
@@ -53,7 +52,6 @@ import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
 import { BudgetedModelDriver } from './BudgetedModelDriver.js'
 import { ChildTaskMaterials } from './ChildTaskMaterials.js'
-import { CompletionReview } from './CompletionReview.js'
 import { ContextMaintenance } from './ContextMaintenance.js'
 import { EffectScheduler } from './EffectScheduler.js'
 import { ModelToolRuntime } from './ModelToolRuntime.js'
@@ -63,16 +61,18 @@ import { RuntimeDiagnostics } from './RuntimeDiagnostics.js'
 import type { RuntimeSessionAccess, VelarosSession } from './RuntimeSession.js'
 import { RuntimeSession } from './RuntimeSession.js'
 import { RuntimeTrace } from './RuntimeTrace.js'
-import { RuntimeWorkspaceBinding } from './RuntimeWorkspaceBinding.js'
+import { SessionExecutionBinding } from './SessionExecutionBinding.js'
 import { standardModules } from './StandardModules.js'
 
 /** 一份由共享主干装配好的运行时。 */
 export interface VelarosRuntime {
   /** 分页读取主线或持久归属下的支线原始上下文、响应、脚本与回执；不唤醒模型。 */
   trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage>
+  /** 只读根会话当前任务的支线目录，不重建历史追踪正文。 */
+  traceBranches(rootSessionId: string): Promise<ActTracePage['branches']>
   /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
   getSession(id: string): Optional<VelarosSession>
-  /** 打开或恢复持久会话，先原子核对工作区绑定；同一实例内相同 id 复用句柄。 */
+  /** 打开或恢复持久会话，先原子核对执行、授权与能力绑定；同一实例内相同 id 复用句柄。 */
   openSession(id: string): Promise<VelarosSession>
   /** 查询实际挂载的模块目录。 */
   modules(query?: ModuleQuery): ModulePage
@@ -86,11 +86,10 @@ export interface VelarosRuntime {
 
 class ComposedRuntime implements VelarosRuntime {
   private static readonly closeTimeoutMs = 5_000
-  private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'storage' | 'closed' = 'openings'
+  private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'resources' | 'storage' | 'closed' =
+    'openings'
   private readonly maintenance?: ContextMaintenance
   private readonly taskModels = new Map<string, ModelDriver>()
-  private readonly completionReviews = new Map<string, CompletionReview>()
-  private readonly closingReviews = new Map<string, Promise<void>>()
   private readonly search?: AdvancedSearchApi
   private readonly agents?: AgentSupervisorApi
   private readonly tools: ModelToolRuntime
@@ -112,6 +111,7 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly stores = new Map<string, StoreSessionApi>()
   private readonly openings = new Map<string, Promise<VelarosSession>>()
 
+  private readonly binding: SessionExecutionBinding
   private readonly options: RuntimeBootstrapOptions
   public constructor(input: RuntimeBootstrapOptions) {
     this.diagnostics = new RuntimeDiagnostics(input.storage, input.onMetric)
@@ -121,7 +121,6 @@ class ComposedRuntime implements VelarosRuntime {
       context: {
         sources: [],
         ...input.context,
-        limits: { ...VelarosMainBudget, ...input.context?.limits },
       },
     }
     const options = this.options
@@ -338,8 +337,14 @@ class ComposedRuntime implements VelarosRuntime {
               modules: profile.modules.filter((module) => module !== 'velaros:agents'),
               turns: profile.limits?.turns ?? VelarosAgentRunLimits.turns,
               timeoutMs: profile.limits?.timeoutMs ?? VelarosAgentRunLimits.timeoutMs,
-              modelCalls: profile.budget?.modelCalls ?? VelarosAgentBudget.modelCalls,
-              modelTokens: profile.budget?.modelTokens ?? VelarosAgentBudget.modelTokens,
+              modelCalls:
+                profile.budget === false
+                  ? undefined
+                  : (profile.budget?.modelCalls ?? VelarosAgentBudget.modelCalls),
+              modelTokens:
+                profile.budget === false
+                  ? undefined
+                  : (profile.budget?.modelTokens ?? VelarosAgentBudget.modelTokens),
             })),
           stores: options.storage.stores
             ? {
@@ -398,6 +403,14 @@ class ComposedRuntime implements VelarosRuntime {
         ...options.modules,
       ].map((module) => this.scheduleEffects(module)),
     })
+    const bindings = []
+    let offset: Nullable<number> = 0
+    while (!isNull(offset)) {
+      const page = this.kernel.list({ offset })
+      bindings.push(...page.items.map((item) => item.binding))
+      offset = page.nextOffset
+    }
+    this.binding = new SessionExecutionBinding(input.storage, input.binding, bindings)
   }
 
   private systemPackage(id: string): ScriptPackageDefinition {
@@ -423,20 +436,9 @@ class ComposedRuntime implements VelarosRuntime {
     return ids
   }
 
-  private isInactiveSkillModule(module: string): boolean {
-    // 已安装只表示可发现；默认/显式选择或 load 后，扩展能力才进入当前会话。
-    const skills = this.options.skills
-    const catalog = skills?.session?.catalog ?? skills?.lease.skills ?? []
-    const active = skills?.session?.skills ?? skills?.lease.skills ?? []
-    return (
-      catalog.some((skill) => skill.grants.includes(module)) &&
-      !active.some((skill) => skill.grants.includes(module))
-    )
-  }
-
   private allows(id: string, module: string): boolean {
     const scope = this.scopes.get(id)
-    if (!scope || this.isInactiveSkillModule(module)) return false
+    if (!scope || this.options.moduleAccess?.(id, module) === false) return false
     if (module === ExecutionsModuleId) return true
     if (module === GoalModuleId) return scope.kind === 'main'
     if (module === ContextMaterialsModuleId)
@@ -497,7 +499,9 @@ class ComposedRuntime implements VelarosRuntime {
       ...profile.limits,
     }
     const modules = profile.modules.filter(
-      (module) => module !== 'velaros:agents' && !this.isInactiveSkillModule(module)
+      (module) =>
+        module !== 'velaros:agents' &&
+        this.options.moduleAccess?.(job.parentSessionId, module) !== false
     )
     for (const module of modules)
       if (!this.allows(job.parentSessionId, module))
@@ -564,11 +568,12 @@ class ComposedRuntime implements VelarosRuntime {
         journal: this.journal,
         contextOptions: {
           ...this.options.context!,
-          completion:
-            this.options.context?.completion && 'verify' in this.options.context.completion
-              ? this.options.context.completion
-              : undefined,
-          limits: { ...this.options.context?.limits, ...VelarosAgentBudget, ...profile.budget },
+          limits: {
+            ...this.options.context?.limits,
+            ...(profile.budget === false
+              ? { modelCalls: undefined, modelTokens: undefined }
+              : { ...VelarosAgentBudget, ...profile.budget }),
+          },
         },
         kernel: this.kernel,
         runner: this.options.runner,
@@ -590,7 +595,10 @@ class ComposedRuntime implements VelarosRuntime {
       const failures = settled.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : []
       )
-      if (!isEmpty(failures)) throw new AggregateError([error, ...failures], '子会话建立和清理失败')
+      if (!isEmpty(failures))
+        throw AppError.withFields('UNAVAILABLE', '子会话建立和清理失败', {
+          errors: [error, ...failures],
+        })
       throw error
     }
     this.sessions.set(job.sessionId, session)
@@ -645,7 +653,9 @@ class ComposedRuntime implements VelarosRuntime {
         result.status === 'rejected' ? [result.reason] : []
       )
       if (!isEmpty(failures))
-        throw new AggregateError([error, ...failures], '子会话启动失败且清理异常')
+        throw AppError.withFields('UNAVAILABLE', '子会话启动失败且清理异常', {
+          errors: [error, ...failures],
+        })
       throw error
     }
     const onEvent = this.options.agents?.onEvent
@@ -691,7 +701,10 @@ class ComposedRuntime implements VelarosRuntime {
           Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
           failures.push(error)
         }
-        if (!isEmpty(failures)) throw new AggregateError(failures, '子会话和父预算清理失败')
+        if (!isEmpty(failures))
+          throw AppError.withFields('UNAVAILABLE', '子会话和父预算清理失败', {
+            errors: [...failures],
+          })
       },
     }
   }
@@ -793,12 +806,10 @@ class ComposedRuntime implements VelarosRuntime {
       id.startsWith('search:') ||
       id.startsWith('agent:') ||
       id.startsWith('context:') ||
-      id.startsWith('verification:') ||
       id.startsWith('store-material:')
     )
       throw new AppError('CLOSED', '运行时已关闭或会话身份无效')
-    await this.closingReviews.get(id)
-    await new RuntimeWorkspaceBinding(this.options.storage, this.options.workspace).bind(id)
+    await this.binding.bind(id)
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     await this.kernel.start()
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
@@ -823,18 +834,6 @@ class ComposedRuntime implements VelarosRuntime {
         this.scopes.set(id, { kind: 'main' })
         this.tools.root(id)
         if (this.options.model) this.taskModels.set(id, this.options.model)
-        const completion = this.options.context?.completion
-        if (completion && 'kind' in completion && completion.kind === 'model-review')
-          this.completionReviews.set(
-            id,
-            new CompletionReview({
-              sessionId: id,
-              storage: this.options.storage,
-              tools: this.tools,
-              model: this.options.model,
-              options: completion,
-            })
-          )
         session = new RuntimeSession(id, {
           node: this.options.node,
           instructions: this.options.instructions,
@@ -856,17 +855,7 @@ class ComposedRuntime implements VelarosRuntime {
           protocol: this.options.protocol,
           inputs: this.options.inputs ? () => this.options.inputs!(id) : undefined,
           journal: this.journal,
-          contextOptions: {
-            ...this.options.context,
-            completion:
-              this.options.context?.completion &&
-              'kind' in this.options.context.completion &&
-              this.options.context.completion.kind === 'model-review'
-                ? this.completionReviews.get(id)
-                : this.options.context?.completion && 'verify' in this.options.context.completion
-                  ? this.options.context.completion
-                  : undefined,
-          },
+          contextOptions: this.options.context,
           kernel: this.kernel,
           runner: this.options.runner,
           storage: this.options.storage,
@@ -890,15 +879,6 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   private releaseMain(id: string): void {
-    const review = this.completionReviews.get(id)
-    if (review) {
-      this.completionReviews.delete(id)
-      const closing = review.close()
-      this.closingReviews.set(id, closing)
-      void closing.then(() => {
-        if (this.closingReviews.get(id) === closing) this.closingReviews.delete(id)
-      })
-    }
     this.sessions.delete(id)
     this.programAccess.delete(id)
     this.scopes.delete(id)
@@ -911,6 +891,11 @@ class ComposedRuntime implements VelarosRuntime {
   public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
+  }
+
+  public async traceBranches(rootSessionId: string): Promise<ActTracePage['branches']> {
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
+    return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).branches()
   }
 
   public getSession(id: string) {
@@ -960,17 +945,23 @@ class ComposedRuntime implements VelarosRuntime {
       ...[...this.sessions.values()].map((session) => session.close()),
     ])
     await Promise.allSettled([...this.openings.values()])
-    const reviews = [...this.completionReviews.values()].map((review) => review.close())
     this.shutdownPhase = 'sessions'
     for (const result of await sessions)
       if (result.status === 'rejected') failures.push(result.reason)
-    await Promise.allSettled([...reviews, ...this.closingReviews.values()])
     try {
       this.shutdownPhase = 'modules'
       await this.kernel.drain()
     } catch (error) {
       Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
       failures.push(error)
+    }
+    this.shutdownPhase = 'resources'
+    for (const resource of [...(this.options.resources ?? [])].reverse()) {
+      try {
+        await resource.close()
+      } catch (error) {
+        failures.push(error)
+      }
     }
     try {
       this.shutdownPhase = 'storage'
@@ -987,21 +978,14 @@ class ComposedRuntime implements VelarosRuntime {
     this.taskModels.clear()
     this.shutdownPhase = 'closed'
     if (!isEmpty(failures))
-      throw new AggregateError(failures, 'Runtime 关闭失败；已尝试释放全部资源')
+      throw AppError.withFields('UNAVAILABLE', 'Runtime 关闭失败；已尝试释放全部资源', {
+        errors: [...failures],
+      })
   }
 }
 
 /** 宿主提供模型周边资源，一份实例图统一维护模块、脚本与上下文。 */
 export async function createRuntime(options: VelarosRuntimeOptions): Promise<VelarosRuntime> {
   const configured = await runtimeBootstrap.prepare(options)
-  try {
-    return new ComposedRuntime(configured)
-  } catch (error) {
-    try {
-      if (!options.storage) await configured.storage.close()
-    } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Runtime 初始化及存储清理失败')
-    }
-    throw error
-  }
+  return new ComposedRuntime(configured)
 }

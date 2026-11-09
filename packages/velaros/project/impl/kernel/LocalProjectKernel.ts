@@ -48,8 +48,7 @@
 //    风险只记进事务与变更记录给界面、审计看，不拦写入、不问人。
 //
 // ## 内存治理（为什么有一堆保留上限）
-// 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限（ProjectTuning 的
-// kernel、queries 两组）按插入顺序淘汰最旧项；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
+// 内核在长会话里常驻，目标引用与事务历史都有保留上限；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
 import * as path from 'node:path'
 
 import {

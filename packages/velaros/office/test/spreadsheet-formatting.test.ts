@@ -9,6 +9,53 @@ import type { OfficeOperationContext } from '../index.js'
 import { officeOperations } from '../index.js'
 
 describe('spreadsheet formatting', () => {
+  test('column styles use the same color translation as cells, and ISO dates accept the documented date-only form', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-office-column-style-'))
+    try {
+      const context: OfficeOperationContext = {
+        abortSignal: new AbortController().signal,
+        office: {
+          getRootPath: () => root,
+          inspectEnvironment: async () => ({ commands: [] }),
+          runCommand: async () => {
+            throw new Error('spreadsheet generation does not run commands')
+          },
+        },
+      }
+      await officeOperations.createSpreadsheet(
+        {
+          outputPath: 'dates.xlsx',
+          sheets: [
+            {
+              name: 'Dates',
+              columns: [
+                {
+                  header: 'Date',
+                  style: { bold: true, color: '#FFFFFF', bgColor: '#1F4E78', numFmt: 'yyyy-mm-dd' },
+                },
+              ],
+              rows: [[{ dateValue: '2026-09-18' }], [{ dateValue: '2026-09-19T01:00:00+01:00' }]],
+            },
+          ],
+        },
+        context
+      )
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.readFile(join(root, 'dates.xlsx'))
+      const sheet = workbook.getWorksheet('Dates')!
+      expect(sheet.getCell('A2').value).toEqual(new Date('2026-09-18T00:00:00Z'))
+      expect(sheet.getCell('A3').value).toEqual(new Date('2026-09-19T00:00:00Z'))
+      expect(sheet.getCell('A2').font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } })
+      expect(sheet.getCell('A2').fill).toMatchObject({
+        type: 'pattern',
+        fgColor: { argb: 'FF1F4E78' },
+      })
+      expect(sheet.getCell('A2').numFmt).toBe('yyyy-mm-dd')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('applies sheet header styles and A1 number format ranges', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-office-spreadsheet-formatting-'))
     const context: OfficeOperationContext = {

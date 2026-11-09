@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
@@ -44,14 +44,12 @@ describe('helper 定位的共享资源根', () => {
       'computer-use',
       `computeruse-${process.platform}-${process.arch}`
     )
-    const venvPython =
+    const python =
       process.platform === 'win32'
-        ? join(packageRoot, 'venv', 'Scripts', 'python.exe')
-        : join(packageRoot, 'venv', 'bin', 'python')
-    await mkdir(join(packageRoot, 'venv', process.platform === 'win32' ? 'Scripts' : 'bin'), {
-      recursive: true,
-    })
-    await writeFile(venvPython, '')
+        ? join(packageRoot, 'python', 'python.exe')
+        : join(packageRoot, 'python', 'bin', 'python3')
+    await mkdir(dirname(python), { recursive: true })
+    await writeFile(python, '')
     await writeFile(join(packageRoot, scriptName ?? ''), '')
     await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '9.9.9' }))
 
@@ -59,7 +57,7 @@ describe('helper 定位的共享资源根', () => {
     // 共享资源根属于平台约定，必须由本包自己算出来。
     const resolved = createComputerHelperLocator().resolve()
     expect(resolved?.packageRoot).toBe(packageRoot)
-    expect(resolved?.pythonCommand).toBe(venvPython)
+    expect(resolved?.pythonCommand).toBe(python)
     expect(resolved?.version).toBe('9.9.9')
   })
 })

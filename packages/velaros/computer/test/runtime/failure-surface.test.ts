@@ -14,6 +14,30 @@ const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
 }
 
 describe('桌面控制的失败面', () => {
+  test('资源定位抛错也交付结构化不可用结果，且可以重新探测', async () => {
+    let fails = true
+    const manager = createComputerRuntime({
+      resolveHelper: () => {
+        if (fails) throw new Error('resource lookup failed')
+        return null
+      },
+    })
+    try {
+      expect(await manager.ensureAvailable()).toMatchObject({
+        available: false,
+        reason: 'spawn-failed',
+        detail: 'resource lookup failed',
+      })
+      fails = false
+      expect(await manager.ensureAvailable()).toMatchObject({
+        available: false,
+        reason: 'helper-missing',
+      })
+    } finally {
+      manager.dispose()
+    }
+  })
+
   test('helper 没装时的可用性结果是中文，且原因是 helper-missing', async () => {
     const manager = createComputerRuntime({ resolveHelper: () => null })
 

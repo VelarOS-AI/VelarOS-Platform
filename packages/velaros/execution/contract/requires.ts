@@ -18,6 +18,8 @@ import type {
 
 /** 宿主的命令、只读进程和后台任务端口；本机实现由 createLocalShellHost 创建。 */
 export interface ShellHostPort {
+  /** 无进程启动地核对只读约束后端能否构造启动规格；不代表已经实测采集成功，实际执行仍核约束。 */
+  observationSupport?(): { readonly available: boolean; readonly reason?: string }
   /** 观察命令的受限执行口；不能回退普通 runCommand，返回实际约束证据。 */
   runObservationCommand?: (
     command: string,
@@ -28,6 +30,7 @@ export interface ShellHostPort {
    * 跑一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；
    * 不能或不允许跑后台任务时以 `PERMISSION` 拒绝。`allowDangerous` 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问。
    * `options.shell` 挑定的 shell 本机没有时，在执行之前以 `VALIDATION` 拒绝、一个进程都不起，不许换默认 shell 照跑。
+   * `waitForClose: true` 仅供前台宿主资源所有者使用：无论兑现还是拒绝，必须未启动进程或已真实退出并排空输出；超时与取消不提前兑现。
    */
   runCommand: (
     command: string,
@@ -52,6 +55,11 @@ export interface ShellHostPort {
 export interface ShellRunCommandHooks {
   /** 前台命令跑着时每吐出一段输出（stdout、stderr 按到达顺序）就回调一次；后台命令不回调。 */
   onOutput?: (text: string, stream?: 'stdout' | 'stderr') => void
+  /**
+   * 后台任务登记与真实有界收尾写入后、历史裁剪前同步交付独立记录副本。
+   * 收尾可能是 exited 或清理未确认的 unknown；观察方的失败不会阻断进程释放，也不等待观察方的异步工作。
+   */
+  onBackgroundTaskState?: (task: ShellBackgroundTaskRecord) => void
 }
 
 // ── 本机宿主 ────────────────────────────────────────────────────
@@ -64,12 +72,6 @@ export interface ShellEnvironmentOptions {
   platform?: NodeJS.Platform
   /** 每个 POSIX 登录 shell 的读取超时，缺省 10 秒。 */
   captureTimeoutMs?: number
-}
-
-/** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */
-export interface LocalNodeValidationOptions {
-  /** 宿主已选择的 Node.js 可执行文件；模型不能替换。 */
-  readonly executable: string
 }
 
 /** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */
@@ -129,7 +131,7 @@ export interface ShellTerminalSpawnOptions {
 
 /** 伪终端里跑着的进程：工厂返回的那一面，node-pty 的进程对象就长这样。 */
 export interface ShellTerminalProcess {
-  /** 进程号。 */
+  /** 进程号；启动握手期间可以为 0，Host 等有效身份后才发布后台任务。 */
   readonly pid: number
   /** 订阅终端输出（已按 UTF-8 解码）；返回的对象用来退订。 */
   onData(listener: (data: string) => void): { dispose(): void }
@@ -139,7 +141,7 @@ export interface ShellTerminalProcess {
   write(data: string): void
   /** 改终端尺寸。 */
   resize(cols: number, rows: number): void
-  /** 给进程发信号，缺省 SIGHUP。 */
+  /** 请求终止并释放终端原生资源；Windows Host 不传信号名，其他平台传原终止信号。 */
   kill(signal?: string): void
 }
 

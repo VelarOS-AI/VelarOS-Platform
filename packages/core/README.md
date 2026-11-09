@@ -58,7 +58,7 @@ Result.match(saved, {
 | `@velaros-ai/core/logger` | 任何进程 | 日志运行时 `Log`、分域日志 `Logger`、transport 合同与回调、内存 transport |
 | `@velaros-ai/core/logger/node` | Node | 文件 transport `createFileLogTransport`：有序 JSONL，按记录的本地日期分文件 |
 | `@velaros-ai/core/result` | 任何进程 | `Result` |
-| `@velaros-ai/core/utils/*` | 按文件 | 低频工具逐文件引：`TimerScope`、`KeyedSerialQueue`、`fetchWithTimeout`、`SqliteMigrations`、`ExclusiveSqliteLock` 等；`FilePersistence`、`FileSecretBox`、`RealPath` 只给 Node |
+| `@velaros-ai/core/utils/*` | 按文件 | 低频工具逐文件引：`TimerScope`、`KeyedSerialQueue`、`fetchWithTimeout`、`ExclusiveSqliteLock` 等；`FilePersistence`、`FileSecretBox`、`RealPath` 只给 Node |
 | [`@velaros-ai/core/platform`](src/platform/README.md) | 任何进程 | 跨平台约定：路径文本、shell 与进程命令规格、应用数据目录；另有 `/contracts`，以及只给 Node 的 `/shared-resources` |
 | [`@velaros-ai/core/text-files`](src/text-files/README.md) | Node | 磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读与流式读；另有 `/contracts` |
 | [`@velaros-ai/core/path-rules`](src/path-rules/README.md) | Node | glob 匹配、.gitignore 判定、遍历时的忽略策略；另有 `/contracts` |
@@ -69,3 +69,4 @@ Result.match(saved, {
 - `code` 是开放字符串：`ErrorCode` 列出通用码（`VALIDATION`、`NOT_FOUND`、`CONFLICT`、`CANCELLED`、`LIMIT` 等），领域码写在各包自己的常量表里；判断失败看 `code`，不看文字。
 - 错误过 IPC 只带 `code`、`message`、`context`（`toJSON` / `AppError.fromJSON`，`Result` 就是这么传的）；`withFields` 挂的字段和 `cause` 过不去，要过边界的细节放进 `context`。
 - 只收无领域语义、至少被两个不相邻领域复用的原语，`check:core-semantic-vocabulary` 拦领域词回流；有领域语义的放回拥有它的包。
+- 日常日志隔离单个输出端的同步与异步故障；显式 `Log.flush()` / `Log.dispose()` 等全部输出端收尾，失败聚合上抛，刷新失败也不会跳过回收。

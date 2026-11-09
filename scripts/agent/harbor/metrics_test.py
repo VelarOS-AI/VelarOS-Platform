@@ -5,7 +5,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from metrics import aggregate_trials, agent_metrics, compare_jobs, distribution, environment_evidence, history_cache_metrics, prompt_layout_metrics, request_metrics, tool_environment_diagnostics, trial_infrastructure_issue, verifier_infrastructure_issue
+from metrics import aggregate_trials, agent_metrics, compare_jobs, distribution, environment_evidence, request_audit, request_audit_metrics, request_metrics, tool_environment_diagnostics, trial_infrastructure_issue, verifier_infrastructure_issue
 from report import markdown, settlement_tail, summarize, summarize_cohort
 
 
@@ -15,7 +15,59 @@ def call(inputs, cached, cost, written=0):
                       "input_tokens_details": {"cached_tokens": cached, "cache_write_tokens": written}}}
 
 
+def audit_turn(frame_id="frame", segment_id="segment"):
+    reference = {"sessionId": "s", "id": frame_id}
+    audit = {"schemaVersion": 3, "model": "fixture", "modelTruncated": False,
+             "inputTokens": 100, "precision": "exact", "basis": "计量🧪", "basisTruncated": False,
+             "outputTokens": 10, "messageCount": 3, "toolCount": 1,
+             "requestFingerprint": {name: "a" * 16 for name in ("id", "systemHash", "messageHash", "prefixHash")}}
+    return {"turnId": frame_id, "request": {"body": json.dumps({"requestAudit": audit, "frameRef": reference,
+                "context": {"phase": "work", "pressure": "normal", "inputLimit": 1000}}, ensure_ascii=False)},
+            "records": [{"ref": reference, "title": "context:frame:" + frame_id,
+                         "body": json.dumps({"frameId": frame_id, "segment": {"id": segment_id}, "entries": []})}]}
+
+
 class MetricsTests(unittest.TestCase):
+    def test_request_audit_preserves_metadata_and_measures_real_utf16_without_prompt_replay(self):
+        turn = audit_turn()
+        measured = request_audit_metrics([turn, {"request": None}])
+        self.assertEqual(measured["measured_requests"], 1)
+        self.assertEqual(measured["unmeasured_requests"], 1)
+        self.assertEqual(measured["input_tokens"]["max"], 100)
+        self.assertEqual(measured["message_count"]["max"], 3)
+        self.assertEqual(measured["model_request_utf16"]["max"], len(turn["request"]["body"].encode("utf-16-le")) // 2)
+        self.assertIsNotNone(measured["context_frame_utf16"])
+        for changed in ({"inputTokens": None}, {"basis": "🧪" * 257}, {"modelTruncated": 1}, {"schemaVersion": 2}):
+            envelope = json.loads(turn["request"]["body"])
+            envelope["requestAudit"].update(changed)
+            self.assertIsNone(request_audit({"request": {"body": json.dumps(envelope)}}))
+        unknown = request_audit_metrics([{"request": None}, {"request": {"body": "{}"}}])
+        self.assertIsNone(unknown["input_tokens"])
+        self.assertIsNone(unknown["model_request_utf16"])
+
+    def test_context_metrics_follow_the_exact_frame_ref_and_remove_retired_prompt_fields(self):
+        turns = [audit_turn("one", "segment-a"), audit_turn("two", "segment-b")]
+        turns[0]["records"].append(audit_turn("unselected", "other")["records"][0])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "agent").mkdir()
+            path = root / "agent/traces.json"
+            path.write_text(json.dumps({"traces": turns, "branches": []}))
+            context = agent_metrics(root)["context"]
+            self.assertEqual(context["observed_segment_transitions"], 1)
+            self.assertEqual(context["peak_estimated_tokens"], 100)
+            self.assertEqual(context["input_limits"], [1000])
+            self.assertEqual(context["pressure_frames"], 0)
+            self.assertEqual(context["request_audit"]["context_frame_utf16"]["count"], 2)
+            for retired in ("history_cache", "prompt_layout", "result_visibility"):
+                self.assertNotIn(retired, context)
+            for turn in turns:
+                turn["records"] = []
+            path.write_text(json.dumps({"traces": turns, "branches": []}))
+            missing = agent_metrics(root)["context"]
+            self.assertIsNone(missing["observed_segment_transitions"])
+            self.assertIsNone(missing["request_audit"]["context_frame_utf16"])
+
     def test_structured_stream_and_transport_failures_remain_distinct_from_http_status_and_usage(self):
         rows = [call(100, 50, .1),
                 {"status": "http-200-interrupted", "estimatedUsd": None, "usage": None,
@@ -259,36 +311,6 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual(result["response_rejections"]["other"], 1)
             self.assertIsNone(result["response_rejections"]["model_seconds"])
 
-    def test_prompt_layout_distinguishes_rendered_text_raw_json_and_missing_requests(self):
-        frame_text = "Runtime 本帧工作内存（origin=runtime-view）；状态"
-        raw_frame = {"partitions": {"task": {"goal": "修复"}, "runtime": {"pending": 1}}}
-        turn = {"request": {"body": json.dumps({"providerRequest": {
-            "system": "instructions", "messages": [
-                {"role": "user", "content": "history"},
-                {"role": "user", "content": [{"type": "text", "text": frame_text}, {"type": "image", "data": "not-counted"}]}]},
-            "request": {"materials": [{"origin": "runtime-view", "text": json.dumps(raw_frame)}]}})}}
-        result = prompt_layout_metrics([turn, {"request": None}])
-        self.assertEqual(result["measured_requests"], 1)
-        self.assertEqual(result["unmeasured_requests"], 1)
-        self.assertEqual(result["provider_text_chars"]["max"], len("instructionshistory") + len(frame_text))
-        self.assertIsNone(result["working_frame_text_chars"], "A similar prefix without current frame identity is not verified SDK delivery")
-        self.assertEqual(result["current_frame"]["unverified_requests"], 1)
-        self.assertEqual(result["non_text_blocks"]["max"], 1)
-        self.assertEqual(result["raw_partition_json_chars"]["task"]["max"], len('{"goal":"修复"}'))
-        self.assertIsNone(prompt_layout_metrics([{"request": None}])["working_frame_text_chars"])
-        augmented = json.loads(turn["request"]["body"])
-        state = {"model": "openai/gpt-6-sol", "format": "openai-responses-v1",
-                 "data": json.dumps({"reasoningContext": "all_turns", "encrypted": "x" * 10000}), "tokens": 40}
-        augmented["providerRequest"]["messages"].insert(0, {"role": "assistant", "content": "ok", "continuation": state})
-        augmented["estimate"] = {"opaqueTokens": 40}
-        with_state = prompt_layout_metrics([{"request": {"body": json.dumps(augmented)}}])
-        self.assertEqual(with_state["provider_text_chars"]["max"], result["provider_text_chars"]["max"] + 2)
-        self.assertEqual(with_state["continuation"]["serialized_chars"]["max"], len(state["data"]))
-        self.assertEqual(with_state["continuation"]["reserved_input_tokens"]["max"], 40)
-        self.assertEqual(with_state["continuation"]["history_items"]["max"], 1)
-        self.assertEqual(with_state["continuation"]["prior_response_reasoning_contexts"], ["all_turns"])
-        self.assertEqual(result["continuation"]["history_items"]["max"], 0)
-
     def test_compatibility_diagnostics_use_tool_outputs_and_deduplicate_observations(self):
         symptom = 'rosetta error: Unimplemented syscall number 282'
         measured = tool_environment_diagnostics([('a', symptom), ('a', symptom), ('b', 'ok')])
@@ -467,20 +489,6 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(trial_infrastructure_issue({"environment_setup": {"started_at": "now"},
                          "exception_info": {"exception_type": "EnvironmentStartTimeoutError"}}, ""), "environment_setup_failed")
 
-    def test_cache_annotations_do_not_count_as_historical_body_rewrites(self):
-        full = json.dumps({"ref": {"id": "receipt"}, "bodyIncluded": True}) + "\nresult"
-        retired = json.dumps({"ref": {"id": "receipt"}, "bodyIncluded": False,
-                              "reason": "lease-expired-or-released"})
-        def turn(content, breakpoint):
-            return {"request": {"body": json.dumps({"providerRequest": {"system": "stable", "messages": [
-                {"role": "user", "content": content, "cacheBreakpoint": breakpoint}
-            ]}})}}
-        result = history_cache_metrics([turn(full, True), turn(full, False), turn(retired, True)])
-        self.assertEqual(result["measured_transitions"], 2)
-        self.assertEqual(result["historical_body_rewrites"], 1)
-        self.assertEqual(result["lease_retirements"], 1)
-        self.assertEqual(result["unchanged_prefix_chars"]["max"], len("stable") + len(full))
-
     def test_environment_uses_historical_log_and_leaves_missing_hashes_unknown(self):
         old = environment_evidence({"environment": {"type": "docker"}}, "")
         self.assertIsNone(old["setup_sha256"])
@@ -640,35 +648,8 @@ class MetricsTests(unittest.TestCase):
             self.assertIsNone(metrics["model_await_seconds_sum"])
             self.assertIsNone(metrics["observed_observation_seconds"])
 
-    def test_outer_body_visibility_does_not_hide_omitted_result_fields(self):
-        frame = {"partitions": {"recent": {"results": [
-            {"ref": "large-result", "bodyIncluded": True, "representation": "excerpt",
-             "omitted": ["/result/value/default"], "size": {"chars": 24000}}
-        ]}, "runtime": {"materialStatus": {"footprint": {"leasedResults": 800}}}}}
-        turn = {"request": {"body": json.dumps({"request": {
-            "materials": [{"origin": "runtime-view", "text": json.dumps(frame)}]}})}}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "agent").mkdir()
-            (root / "agent/traces.json").write_text(json.dumps({"traces": [turn, turn], "branches": []}))
-            result = agent_metrics(root)["context"]["result_visibility"]
-            self.assertEqual(result["partial_exposures"], 2)
-            self.assertEqual(result["unique_results_with_omissions"], 1)
-            self.assertEqual(result["reference_only_exposures"], 0)
-            self.assertEqual(result["peak_visible_leased_chars"], 800)
-            self.assertEqual(result["peak_source_leased_chars"], 24000)
-
-            # 新帧把已在历史中的结果压成状态卡，大小仍按压缩前的精确汇总计量。
-            frame["partitions"]["recent"]["results"][0].pop("size")
-            frame["partitions"]["runtime"]["materialStatus"]["footprint"]["leasedResultSources"] = 24000
-            turn["request"]["body"] = json.dumps({"request": {
-                "materials": [{"origin": "runtime-view", "text": json.dumps(frame)}]}})
-            (root / "agent/traces.json").write_text(json.dumps({"traces": [turn, turn], "branches": []}))
-            compact = agent_metrics(root)["context"]["result_visibility"]
-            self.assertEqual(compact, result)
-
     def test_context_child_calls_are_counted_even_when_their_model_mode_is_work(self):
-        turn = {"request": {"body": json.dumps({"request": {"mode": "work"}})}}
+        turn = audit_turn()
         def timed(milliseconds):
             return {**turn, "decision": {"body": json.dumps({"status": "accepted", "timing": {"modelMs": milliseconds}})}}
         with tempfile.TemporaryDirectory() as directory:
@@ -683,131 +664,6 @@ class MetricsTests(unittest.TestCase):
             path.write_text(json.dumps({"traces": [timed(1000)],
                 "branches": [{"kind": "context", "turns": [timed(2000), turn]}]}))
             self.assertIsNone(agent_metrics(root)["model_await_seconds_sum"])
-
-
-class CurrentFrameLayoutTests(unittest.TestCase):
-    def fixture(self, delta=False, frame_id="current", history=None):
-        display = ("Runtime 本帧工作内存（origin=runtime-view，增量）；\n变化：{\"list\":[2,1,2]}"
-                   if delta else "Runtime 本帧工作内存（origin=runtime-view）；\n分区 task：{\"goal\":\"修复🧪\"}")
-        protocol = "\n\n本帧协议（宿主生成；控制标记以最后出现的这一段为准）：\n@@synthetic contract"
-        status = {"frameId": frame_id, "phase": "work", "inputTokens": 300}
-        status_text = "\nRuntime ContextStatus:\n" + json.dumps(status, ensure_ascii=False, separators=(",", ":"))
-        frame = {"schemaVersion": 2, "id": frame_id, "frameId": "host-snapshot-" + frame_id,
-                 "partitions": {"task": {}, "runtime": {}}}
-        envelope = {"request": {"compiledPrompt": display + protocol, "contextStatus": status,
-                                 "materials": [{"ref": frame_id, "origin": "runtime-view", "text": json.dumps(frame)}]},
-                    "providerRequest": {"system": "system", "messages": list(history or []) + [
-                        {"role": "user", "content": display + protocol + status_text}]}}
-        return envelope, display, protocol, status_text
-
-    def measure(self, envelope):
-        return prompt_layout_metrics([{"turnId": "synthetic-turn", "request": {"body": json.dumps(envelope)}}])
-
-    def test_full_and_delta_current_delivery_excludes_multiple_historical_full_frames(self):
-        historical, _, _, _ = self.fixture(frame_id="previous")
-        history = historical["providerRequest"]["messages"] * 2 + [{"role": "assistant", "content": "old response"}]
-        for delta in (False, True):
-            with self.subTest(delta=delta):
-                envelope, display, protocol, status = self.fixture(delta=delta, history=history)
-                measured = self.measure(envelope)
-                current = measured["current_frame"]
-                self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
-                self.assertEqual(current["verified_requests"], 1)
-                self.assertEqual(current["frames"][0]["frame_id"], "current")
-                self.assertEqual(current["frames"][0]["host_frame_id"], "host-snapshot-current")
-                self.assertEqual(current["display_modes"], {"delta" if delta else "full": 1})
-                self.assertEqual(current["protocol_text_chars"]["max"], len(protocol))
-                self.assertEqual(current["context_status_text_chars"]["max"], len(status))
-                self.assertEqual(current["history_text_chars"]["max"], sum(len(row["content"]) for row in history))
-                self.assertEqual(measured["provider_text_chars"]["max"],
-                                 len("system") + current["history_text_chars"]["max"] + len(display + protocol + status))
-
-    def test_reset_uses_the_new_last_frame_without_requiring_old_history_or_accepted_baseline(self):
-        envelope, display, _, _ = self.fixture(frame_id="new-authorization", history=[])
-        measured = self.measure(envelope)
-        self.assertEqual(measured["current_frame"]["frames"][0]["frame_id"], "new-authorization")
-        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
-        self.assertEqual(measured["current_frame"]["history_text_chars"]["max"], 0)
-
-    def test_character_units_preserve_non_bmp_and_unpaired_surrogate_text(self):
-        envelope, display, protocol, status = self.fixture()
-        unusual = "🧪\ud800"
-        envelope["request"]["compiledPrompt"] = display + unusual + protocol
-        envelope["providerRequest"]["messages"][-1]["content"] = display + unusual + protocol + status
-        measured = self.measure(envelope)
-        self.assertEqual(measured["character_unit"], "unicode_codepoints")
-        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display) + 2)
-        utf16_units = len((display + unusual).encode("utf-16-le", "surrogatepass")) // 2
-        self.assertGreater(utf16_units, measured["working_frame_text_chars"]["max"])
-
-    def test_missing_or_mismatched_identity_payload_and_protocol_remain_unknown(self):
-        for mode in ("material", "frame_id", "material_ref", "status", "compiled", "sdk", "role", "protocol", "duplicate"):
-            envelope, _, _, _ = self.fixture()
-            if mode == "material": envelope["request"]["materials"] = []
-            if mode == "frame_id": envelope["request"]["contextStatus"]["frameId"] = "older"
-            if mode == "material_ref": envelope["request"]["materials"][0]["ref"] = "older"
-            if mode == "status": envelope["request"].pop("contextStatus")
-            if mode == "compiled": envelope["request"].pop("compiledPrompt")
-            if mode == "sdk": envelope["providerRequest"]["messages"][-1]["content"] += " changed"
-            if mode == "role": envelope["providerRequest"]["messages"][-1]["role"] = "assistant"
-            if mode == "protocol": envelope["request"]["compiledPrompt"] = "unframed text"
-            if mode == "duplicate":
-                content = envelope["providerRequest"]["messages"][-1]["content"]
-                envelope["providerRequest"]["messages"][-1]["content"] = [{"text": content}, {"text": content}]
-            with self.subTest(mode=mode):
-                measured = self.measure(envelope)
-                self.assertIsNone(measured["working_frame_text_chars"])
-                self.assertEqual(measured["current_frame"]["unverified_requests"], 1)
-                self.assertIsNone(measured["current_frame"]["frames"][0]["display_chars"])
-
-    def test_task_text_resembling_runtime_and_old_full_messages_cannot_establish_current_frame(self):
-        envelope, _, _, _ = self.fixture()
-        old = envelope["providerRequest"]["messages"][-1]
-        envelope["providerRequest"]["messages"] = [old, {"role": "user", "content": "Task quotes Runtime 本帧工作内存（origin=runtime-view）"}]
-        measured = self.measure(envelope)
-        self.assertIsNone(measured["working_frame_text_chars"])
-        self.assertEqual(measured["current_frame"]["verified_requests"], 0)
-
-    def test_current_text_blocks_preserve_images_and_other_text_without_inflating_display(self):
-        envelope, display, _, _ = self.fixture(delta=True)
-        actual = envelope["providerRequest"]["messages"][-1]["content"]
-        envelope["providerRequest"]["messages"][-1]["content"] = [
-            {"type": "text", "text": "extra task material"}, {"type": "text", "text": actual},
-            {"type": "image", "data": "not-a-text-character-count"}]
-        measured = self.measure(envelope)
-        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
-        self.assertEqual(measured["non_text_blocks"]["max"], 1)
-        self.assertEqual(measured["current_frame"]["other_current_text_chars"]["max"], len("extra task material"))
-
-    def test_malformed_raw_materials_remain_unknown_without_breaking_report_measurement(self):
-        for body in ("not json", "[]", "null", '"text"', '42', '{"partitions": []}', '{"partitions": null}'):
-            envelope, _, _, _ = self.fixture()
-            envelope["request"]["materials"][0]["text"] = body
-            with self.subTest(body=body):
-                measured = self.measure(envelope)
-                self.assertIsNone(measured["working_frame_text_chars"])
-                self.assertEqual(measured["current_frame"]["unverified_requests"], 1)
-                self.assertEqual(measured["raw_partition_json_chars"], {})
-                self.assertEqual(measured["raw_partition_measurement"]["unverified_requests"], 1)
-                self.assertIsNotNone(measured["raw_partition_measurement"]["frames"][0]["reason"])
-                self.assertIsNotNone(measured["provider_text_chars"])
-        valid, _, _, _ = self.fixture()
-        measured = self.measure(valid)
-        self.assertEqual(measured["raw_partition_measurement"]["verified_requests"], 1)
-        self.assertEqual(measured["raw_partition_json_chars"]["task"]["max"], 2)
-
-    def test_ambiguous_and_wrongly_typed_materials_do_not_create_partition_sizes(self):
-        for mode in ("duplicate", "non_dictionary", "wrong_material_list", "wrong_host"):
-            envelope, _, _, _ = self.fixture()
-            if mode == "duplicate": envelope["request"]["materials"] *= 2
-            if mode == "non_dictionary": envelope["request"]["materials"] = ["runtime-view"]
-            if mode == "wrong_material_list": envelope["request"]["materials"] = {"origin": "runtime-view"}
-            if mode == "wrong_host": envelope["request"] = "not a request"
-            with self.subTest(mode=mode):
-                measured = self.measure(envelope)
-                self.assertIsNone(measured["working_frame_text_chars"])
-                self.assertEqual(measured["raw_partition_json_chars"], {})
-                self.assertEqual(measured["raw_partition_measurement"]["unverified_requests"], 1)
 
 
 if __name__ == "__main__":

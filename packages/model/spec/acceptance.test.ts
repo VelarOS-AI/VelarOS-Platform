@@ -22,6 +22,7 @@ import {
   ModelErrorCodes,
   ModelProviderOperationalManifests,
   type ModelRuntimeCapabilityService,
+  type ModelSelection,
   modelUsage,
 } from '../src/index'
 import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
@@ -41,7 +42,7 @@ module.exports = {
     baseURLConfigurable: false,
     enabledByDefault: true,
     defaultModel: 'spec-chat',
-    models: [{ id: 'spec-chat', label: 'Spec Chat' }]
+    models: [{ id: 'spec-chat', label: 'Spec Chat', inputModalities: ['text', 'image'] }]
   },
   createLanguageModelFactory() {
     return function createLanguageModel() {
@@ -75,6 +76,111 @@ async function activate(registry: ModelAdapterRegistryApi) {
 }
 
 describe('model 不变量验收', () => {
+  test('INV-23 typed and unknown selections resolve system credentials without copied fields', async () => {
+    const requests: Array<{ url: string; authorization: string | null }> = []
+    const composition = createModelRuntimeComposition({
+      environment: {},
+      providerScripts: { configPaths: [] },
+      providerCatalog: {
+        fetch: async (input, init) => {
+          requests.push({
+            url: String(input),
+            authorization: new Headers(init?.headers).get('authorization'),
+          })
+          return Response.json({ data: [{ id: 'fixture-model', context_length: 64000 }] })
+        },
+      },
+    })
+    const selection: ModelSelection = {
+      provider: 'openai-compatible-gateway',
+      model: 'fixture-model',
+    }
+    const context = {
+      providerRuntimeConfigs: [
+        {
+          provider: selection.provider,
+          defaultModel: selection.model,
+          enabled: true,
+          apiKey: 'system-key',
+          baseURL: 'https://system.example/v1',
+        },
+      ],
+      openRouter: { useFreeModelsForDebug: false },
+    }
+    for (const resolver of [
+      composition.agentModelResolver.resolve.bind(composition.agentModelResolver),
+      composition.agentModelRuntime.resolveRoleRuntime.bind(composition.agentModelRuntime),
+    ]) {
+      const resolved = await resolver(selection, context)
+      expect(resolved.providerId).toBe(selection.provider)
+      expect(resolved.model).toBe(selection.model)
+      await resolver(
+        { ...selection, apiKey: 'request-key', baseURL: 'https://request.example/v1' },
+        context
+      )
+      await expect(
+        resolver(selection, {
+          ...context,
+          providerRuntimeConfigs: context.providerRuntimeConfigs.map((row) => ({
+            ...row,
+            enabled: false,
+          })),
+        })
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+      await expect(
+        resolver(selection, { ...context, providerRuntimeConfigs: [] })
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+      await expect(
+        resolver(
+          { ...selection, apiKey: 'request-key' },
+          { ...context, providerRuntimeConfigs: [] }
+        )
+      ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
+    }
+    expect(context.providerRuntimeConfigs[0]!.apiKey).toBe('system-key')
+    expect(context.providerRuntimeConfigs[0]!.baseURL).toBe('https://system.example/v1')
+    expect(requests).toEqual([
+      { url: 'https://system.example/v1/models', authorization: 'Bearer system-key' },
+      { url: 'https://request.example/v1/models', authorization: 'Bearer request-key' },
+    ])
+  })
+
+  test('INV-23 missing provider configuration cannot be supplied by an environment key or an optional credential', async () => {
+    let requests = 0
+    const composition = createModelRuntimeComposition({
+      environment: { OPENAI_API_KEY: 'environment-key' },
+      providerScripts: { configPaths: [] },
+      providerCatalog: {
+        fetch: async () => {
+          requests++
+          return Response.json({ data: [] })
+        },
+      },
+    })
+    const context = { providerRuntimeConfigs: [], openRouter: { useFreeModelsForDebug: false } }
+    for (const resolver of [
+      composition.agentModelResolver.resolve.bind(composition.agentModelResolver),
+      composition.agentModelRuntime.resolveRoleRuntime.bind(composition.agentModelRuntime),
+    ])
+      for (const provider of ['openai', 'ollama'] as const)
+        await expect(resolver({ provider, model: 'fixture' }, context)).rejects.toMatchObject({
+          code: 'MODEL_PROVIDER_UNAVAILABLE',
+        })
+    expect(requests).toBe(0)
+  })
+
+  test('INV-23 provider defaults and environment credentials accept an absent override', () => {
+    const composition = createModelRuntimeComposition({
+      environment: { OPENAI_API_KEY: 'environment-key' },
+      providerScripts: { configPaths: [] },
+    })
+    const providers = composition.providerCollection
+    expect(providers.requireApiKey({ provider: 'openai' })).toBe('environment-key')
+    expect(providers.resolveBaseURL({ provider: 'openai' })).toBe(
+      providers.requireOperationalManifest('openai').defaultBaseURL
+    )
+  })
+
   test('INV-1 只在同一个 provider 内回退模型，绝不换 provider', () => {
     // 逐个内置 provider 核对：拿别家的模型名来解析，结果要么是用户填的原名（目录只是建议的
     // 那几家），要么是**本家**目录里的模型，绝不会解析成别家目录独有的模型。
@@ -209,6 +315,62 @@ describe('model 不变量验收', () => {
     for (const manifest of ModelProviderOperationalManifests) {
       expect(`${manifest.id}:${!!modelCatalog.manifest(manifest.id)}`).toBe(`${manifest.id}:true`)
     }
+
+    const first = createIsolatedComposition()
+    const second = createIsolatedComposition()
+    const expectedCatalog = structuredClone(modelCatalog.catalog('openai')!)
+    const catalog = modelCatalog.catalog('openai')!
+    catalog.defaultModel = 'snapshot-only'
+    catalog.models[0].contextWindow = 1
+    catalog.models.push({ id: 'snapshot-only', contextWindow: 1 })
+    expect(modelCatalog.catalog('openai')).toEqual(expectedCatalog)
+    const collectionCatalog = first.providerCollection.requireCatalog('openai')
+    collectionCatalog.models[0].id = 'snapshot-only'
+    expect(first.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
+    expect(second.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
+
+    const expectedManifest = structuredClone(modelCatalog.manifest('openai')!)
+    modelCatalog.manifest('openai')!.label = 'snapshot-only'
+    first.providerCollection.requireOperationalManifest('openai').label = 'snapshot-only'
+    first.providerCollection.listOperationalManifests().find((row) => row.id === 'openai')!.label =
+      'snapshot-only'
+    expect(modelCatalog.manifest('openai')).toEqual(expectedManifest)
+    expect(first.providerCollection.requireOperationalManifest('openai')).toEqual(expectedManifest)
+    expect(second.providerCollection.requireOperationalManifest('openai')).toEqual(expectedManifest)
+
+    first.providerScriptRegistry.registerSource({
+      source: InjectedProviderSource,
+      scriptPath: '/tmp/velaros-model-spec-provider.cjs',
+    })
+    const expectedScript = structuredClone(
+      first.providerCollection.requireOperationalManifest(InjectedProviderId)
+    )
+    const script = first.providerCollection.requireOperationalManifest(InjectedProviderId)
+    script.providerScript!.models[0].label = 'snapshot-only'
+    const modalities = script.providerScript!.models[0].inputModalities as string[]
+    modalities[0] = 'audio'
+    const listed = first.providerCollection
+      .listOperationalManifests()
+      .find((row) => row.id === InjectedProviderId)!
+    listed.providerScript!.models[0].id = 'snapshot-only'
+    const preset = first.providerCollection
+      .listPresets()
+      .find((row) => row.id === InjectedProviderId)!
+    preset.providerScript!.models.length = 0
+    first.providerCollection.getDefaultRuntimeConfig(InjectedProviderId).providerScript!.label =
+      'snapshot-only'
+    const scriptCatalog = first.providerCollection.requireCatalog(InjectedProviderId)
+    const catalogModalities = scriptCatalog.models[0].inputModalities as string[]
+    catalogModalities[0] = 'audio'
+    expect(first.providerCollection.requireOperationalManifest(InjectedProviderId)).toEqual(
+      expectedScript
+    )
+    expect(first.providerScriptRegistry.getProviderScript(InjectedProviderId)?.manifest).toEqual(
+      expectedScript.providerScript
+    )
+    expect(
+      first.providerCollection.requireCatalog(InjectedProviderId).models[0].inputModalities
+    ).toEqual(['text', 'image'])
   })
 
   test('INV-9 账本永远非负，查不到单价就不算钱', () => {
@@ -316,13 +478,19 @@ async function streamedReasoning(parts: readonly unknown[]): Promise<string[]> {
     limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
   })
   const reasoning: string[] = []
+  const terminal: unknown[] = []
   let text = ''
   for await (const delta of driver.stream(request, new AbortController().signal)) {
     if (delta.type === 'reasoning') reasoning.push(delta.text)
     if (delta.type === 'text') text += delta.text
+    if (delta.type === 'usage' || delta.type === 'finish') terminal.push(delta)
     if (delta.type === 'error') throw Error(delta.message)
   }
   expect(text).toBe('ok')
+  expect(terminal).toEqual([
+    expect.objectContaining({ type: 'usage', inputTokens: 10, outputTokens: 2 }),
+    { type: 'finish', reason: 'stop' },
+  ])
   return reasoning
 }
 
@@ -361,11 +529,23 @@ test('INV-13 思考摘要只转给宿主展示：一条响应只认一路来源�
   expect(
     await streamedReasoning([
       { type: 'reasoning-start', id: 'r:0' },
-      { type: 'reasoning-delta', id: 'r:0', delta: long },
+      { type: 'reasoning-delta', id: 'r:0', delta: `${long}超出部分` },
       { type: 'reasoning-delta', id: 'r:0', delta: '更多' },
       { type: 'reasoning-end', id: 'r:0' },
     ])
   ).toEqual([long])
+  const nearLimit = long.slice(0, -3)
+  expect(
+    await streamedReasoning([
+      { type: 'reasoning-start', id: 'r:0' },
+      { type: 'reasoning-delta', id: 'r:0', delta: nearLimit },
+      { type: 'reasoning-end', id: 'r:0' },
+      { type: 'reasoning-start', id: 'r:1' },
+      { type: 'reasoning-delta', id: 'r:1', delta: '末段' },
+      { type: 'reasoning-delta', id: 'r:1', delta: '更多' },
+      { type: 'reasoning-end', id: 'r:1' },
+    ])
+  ).toEqual([nearLimit, '\n\n末'])
 })
 
 test('INV-14 型号不认思考参数时往下退档重发、退到底不带思考参数，并在同一份运行时里记住；与思考无关的 400 原样交出', async () => {

@@ -1,4 +1,14 @@
-import type { ContextState, ContextStorage } from '@velaros-ai/context'
+import type {
+  ContextMetadata,
+  ContextRecord,
+  ContextRecordPage,
+  ContextRecordQuery,
+  ContextRecordSelection,
+  ContextRecordSnapshot,
+  ContextState,
+  ContextStorage,
+} from '@velaros-ai/context'
+import { ContextLimits } from '@velaros-ai/context'
 import { AppError } from '@velaros-ai/core/error'
 
 /** 当前会话元数据的短暂提交缓冲，原文沿用原对象存储。 */
@@ -32,9 +42,106 @@ export class ContextPatchStore implements ContextPatchStoreApi {
     if (this.closed || sessionId !== this.id)
       throw new AppError('CLOSED', '上下文提交缓冲已关闭或引用越界')
   }
+  public async allocateReferenceId(sessionId: string): Promise<string> {
+    this.check(sessionId)
+    return this.storage.allocateReferenceId(sessionId)
+  }
   public async load(sessionId: string) {
     this.check(sessionId)
     return structuredClone(this.state)
+  }
+  public async loadMetadata(sessionId: string): Promise<ContextMetadata> {
+    this.check(sessionId)
+    const { records: _records, ...metadata } = this.state
+    return structuredClone(metadata)
+  }
+  public async selectSnapshot(
+    sessionId: string,
+    selections: readonly ContextRecordSelection[]
+  ): Promise<ContextRecordSnapshot> {
+    this.check(sessionId)
+    const selected = new Map<number, ContextRecord>()
+    for (const selection of selections) {
+      let records = this.state.records.filter(
+        (record) =>
+          (selection.after === undefined || record.sequence > selection.after) &&
+          (selection.through === undefined || record.sequence <= selection.through) &&
+          (selection.sequence === undefined || record.sequence === selection.sequence) &&
+          (selection.title === undefined || record.title === selection.title) &&
+          (selection.titlePrefix === undefined || record.title.startsWith(selection.titlePrefix)) &&
+          (selection.titleSuffix === undefined || record.title.endsWith(selection.titleSuffix)) &&
+          (selection.refId === undefined || record.ref.id === selection.refId) &&
+          (selection.kind === undefined || record.kind === selection.kind)
+      )
+      if (selection.latestPerTitle)
+        records = [...new Map(records.map((record) => [record.title, record])).values()]
+      if (selection.latest) records = records.slice(-1)
+      if (selection.last !== undefined) records = records.slice(-selection.last)
+      if (selection.first !== undefined) records = records.slice(0, selection.first)
+      for (const record of records) selected.set(record.sequence, record)
+    }
+    return {
+      metadata: await this.loadMetadata(sessionId),
+      records: structuredClone([...selected.values()].sort((a, b) => a.sequence - b.sequence)),
+    }
+  }
+  public async records(sessionId: string, query: ContextRecordQuery): Promise<ContextRecordPage> {
+    const selected = await this.selectSnapshot(sessionId, [query])
+    const limit = query.limit ?? ContextLimits.recordPage
+    const items = selected.records.slice(0, limit)
+    return { items, nextAfter: selected.records.length > limit ? items.at(-1)!.sequence : null }
+  }
+  public async compareAndSwapMetadata(
+    sessionId: string,
+    expectedVersion: number,
+    metadata: ContextMetadata,
+    additions: ReadonlyArray<Omit<ContextRecord, 'sequence'>> = []
+  ): Promise<boolean> {
+    this.check(sessionId)
+    if (metadata.version !== expectedVersion + 1)
+      throw new AppError('VALIDATION', '上下文提交版本无效')
+    for (const record of additions) {
+      if (record.objectId && !(await this.storage.has(sessionId, record.objectId)))
+        throw new AppError('NOT_FOUND', '上下文正文不存在')
+    }
+    this.check(sessionId)
+    if (this.state.version !== expectedVersion) return false
+    const records = [...this.state.records]
+    for (const entry of additions) {
+      if (
+        entry.ref.sessionId !== sessionId ||
+        records.some((record) => record.ref.id === entry.ref.id) ||
+        entry.sources.some(
+          (source) =>
+            source.sessionId !== sessionId || !records.some((record) => record.ref.id === source.id)
+        )
+      )
+        throw new AppError('CONFLICT', '上下文目录引用无效')
+      records.push({ ...entry, sequence: (records.at(-1)?.sequence ?? 0) + 1 })
+    }
+    this.state = structuredClone({ ...metadata, records })
+    return true
+  }
+  public async appendRecord(
+    sessionId: string,
+    record: Omit<ContextRecord, 'sequence'>
+  ): Promise<ContextRecord> {
+    for (;;) {
+      const metadata = await this.loadMetadata(sessionId)
+      if (
+        await this.compareAndSwapMetadata(
+          sessionId,
+          metadata.version,
+          { ...metadata, version: metadata.version + 1 },
+          [record]
+        )
+      )
+        return structuredClone(this.state.records.at(-1)!)
+    }
+  }
+  public async has(sessionId: string, objectId: string): Promise<boolean> {
+    this.check(sessionId)
+    return this.storage.has(sessionId, objectId)
   }
   public async compareAndSwap(sessionId: string, expectedVersion: number, state: ContextState) {
     this.check(sessionId)
@@ -46,7 +153,7 @@ export class ContextPatchStore implements ContextPatchStoreApi {
     this.check(sessionId)
     return this.storage.put(sessionId, text)
   }
-  public async get(sessionId: string, objectId: string) {
+  public async get(sessionId: string, objectId: string): Promise<Nullable<string>> {
     this.check(sessionId)
     return this.storage.get(sessionId, objectId)
   }

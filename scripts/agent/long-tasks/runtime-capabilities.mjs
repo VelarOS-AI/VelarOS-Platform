@@ -20,11 +20,12 @@ export function runtimeContextPolicy(config) {
 }
 
 // 只改变可选业务能力；执行、上下文整理、模型限制与评分流程共用同一候选。
-export function runtimeCapabilityOptions(mode = 'on-demand') {
+export function runtimeCapabilityPlan(mode = 'on-demand') {
   assert(['on-demand', 'node', 'project'].includes(mode), 'Unknown ScriptAct capability mode')
   const enabled = mode === 'on-demand'
   return {
-    project: enabled ? { code: true } : mode === 'project',
+    project: mode !== 'node',
+    code: enabled,
     agents: enabled,
     search: enabled,
   }
@@ -32,7 +33,7 @@ export function runtimeCapabilityOptions(mode = 'on-demand') {
 
 // 编辑策略是独立实验条件，只改 ScriptAct 的任务正文，保留普通按需能力的默认行为。
 export function runtimeEditingPrompt(mode, strategy = 'adaptive', prompt) {
-  const capabilities = runtimeCapabilityOptions(mode)
+  const capabilities = runtimeCapabilityPlan(mode)
   assert(['adaptive', 'project'].includes(strategy), 'Unknown ScriptAct editing strategy')
   assert.equal(typeof prompt, 'string')
   if (strategy === 'adaptive') return prompt

@@ -49,9 +49,9 @@ export interface McpClientConnectionApi {
   listTools(): Promise<McpToolDescriptor[]>
   /** 列出这个 server 暴露的全部资源，同样跟随 cursor 翻完所有页；`name` 缺失时退回用 uri 当名字。没连接时抛 `UNAVAILABLE`。 */
   listResources(): Promise<McpResourceDescriptor[]>
-  /** 读一个资源，把 SDK 的 text/blob 联合收敛成固定形状（两个字段都在，没有的那个是 null）；超过 `callTimeoutMs` 或 `abortSignal` 取消时抛错。 */
+  /** 读一个资源，把 SDK 的 text/blob 联合收敛成固定形状；真超时抛 TIMEOUT，主动取消保留调用方的 signal.reason。 */
   readResource(uri: string, abortSignal?: AbortSignal): Promise<McpResourceContent[]>
-  /** 调一个工具，原样把 server 的结果记录交回（不是记录就给空对象），解析和 isError 判定在 `translateMcpCallResult` 那层做。有进度上报会重置超时；真超时抛 `TIMEOUT` 并带上服务器名、工具名和毫秒数。 */
+  /** 调一个工具并返回 server 结果。有进度上报会重置超时；真超时抛 TIMEOUT，主动取消保留调用方的 signal.reason。 */
   callTool(
     toolName: string,
     args: Record<string, unknown>,
@@ -77,7 +77,7 @@ const log = Log.tag('McpClientConnection')
  *
  * 实现是 `McpClientConnection`，宿主给每个已配置的 server 建一个，连接状态只在这个实例里；
  * server 配置与凭据存储、OAuth 的用户交互与回调、自动批准策略和产品状态文案都不在这层。
- * 失败一律是 `AppError`：没连上是 `UNAVAILABLE`，调用超时是 `TIMEOUT`，需要 OAuth 是 `McpAuthorizationRequiredError`。
+ * 没连上是 `UNAVAILABLE`，调用超时是 `TIMEOUT`，需要 OAuth 是 `McpAuthorizationRequiredError`；主动取消保留调用方的原始原因。
  */
 
 /** 单个 MCP 服务器的 host 无关协议连接。 */
@@ -263,19 +263,31 @@ export class McpClientConnection implements McpClientConnectionApi {
 
   /** 读取一个资源并把 text/blob 联合收敛成稳定、可序列化形状。 */
   public async readResource(uri: string, abortSignal?: AbortSignal): Promise<McpResourceContent[]> {
-    const response = await this.requireClient().readResource(
-      { uri },
-      {
-        timeout: this.options.callTimeoutMs ?? McpLimits.callTimeoutMs,
-        signal: abortSignal,
-      }
-    )
-    return response.contents.map((content) => ({
-      uri: content.uri,
-      mimeType: toNullable(content.mimeType),
-      text: 'text' in content ? content.text : null,
-      blob: 'blob' in content ? content.blob : null,
-    }))
+    abortSignal?.throwIfAborted()
+    try {
+      const response = await this.requireClient().readResource(
+        { uri },
+        {
+          timeout: this.options.callTimeoutMs ?? McpLimits.callTimeoutMs,
+          signal: abortSignal,
+        }
+      )
+      return response.contents.map((content) => ({
+        uri: content.uri,
+        mimeType: toNullable(content.mimeType),
+        text: 'text' in content ? content.text : null,
+        blob: 'blob' in content ? content.blob : null,
+      }))
+    } catch (error) {
+      abortSignal?.throwIfAborted()
+      if (isMcpTimeoutError(error))
+        throw new AppError(
+          'TIMEOUT',
+          `MCP 资源读取超时：${this.serverName}/${uri}（${this.options.callTimeoutMs ?? McpLimits.callTimeoutMs}ms）。`,
+          error
+        )
+      throw error
+    }
   }
 
   /** 调用一个工具；超时或 server 中断时抛 AppError。 */
@@ -284,6 +296,7 @@ export class McpClientConnection implements McpClientConnectionApi {
     args: Record<string, unknown>,
     abortSignal?: AbortSignal
   ): Promise<McpRawCallResult> {
+    abortSignal?.throwIfAborted()
     const client = this.requireClient()
     try {
       const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
@@ -293,6 +306,8 @@ export class McpClientConnection implements McpClientConnectionApi {
       })
       return isRecord(result) ? result : {}
     } catch (error) {
+      // SDK 把普通 signal.reason 包成 RequestTimeout；先还原真正的调用方取消。
+      abortSignal?.throwIfAborted()
       if (isMcpTimeoutError(error)) {
         throw new AppError(
           'TIMEOUT',
@@ -364,7 +379,8 @@ export class McpClientConnection implements McpClientConnectionApi {
         args: [...this.spec.args],
         env: { ...getDefaultEnvironment(), ...this.spec.env },
         cwd: toOptional(this.spec.cwd),
-        stderr: 'pipe',
+        // 本 owner 不采集服务器诊断输出，不创建无人消费的 stderr 管道。
+        stderr: 'ignore',
       })
     if (!this.spec.url) {
       throw new AppError('INVALID_ARGUMENT', `MCP 服务器「${this.serverName}」缺少远程 URL。`)

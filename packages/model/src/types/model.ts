@@ -164,19 +164,16 @@ export interface ValidateProviderRuntimeRequest {
   adapter?: LooseOptional<AgentProviderAdapterConfig>
 }
 
-/** Opaque-to-Agent provider selection interpreted only by Model Runtime. */
-export interface ModelProviderSelection {
+/** 模型身份与可选的单次覆盖；缺省凭据和地址由 Model Runtime 读取供应商配置。 */
+export interface ModelSelection {
   provider: ChatProviderId
-  apiKey: string
-  baseURL: string
+  model: string
+  apiKey?: string
+  baseURL?: string
   adapter?: LooseOptional<AgentProviderAdapterConfig>
   reasoningLevel?: LooseOptional<ReasoningLevel>
   /** OpenAI 显式缓存断点能力；覆盖 provider 配置，缺席时仅官方端点沿用已知型号默认值。 */
   openaiExplicitCacheBreakpoints?: boolean
-}
-
-export interface ModelSelection extends ModelProviderSelection {
-  model: string
 }
 
 /** Product-owned provider collection state interpreted only by Model Runtime. */

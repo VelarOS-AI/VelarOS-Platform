@@ -2,7 +2,8 @@ import { isArray, isBoolean, isPlainObject, isString, isUndefined } from '@velar
 import { AppError } from '@velaros-ai/core/error'
 import { CodeProgramEditLimits, CodeSurfaceLimits } from '@velaros-ai/script/contracts'
 
-import { ScriptLeaseLimits } from '../../system/contract/constants.js'
+import { MemoryReadLimits, ScriptLeaseLimits } from '../../system/contract/constants.js'
+import { ObservationLimits } from '../contract/constants.js'
 import type { ScriptSubmission } from '../types/session.js'
 
 /** 提交不合约定：在任何检查、存档与执行之前拒绝。 */
@@ -52,9 +53,38 @@ function checkEdits(value: unknown, label: string): void {
   })
 }
 
-/** 一段程序：给正文（source），或引用已存档的源码（sourceRef，可带替换）；观察还可以只给替换，改当前那一份。execute 另可声明结果租约。 */
+/** 程序或独立的历史选择；持续观察可编辑当前源码，execute 另可声明结果租约。 */
 function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   if (!isPlainObject(value)) throw submissionInput(`${label} 必须是对象`)
+  if (!isUndefined(value.history)) {
+    if (label !== 'observe') throw submissionInput('history 只能用于 observe')
+    checkFields(value, ['history'], label)
+    if (!isPlainObject(value.history)) throw submissionInput('history 必须是对象')
+    const history = value.history
+    if (history.kind === 'list') {
+      checkFields(history, ['kind', 'cursor', 'limit'], 'history')
+      if (!isUndefined(history.cursor)) checkText(history.cursor, 'history.cursor', 1)
+    } else if (history.kind === 'read') {
+      checkFields(history, ['kind', 'snapshotId', 'pointer', 'offset', 'limit'], 'history')
+      checkText(history.snapshotId, 'history.snapshotId', 1)
+      if (!isUndefined(history.pointer))
+        checkText(history.pointer, 'history.pointer', 0, MemoryReadLimits.pointerChars)
+      if (
+        !isUndefined(history.offset) &&
+        (!Number.isSafeInteger(history.offset) || (history.offset as number) < 0)
+      )
+        throw submissionInput('history.offset 需要非负安全整数')
+    } else throw submissionInput('history.kind 必须是 list 或 read')
+    const max = history.kind === 'list' ? ObservationLimits.maxList : ObservationLimits.maxReadChars
+    if (
+      !isUndefined(history.limit) &&
+      (!Number.isSafeInteger(history.limit) ||
+        (history.limit as number) < 1 ||
+        (history.limit as number) > max)
+    )
+      throw submissionInput(`history.limit 需要 1 到 ${max} 的整数`)
+    return
+  }
   const lease = label === 'execute' ? ['retainTurns', 'timeoutMs'] : ['refresh']
   if (
     label === 'execute' &&
@@ -92,7 +122,7 @@ function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   } else {
     throw submissionInput(
       label === 'observe'
-        ? 'observe 需要 source、sourceRef 或 edits'
+        ? 'observe 需要 source、sourceRef、edits、snapshot 或 history'
         : 'execute 需要 source 或 sourceRef'
     )
   }

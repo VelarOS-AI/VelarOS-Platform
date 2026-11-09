@@ -82,7 +82,7 @@ export interface LabDriver {
   send: (session: SessionHandle, leg: LegSpec) => Promise<void>
   /** 等这一段跑完，期间按 `onSample` 的裁决决定继不继续。 */
   waitSettled: (session: SessionHandle, request: SettleRequest) => Promise<SettleOutcome>
-  /** 采一次观测。 */
+  /** 采会话累计观测；运行器会在 send 前采真实基线，不能只报本段增量或清空历史。 */
   collect: (session: SessionHandle, phase: ObservationPhase) => Promise<Observation>
   /** 中止当前这一段，理由原样传给执行体。 */
   abort: (session: SessionHandle, reason: string) => Promise<void>
@@ -107,9 +107,9 @@ export interface PollingDriverAdapter {
   prepare: (session: SessionHandle, setup: JourneySetup | null) => Promise<void>
   /** 把这一段的提示词发给执行体。 */
   send: (session: SessionHandle, leg: LegSpec) => Promise<void>
-  /** 读一次原生执行态：在不在跑、等不等审批、用量多少。 */
+  /** 读原生执行态；usage 是当前 send 段累计，未知保持 null，不能混入之前段的调用/token。 */
   readState: (session: SessionHandle) => Promise<NativeExecutionState>
-  /** 采一次观测。 */
+  /** 采会话累计观测；turns/usage 不随 send 清零，缺失面通过 coverage/null 说明。 */
   collect: (session: SessionHandle, phase: ObservationPhase) => Promise<Observation>
   /** 回一条审批；`confirmationId` 用采样当时看到的那个，不重查代填。执行体不支持就不实现。 */
   resolveConfirmation?: (

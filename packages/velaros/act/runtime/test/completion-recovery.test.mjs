@@ -2,17 +2,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
-
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, turn } from './support/model-turn.mjs'
-async function setup(t, completion, stream, modules = []) {
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+async function setup(t, beforeComplete, stream, modules = []) {
+  const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
-    storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
+    storage,
     modules,
-    context: { completion, maintenance: false },
+    context: { maintenance: false },
     model: {
       id: 'recovery',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -20,8 +18,16 @@ async function setup(t, completion, stream, modules = []) {
       stream,
     },
   })
-  t.after(() => runtime.close())
-  return runtime.openSession('root')
+  t.after(async () => {
+    await runtime.close()
+    await storage.close()
+  })
+  const session = await runtime.openSession('root')
+  if (beforeComplete) {
+    const complete = session.view.complete.bind(session.view)
+    session.view.complete = async (...args) => (await beforeComplete()) ?? complete(...args)
+  }
+  return session
 }
 async function run(session) {
   const events = []
@@ -29,33 +35,29 @@ async function run(session) {
   return events
 }
 
-test('INV-28 domain rejection is returned to the next round and a verified repair can finish', async (t) => {
+test('INV-28 a stale view returns feedback to the next round and a refreshed task can finish', async (t) => {
   let calls = 0
   let checks = 0
   const session = await setup(
     t,
-    {
-      verify: async () =>
-        ++checks === 1
-          ? { verified: false, reason: 'Test assertion still fails' }
-          : { verified: true, reason: 'Tests pass' },
-    },
+    async () =>
+      ++checks === 1 ? { completed: false, reason: 'STALE_VIEW', recovery: 'refresh' } : undefined,
     async function* (request) {
-      if (++calls === 2) assert.match(request.compiledPrompt, /Test assertion still fails/)
+      if (++calls === 2) assert.match(request.protocol, /STALE_VIEW/)
       yield* done(request)
     }
   )
   const events = await run(session)
   assert.equal(events.at(-1).status, 'completed')
   assert.equal(calls, 2)
-  assert.equal(events.filter((e) => e.type === 'verification').length, 2)
+  assert.equal(events.filter((e) => e.type === 'completion').length, 2)
 })
 
-test('repeated domain failure is bounded and is reported as failure with the actual reason', async (t) => {
+test('repeated missing required evidence is bounded and retains the actual failure reason', async (t) => {
   let calls = 0
   const session = await setup(
     t,
-    { verify: async () => ({ verified: false, reason: 'Required integration test fails' }) },
+    async () => ({ completed: false, reason: 'REQUIRED_EVIDENCE_MISSING', recovery: 'repair' }),
     async function* (request) {
       calls++
       yield* done(request)
@@ -64,7 +66,7 @@ test('repeated domain failure is bounded and is reported as failure with the act
   const events = await run(session)
   assert.equal(events.at(-1).status, 'failed')
   assert.equal(calls, 3)
-  assert.equal(events.findLast((e) => e.type === 'verification').recovery, 'repair')
+  assert.equal(events.findLast((e) => e.type === 'completion').recovery, 'repair')
 })
 
 test('uncertain world effects do not stop the run, and the script is never replayed automatically', async (t) => {

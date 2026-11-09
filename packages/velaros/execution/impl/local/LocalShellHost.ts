@@ -7,10 +7,12 @@ import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'no
 import { isAbsolute, join, resolve } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { createPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
+import { ShellErrorCodes } from '../../contract/constants.js'
 import type {
   LocalShellHostOptions,
   ShellHostPort,
@@ -41,6 +43,7 @@ import type {
   SystemProcessInfo,
   SystemProcessQueryOptions,
 } from '../../types/shell-command.js'
+import { buildConfinedSpawnSpec } from '../../utils/confinement.js'
 import { runPlatformCommand } from '../../utils/process.js'
 import { detectAvailableShells, replaceEnvironment, toShellDescriptor } from '../../utils/shells.js'
 import {
@@ -53,6 +56,7 @@ import {
   parseSwapStats,
   selectOpenPorts,
   selectProcesses,
+  selectTopProcesses,
 } from '../../utils/system-info.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
@@ -88,7 +92,7 @@ export interface LocalShellHostApi extends ShellHostPort {
    * 以及给定的每个命令在不在、在哪。宿主把 `shells` 与默认那个写进每回合给模型的环境报告，`run` 的 `shell` 字段就照着这份清单填。
    */
   inspectEnvironment(commands?: string[]): Promise<ShellEnvironmentInspection>
-  /** 系统指标快照：CPU、内存、交换区、系统盘、负载各自的用量和告警级别，外加占用最高的 5 个进程；读不到的项为 null。 */
+  /** 系统指标快照：用量与告警级别，另取已知 CPU 优先降序、未知按内存降序的 5 个进程；读不到的项为 null。 */
   getSystemMetrics(): Promise<SystemMetricsSnapshot>
   /** 列出本机进程（名称、命令行、用户、CPU、内存），可按 pid、名字、命令行片段、用户、资源占用筛选，最多 limit 条（默认 50）。 */
   listProcesses(options?: SystemProcessQueryOptions): Promise<SystemProcessInfo[]>
@@ -108,8 +112,9 @@ export interface LocalShellHostApi extends ShellHostPort {
    */
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
   /**
-   * 给控制台发中断，相当于用户按 Ctrl+C：终端里写一个 Ctrl+C，由终端发给前台进程组；管道下 POSIX 向整个进程组发 SIGINT，
-   * Windows 上退回按进程树终止。任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
+   * 请求中断控制台：终端里写一个 Ctrl+C，由终端发给前台进程组；管道下 POSIX 向整个进程组发 SIGINT，
+   * Windows 管道强制终止受管进程树并等待真实收尾，不承诺软中断。任务不存在、不属于请求里的会话时抛错；
+   * 进程已经退出或收尾尚未确认时不抛错，结果里 `accepted` 为 false。
    */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
   /**
@@ -125,7 +130,7 @@ export interface LocalShellHostApi extends ShellHostPort {
     request: ShellConsoleWatchRequest,
     listener: (event: ShellConsoleOutputEvent) => void
   ): () => void
-  /** 释放：停掉这个宿主启动过、还没退出的全部后台进程。 */
+  /** 释放：等待两个执行器的实际收尾；失败保留未确认任务并抛错，仍可复核和重试。 */
   dispose(): Promise<void>
 }
 
@@ -138,9 +143,11 @@ export class LocalShellHost implements LocalShellHostApi {
   private readonly shells: ShellResolverApi = shellResolver
   private readonly commands: ShellCommandRunnerApi
   private readonly observationCommands: ShellCommandRunnerApi
+  private readonly confinementProvider: LocalShellHostOptions['confinementProvider']
 
   constructor(options: LocalShellHostOptions) {
     this.environment = options.environment
+    this.confinementProvider = options.confinementProvider
     const root = resolve(options.cwd)
     this.homeDir = options.homeDir ?? homedir()
     this.hostPlatform = options.platform ?? platform()
@@ -231,7 +238,9 @@ export class LocalShellHost implements LocalShellHostApi {
         parseSwapStats,
         'swap stats'
       ),
-      this.listProcesses({ limit: ShellTuning.systemInfo.topProcesses }),
+      this.listProcesses({ limit: Number.POSITIVE_INFINITY }).then((rows) =>
+        selectTopProcesses(rows)
+      ),
     ])
     const swapUsagePercent =
       swapStats && swapStats.totalBytes > 0
@@ -289,9 +298,7 @@ export class LocalShellHost implements LocalShellHostApi {
     const output = await runPlatformCommand(commandSpec, { tolerateLsofEmptyResult: true })
     const entries = parseOpenPortEntries(output.stdout, this.hostPlatform)
     const pids = collectPortPids(entries)
-    const owners = isEmpty(pids)
-      ? []
-      : await this.listProcesses({ pids, includeCwd: !!options.includeCwd, limit: pids.length })
+    const owners = isEmpty(pids) ? [] : await this.listProcesses({ pids, limit: pids.length })
     return selectOpenPorts(
       entries,
       new Map(owners.map((processInfo) => [processInfo.pid, processInfo])),
@@ -371,6 +378,23 @@ export class LocalShellHost implements LocalShellHostApi {
     return this.commands.run(command, this.resolvePath(options.cwd), options, abortSignal)
   }
 
+  public observationSupport(): ReturnType<NonNullable<ShellHostPort['observationSupport']>> {
+    try {
+      buildConfinedSpawnSpec(
+        {
+          spec: { file: process.execPath, args: [] },
+          policy: { mode: 'read-only', workspaceRoot: this.workingDirectory, network: false },
+        },
+        { platform: this.hostPlatform, provider: this.confinementProvider }
+      )
+      return { available: true }
+    } catch (error) {
+      if (error instanceof AppError && error.code === ShellErrorCodes.processConfinementUnavailable)
+        return { available: false, reason: error.message }
+      throw error
+    }
+  }
+
   public runObservationCommand(
     command: string,
     options: ShellRunCommandOptions = {},
@@ -396,7 +420,15 @@ export class LocalShellHost implements LocalShellHostApi {
   }
 
   public async dispose(): Promise<void> {
-    await Promise.all([this.commands.dispose(), this.observationCommands.dispose()])
+    const outcomes = await Promise.allSettled([
+      this.commands.dispose(),
+      this.observationCommands.dispose(),
+    ])
+    const failures = outcomes.flatMap((outcome) =>
+      outcome.status === 'rejected' ? [outcome.reason] : []
+    )
+    if (failures.length)
+      throw new AppError('PLATFORM', '宿主进程尚未全部完整收尾。', failures[0], { failures })
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */

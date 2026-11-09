@@ -359,14 +359,33 @@ const ForbiddenInternalDependencies = [
   },
 ]
 
-// 断言「版本单源」而不是钉死某个字面量版本号：`ProjectPackageVersion` 会被写进 kernel
-// module manifest 与全部内置插件的 version 字段，与 package.json 漂移时，宿主看到的是一个
+// 断言「版本单源」而不是钉死某个字面量版本号：`ProjectPackageVersion` 写进内置插件的
+// version 字段，与 package.json 漂移时，宿主看到的是一个
 // 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
 // 1.2.5），红成常态的门等于没有门。项目单元随 @velaros-ai/velaros 发布，版本就是那个包的版本。
-const versionConstantSource = readFileSync(resolve(SourceRoot, 'contract/constants.ts'), 'utf8')
-const versionConstant = /ProjectPackageVersion\s*=\s*["']([^"']+)["']/.exec(
-  versionConstantSource
-)?.[1]
+const versionConstantsPath = resolve(SourceRoot, 'contract/constants.ts')
+const versionConstants = ts.createSourceFile(
+  versionConstantsPath,
+  readFileSync(versionConstantsPath, 'utf8'),
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS
+)
+const versionDeclaration = versionConstants.statements
+  .filter(ts.isVariableStatement)
+  .flatMap((statement) => statement.declarationList.declarations)
+  .find(
+    (declaration) =>
+      ts.isIdentifier(declaration.name) && declaration.name.text === 'ProjectPackageVersion'
+  )
+let versionValue = versionDeclaration?.initializer
+while (
+  versionValue &&
+  (ts.isAsExpression(versionValue) || ts.isParenthesizedExpression(versionValue))
+)
+  versionValue = versionValue.expression
+const versionConstant =
+  versionValue && ts.isStringLiteral(versionValue) ? versionValue.text : undefined
 if (versionConstant !== manifest.version) {
   fail(
     `ProjectPackageVersion (${versionConstant ?? 'not found'}) must match @velaros-ai/velaros version (${manifest.version})`

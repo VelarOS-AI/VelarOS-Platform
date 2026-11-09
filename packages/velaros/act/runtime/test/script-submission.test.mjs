@@ -6,13 +6,14 @@ import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const observe =
   "import {output} from 'velaros'; import {read} from 'test:world'; output({value:await read()});"
@@ -21,7 +22,8 @@ async function fixture(
   t,
   stream = async function* (request) {
     yield* done(request)
-  }
+  },
+  { declareObservationSupport = false } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'script-submit-'))
   const path = join(root, 'state.sqlite')
@@ -66,13 +68,51 @@ async function fixture(
     },
   ]
   let storage = localContextStorage({ path })
-  let runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+  let executionEnvironment
+  const openRuntime = async () => {
+    // 只有登记、校验和执行幂等夹具显式声明支持；其他分支读取真实支持，run 均不作只读回退。
+    const host = createLocalShellHost({
+      cwd: root,
+      processConfinement: { mode: 'danger-full-access' },
+    })
+    executionEnvironment = createNodeExecutionEnvironment({
+      cwd: root,
+      directory: join(root, 'runs'),
+      host,
+    })
+    const delegate = createNodeCodeRunner(executionEnvironment)
+    try {
+      return await createRuntime({
+        storage,
+        modules,
+        model,
+        ...(declareObservationSupport
+          ? {
+              runner: {
+                environment: delegate.environment,
+                cwd: delegate.cwd,
+                observationSupport: () => ({ available: true }),
+                run: (...args) => delegate.run(...args),
+              },
+            }
+          : { node: executionEnvironment }),
+        resources: [{ close: () => host.dispose() }],
+      })
+    } catch (error) {
+      await host.dispose()
+      throw error
+    }
+  }
+  let runtime = await openRuntime()
   let session = await runtime.openSession('s')
   await session.context.append({ kind: 'user', body: 'Maintain a counter.' })
   const f = {
     world,
     frames,
     path,
+    get observationSupport() {
+      return executionEnvironment.observationSupport()
+    },
     get session() {
       return session
     },
@@ -86,7 +126,7 @@ async function fixture(
     restart: async () => {
       await runtime.close()
       storage = localContextStorage({ path })
-      runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+      runtime = await openRuntime()
       session = await runtime.openSession('s')
     },
     submit: async () => {
@@ -102,6 +142,241 @@ async function fixture(
   return f
 }
 
+async function assertNoObservationOrExecution(f) {
+  assert.deepEqual(f.world, { value: 1, writes: 0, reads: 0 })
+  assert.equal((await f.state()).observation, undefined)
+  const records = (await f.storage.load('s')).records
+  assert.equal(records.filter((record) => record.title.startsWith('script:execution:')).length, 0)
+  assert.equal(records.filter((record) => record.title.startsWith('script:version:')).length, 0)
+  assert.equal((await createContextInvocationJournal(f.storage).list('s')).length, 0)
+}
+
+async function assertUnavailableComposite(
+  f,
+  input = { observe: { source: observe }, execute: { source: execute } }
+) {
+  const support = f.observationSupport
+  assert.equal(support.available, false)
+  assert.equal(typeof support.reason, 'string')
+  assert.ok(support.reason.length > 0)
+  await assert.rejects(f.session.script(input), (error) => {
+    assert.equal(error.code, 'UNAVAILABLE')
+    assert.equal(error.message, support.reason)
+    return true
+  })
+  await assertNoObservationOrExecution(f)
+}
+
+function holdMetadataRead(storage) {
+  const original = storage.loadMetadata.bind(storage)
+  let release
+  let notify
+  const gate = new Promise((resolve) => (release = resolve))
+  const entered = new Promise((resolve) => (notify = resolve))
+  let held = false
+  storage.loadMetadata = async (id) => {
+    const metadata = await original(id)
+    if (id === 's' && !held) {
+      held = true
+      notify()
+      await gate
+    }
+    return metadata
+  }
+  return { entered, release }
+}
+
+test('model admission owns recovery before another model or host script can enter', async (t) => {
+  const f = await fixture(t, async function* (request, frames) {
+    if (frames.length === 1) {
+      yield turn(request, { execute: { source: execute } })
+      yield { type: 'finish', reason: 'stop' }
+    } else yield* done(request)
+  })
+  const gate = holdMetadataRead(f.storage)
+  const first = f.submit()
+  const competing = f.session.submit('Competing input')[Symbol.asyncIterator]()
+  try {
+    await gate.entered
+    assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+    assert.equal(f.frames.length, 0)
+    await assert.rejects(competing.next(), { code: 'CONFLICT' })
+    await assert.rejects(f.session.script({ execute: { source: execute } }), { code: 'CLOSED' })
+    assert.equal(f.world.writes, 0)
+  } finally {
+    gate.release()
+    await competing.return()
+    await first
+  }
+  assert.equal(f.world.writes, 1)
+  assert.equal(f.frames.length, 2)
+  await f.submit()
+  assert.equal(f.frames.length, 3)
+  assert.equal(f.world.writes, 1)
+})
+
+test('host admission owns recovery while duplicates share the same actual execution', async (t) => {
+  const f = await fixture(t)
+  const gate = holdMetadataRead(f.storage)
+  const input = { execute: { source: execute } }
+  const options = { callId: 'recovery-owner' }
+  const first = f.session.script(input, undefined, options)
+  const competing = f.session.submit('Competing input')[Symbol.asyncIterator]()
+  try {
+    await gate.entered
+    assert.equal(f.frames.length, 0)
+    await assert.rejects(competing.next(), { code: 'CLOSED' })
+    await assert.rejects(f.session.script(input, undefined, { callId: 'different-owner' }), {
+      code: 'SCRIPT_BUSY',
+    })
+    await assert.rejects(
+      f.session.script(
+        { execute: { source: `${execute}\n// different payload` } },
+        undefined,
+        options
+      ),
+      { code: 'SCRIPT_CALL_CONFLICT' }
+    )
+    const duplicate = f.session.script(input, undefined, options)
+    gate.release()
+    const [a, b] = await Promise.all([first, duplicate])
+    assert.deepEqual(a, b)
+    assert.equal(a.executed, true)
+    assert.equal(f.world.writes, 1)
+  } finally {
+    gate.release()
+    await competing.return()
+    await first
+  }
+  await f.submit()
+  assert.equal(f.frames.length, 1)
+  assert.equal(f.world.writes, 1)
+})
+
+test('a host script awaiting its baseline cannot enter a newly admitted model run', async (t) => {
+  let releaseModel
+  let notifyModel
+  const modelGate = new Promise((resolve) => (releaseModel = resolve))
+  const modelEntered = new Promise((resolve) => (notifyModel = resolve))
+  const f = await fixture(t, async function* (request) {
+    notifyModel()
+    await modelGate
+    yield* done(request)
+  })
+  const original = f.storage.selectSnapshot.bind(f.storage)
+  let releaseBaseline
+  let notifyBaseline
+  const baselineGate = new Promise((resolve) => (releaseBaseline = resolve))
+  const baselineEntered = new Promise((resolve) => (notifyBaseline = resolve))
+  let held = false
+  f.storage.selectSnapshot = async (id, selections) => {
+    const snapshot = await original(id, selections)
+    if (!held && selections.some((item) => item.title === 'script:lease-state')) {
+      held = true
+      notifyBaseline()
+      await baselineGate
+    }
+    return snapshot
+  }
+  const rejected = assert.rejects(f.session.script({ execute: { source: execute } }), {
+    code: 'SCRIPT_BUSY',
+  })
+  let running
+  try {
+    await baselineEntered
+    running = f.submit()
+    await modelEntered
+    releaseBaseline()
+    await rejected
+    assert.equal(f.world.writes, 0)
+  } finally {
+    releaseBaseline()
+    releaseModel()
+    await Promise.all([rejected, running])
+  }
+  assert.equal(f.frames.length, 1)
+  const accepted = await f.session.script({ execute: { source: execute } })
+  assert.equal(accepted.executed, true)
+  assert.equal(f.world.writes, 1)
+})
+
+test('a recovery storage failure releases model admission without accepting the input', async (t) => {
+  const f = await fixture(t)
+  const original = f.storage.loadMetadata.bind(f.storage)
+  const failure = new Error('recovery metadata unavailable')
+  let injected = false
+  f.storage.loadMetadata = async (id) => {
+    const metadata = await original(id)
+    if (!injected) {
+      injected = true
+      throw failure
+    }
+    return metadata
+  }
+  await assert.rejects(f.submit(), (error) => error === failure)
+  assert.equal(f.frames.length, 0)
+  assert.equal(f.world.writes, 0)
+  assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+  await f.submit()
+  assert.equal(f.frames.length, 1)
+})
+
+for (const cancel of ['source', 'session']) {
+  test(`${cancel} cancellation during recovery releases admission without starting the model`, async (t) => {
+    const f = await fixture(t)
+    const gate = holdMetadataRead(f.storage)
+    const source = new AbortController()
+    const failure = new Error('cancel before model admission completes')
+    const rejected = assert.rejects(
+      async () => {
+        for await (const event of f.session.submit('Cancelled input', source.signal)) {
+          assert.fail(`recovery cancellation cannot emit ${event.type}`)
+        }
+      },
+      (error) => (cancel === 'source' ? error === failure : error.name === 'AbortError')
+    )
+    try {
+      await gate.entered
+      if (cancel === 'source') source.abort(failure)
+      else f.session.cancel()
+    } finally {
+      gate.release()
+      await rejected
+    }
+    assert.equal(f.frames.length, 0)
+    assert.equal(f.world.writes, 0)
+    assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+    await f.submit()
+    assert.equal(f.frames.length, 1)
+  })
+}
+
+test('close drains a blocked recovery read and never starts its admitted model afterward', async (t) => {
+  const f = await fixture(t)
+  const gate = holdMetadataRead(f.storage)
+  const rejected = assert.rejects(f.submit(), { code: 'CLOSED' })
+  let closed = false
+  let closing
+  try {
+    await gate.entered
+    closing = f.session.close().then(() => {
+      closed = true
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(closed, false, 'close must drain the actual outstanding storage read')
+    assert.equal(f.frames.length, 0)
+  } finally {
+    gate.release()
+    await Promise.all([rejected, closing])
+  }
+  assert.equal(closed, true)
+  assert.equal(f.frames.length, 0)
+  assert.equal(f.world.writes, 0)
+  assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+  await assert.rejects(f.submit(), { code: 'CLOSED' })
+  await assert.rejects(f.session.script({ execute: { source: execute } }), { code: 'CLOSED' })
+})
+
 test('one model call publishes observer, executes once and sends fresh context with a leased result', async (t) => {
   const f = await fixture(t, async function* (request, frames) {
     if (frames.length === 1) {
@@ -113,6 +388,26 @@ test('one model call publishes observer, executes once and sends fresh context w
     } else yield* done(request)
   })
   await f.submit()
+  const support = f.observationSupport
+  if (!support.available) {
+    assert.equal(typeof support.reason, 'string')
+    assert.ok(support.reason.length > 0)
+    assert.equal(f.frames[0].observation.availability.available, false)
+    assert.equal(f.frames[0].observation.availability.reason, support.reason)
+    const responses = await f.storage.selectSnapshot('s', [{ title: 'model-response' }])
+    const saved = await Promise.all(
+      responses.records.map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
+    )
+    const rejection = saved.find((response) => response.status === 'rejected')
+    assert.ok(rejection)
+    assert.equal(rejection.error.code, 'SCRIPT_PROTOCOL')
+    assert.ok(rejection.error.message.includes(support.reason))
+    const raw = await f.session.context.read(rejection.rawRef)
+    assert.ok(raw.text.includes(' observe('))
+    assert.ok(raw.text.includes(' execute('))
+    await assertNoObservationOrExecution(f)
+    return
+  }
   assert.deepEqual(f.world, { value: 2, writes: 1, reads: 1 })
   assert.equal(JSON.parse(f.frames[1].observation.text).value.default.value, 2)
   assert.equal(f.frames[1].results[0].remainingTurns, 2)
@@ -141,7 +436,7 @@ test('one model call publishes observer, executes once and sends fresh context w
 })
 
 test('either invalid candidate rejects the entire submission before publishing or writing', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const initial = await f.session.script({ observe: { source: observe } })
   for (const input of [
     { observe: { source: `${observe}\n// new observer` }, execute: { source: 'const = ;' } },
@@ -178,6 +473,10 @@ test('INV-11 implicit edits bind to the displayed observation and can accompany 
       yield { type: 'finish', reason: 'stop' }
     } else yield* done(request)
   })
+  if (!f.observationSupport.available) {
+    await assertUnavailableComposite(f)
+    return
+  }
   const initial = await f.session.script({ observe: { source: observe } })
   await f.submit()
   assert.notEqual(f.frames[1].observation.sourceRef, initial.observe.sourceRef)
@@ -187,7 +486,7 @@ test('INV-11 implicit edits bind to the displayed observation and can accompany 
 })
 
 test('implicit edits require an installed observation; execution edits require an explicit sourceRef', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const edits = [{ oldText: 'value', newText: 'current' }]
   const missing = await f.session.script({ observe: { edits }, execute: { source: execute } })
   assert.equal(missing.status, 'rejected')
@@ -207,6 +506,10 @@ test('implicit edits require an installed observation; execution edits require a
 
 test('omitted sections preserve observer and do not run one-shot code', async (t) => {
   const f = await fixture(t)
+  if (!f.observationSupport.available) {
+    await assertUnavailableComposite(f)
+    return
+  }
   const first = await f.session.script({ observe: { source: observe } })
   assert.equal(f.world.reads, 0)
   assert.equal(first.executed, false)
@@ -219,7 +522,7 @@ test('omitted sections preserve observer and do not run one-shot code', async (t
 })
 
 test('combined retries return the original receipt across restart without advancing versions or writing again', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const input = { observe: { source: observe }, execute: { source: execute } }
   const options = { callId: 'one-submission' }
   const first = await f.session.script(input, undefined, options)
@@ -235,7 +538,7 @@ test('combined retries return the original receipt across restart without advanc
 })
 
 test('a prepared composite submission cannot replay after lost publication acknowledgement', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const original = f.storage.compareAndSwapMetadata.bind(f.storage)
   let injected = false
   f.storage.compareAndSwapMetadata = async (id, version, state, append = []) => {
@@ -257,7 +560,7 @@ test('a prepared composite submission cannot replay after lost publication ackno
 })
 
 test('in-flight duplicates share one execution and conflicting payloads cannot reuse its identity', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const original = f.storage.compareAndSwapMetadata.bind(f.storage)
   let release
   let entered
@@ -288,6 +591,13 @@ test('in-flight duplicates share one execution and conflicting payloads cannot r
 
 test('execution runtime failure keeps the published observer available for diagnosis', async (t) => {
   const f = await fixture(t)
+  if (!f.observationSupport.available) {
+    await assertUnavailableComposite(f, {
+      observe: { source: observe },
+      execute: { source: "throw Error('business failure');" },
+    })
+    return
+  }
   const result = await f.session.script({
     observe: { source: observe },
     execute: { source: "throw Error('business failure');" },
@@ -327,6 +637,10 @@ test('a stale displayed baseline rejects implicit edits and the accompanying exe
       yield { type: 'finish', reason: 'stop' }
     } else yield* done(request)
   })
+  if (!f.observationSupport.available) {
+    await assertUnavailableComposite(f)
+    return
+  }
   const external = new ProgramContext('s', f.session.context, f.storage)
   await f.session.script({ observe: { source: observe } })
   await f.submit()
@@ -336,7 +650,7 @@ test('a stale displayed baseline rejects implicit edits and the accompanying exe
 })
 
 test('a concurrent prepared receipt discovered while publishing rejection still requires reconciliation', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, undefined, { declareObservationSupport: true })
   const original = f.storage.compareAndSwapMetadata.bind(f.storage)
   let raced = false
   f.storage.compareAndSwapMetadata = async (id, version, state, append = []) => {

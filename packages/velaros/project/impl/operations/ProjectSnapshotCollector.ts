@@ -39,7 +39,7 @@ export class ProjectSnapshotCollector implements ProjectSnapshotCollectorApi {
     let readRequests = 0
     let materialBytes = 0
     const collect = async (): Promise<ProjectSnapshotFile[]> => {
-      let remaining: number = ProjectSnapshotLimits.chars
+      let remaining: number = ctx.observationChars ?? ProjectSnapshotLimits.chars
       const files: ProjectSnapshotFile[] = []
       for (const item of plan.files) {
         ctx.abortSignal.throwIfAborted()
@@ -74,8 +74,7 @@ export class ProjectSnapshotCollector implements ProjectSnapshotCollectorApi {
       )
         throw new AppError('CONFLICT', 'snapshot 前后捕获或项目绑定已经变化，重新采集')
       ctx.abortSignal.throwIfAborted()
-      ctx.recordSnapshotCompletion?.()
-      return {
+      const capture: Snapshot = {
         providerId,
         root,
         complete: true,
@@ -85,6 +84,13 @@ export class ProjectSnapshotCollector implements ProjectSnapshotCollectorApi {
         materialBytes,
         fingerprint: createHash('sha256').update(JSON.stringify(after)).digest('hex'),
       }
+      if (
+        !isUndefined(ctx.observationChars) &&
+        JSON.stringify(capture).length > ctx.observationChars
+      )
+        throw new AppError('LIMIT', '观察快照超过小型采集上限，请缩小文件范围或改用一次性读取')
+      ctx.recordSnapshotCompletion?.()
+      return capture
     } catch (error) {
       ctx.recordSnapshotMetrics?.({ readRequests, materialBytes })
       const failure = AppError.from(error)

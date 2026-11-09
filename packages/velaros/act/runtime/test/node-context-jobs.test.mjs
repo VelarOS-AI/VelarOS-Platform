@@ -91,7 +91,10 @@ test('first and restored frames expose terminal state without pretending a trans
     if (previous) delete previous.presentation
     const runtime = nodeFrameState(frame(jobs), previous).runtime
     assert.deepEqual(runtime.jobs, jobs)
-    assert.deepEqual(runtime.jobChanges.items, [{ ...jobs[0], terminal: true }])
+    assert.equal(runtime.jobChanges.items[0].previousStatus, undefined)
+    assert.deepEqual(JSON.parse(JSON.stringify(runtime.jobChanges.items)), [
+      { ...jobs[0], terminal: true },
+    ])
   }
 })
 
@@ -106,7 +109,7 @@ test('grouping and ungrouping alone produce no changes; new terminal and changed
   assert.equal(project(grouped, previous).jobChanges, undefined)
   assert.equal(project(previous, grouped).jobChanges, undefined)
   const current = [{ ...grouped[0], results: { a: 'ra', b: 'rb2', c: 'rc' } }]
-  assert.deepEqual(project(current, grouped).jobChanges.items, [
+  assert.deepEqual(JSON.parse(JSON.stringify(project(current, grouped).jobChanges.items)), [
     {
       executionId: 'b',
       status: 'succeeded',
@@ -159,5 +162,7 @@ test('missing or removed result refs, unknown statuses and malformed entries sta
 
 test('ambiguous previous execution identity is not silently used as a baseline', () => {
   const job = { executionId: 'a', status: 'succeeded', resultRef: 'r' }
-  assert.deepEqual(project([job], [job, job]).jobChanges.items, [{ ...job, terminal: true }])
+  const changes = project([job], [job, job]).jobChanges.items
+  assert.equal(changes[0].previousStatus, undefined)
+  assert.deepEqual(JSON.parse(JSON.stringify(changes)), [{ ...job, terminal: true }])
 })

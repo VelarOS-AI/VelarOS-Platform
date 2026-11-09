@@ -52,6 +52,45 @@ function validManifest(): unknown {
 }
 
 describe('Kernel update manifest', () => {
+  test('published versions use the same strict parser as the module boundary', () => {
+    for (const version of [
+      'v1.0.0',
+      '01.0.0',
+      '1.0.0-01',
+      '1.0.0-alpha..1',
+      '9007199254740992.0.0',
+      '1.0.0 ',
+    ]) {
+      expect(() => parseKernelUpdateManifest(manifestOf([{ version, artifacts: {} }]))).toThrow(
+        expect.objectContaining({ code: 'INVALID_MANIFEST' })
+      )
+    }
+  })
+
+  test('selects the later numeric prerelease rather than the lexically larger identifier', () => {
+    const manifest = parseKernelUpdateManifest(
+      manifestOf([
+        { version: '1.0.0-beta.2', artifacts: { 'linux-x64': linuxArtifact.descriptor } },
+        { version: '1.0.0-beta.10', artifacts: { 'linux-x64': linuxArtifact.descriptor } },
+      ])
+    )
+    expect(selectKernelManifestVersion(manifest, { target: 'linux-x64' })?.version).toBe(
+      '1.0.0-beta.10'
+    )
+  })
+
+  test('rejects an invalid query range even when every published version is yanked', () => {
+    const manifest = parseKernelUpdateManifest(
+      manifestOf([{ version: '1.0.0', yanked: true, artifacts: {} }])
+    )
+    expect(() => listKernelManifestVersions(manifest, { range: '* || nonsense' })).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_VERSION_RANGE',
+        details: { versionRange: '* || nonsense' },
+      })
+    )
+  })
+
   test('parses a published manifest and applies documented defaults', () => {
     const manifest = parseKernelUpdateManifest(validManifest())
 

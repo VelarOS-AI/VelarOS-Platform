@@ -5,18 +5,17 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
-import { done, marker } from './support/model-turn.mjs'
+import { done, historyEntries, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const block = (request, head, source = '') =>
   `${marker(request)} ${head}\n${source}${source ? '\n' : ''}${marker(request)}\n`
 const finish = { type: 'finish', reason: 'stop' }
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 test('INV-86 a whitespace-stalled response performs no write and starts no repair request', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield {
@@ -116,7 +115,6 @@ async function fixture(t, stream, extra = {}) {
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [module],
     ...extra,
@@ -297,7 +295,9 @@ test('protocol repair reuses the frame and does not rerun stable observation', a
     source: "import {read} from 'test:ops';import {output} from 'velaros';output(await read());",
   })
   assertDone(await collect(f))
-  assert.equal(f.reads, 1)
+  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(tags[0], tags[1])
   assert.equal(f.frames[0].programFrame.id, f.frames[1].programFrame.id)
 })
@@ -328,7 +328,10 @@ test('INV-84 short random markers reject a prior frame before dispatch and prese
   assert.equal(f.calls, 3)
   assert.deepEqual(f.writes, ['one'])
   const trace = await f.runtime.trace('s', { fullContent: true })
-  assert.equal(trace.turns[1].requestSummary.system, trace.turns[0].requestSummary.system)
+  assert.equal(
+    JSON.parse(trace.turns[1].request.body).requestAudit.requestFingerprint.systemHash,
+    JSON.parse(trace.turns[0].request.body).requestAudit.requestFingerprint.systemHash
+  )
   assert.equal(trace.turns[1].repair, 0)
   assert.equal(trace.turns[2].repair, 1)
 })
@@ -373,7 +376,9 @@ test('explicit observation clear removes the next-frame rerun', async (t) => {
   })
   await f.session.observe({ source: "import {read} from 'test:ops';await read();" })
   assertDone(await collect(f))
-  assert.equal(f.reads, 1)
+  assert.equal(f.reads, platformHasDefaultConfinement ? 1 : 0)
+  if (!platformHasDefaultConfinement)
+    assert.match(f.frames[0].observation.text, /SHELL_CONFINEMENT_UNAVAILABLE/)
   assert.equal(f.frames[1].observation.sourceRef, null)
 })
 
@@ -724,7 +729,7 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
       assert.match(system, /结果未知(?:时不得|不)重跑/)
       assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
       assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用归档源码/)
-      const protocol = request.compiledPrompt.split('本帧协议').at(-1)
+      const protocol = request.protocol
       const tag = marker(request)
       assert(protocol.includes(`${tag} run()`))
       assert(protocol.includes(`${tag} finish`))
@@ -788,8 +793,8 @@ test('INV-63 missing closure between blob and program rejects the whole response
         [],
         'earlier valid block cannot execute before the whole response passes'
       )
-      assert(request.compiledPrompt.includes(`闭合行必须逐字为：\n${tag}\n`))
-      assert.match(request.compiledPrompt, /下一控制头不能代替闭合行/)
+      assert(request.protocol.includes(`闭合行必须逐字为：\n${tag}\n`))
+      assert.match(request.protocol, /下一控制头不能代替闭合行/)
       yield {
         type: 'text',
         text:
@@ -957,8 +962,7 @@ test('default results preserve the durable history while cumulative runtime fram
     tokens: Math.ceil(
       JSON.stringify({
         instructions: request.instructions,
-        history: request.history,
-        prompt: request.compiledPrompt,
+        messages: modelRequestEncoder.messages(request),
       }).length / 4
     ),
     precision: 'exact',

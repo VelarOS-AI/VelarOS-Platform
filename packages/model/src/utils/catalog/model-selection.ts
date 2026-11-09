@@ -22,11 +22,6 @@ export function isOfficialOpenAiEndpoint(baseURL: string): boolean {
   return URL.canParse(baseURL) && new URL(baseURL).origin === 'https://api.openai.com'
 }
 
-/** 只在 OpenAI 直连下可选的模型 id 的只读快照。 */
-export function getOpenAiOnlyModelIds(): ReadonlySet<string> {
-  return OpenAiOnlyModelIds
-}
-
 /** 这个 provider 走不走 OpenRouter 的路由语义。 */
 export function isOpenRouterCompatibleProvider(providerId: ChatProviderId): boolean {
   return (OpenRouterCompatibleProviderIds as readonly string[]).includes(providerId)

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "@velaros-ai/skill-jsts",
+  "name": "JsTs",
+  "description": "JS/TS 项目的语义重构、结构搜索、配置修改、格式化与网页测试。",
+  "version": "0.2.0",
+  "instructions": "SKILL.md",
+  "source": "native",
+  "implicit": true,
+  "prompt": "",
+  "diagnostics": [],
+  "toolDependencies": []
+}

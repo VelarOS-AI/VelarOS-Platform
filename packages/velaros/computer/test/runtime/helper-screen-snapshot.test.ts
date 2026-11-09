@@ -8,6 +8,56 @@ const PythonCommand = ['python3', 'python'].find(
 )
 const pythonTest = PythonCommand ? test : test.skip
 
+pythonTest(
+  'all platform key handlers consume keys and reject the removed keySequence alias',
+  () => {
+    const runtimeDir = resolve(import.meta.dir, '../../runtime')
+    const script = String.raw`
+import ast
+from pathlib import Path
+from types import SimpleNamespace
+
+# 只装载真实按键函数与其别名表；不导入图形依赖，也不接触用户的桌面。
+for filename in ("mac_helper.py", "win_helper.py", "linux_helper.py"):
+    tree = ast.parse(Path(filename).read_text(encoding="utf-8"), filename)
+    nodes = [node for node in tree.body if (
+        isinstance(node, ast.FunctionDef) and node.name in ("normalize_key", "key_combo")
+    ) or (
+        isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "KEY_ALIASES" for target in node.targets
+        )
+    )]
+    calls = []
+    backend = SimpleNamespace(
+        press=lambda key: calls.append(("press", key)),
+        hotkey=lambda *keys, **options: calls.append(("hotkey", keys, options)),
+    )
+    scope = {"pyautogui": backend, "load_pyautogui": lambda: backend}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), filename, "exec"), scope)
+    combo = scope["key_combo"]
+    assert combo({"keys": "ctrl+A"}) == {"pressed": ["ctrl", "a"]}, filename
+    assert calls == [("hotkey", ("ctrl", "a"), {"interval": 0.02})], filename
+    assert combo({"keys": "enter", "keySequence": "ctrl+x"}) == {"pressed": ["enter"]}, filename
+    assert calls[-1] == ("press", "enter"), filename
+    count = len(calls)
+    for payload in ({"keySequence": "ctrl+x"}, {"keys": "", "keySequence": "ctrl+x"}):
+        try:
+            combo(payload)
+        except ValueError as error:
+            assert str(error) == "No keys provided", filename
+        else:
+            raise AssertionError(f"{filename} accepted the removed keySequence field")
+    assert len(calls) == count, filename
+`
+    const result = spawnSync(PythonCommand, ['-c', script], {
+      cwd: runtimeDir,
+      encoding: 'utf8',
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+    })
+    expect(result.status, result.stderr || result.stdout).toBe(0)
+  }
+)
+
 pythonTest('helper binds screenshot ids to geometry and fails closed', () => {
   const runtimeDir = resolve(import.meta.dir, '../../runtime')
   const script = String.raw`

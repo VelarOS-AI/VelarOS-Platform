@@ -239,6 +239,12 @@ export interface ShellRunCommandOptions {
   cwd?: string
   /** null 仅供宿主自管时钟使用，必须同时提供取消信号。 */
   timeoutMs?: LooseOptional<number>
+  /**
+   * 仅前台：等待本次受管进程退出且输出管道真实关闭之后才兑现或拒绝 Promise，供宿主安全回收本次临时资源。
+   * 超时/取消仍触发原有界终止，回执保留当时的 cleanupIncomplete/timeout/abort 事实；此选项不把 unknown 改成成功。
+   * 不与 background 同用；无法确认关闭时调用继续持有资源等待，不能用外部 race 的提前结束充当排空证据。
+   */
+  waitForClose?: boolean
   background?: boolean
   /**
    * 交互式：命令要向用户要输入（口令、y/n、菜单选项）时为真，必须和 `background` 一起用。
@@ -310,7 +316,8 @@ export interface SystemProcessInfo {
   cwd: Nullable<string>
   startTime: Nullable<string>
   user: string
-  cpuPercent: number
+  /** 平台未提供进程 CPU 采样时为 null，不能解释成零占用。 */
+  cpuPercent: Nullable<number>
   memoryBytes: number
   status: string
 }
@@ -329,7 +336,6 @@ export interface SystemProcessQueryOptions {
   onlyCurrentUser?: boolean
   minCpuPercent?: number
   minMemoryBytes?: number
-  includeCwd?: boolean
 }
 
 /** 一个开放端口及占用它的进程。 */
@@ -356,7 +362,6 @@ export interface SystemOpenPortQueryOptions {
   ports?: number[]
   rangeStart?: number
   rangeEnd?: number
-  includeCwd?: boolean
 }
 
 /** 一次系统资源采样。拿不到的指标填 null，不填 0。 */
@@ -375,6 +380,7 @@ export interface SystemMetricsSnapshot {
   diskUsagePercent: Nullable<number>
   loadAverage: { oneMinute: number; fiveMinutes: number; fifteenMinutes: number }
   levels: Record<'cpu' | 'memory' | 'swap' | 'disk' | 'load', SystemMetricLevel>
+  /** 完整进程快照排序后取前列：已知 CPU 优先降序，其余按内存降序；Windows 仅有内存数据。 */
   topProcesses: SystemProcessInfo[]
 }
 
@@ -402,7 +408,7 @@ export interface ShellConsoleInputRequest {
   submit?: boolean
 }
 
-/** 给控制台发中断（SIGINT，相当于用户按 Ctrl+C）的请求。 */
+/** 请求中断控制台：PTY 为 Ctrl+C，POSIX 管道为 SIGINT，Windows 管道强制终止受管进程树。 */
 export interface ShellConsoleInterruptRequest {
   taskId: string
   sessionId?: string

@@ -89,7 +89,7 @@ const log = Log.tag('ShellCommandRunner')
 /**
  * 命令执行器：把一条命令变成受管子进程跑起来。前台等它结束并采集输出；后台登记成后台任务，之后可查、可停。
  *
- * 实现是 `ShellCommandRunner`，由本机宿主（与受约束执行器）创建并持有。它启动过的后台进程归它管，内核释放时一并停掉。
+ * 实现是 `ShellCommandRunner`，由本机宿主（与受约束执行器）创建并持有。它启动的前后台进程都归它管。
  */
 export interface ShellCommandRunnerApi {
   /**
@@ -102,6 +102,7 @@ export interface ShellCommandRunnerApi {
    * 交互式（options.interactive，必须和 background 一起）：宿主给了伪终端工厂就在真终端里跑（channel 为 `pty`），
    * 没给就留一根保持打开的 stdin 管道（channel 为 `pipe`）；输出另外存进控制台缓冲区，结果的 `backgroundProcess.console` 给出这个控制台。
    * 前台命令跑着时，给了 `options.onOutput` 就把每段解码好的输出（stdout、stderr 按到达顺序）交给它；它抛错只记日志。
+   * `waitForClose` 仅前台可用，兑现或拒绝之前等待本次受管进程真实 close，供宿主回收本次临时资源；原有界 unknown 回执不改写。
    * 命令自己失败（非零退出、超时、取消）不抛错，如实写进结果；找不到能用的 shell、约束后端缺失、进程拉不起来才抛错。
    * @param command 命令文本；给了 options.nativeCommand 时只用来展示
    * @param cwd 已经解析好的绝对工作目录
@@ -132,7 +133,8 @@ export interface ShellCommandRunnerApi {
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
   /**
    * 给控制台发中断：终端里写一个 Ctrl+C，由终端发给它的前台进程组（交互 shell 里正在跑的那条命令也收得到）；
-   * 管道下 POSIX 向进程组发 SIGINT，Windows 退回按进程树终止。进程已经退出时不抛错，`accepted` 为 false。
+   * 管道下 POSIX 向进程组发 SIGINT；Windows 强制终止受管进程树并等待真实收尾，不承诺软中断。
+   * 进程已经退出或收尾尚未确认时不抛错，`accepted` 为 false。
    */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
   /** 改控制台的终端尺寸；列数、行数不是正整数时抛 VALIDATION。管道后面的任务没有尺寸、进程已经退出时不抛错，`accepted` 为 false。 */
@@ -145,7 +147,7 @@ export interface ShellCommandRunnerApi {
     request: ShellConsoleWatchRequest,
     listener: (event: ShellConsoleOutputEvent) => void
   ): () => void
-  /** 停掉这个执行器启动过、还没退出的全部后台进程。 */
+  /** 拒绝新命令、取消准备并等待自有前后台进程真实收尾；未确认对象保留并抛错，仍可重试。 */
   dispose(): Promise<void>
 }
 
@@ -186,6 +188,10 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   private readonly tasks = new Map<string, ShellBackgroundTaskRecord>()
   private readonly issuedTaskIds = new Set<string>()
   private readonly executions = new Map<string, ManagedShellProcess>()
+  private readonly owned = new Set<ManagedShellProcess>()
+  private readonly running = new Set<Promise<ShellCommandResult>>()
+  private readonly lifetime = new AbortController()
+  private disposing?: Promise<void>
   private readonly consoles = new Map<string, ShellConsoleBuffer>()
   private readonly options: ShellCommandRunnerOptions
 
@@ -193,15 +199,60 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     this.options = options
   }
 
-  public async run(
+  public run(
     commandInput: string,
     cwd: string,
     options: ShellRunCommandOptions & ShellRunCommandHooks,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {
-    abortSignal?.throwIfAborted()
+    if (this.lifetime.signal.aborted)
+      return Promise.reject(new AppError('CLOSED', '命令执行器已关闭。'))
     if (isNull(options.timeoutMs) && !abortSignal)
-      throw new AppError('VALIDATION', '宿主自管执行时限必须提供取消信号。')
+      return Promise.reject(new AppError('VALIDATION', '宿主自管执行时限必须提供取消信号。'))
+    const signal = abortSignal
+      ? AbortSignal.any([abortSignal, this.lifetime.signal])
+      : this.lifetime.signal
+    let managed: ManagedShellProcess | undefined
+    const running = this.execute(commandInput, cwd, options, signal, (owned) => {
+      managed = owned
+    })
+    this.running.add(running)
+    const release = () => {
+      this.running.delete(running)
+    }
+    void running.then(release, release)
+    if (!options.waitForClose) return running
+    return (async () => {
+      try {
+        return await running
+      } catch (error) {
+        if (managed) {
+          try {
+            await managed.stop('SIGKILL')
+          } catch (stopError) {
+            log.warn('严格前台调用失败后的停止未完成', {
+              error: stopError,
+              identity: managed.identity,
+            })
+          }
+        }
+        throw error
+      } finally {
+        if (managed) await managed.closing
+      }
+    })()
+  }
+
+  private async execute(
+    commandInput: string,
+    cwd: string,
+    options: ShellRunCommandOptions & ShellRunCommandHooks,
+    abortSignal: AbortSignal,
+    onManaged: (owned: ManagedShellProcess) => void
+  ): Promise<ShellCommandResult> {
+    abortSignal?.throwIfAborted()
+    if (options.background && options.waitForClose)
+      throw new AppError('VALIDATION', 'waitForClose 只用于前台命令，不能与 background 同用。')
     // 工作目录不存在时 spawn 会报成找不到 shell，先核对一次，报错才指向真正的原因。
     if (options.background && !isUndefined(options.stdin))
       throw new AppError('VALIDATION', '前台标准输入不能与后台命令一起使用。')
@@ -244,6 +295,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       stdin: options.stdin,
       onOutput: options.onOutput,
       abortSignal,
+      onManaged,
     })
     return buildShellCommandResult(command, cwd, startedAt, {
       ...result,
@@ -254,7 +306,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
 
   public listTasks(options: ShellBackgroundTaskQueryOptions = {}): ShellBackgroundTaskRecord[] {
     const tasks = [...this.tasks.values()].map((task) => ({
-      ...task,
+      ...structuredClone(task),
       status: this.resolveTaskStatus(task),
       updatedAt: Date.now(),
     }))
@@ -269,9 +321,14 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const signal = request.force ? 'SIGKILL' : 'SIGTERM'
     const statusBefore = this.resolveTaskStatus(task)
     let terminated = false
-    let message = statusBefore === 'running' ? '后台进程已发送终止信号。' : '后台进程已经不在运行。'
+    let message =
+      statusBefore === 'running'
+        ? '后台进程已发送终止信号。'
+        : statusBefore === 'unknown'
+          ? '后台进程的退出与管道收尾尚未确认。'
+          : '后台进程已经不在运行。'
 
-    if (statusBefore === 'running') {
+    if (statusBefore === 'running' || statusBefore === 'unknown') {
       try {
         const owned = this.executions.get(taskId)
         if (!owned || owned.pid !== task.pid)
@@ -279,6 +336,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         terminated = await owned.stop(signal)
         if (!terminated && !owned.exited)
           throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
+        if (!terminated) message = '后台进程退出与管道收尾尚未确认。'
       } catch (error) {
         if (!this.options.platformTools.isProcessMissingError(error)) {
           // 身份核对失败（PERMISSION）和期限内没退出（PLATFORM）各有自己的错误码，原样抛出，调用方才分得开。
@@ -397,7 +455,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         message: '这条后台任务不是交互式的，没有可以中断的控制台。',
       }
     if (status !== 'running')
-      return { taskId: task.id, accepted: false, status, message: '进程已经不在运行，不用再中断。' }
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message:
+          status === 'unknown' ? '进程退出与管道收尾尚未确认。' : '进程已经不在运行，不用再中断。',
+      }
 
     // 只中断自己启动的那个进程：pid 可能已经被系统复用，身份对不上就什么都不发。
     const owned = this.executions.get(task.id)
@@ -416,7 +480,18 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       return { taskId: task.id, accepted: true, status, message: '已发送中断（Ctrl+C）。' }
     }
 
-    // POSIX 向整个进程组发 SIGINT；Windows 没有 SIGINT，退回按进程树终止。
+    // Windows 管道没有终端 Ctrl+C；复用持有进程身份、有界终止与管道收尾的受管入口。
+    if (this.options.platform === 'win32') {
+      const report = await this.terminateTask({ ...request, force: true })
+      return {
+        taskId: report.taskId,
+        accepted: report.terminated,
+        status: report.statusAfter,
+        message: report.terminated ? '已终止受管进程树并关闭控制台。' : report.message,
+      }
+    }
+
+    // POSIX 管道向整个进程组发 SIGINT；PTY 上面的分支仍由终端处理 Ctrl+C。
     const delivered = await terminateProcessTree(task.pid, 'SIGINT', {
       platform: this.options.platform,
     })
@@ -469,15 +544,57 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     }
   }
 
-  public async dispose(): Promise<void> {
-    await Promise.allSettled(
-      [...this.executions.values()]
-        .filter((entry) => !entry.exited)
-        .map((entry) => entry.stop('SIGKILL'))
+  public dispose(): Promise<void> {
+    if (this.disposing) return this.disposing
+    this.lifetime.abort(new AppError('CLOSED', '命令执行器已关闭。'))
+    const disposing = this.disposeOwned()
+    this.disposing = disposing
+    void disposing.then(
+      () => {
+        this.disposing = undefined
+      },
+      () => {
+        this.disposing = undefined
+      }
     )
-    this.tasks.clear()
-    this.executions.clear()
-    this.consoles.clear()
+    return disposing
+  }
+
+  private async disposeOwned(): Promise<void> {
+    const outcomes = await Promise.allSettled(
+      [...new Set([...this.owned, ...this.executions.values()])].map(async (owned) => {
+        const stopped = await owned.stop('SIGKILL')
+        if (!stopped)
+          throw new AppError('UNAVAILABLE', `受管进程 ${owned.identity} 的退出与管道收尾尚未确认。`)
+        this.owned.delete(owned)
+        for (const [taskId, execution] of this.executions) {
+          if (execution !== owned) continue
+          this.tasks.delete(taskId)
+          this.executions.delete(taskId)
+          this.consoles.delete(taskId)
+        }
+      })
+    )
+    await Promise.allSettled([...this.running])
+    const failures = outcomes.flatMap((outcome) =>
+      outcome.status === 'rejected' ? [outcome.reason] : []
+    )
+    if (failures.length)
+      throw new AppError('PLATFORM', '命令进程尚未全部完整收尾，保留未确认记录。', failures[0], {
+        failures,
+      })
+  }
+
+  /** 从 spawn 后立即持有 owner；有界回执未确认时一直保留到真实关闭或后续 dispose 复核。 */
+  private track(owned: ManagedShellProcess): ManagedShellProcess {
+    this.owned.add(owned)
+    void owned.completion.then((result) => {
+      if (!result.cleanupIncomplete) this.owned.delete(owned)
+    })
+    void owned.closing.then(() => {
+      this.owned.delete(owned)
+    })
+    return owned
   }
 
   /**
@@ -543,6 +660,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       stdin?: string
       onOutput?: (text: string, stream?: 'stdout' | 'stderr') => void
       abortSignal?: AbortSignal
+      onManaged: (owned: ManagedShellProcess) => void
     }
   ): Promise<{
     exitCode: Nullable<number>
@@ -571,11 +689,14 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     void child.catch((error) => log.warn('Execa 进程收尾失败', { error }))
-    const owned = this.options.processes.manage(child, {
-      platform: this.options.platform,
-      timeoutMs: options.timeoutMs,
-      abortSignal: options.abortSignal,
-    })
+    const owned = this.track(
+      this.options.processes.manage(child, {
+        platform: this.options.platform,
+        timeoutMs: options.timeoutMs,
+        abortSignal: options.abortSignal,
+      })
+    )
+    options.onManaged(owned)
     const maxChars = options.maxOutputChars
     const decoders = { stdout: new ShellOutputDecoder(), stderr: new ShellOutputDecoder() }
     const output = { stdout: '', stderr: '' }
@@ -601,9 +722,16 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         )
       )
     child.stdin.on('error', (error) => log.debug('前台命令输入管道已关闭', { error }))
+    let flushed = false
+    const flush = (): void => {
+      if (flushed) return
+      flushed = true
+      for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())
+    }
+    void owned.closing.then(flush)
     child.stdin.end(options.stdin, 'utf8')
     return owned.completion.then((result) => {
-      for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())
+      if (!result.cleanupIncomplete) flush()
       if (result.spawnError) throw result.spawnError
       const storedBytes = Buffer.byteLength(output.stdout) + Buffer.byteLength(output.stderr)
       const capture: ShellCommandOutputCapture = {
@@ -627,7 +755,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     command: string,
     cwd: string,
     prepared: PreparedShellCommand,
-    options: ShellRunCommandOptions,
+    options: ShellRunCommandOptions & ShellRunCommandHooks,
     startedAt: number,
     abortSignal?: AbortSignal
   ): Promise<ShellBackgroundProcessInfo> {
@@ -648,7 +776,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     let started: { owned: ManagedShellProcess; flush: () => void }
     try {
       started = terminal
-        ? this.startInTerminal(terminal, prepared, cwd, taskId, append, abortSignal)
+        ? await this.startInTerminal(terminal, prepared, cwd, taskId, append, abortSignal)
         : await this.startWithPipes(prepared, cwd, taskId, !!interactive, append, abortSignal)
     } catch (error) {
       this.consoles.delete(taskId)
@@ -706,8 +834,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     this.executions.set(taskId, owned)
     void owned.completion
       .then((result) => {
-        flush()
-        this.tasks.set(taskId, {
+        if (!result.cleanupIncomplete) flush()
+        const settled: ShellBackgroundTaskRecord = {
           ...task,
           status: result.cleanupIncomplete ? 'unknown' : 'exited',
           recentOutput,
@@ -717,11 +845,52 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
           finishedAt: Date.now(),
           updatedAt: Date.now(),
           console: closedConsole,
-        })
+        }
+        this.tasks.set(taskId, settled)
+        this.publishTaskState(taskId, options.onBackgroundTaskState)
         this.pruneFinishedTasks()
       })
       .catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
+    void owned.closing
+      .then((result) => {
+        const current = this.tasks.get(taskId)
+        if (!current?.cleanupIncomplete) return
+        flush()
+        const finishedAt = Date.now()
+        this.tasks.set(taskId, {
+          ...current,
+          status: 'exited',
+          cleanupIncomplete: false,
+          recentOutput,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          finishedAt,
+          updatedAt: finishedAt,
+          console: closedConsole,
+        })
+        this.publishTaskState(taskId, options.onBackgroundTaskState)
+        this.pruneFinishedTasks()
+      })
+      .catch((error) => log.warn('后台进程真实关闭记录失败', { taskId, error }))
+    // 先登记 owner 的完成处理，再让观察方重入停止；快完成也不能在 dispose 后补写回已移除记录。
+    this.publishTaskState(taskId, options.onBackgroundTaskState)
     return backgroundProcess
+  }
+
+  /** 观察方不持有任务账本，不能改 owner 的记录或用异步等待拖住真实进程收尾。 */
+  private publishTaskState(
+    taskId: string,
+    observer: ShellRunCommandHooks['onBackgroundTaskState']
+  ): void {
+    if (!observer) return
+    const task = this.tasks.get(taskId)!
+    try {
+      void Promise.resolve(observer(structuredClone(task))).catch((error: unknown) =>
+        log.warn('后台任务状态观察失败', { taskId: task.id, error })
+      )
+    } catch (error) {
+      log.warn('后台任务状态观察失败', { taskId: task.id, error })
+    }
   }
 
   /**
@@ -753,7 +922,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     // stdin 管道断开（进程关了输入、写到一半进程退出）时流上会报 error；不接住就成了宿主进程的未捕获异常。写入结果由写的一方从回调里拿，这里只记日志。
     child.stdin?.on('error', (error) => log.debug('控制台的输入管道断开', { taskId, error }))
     void child.catch((error) => log.warn('Execa 后台进程收尾失败', { taskId, error }))
-    const owned = processes.manage(child, { platform, abortSignal })
+    const owned = this.track(processes.manage(child, { platform, abortSignal }))
     const decoders = { stdout: new ShellOutputDecoder(), stderr: new ShellOutputDecoder() }
     // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
     for (const stream of ['stdout', 'stderr'] as const)
@@ -781,14 +950,14 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
    * 在宿主的伪终端里起交互式任务：终端输出只有一路、已经解码，终端本身就是控制台的另一头。
    * 进程带着约束包装原样交给工厂，TERM 与终端类型一致；工厂起不来就抛错。
    */
-  private startInTerminal(
+  private async startInTerminal(
     factory: ShellTerminalFactory,
     prepared: PreparedShellCommand,
     cwd: string,
     taskId: string,
     append: (text: string) => void,
     abortSignal?: AbortSignal
-  ): { owned: ManagedShellProcess; flush: () => void } {
+  ): Promise<{ owned: ManagedShellProcess; flush: () => void }> {
     abortSignal?.throwIfAborted()
     const terminal = factory.spawn(prepared.spec.file, prepared.spec.args, {
       cwd,
@@ -798,20 +967,29 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       name: ShellCommandRunner.TerminalEnv.TERM,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
-    const owned = this.options.processes.manageTerminal(terminal, {
-      platform: this.options.platform,
-      abortSignal,
-    })
+    const owned = this.track(
+      this.options.processes.manageTerminal(terminal, {
+        platform: this.options.platform,
+        abortSignal,
+      })
+    )
     terminal.onData(append)
     const buffered = this.consoles.get(taskId)
     if (buffered) buffered.end = { channel: 'pty', terminal }
+    try {
+      await owned.waitForTerminalStart()
+      abortSignal?.throwIfAborted()
+    } catch (error) {
+      await owned.stop('SIGKILL')
+      throw error
+    }
     return { owned, flush: () => undefined }
   }
 
-  /** 已结束的任务只留最近 ShellTuning.command.finishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
+  /** 已确认完整收尾的任务只留最近几条；unknown 是未解决的资源事实，不能当历史记录清掉。 */
   private pruneFinishedTasks(): void {
     const finished = [...this.tasks.values()]
-      .filter((task) => task.status !== 'running')
+      .filter((task) => this.resolveTaskStatus(task) === 'exited')
       .sort((a, b) => (a.finishedAt ?? a.updatedAt) - (b.finishedAt ?? b.updatedAt))
     for (const task of finished.slice(
       0,
@@ -867,7 +1045,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   /** 后台任务此刻的状态：受管进程还在就看它是否退出、收尾是否完整；已经不在登记里时看任务有没有记下结束时间。 */
   private resolveTaskStatus(task: ShellBackgroundTaskRecord): ShellBackgroundTaskStatus {
     const owned = this.executions.get(task.id)
-    if (!owned) return task.finishedAt ? 'exited' : 'unknown'
-    return owned.result?.cleanupIncomplete ? 'unknown' : owned.exited ? 'exited' : 'running'
+    if (!owned) return task.finishedAt && !task.cleanupIncomplete ? 'exited' : 'unknown'
+    if (owned.result?.cleanupIncomplete || (owned.exited && !owned.result)) return 'unknown'
+    return owned.exited ? 'exited' : 'running'
   }
 }

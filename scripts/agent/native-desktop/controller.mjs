@@ -15,16 +15,28 @@ import {
   configureModel,
   desktopClient,
   dispatch,
+  prepareUnattendedPermissions,
   privateJson,
   restoreModel,
   sha256,
   waitForSettlement,
 } from './client.mjs'
 import { runCodex } from './codex.mjs'
+import { createOwnedWorkspaceProcessGuard } from './owned-processes.mjs'
 import { codexPolicyAudit, scriptPolicyAudit } from './audit.mjs'
 import { nativeContextPolicy, observedInputWindows } from './context-window.mjs'
 
 const execute = promisify(execFile)
+
+/** 原生配对只运行在本次独占工作区，结束和取消都收回脱离进程组的服务。 */
+export async function runNativeCodex({ resourceId, ...options }) {
+  const processGuard = createOwnedWorkspaceProcessGuard({
+    workspace: options.workspace,
+    directory: options.directory,
+    resourceId,
+  })
+  return runCodex({ ...options, processGuard })
+}
 
 /** 派发前原子取得两层租约；本地尝试冲突时撤回本次新建的全局租约。 */
 export async function acquireControllerLeases(globalPath, localPath, identity) {
@@ -457,6 +469,7 @@ async function main(manifestPath) {
     sampler,
     priorConfigs,
     temporaryKey,
+    permissions,
     settlementProved = false
   let stateWrites = Promise.resolve()
   const writeState = () => (stateWrites = stateWrites.then(() => privateJson(stateFile, state)))
@@ -511,6 +524,8 @@ async function main(manifestPath) {
     temporaryKey = credentials[0]
     await privateJson(join(directory, 'identities.json'), identities)
     for (const who of ['scriptact', 'codex']) await mkdir(join(directory, who), { mode: 0o700 })
+    permissions = await prepareUnattendedPermissions(hook)
+    await permissions.enable()
     await configureModel(hook, manifest.desktop.settingsFile, {
       baseURL: manifest.gateway.baseURL,
       apiKey: credentials[0],
@@ -599,7 +614,8 @@ async function main(manifestPath) {
     const startCodex = async () => {
       const item = (state.participants.codex = { status: 'dispatching', startedAt: Date.now() })
       await writeState()
-      const result = await runCodex({
+      const result = await runNativeCodex({
+        resourceId: identities[1].attemptId,
         executable: manifest.codex.executable,
         workspace: manifest.task.workspaces.codex,
         directory: join(directory, 'codex'),
@@ -746,6 +762,14 @@ async function main(manifestPath) {
         )
       } catch (error) {
         state.configurationRestoreError = error.message
+        state.status = 'configuration_restore_failure'
+      }
+    }
+    if (permissions) {
+      try {
+        state.permissionRestore = await permissions.restore()
+      } catch (error) {
+        state.permissionRestoreError = error.message
         state.status = 'configuration_restore_failure'
       }
     }

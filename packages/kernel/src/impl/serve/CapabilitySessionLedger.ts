@@ -34,7 +34,13 @@ export class CapabilitySessionLedger implements CapabilitySessionLedgerApi {
       requires: requires.map((item): BoundCapabilityRequirement => ({
         capabilityId: item.capabilityId,
         operations: isNull(item.operations) ? null : new Set(item.operations),
-        scope: item.scope,
+        scope: isNull(item.scope)
+          ? null
+          : {
+              id: item.scope.id,
+              ownerModuleId: item.scope.ownerModuleId,
+              kind: item.scope.kind,
+            },
       })),
     }
     this.sessions.set(sessionId, record)

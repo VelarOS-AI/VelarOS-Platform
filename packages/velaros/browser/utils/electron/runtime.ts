@@ -78,8 +78,8 @@ export function buildExternalCurrentPageTarget(
 }
 
 /** 等待一小段时间，便于用户看到按压反馈。 */
-export function delay(ms: number): Promise<void> {
-  return TimerScope.sleep(ms, { label: 'ElectronBrowserRuntime.delay' })
+export function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return TimerScope.sleep(ms, { label: 'ElectronBrowserRuntime.delay', signal })
 }
 
 /** 拼出外部浏览器一次导航的回执。 */

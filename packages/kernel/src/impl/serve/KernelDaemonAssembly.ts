@@ -1,4 +1,5 @@
 import { isNotUndefined, isNull, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
 
 import { KernelVersionAxes } from '../../contract/constants'
@@ -178,9 +179,10 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
       try {
         await this.service.dispose()
       } catch (disposeError) {
-        throw new AggregateError(
-          [error, disposeError],
-          'Kernel daemon 启动失败，且回收 Kernel service 时再次失败。'
+        throw AppError.withFields(
+          'UNAVAILABLE',
+          'Kernel daemon 启动失败，且回收 Kernel service 时再次失败。',
+          { errors: [error, disposeError] }
         )
       }
       throw error

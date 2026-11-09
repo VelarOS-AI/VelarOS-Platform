@@ -32,7 +32,7 @@ import {
   taskTemporaryEnvironment,
 } from './task-environment.mjs'
 
-import { createNodeExecutionEnvironment } from '../../../packages/velaros/dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../packages/velaros/dist/act/runtime/node.js'
 import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
 
 const environment = {

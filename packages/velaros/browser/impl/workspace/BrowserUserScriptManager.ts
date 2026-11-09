@@ -22,6 +22,7 @@ import type {
 import type { BrowserUserScriptAccess, BrowserUserScriptStore } from '../../types/workspace.js'
 import {
   browserUserScriptMatchesUrl,
+  buildUserScriptOverview,
   createScriptId,
   normalizeCode,
   normalizeDescription,
@@ -40,8 +41,8 @@ const log = Log.tag('BrowserUserScriptManager')
 /**
  * 站点用户脚本的存储：索引与代码都落在站点工作区里，负责增删改查、启停、排序与执行记录。
  *
- * 安全语义写在这里：agent 建的脚本一律先停用；改代码或改执行范围之后自动停用，必须用户重新确认才能再启用；
- * 所有校验都在写盘之前做完，校验失败不留半截（代码换了、索引没换）。
+ * 安全语义写在这里：agent 建的脚本一律先停用；执行面更新成功后是否保持停用由宿主策略决定，启用需宿主授权；
+ * 所有校验与可靠旧内容读取都在写盘之前完成。已启用脚本更新执行面先持久停用，后续失败不恢复启用。
  *
  * 实例归运行时：无会话状态，一份就够；站点由每次调用传进来的上下文决定。
  */
@@ -66,12 +67,9 @@ export interface BrowserUserScriptManagerApi {
     defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }
   ): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord }>
   /**
-   * 修改用户脚本：**先把全部字段校验成最终值，再写代码，最后写索引**。
-   *
-   * 老写法把 `patch.code` 第一个写盘，之后才校验 name / match / excludeMatch：校验失败抛错时
-   * 索引里的 revision、enabled 一个没动，磁盘上的代码却已经换成新的——已启用的脚本下次注入
-   * 就跑这份没经用户确认的代码，绕开了「改代码或执行范围后自动停用、重新确认才能启用」。
-   * 现在校验失败时盘上什么都没动；索引写失败时把代码回滚回去，不留半截状态。
+   * 修改用户脚本：先校验和读取可靠旧内容；已启用脚本的执行面确有变化时先持久停用，
+   * 再写代码与新索引。停用落盘失败就终止；之后的失败可能使脚本保持停用。
+   * 原错误向外抛，代码回滚或安全索引恢复失败另留诊断，不将失败伪装成完整回滚。
    */
   updateScript(
     context: BrowserSiteContext,
@@ -130,15 +128,9 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   constructor(private readonly access: BrowserUserScriptAccess) {}
 
   public async getOverview(context: BrowserSiteContext): Promise<BrowserUserScriptOverview> {
-    const store = await this.loadStore()
-    return {
-      browserContext: context,
-      globalEnabled: store.globalEnabled,
-      scripts: sortScripts(store.scripts),
-      matchedScriptIds: sortScripts(store.scripts)
-        .filter((script) => browserUserScriptMatchesUrl(script, context.url))
-        .map((script) => script.id),
-    }
+    return browserUserScriptIndexQueue.run(async () =>
+      buildUserScriptOverview(context, await this.loadStore())
+    )
   }
 
   public async readScript(
@@ -149,21 +141,15 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     script: BrowserUserScriptRecord
     code: string
   }> {
-    const store = await this.loadStore()
-    const script = requireScript(store, id)
-    const code = await this.readCode(script)
-    return {
-      overview: {
-        browserContext: context,
-        globalEnabled: store.globalEnabled,
-        scripts: sortScripts(store.scripts),
-        matchedScriptIds: sortScripts(store.scripts)
-          .filter((candidate) => browserUserScriptMatchesUrl(candidate, context.url))
-          .map((candidate) => candidate.id),
-      },
-      script,
-      code,
-    }
+    return browserUserScriptIndexQueue.run(async () => {
+      const store = await this.loadStore()
+      const script = requireScript(store, id)
+      return {
+        overview: buildUserScriptOverview(context, store),
+        script,
+        code: await this.readCode(script),
+      }
+    })
   }
 
   public async createScript(
@@ -210,18 +196,11 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
         await this.deleteFileQuietly(script.relativePath)
         throw error
       }
-      return { overview: await this.getOverview(context), script }
+      return { overview: buildUserScriptOverview(context, store), script }
     })
   }
 
-  /**
-   * 修改用户脚本：**先把全部字段校验成最终值，再写代码，最后写索引**。
-   *
-   * 老写法把 `patch.code` 第一个写盘，之后才校验 name / match / excludeMatch：校验失败抛错时
-   * 索引里的 revision、enabled 一个没动，磁盘上的代码却已经换成新的——已启用的脚本下次注入
-   * 就跑这份没经用户确认的代码，绕开了「改代码或执行范围后自动停用、重新确认才能启用」。
-   * 现在校验失败时盘上什么都没动；索引写失败时把代码回滚回去，不留半截状态。
-   */
+  /** 见公开接口：预停用是安全写入，不与原启用状态一起回滚。 */
   public async updateScript(
     context: BrowserSiteContext,
     id: string,
@@ -231,45 +210,66 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const script = requireScript(store, id)
-      // ① 全部字段先校验成最终值：任何一条不合法都在这里抛错，此时盘上一个字节都没改。
       const validated = validateUserScriptPatch(patch)
-      const previousCode = isNotNull(validated.code) ? await this.readCodeForRollback(script) : null
-
-      // ② 代码文件。
-      if (isNotNull(validated.code)) {
-        await this.access.writeFile(script.relativePath, validated.code, { overwrite: true })
+      const scopeChanged =
+        (isNotNull(validated.match) &&
+          JSON.stringify(validated.match) !== JSON.stringify(script.match)) ||
+        (isNotNull(validated.excludeMatch) &&
+          JSON.stringify(validated.excludeMatch) !== JSON.stringify(script.excludeMatch ?? [])) ||
+        (isPresent(patch.runAt) && patch.runAt !== script.runAt) ||
+        (isPresent(patch.world) && patch.world !== script.world)
+      const previousCode =
+        isNotNull(validated.code) || (script.enabled && scopeChanged)
+          ? await this.readCode(script)
+          : null
+      const codeChanged = isNotNull(validated.code) && validated.code !== previousCode
+      const executionChanged = codeChanged || scopeChanged
+      const previousScript = { ...script }
+      const predisabled = script.enabled && executionChanged
+      if (predisabled) {
+        script.enabled = false
+        await this.saveStore(store)
       }
-
-      // ③ 索引：执行面（代码、match、excludeMatch、runAt、world）变了就换代并按宿主策略停用。
-      const executionChanged =
-        isNotNull(validated.code) ||
-        ['match', 'excludeMatch', 'runAt', 'world'].some((key) =>
-          Object.prototype.hasOwnProperty.call(patch, key)
-        )
-      if (isNotNull(validated.name)) script.name = validated.name
-      if (isNotNull(validated.description)) script.description = validated.description.value
-      if (isNotNull(validated.match)) script.match = validated.match
-      if (isNotNull(validated.excludeMatch)) script.excludeMatch = validated.excludeMatch
-      if (isPresent(patch.runAt)) script.runAt = patch.runAt
-      if (isPresent(patch.world)) script.world = patch.world
-      if (executionChanged) {
-        script.revision += 1
-        // Agent 工具入口会要求修改执行面后重新显式启用；UI 编辑入口可保留当前状态。
-        if (options.disableAfterExecutionChange) script.enabled = false
-        script.lastRun = undefined
-      }
-      if (isNotNull(validated.version)) script.version = validated.version
-      script.updatedAt = Date.now()
-
+      let codeWriteStarted = false
       try {
+        if (codeChanged && isNotNull(validated.code)) {
+          codeWriteStarted = true
+          await this.access.writeFile(script.relativePath, validated.code, { overwrite: true })
+        }
+        if (isNotNull(validated.name)) script.name = validated.name
+        if (isNotNull(validated.description)) script.description = validated.description.value
+        if (isNotNull(validated.match)) script.match = validated.match
+        if (isNotNull(validated.excludeMatch)) script.excludeMatch = validated.excludeMatch
+        if (isPresent(patch.runAt)) script.runAt = patch.runAt
+        if (isPresent(patch.world)) script.world = patch.world
+        if (executionChanged) {
+          script.revision += 1
+          script.lastRun = undefined
+        }
+        script.enabled =
+          previousScript.enabled && !(executionChanged && options.disableAfterExecutionChange)
+        if (isNotNull(validated.version)) script.version = validated.version
+        script.updatedAt = Date.now()
         await this.saveStore(store)
       } catch (error) {
-        await this.restoreCodeAfterFailedUpdate(script, previousCode)
+        Object.assign(script, previousScript)
+        if (predisabled) {
+          script.enabled = false
+          try {
+            await this.saveStore(store)
+          } catch (safeIndexError) {
+            log.error('用户脚本更新失败后未能确认停用索引，须人工核对', {
+              scriptId: script.id,
+              error: String(safeIndexError),
+            })
+          }
+        }
+        if (codeWriteStarted) await this.restoreCodeAfterFailedUpdate(script, previousCode)
         throw error
       }
 
       return {
-        overview: await this.getOverview(context),
+        overview: buildUserScriptOverview(context, store),
         script,
         refreshRequired: executionChanged,
       }
@@ -283,7 +283,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       script.enabled = enabled
       script.updatedAt = Date.now()
       await this.saveStore(store)
-      return { overview: await this.getOverview(context), script, refreshRequired: true }
+      return { overview: buildUserScriptOverview(context, store), script, refreshRequired: true }
     })
   }
 
@@ -292,7 +292,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       const store = await this.loadStore()
       store.globalEnabled = enabled
       await this.saveStore(store)
-      return { overview: await this.getOverview(context), refreshRequired: true }
+      return { overview: buildUserScriptOverview(context, store), refreshRequired: true }
     })
   }
 
@@ -314,7 +314,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
         store.scripts = ordered
         await this.saveStore(store)
       }
-      return { overview: await this.getOverview(context), script }
+      return { overview: buildUserScriptOverview(context, store), script }
     })
   }
 
@@ -325,25 +325,26 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       await this.access.deleteFile(script.relativePath)
       store.scripts = store.scripts.filter((candidate) => candidate.id !== script.id)
       await this.saveStore(store)
-      return { overview: await this.getOverview(context), script, refreshRequired: true }
+      return { overview: buildUserScriptOverview(context, store), script, refreshRequired: true }
     })
   }
 
   public async listRunnable(
     url: string
   ): Promise<Array<{ script: BrowserUserScriptRecord; code: string }>> {
-    const store = await this.loadStore()
-    if (!store.globalEnabled) return []
-    const matching = sortScripts(store.scripts).filter(
-      (script) => script.enabled && browserUserScriptMatchesUrl(script, url)
-    )
-    const results = await Promise.all(
-      matching.map(async (script) => ({
-        script,
-        code: await this.readCode(script),
-      }))
-    )
-    return results
+    return browserUserScriptIndexQueue.run(async () => {
+      const store = await this.loadStore()
+      if (!store.globalEnabled) return []
+      const matching = sortScripts(store.scripts).filter(
+        (script) => script.enabled && browserUserScriptMatchesUrl(script, url)
+      )
+      return Promise.all(
+        matching.map(async (script) => ({
+          script,
+          code: await this.readCode(script),
+        }))
+      )
+    })
   }
 
   public async recordRun(id: string, run: BrowserUserScriptLastRun): Promise<void> {
@@ -355,20 +356,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     })
   }
 
-  /** 读一份用于回滚的旧代码；读不到（文件缺失、超限）就返回 null，不因此挡下这次修改。 */
-  private async readCodeForRollback(script: BrowserUserScriptRecord): Promise<Nullable<string>> {
-    try {
-      return await this.readCode(script)
-    } catch (error) {
-      log.debug('读取用户脚本旧代码失败，本次修改失败时无法回滚代码', {
-        scriptId: script.id,
-        error: String(error),
-      })
-      return null
-    }
-  }
-
-  /** 索引写失败后的代码回滚：把改之前的代码写回去，别留「新代码 + 旧索引」的半截状态。 */
+  /** 更新失败后尝试恢复旧代码；回滚失败保留诊断，不掩盖原错误或恢复启用。 */
   private async restoreCodeAfterFailedUpdate(
     script: BrowserUserScriptRecord,
     previousCode: Nullable<string>

@@ -14,10 +14,13 @@ import {
 import { evaluationScenario } from './act-scenarios.mjs'
 import { workflowMetrics } from './workflow-metrics.mjs'
 import { createEvidenceCheckpoints } from './evidence-checkpoints.mjs'
-import { createRuntime } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
+import * as projectPackage from '@velaros-ai/velaros/project'
+import { evaluationCapabilities } from './harbor/evaluation-runtime.mjs'
+import { observedFiles, traceBody as body } from './act-trace.mjs'
 
 const prompt =
-  '工作区 state.txt 当前第一行是 one。请用 observe 持续读取它（注释说明观察目的），先等待下一轮观察确实返回 one，再用后续 execute 将第一行改为 two，只修改一次；安装 observe 的同一份响应不要改写；在之后一轮的观察结果中确认 two 再完成。保留 protected.txt 原样。通过 velaros:project 的真实契约完成读写。'
+  '工作区 state.txt 当前第一行是 one。请用 observe 调用 velaros:project.snapshot 持续捕获它（files 条目给稳定 key 和 purpose，并用 output 交出完整快照回执），先等待下一轮观察确实返回 one，再用后续 execute 的 project.commit 将第一行改为 two，只提交一次；安装 observe 的同一份响应不要改写；在之后一轮的快照中确认 two 再完成。普通文件读取使用 node:fs/promises，commit 使用真实已读基线或唯一片段。保留 protected.txt 原样。'
 const coverage = Object.fromEntries(
   ObservationFaces.map((face) => [
     face,
@@ -40,11 +43,6 @@ async function writeSnapshot(path, value) {
   const temporary = `${path}.writing`
   await writeFile(temporary, JSON.stringify(value, null, 2))
   await rename(temporary, path)
-}
-
-// 正文截断时保留未知，不把局部 JSON 当成完整事实。
-function body(record) {
-  return record && !record.truncated && record.body !== null ? JSON.parse(record.body) : null
 }
 
 // 将同一 Kernel 调用去重映射给 Lab；ScriptAct 外层协议不伪装成工具调用。
@@ -148,17 +146,30 @@ export async function runActEvaluation({
     item.maxMs = Math.max(item.maxMs, metric.durationMs)
     metrics.set(key, item)
   }
-  const runtime = await createRuntime({
+  const capabilityOptions = await evaluationCapabilities({
+    projectPackage,
+    root,
+    stateDirectory: join(directory, 'state'),
+    model,
+    project: true,
+    agents: Boolean(workload?.modelTools),
+    search: Boolean(workload?.modelTools),
+  })
+  const runtime = await createNodeRuntime({
     onMetric,
-    workspace: root,
-    dataDir: join(directory, 'state'),
+    cwd: root,
+    binding: {
+      executionIdentity: `act-evaluation:${scenario}`,
+      authorizationScope: 'isolated-evaluation-host',
+    },
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
+    stateDirectory: join(directory, 'state'),
     model,
     // 该工作负载显式验收持续观察，按宿主合同开放观察声明。
     protocol: { allowed: ['observe', 'blobs', 'execute', 'done'] },
-    agents: workload?.modelTools ?? false,
-    search: workload?.modelTools ?? false,
+    ...capabilityOptions,
     context: {
-      sources: [],
+      ...capabilityOptions.context,
       limits: { modelCalls: turns * 3, modelTokens: turns * 3 * model.limits.contextTokens },
     },
     limits: { turns, timeoutMs, outputTokens: model.limits.outputTokens, safetyTokens: 1024 },
@@ -169,6 +180,8 @@ export async function runActEvaluation({
     failure = null,
     started = 0,
     finished = 0,
+    legTraceStart = 0,
+    legToolIds = new Set(),
     traces = [],
     events = [],
     artifacts = [],
@@ -247,8 +260,13 @@ export async function runActEvaluation({
     async prepare() {},
     async send(_handle, leg) {
       if (running) throw new Error('同一验收会话仍在运行')
+      legTraceStart = traces.length
+      legToolIds = new Set(
+        observedCalls(traces).flatMap((turn) => turn.toolCalls.map((call) => call.id))
+      )
       running = true
       started = Date.now()
+      finished = 0
       pending = (async () => {
         try {
           for await (const event of session.submit(leg.prompt)) {
@@ -292,10 +310,13 @@ export async function runActEvaluation({
         usage: {
           toolCalls: running
             ? null
-            : observedCalls(traces).reduce((n, turn) => n + turn.toolCalls.length, 0),
+            : observedCalls(traces).reduce(
+                (n, turn) => n + turn.toolCalls.filter((call) => !legToolIds.has(call.id)).length,
+                0
+              ),
           workingMs: null,
           wallClockMs: started ? (finished || Date.now()) - started : 0,
-          tokens: running ? null : measuredUsage(traces).totalTokens,
+          tokens: running ? null : measuredUsage(traces.slice(legTraceStart)).totalTokens,
           legs: started ? 1 : 0,
         },
         unavailable: failure ? { detail: failure } : null,
@@ -303,7 +324,7 @@ export async function runActEvaluation({
     },
     async collect(_handle, phase) {
       const snapshot = await session.inspect(),
-        requests = traces.map((trace) => body(trace.request)),
+        requests = traces.map((trace) => body(trace.request)?.requestAudit),
         latest = requests.at(-1)
       return {
         phase,
@@ -347,11 +368,9 @@ export async function runActEvaluation({
           awaitingConfirmation: snapshot.pending.some((item) => item.kind === 'confirmation'),
           awaitingInput: snapshot.pending.length > 0,
           status: snapshot.status,
-          contextTokens: latest?.estimate.tokens ?? null,
+          contextTokens: latest?.inputTokens ?? null,
           contextWindow: model.limits.contextTokens,
-          contextPercent: latest
-            ? (latest.estimate.tokens / model.limits.contextTokens) * 100
-            : null,
+          contextPercent: latest ? (latest.inputTokens / model.limits.contextTokens) * 100 : null,
         },
         contextResidency: requests.flatMap((request, index) =>
           request
@@ -360,18 +379,14 @@ export async function runActEvaluation({
                   id: traces[index].turnId,
                   epoch: index,
                   turn: traces[index].turn,
-                  cause: 'runtime-view',
-                  beforeTokens: requests[index - 1]?.estimate.tokens ?? null,
-                  afterTokens: request.estimate.tokens,
+                  cause: 'model-request',
+                  beforeTokens: requests[index - 1]?.inputTokens ?? null,
+                  afterTokens: request.inputTokens,
                   cacheReadDropNextRequest: null,
                   distillCostTokens: null,
                   payload: {
-                    precision: request.estimate.precision,
-                    basis: request.estimate.basis,
-                    materialChars: request.request.materials.reduce(
-                      (n, item) => n + item.text.length,
-                      0
-                    ),
+                    precision: request.precision,
+                    basis: request.basis,
                   },
                 },
               ]
@@ -380,7 +395,7 @@ export async function runActEvaluation({
         artifacts,
         metadata: {
           rawTracePath: tracePath,
-          requestTokensAreEstimates: true,
+          requestTokenSource: 'compiler-request-audit',
           providerReceiptConfirmed: false,
           failure,
         },
@@ -423,51 +438,31 @@ export async function runActEvaluation({
       text = await readFile(join(root, 'state.txt'), 'utf8'),
       protectedText = await readFile(join(root, 'protected.txt'), 'utf8')
     const calls = traces.flatMap((trace) => trace.invocations.map(body).filter(Boolean)),
-      edits = new Map(
+      commits = new Map(
         calls
           .filter(
             (item) =>
               item.prepared.binding.moduleId === 'velaros:project' &&
-              item.prepared.operation === 'edit'
+              item.prepared.operation === 'commit'
           )
           .map((item) => [item.prepared.id, item])
       )
-    const successfulEdits = [...edits.values()].filter(
-      (item) => item.receipt?.outcome === 'succeeded' && item.receipt.effect === 'committed'
+    const successfulCommits = [...commits.values()].filter(
+      (item) =>
+        item.receipt?.outcome === 'succeeded' &&
+        item.receipt.effect === 'committed' &&
+        item.receipt.value?.status === 'applied'
     )
-    const observations = traces.flatMap((trace) => {
-      const request = body(trace.request),
-        material = request?.request.materials.find((item) => item.origin === 'runtime-view')
-      if (!material) return []
-      const frame = JSON.parse(material.text)
-      const record = trace.records.find(
-        (item) => item.ref.id === frame.partitions.observation?.resultRef
-      )
-      if (!record) return []
-      const executionId = record.title.slice(7, -7)
-      const reads = trace.invocations
-        .map(body)
-        .filter(
-          (item) =>
-            item?.prepared.executionId === executionId &&
-            item.prepared.mode === 'observe' &&
-            item.prepared.operation === 'read' &&
-            item.prepared.binding.moduleId === 'velaros:project' &&
-            item.receipt?.outcome === 'succeeded'
-        )
-      return reads.map((item) => ({
+    const observations = traces.flatMap((trace) =>
+      observedFiles(trace).map((observation) => ({
         turn: trace.turnId,
-        value: item.receipt.value,
-        visible: frame.partitions.observation.text,
+        ...observation,
       }))
-    })
+    )
     const matches = (item, text) =>
-      item.value?.files?.some(
-        (file) =>
-          (file.path === 'state.txt' || file.path.endsWith('/state.txt')) &&
-          file.startLine === 1 &&
-          file.text.split('\n')[0] === text
-      ) && item.visible.includes(text)
+      (item.file.path === 'state.txt' || item.file.path.endsWith('/state.txt')) &&
+      item.file.startLine === 1 &&
+      item.file.text.split('\n')[0] === text
     const first = observations.findIndex((item) => matches(item, 'one'))
     const sawOne = first >= 0
     const sawTwo = observations.some((item, index) => index > first && matches(item, 'two'))
@@ -475,10 +470,11 @@ export async function runActEvaluation({
       status: snapshot.status,
       text,
       protectedText,
-      successfulEdits: successfulEdits.length,
-      editCalls: edits.size,
+      successfulCommits: successfulCommits.length,
+      commitCalls: commits.size,
       sawOne,
       sawTwo,
+      observations,
       modelCalls: traces.length,
       tracePath,
     }
@@ -486,8 +482,8 @@ export async function runActEvaluation({
       snapshot.status === 'completed' &&
       text === 'two\n' &&
       protectedText === 'keep this\n' &&
-      edits.size === 1 &&
-      successfulEdits.length === 1 &&
+      commits.size === 1 &&
+      successfulCommits.length === 1 &&
       sawOne &&
       sawTwo
     return passed
@@ -588,10 +584,6 @@ export async function runActEvaluation({
     totalModelCalls: traces.length + branches.reduce((n, branch) => n + branch.turns.length, 0),
     usageScope: 'main',
     totalUsage: measuredUsage([...traces, ...branches.flatMap((branch) => branch.turns)]),
-    requestChars: traces.map(
-      (trace) =>
-        body(trace.request)?.request.materials.reduce((n, item) => n + item.text.length, 0) ?? null
-    ),
     usage: measuredUsage(traces),
     storageBytes: (await stat(join(directory, 'state/context.sqlite'))).size,
   }

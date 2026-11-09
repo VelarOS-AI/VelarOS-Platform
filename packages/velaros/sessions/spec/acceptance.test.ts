@@ -111,13 +111,11 @@ describe('交给宿主的东西', () => {
         answer
       )
     }
-    for (const status of ['delivered', 'queued'] as const) {
-      const told: SessionTold = { session: 'browser-1', status }
-      const space = sessionsSpace({ told: async () => told })
-      expect(
-        await sessionsOperations.tell({ to: 'browser-1', message: '换个地址' }, space.context)
-      ).toBe(told)
-    }
+    const told: SessionTold = { session: 'browser-1', status: 'queued' }
+    const receiving = sessionsSpace({ told: async () => told })
+    expect(
+      await sessionsOperations.tell({ to: 'browser-1', message: '换个地址' }, receiving.context)
+    ).toBe(told)
 
     const refusal = new AppError('SESSIONS_DEADLOCK', 'browser-1 正在等你回答，不能反过来等它')
     const refusing = sessionsSpace({
@@ -140,6 +138,24 @@ describe('交给宿主的东西', () => {
     expect(
       await failureOf(sessionsOperations.tell({ to: 'other-9', message: 'x' }, stranger.context))
     ).toEqual({ code: 'SESSIONS_NOT_IN_CONVERSATION', message: 'other-9 不在这个对话里' })
+
+    const idleRefusal = new AppError(
+      'UNAVAILABLE',
+      '目标没有可接收引导的活动运行；启动任务请使用 ask'
+    )
+    const idle = sessionsSpace({
+      told: async () => {
+        throw idleRefusal
+      },
+    })
+    let rejected: unknown = null
+    try {
+      await sessionsOperations.tell({ to: 'system-1', message: '换个方向' }, idle.context)
+    } catch (error) {
+      rejected = error
+    }
+    expect(rejected).toBe(idleRefusal)
+    expect(idle.record.asks).toEqual([])
   })
 
   test('INV-5 tell：to 去掉首尾空白，message 原样，对象上只有 to 与 message', async () => {
@@ -149,7 +165,7 @@ describe('交给宿主的东西', () => {
     expect(space.record.tells.map(({ input }) => input)).toStrictEqual([
       { to: 'project-2', message },
     ])
-    expect(told).toEqual({ session: 'project-2', status: 'delivered' })
+    expect(told).toEqual({ session: 'project-2', status: 'queued' })
   })
 })
 
@@ -293,7 +309,7 @@ const [order, disk] = await Promise.all([
   ask({ to: browser.id, task: '下单' }),
   ask({ workspace: 'system', task: '看看磁盘' }),
 ])
-const told = await tell({ to: ' system-1 ', message: '磁盘满了就清缓存' })
+const told = await tell({ to: ' browser-1 ', message: '付款前先确认订单地址' })
 let refused
 try {
   await ask({ workspace: 'project', root: 'relative/path', task: '查' })
@@ -307,7 +323,7 @@ export default { self: peers.find((peer) => peer.self).id, order: order.status, 
       self: 'project-1',
       order: 'completed',
       opened: 'system-new',
-      told: { session: 'system-1', status: 'delivered' },
+      told: { session: 'browser-1', status: 'queued' },
       refused: SessionsErrorCodes.rootInvalid,
     })
     expect(space.record.asks.map(({ input }) => input)).toEqual([

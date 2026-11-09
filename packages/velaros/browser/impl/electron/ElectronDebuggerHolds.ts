@@ -30,6 +30,8 @@ export interface ElectronDebuggerHoldsProtocol {
 
 /** 一条 WebContents 上持久生效的网络采集。 */
 export interface ElectronDebuggerHoldsNetwork {
+  /** 并发使用者等待同一次 Network.enable，失败时撤销占用后可重试。 */
+  ready: Promise<void>
   /** 网络控制器：离线、请求头、拦截与 mock 都经它下发。 */
   controller: BrowserCdpNetworkController
   /** 这条 WebContents 累积的网络诊断，跨多次工具调用留着。 */
@@ -71,6 +73,8 @@ export interface ElectronDebuggerHoldsApi {
   hasNetwork(webContents: electron.WebContents): boolean
   /** 登记网络采集。 */
   setNetwork(webContents: electron.WebContents, hold: ElectronDebuggerHoldsNetwork): void
+  /** 撤销已失效或未能建立的网络采集。 */
+  deleteNetwork(webContents: electron.WebContents): void
   /** 登记模型的 CDP 会话。 */
   setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void
   /** 撤销模型 CDP 会话的登记。 */
@@ -92,6 +96,8 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
 
   public hasPersistentHold(webContents: electron.WebContents): boolean {
     return (
+      this.traces.has(webContents) ||
+      this.screencasts.has(webContents) ||
       this.emulations.has(webContents) ||
       this.networks.has(webContents) ||
       this.protocols.has(webContents)
@@ -141,6 +147,10 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
 
   public setNetwork(webContents: electron.WebContents, hold: ElectronDebuggerHoldsNetwork): void {
     this.networks.set(webContents, hold)
+  }
+
+  public deleteNetwork(webContents: electron.WebContents): void {
+    this.networks.delete(webContents)
   }
 
   public setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void {

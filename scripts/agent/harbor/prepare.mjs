@@ -144,6 +144,7 @@ const identity = await withVerifiedPackageBuilds(names, async (buildProof) => {
     )
     for (const name of [
       'run.mjs',
+      'evaluation-runtime.mjs',
       'atif.mjs',
       'trace-export.mjs',
       'trace-artifact.mjs',

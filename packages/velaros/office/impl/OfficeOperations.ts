@@ -32,15 +32,6 @@ import {
   wordToPdfInput,
 } from '../utils/input.js'
 
-import type { OfficeDocumentOperationsApi } from './operations/OfficeDocumentOperations.js'
-import { officeDocumentOperations } from './operations/OfficeDocumentOperations.js'
-import type { OfficeMarkdownOperationsApi } from './operations/OfficeMarkdownOperations.js'
-import { officeMarkdownOperations } from './operations/OfficeMarkdownOperations.js'
-import type { OfficePdfOperationsApi } from './operations/OfficePdfOperations.js'
-import { officePdfOperations } from './operations/OfficePdfOperations.js'
-import type { OfficePreviewOperationsApi } from './operations/OfficePreviewOperations.js'
-import { officePreviewOperations } from './operations/OfficePreviewOperations.js'
-
 /**
  * @AgentView
  * 办公文档：生成 Word、PowerPoint、Excel，读 PDF 的文字、编辑 PDF，Word 转 PDF、LaTeX 编译成 PDF，预览 Office 文档，把文档转成 Markdown。
@@ -110,21 +101,17 @@ export interface OfficeOperationsMarkdownApi {
   toMarkdown(input: OfficeMarkdownInput, ctx: OfficeOperationContext): Promise<OfficeMarkdown>
 }
 
-/** 顺序是固定的：先查取消、再核对入参、最后交给执行类——入参错了一步都不做。整个进程共用一份，无状态。 */
+/** 先查取消、核对入参，再按需加载执行组；加载后重查取消，复用执行组的进程单例。 */
 export class OfficeOperations implements OfficeOperationsApi {
-  constructor(
-    private readonly documents: OfficeDocumentOperationsApi,
-    private readonly pdfs: OfficePdfOperationsApi,
-    private readonly previews: OfficePreviewOperationsApi,
-    private readonly markdown: OfficeMarkdownOperationsApi
-  ) {}
-
   public async createWord(
     input: OfficeWordInput,
     ctx: OfficeOperationContext
   ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
-    return this.documents.createWord(wordInput(input), ctx)
+    const request = wordInput(input)
+    const { officeDocumentOperations } = await import('./operations/OfficeDocumentOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officeDocumentOperations.createWord(request, ctx)
   }
 
   public async createPresentation(
@@ -132,7 +119,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
-    return this.documents.createPresentation(presentationInput(input), ctx)
+    const request = presentationInput(input)
+    const { officeDocumentOperations } = await import('./operations/OfficeDocumentOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officeDocumentOperations.createPresentation(request, ctx)
   }
 
   public async createSpreadsheet(
@@ -140,7 +130,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
-    return this.documents.createSpreadsheet(spreadsheetInput(input), ctx)
+    const request = spreadsheetInput(input)
+    const { officeDocumentOperations } = await import('./operations/OfficeDocumentOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officeDocumentOperations.createSpreadsheet(request, ctx)
   }
 
   public async readPdf(
@@ -148,7 +141,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficePdfText> {
     ctx.abortSignal.throwIfAborted()
-    return this.pdfs.readText(readPdfInput(input), ctx)
+    const request = readPdfInput(input)
+    const { officePdfOperations } = await import('./operations/OfficePdfOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officePdfOperations.readText(request, ctx)
   }
 
   public async wordToPdf(
@@ -156,7 +152,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
-    return this.pdfs.wordToPdf(wordToPdfInput(input), ctx)
+    const request = wordToPdfInput(input)
+    const { officePdfOperations } = await import('./operations/OfficePdfOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officePdfOperations.wordToPdf(request, ctx)
   }
 
   public async latexToPdf(
@@ -164,7 +163,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeLatexCompiled> {
     ctx.abortSignal.throwIfAborted()
-    return this.pdfs.latexToPdf(latexInput(input), ctx)
+    const request = latexInput(input)
+    const { officePdfOperations } = await import('./operations/OfficePdfOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officePdfOperations.latexToPdf(request, ctx)
   }
 
   public async editPdf(
@@ -172,7 +174,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
-    return this.pdfs.editPdf(editPdfInput(input), ctx)
+    const request = editPdfInput(input)
+    const { officePdfOperations } = await import('./operations/OfficePdfOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officePdfOperations.editPdf(request, ctx)
   }
 
   public async preview(
@@ -183,7 +188,9 @@ export class OfficeOperations implements OfficeOperationsApi {
     const request = previewInput(input)
     // 不给 outputPath 只是读：这次调用对外界没有效果
     if (!request.outputPath) ctx.recordEffect?.('none')
-    return this.previews.preview(request, ctx)
+    const { officePreviewOperations } = await import('./operations/OfficePreviewOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officePreviewOperations.preview(request, ctx)
   }
 
   public async toMarkdown(
@@ -193,14 +200,11 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx.abortSignal.throwIfAborted()
     const request = markdownInput(input)
     if (!request.outputPath) ctx.recordEffect?.('none')
-    return this.markdown.toMarkdown(request, ctx)
+    const { officeMarkdownOperations } = await import('./operations/OfficeMarkdownOperations.js')
+    ctx.abortSignal.throwIfAborted()
+    return officeMarkdownOperations.toMarkdown(request, ctx)
   }
 }
 
 /** 整个进程只有一份的办公文档操作；空间把它挂在代码面的 `office` 命名空间上。 */
-export const officeOperations: OfficeOperationsApi = new OfficeOperations(
-  officeDocumentOperations,
-  officePdfOperations,
-  officePreviewOperations,
-  officeMarkdownOperations
-)
+export const officeOperations: OfficeOperationsApi = new OfficeOperations()

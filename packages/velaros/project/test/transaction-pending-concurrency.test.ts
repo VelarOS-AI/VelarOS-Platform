@@ -106,7 +106,7 @@ test('并发的两个 apply 各留各的恢复计划，重启后逐个恢复', a
   }
 }, 60_000)
 
-test('旧格式状态文件里的单槽位 pending 读回后照样恢复', async () => {
+test('旧单槽位事务格式拒绝恢复，状态和项目内容均保持原样', async () => {
   const root = join(directory, 'legacy')
   const statePath = join(directory, 'legacy-state', 'transactions.json')
   await mkdir(root, { recursive: true })
@@ -144,11 +144,10 @@ test('旧格式状态文件里的单槽位 pending 读回后照样恢复', async
   }
   await writeFile(statePath, JSON.stringify(legacy))
 
-  const restarted = await createProjectKernel({ root, transactionStatePath: statePath })
-  expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('before\n')
-  expect(restarted.getTransaction(transaction)?.status).toBe('validated')
-  const upgraded = await readState(statePath)
-  expect(upgraded.formatVersion).toBe(3)
-  expect(upgraded.pending).toBeUndefined()
-  expect(upgraded.pendings).toBeUndefined()
+  const bytes = await readFile(statePath, 'utf8')
+  await expect(
+    createProjectKernel({ root, transactionStatePath: statePath })
+  ).rejects.toMatchObject({ reason: 'TRANSACTION_RECOVERY_CONFLICT' })
+  expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
+  expect(await readFile(statePath, 'utf8')).toBe(bytes)
 }, 60_000)

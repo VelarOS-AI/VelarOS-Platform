@@ -9,7 +9,6 @@ import type {
   DetectorDefinition,
   Finding,
   JsonObject,
-  JsonValue,
   Observation,
   ObservationReference,
   ToolCallRecord,
@@ -18,7 +17,12 @@ import type { ResolvedDetectorSettings } from '../../types/internal.js'
 import { canonicalJson } from '../canonical-json.js'
 import { AgentLabTuning } from '../tuning.js'
 
-import { collectToolCalls, normalizeObservation } from './normalize.js'
+import {
+  catalogReadPageKey,
+  collectToolCalls,
+  normalizeObservation,
+  retryCallKey,
+} from './normalize.js'
 
 /** 这些结束原因是正常终止，不用报未知。 */
 const TerminalFinishReasons = new Set([
@@ -49,11 +53,6 @@ const SettledPhases: readonly ObservationPhase[] = ['archive', 'idle']
 
 /** 判词能观测到的阶段：全程。 */
 const AllPhases: readonly ObservationPhase[] = ['archive', 'idle', 'running']
-
-/** 这个 JSON 值是不是一个对象。 */
-function isJsonObject(value: JsonValue): value is JsonObject {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 /** 造一条指向观测某一处的引用。 */
 function reference(
@@ -422,21 +421,16 @@ export function createBuiltinDetectors(
         let previousKey: string | null = null
         let consecutiveCount = 0
         for (const call of collectToolCalls(observation)) {
-          if (call.input === null) {
+          const key = retryCallKey(call)
+          if (key === null) {
             previousKey = null
             consecutiveCount = 0
             continue
           }
-          const serializedInput = canonicalJson(call.input)
-          if (serializedInput === '{}') {
-            previousKey = null
-            consecutiveCount = 0
-            continue
-          }
-          const key = `${call.name}\u0000${serializedInput}`
           const current = groups.get(key)
           consecutiveCount = key === previousKey ? consecutiveCount + 1 : 1
-          groups.set(key, { call, count: Math.max(current?.count ?? 0, consecutiveCount) })
+          if (!current || consecutiveCount >= current.count)
+            groups.set(key, { call, count: consecutiveCount })
           previousKey = key
         }
         return [...groups.values()]
@@ -465,9 +459,8 @@ export function createBuiltinDetectors(
       (observation) => {
         const reads = new Map<string, { call: ToolCallRecord; count: number }>()
         for (const call of collectToolCalls(observation)) {
-          if (!catalogToolNames.has(call.name)) continue
-          if (!isJsonObject(call.input) || call.input.op !== 'read') continue
-          const page = canonicalJson(call.input.ids ?? call.input.id ?? '')
+          const page = catalogReadPageKey(call, catalogToolNames)
+          if (page === null) continue
           const current = reads.get(page)
           reads.set(page, { call, count: (current?.count ?? 0) + 1 })
         }

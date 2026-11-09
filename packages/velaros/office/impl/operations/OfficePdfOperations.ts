@@ -116,8 +116,9 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       timeoutMs: OfficeTuning.command.libreOfficeTimeoutMs,
     })
     // 使用临时目录接收 LibreOffice 生成物，避免污染用户目录。
-    const tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-word-pdf-'))
+    let tempDir: Nullable<string> = null
     try {
+      tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-word-pdf-'))
       const normalizedInputPath = normalizedWord.path
       const commandResult = await this.converters.runLibreOffice(
         ctx,
@@ -137,9 +138,10 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       if (!generatedPdf) throw missingOutputError('Word 转 PDF ', 'PDF')
       return await copyOfficeOutput(output, generatedPdf, ctx.abortSignal)
     } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(
-        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
-      )
+      if (tempDir)
+        await rm(tempDir, { recursive: true, force: true }).catch(
+          () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+        )
       await this.converters.cleanupNormalizedWordInput(normalizedWord)
     }
   }

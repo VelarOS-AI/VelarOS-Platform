@@ -1,11 +1,41 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { localContextStorage } from '@velaros-ai/context/node'
 
-import { volatileStorageBackend } from '../../../../context/test/support/storage-contract.mjs'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+
+async function observedSqliteStorage(t) {
+  const temporary = await realpath(tmpdir())
+  const directory = await realpath(await mkdtemp(join(temporary, 'runtime-lifecycle-')))
+  const connections = new Set()
+  const backend = {
+    closes: 0,
+    open: () => {
+      const storage = localContextStorage({ path: join(directory, 'context.sqlite') })
+      const close = storage.close.bind(storage)
+      storage.close = async () => {
+        if (!connections.has(storage)) return
+        await close()
+        connections.delete(storage)
+        backend.closes++
+      }
+      connections.add(storage)
+      return storage
+    },
+  }
+  t.after(async () => {
+    for (const storage of connections) await storage.close()
+    assert.equal(dirname(directory), temporary)
+    assert.ok(basename(directory).startsWith('runtime-lifecycle-'))
+    await rm(directory, { recursive: true, force: true })
+  })
+  return backend
+}
 
 const deferred = () => {
   let resolve
@@ -34,17 +64,26 @@ async function boundedClose(runtime) {
   }
 }
 
-test('INV-47 full runtime close preserves noncooperative writes, real effects and storage until settlement', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 full runtime close preserves noncooperative writes, real effects and storage until settlement', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const storage = await backend.open()
   const audit = createContextInvocationJournal(await backend.open())
   const entered = deferred()
   const release = deferred()
   let disposed = false
+  let resourcesClosed = 0
   let writes = 0
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
+    resources: [
+      {
+        close: () => {
+          assert.equal(disposed, true)
+          assert.equal(writes, 1)
+          resourcesClosed++
+        },
+      },
+    ],
     context: { maintenance: false },
     modules: [
       {
@@ -81,6 +120,7 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
     await boundedClose(runtime)
     assert.equal(backend.closes, 0)
     assert.equal(disposed, false)
+    assert.equal(resourcesClosed, 0)
     assert.equal(writes, 0)
     assert.equal(
       runtime.pending().some((item) => item.moduleId === 'test:slow' && item.cancelRequested),
@@ -98,6 +138,7 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
     await runtime.close()
   }
   assert.equal(disposed, true)
+  assert.equal(resourcesClosed, 1)
   assert.equal(backend.closes, 1)
   assert.equal(writes, 1)
   assert.deepEqual(runtime.pending(), [])
@@ -106,14 +147,58 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
   )
   assert.equal(final.receipt.effect, 'committed')
   assert.ok(final.receipt.lifecycle.startedAt)
+  let callerResourceClosed = false
+  const rejectedStorage = await backend.open()
+  const callerResource = {
+    close: () => {
+      callerResourceClosed = true
+    },
+  }
+  try {
+    await assert.rejects(
+      createRuntime({
+        storage: rejectedStorage,
+        resources: [callerResource],
+        modules: [
+          {
+            binding: {
+              moduleId: 'velaros:program',
+              instanceId: 'reserved',
+              generation: 1,
+              schemaRevision: '1',
+            },
+            summary: 'invalid reserved binding',
+            operations: {},
+          },
+        ],
+      }),
+      { code: 'VALIDATION' }
+    )
+    assert.equal(
+      callerResourceClosed,
+      false,
+      'Failed initialization leaves injected resources with the caller'
+    )
+  } finally {
+    await rejectedStorage.close()
+    callerResource.close()
+  }
 })
 
-test('INV-47 close deadline covers session shutdown before Kernel disposal', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 close deadline covers session shutdown before Kernel disposal', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const entered = deferred()
   const release = deferred()
+  let resourceClosed = false
   const runtime = await createRuntime({
     storage: await backend.open(),
+    resources: [
+      {
+        close: () => {
+          resourceClosed = true
+        },
+      },
+    ],
     modules: [],
     context: { maintenance: false },
     runner: {
@@ -131,6 +216,7 @@ test('INV-47 close deadline covers session shutdown before Kernel disposal', asy
     await entered.promise
     await boundedClose(runtime)
     assert.equal(backend.closes, 0)
+    assert.equal(resourceClosed, false)
     await assert.rejects(runtime.openSession('new'), { code: 'CLOSED' })
   } finally {
     release.resolve()
@@ -138,16 +224,16 @@ test('INV-47 close deadline covers session shutdown before Kernel disposal', asy
     await runtime.close()
   }
   assert.equal(backend.closes, 1)
+  assert.equal(resourceClosed, true)
 })
 
-test('INV-47 caller cancellation keeps the actual write lock until the handler exits', async () => {
-  const backend = volatileStorageBackend()
+test('INV-47 caller cancellation keeps the actual write lock until the handler exits', async (t) => {
+  const backend = await observedSqliteStorage(t)
   const entered = deferred()
   const release = deferred()
   const started = []
   const runtime = await createRuntime({
     storage: await backend.open(),
-    runner: nodeSubprocessCodeRunner,
     context: { maintenance: false },
     modules: [
       {

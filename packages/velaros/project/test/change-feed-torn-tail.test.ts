@@ -72,3 +72,27 @@ test('整份文件只有半条记录时截成空文件，之后照常追加', as
   expect(lines).toHaveLength(1)
   expect(JSON.parse(lines[0]!).transactionId).toBe('tx_9')
 })
+
+test('合法 JSON 但缺换行的尾行不发布，重开前后记录与下一序号一致', async () => {
+  const path = join(directory, 'valid-torn.jsonl')
+  const first = createFileProjectChangeFeed({ path })
+  first.record(record('tx_1'))
+  first.close()
+  await appendFile(path, JSON.stringify({ ...record('tx_2'), sequence: 2, updatedAt: 2 }))
+
+  const second = createFileProjectChangeFeed({ path })
+  try {
+    expect(second.list().map((change) => change.transactionId)).toEqual(['tx_1'])
+    expect(second.record(record('tx_3')).sequence).toBe(2)
+  } finally {
+    second.close()
+  }
+
+  const reopened = createFileProjectChangeFeed({ path })
+  try {
+    expect(reopened.list().map((change) => change.transactionId)).toEqual(['tx_3', 'tx_1'])
+    expect(reopened.record(record('tx_4')).sequence).toBe(3)
+  } finally {
+    reopened.close()
+  }
+})

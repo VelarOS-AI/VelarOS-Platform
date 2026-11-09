@@ -28,6 +28,8 @@ export interface NodeExecutionEnvironmentApi {
   readonly runtime?: NodeCodeRunnerOptions['runtime']
   /** 宿主在进程计时开始前审批。 */
   readonly authorize: NodeCodeRunnerOptions['authorize']
+  /** 转发同一宿主的只读后端检测，不以普通执行口代替。 */
+  readonly observationSupport: NonNullable<NodeCodeRunnerOptions['observationSupport']>
   /** 经命令宿主派发并等待完整的进程收束。 */
   execute(
     request: NodeProcessRequest,
@@ -44,6 +46,7 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
   public readonly packageDirectory?: string
   public readonly runtime?: NodeCodeRunnerOptions['runtime']
   public readonly authorize: NodeCodeRunnerOptions['authorize']
+  public readonly observationSupport: NonNullable<NodeCodeRunnerOptions['observationSupport']>
 
   public constructor(private readonly options: NodeExecutionEnvironmentOptions) {
     this.cwd = options.cwd
@@ -51,6 +54,13 @@ class NodeExecutionEnvironment implements NodeExecutionEnvironmentApi {
     this.packageDirectory = options.packageDirectory
     this.runtime = options.runtime
     this.authorize = options.authorize
+    this.observationSupport = () =>
+      options.host.runObservationCommand
+        ? (options.host.observationSupport?.() ?? {
+            available: false,
+            reason: '宿主未声明只读程序约束支持',
+          })
+        : { available: false, reason: '宿主没有提供只读进程执行口' }
     const executable = options.executable ?? nodeExecutable.resolve()
     if (executable)
       this.npm = createNpmClient({

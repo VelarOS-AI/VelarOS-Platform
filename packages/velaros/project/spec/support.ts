@@ -2,8 +2,8 @@
  * 验收测试与实现测试共用的替身，两个都装着真内核：
  * - `createProjectHarness`：两件工具的假空间。两件工具只经根入口拿（projectFileOperations、projectCodeOperations、createProjectKernel），
  *   两件工具不问人，所以这个空间里没有审批端口，也没有授权口子。
- * - `createProjectPortsHarness`：一个假宿主（`ProjectHostPort`），三件共用能力（`execution 宿主`、`velaros:sandbox`、`velaros:images`）的操作
- *   配上 `projectCapabilityPorts` 现装的项目端口——产品装项目空间时就是这样接的。审批（只有危险命令会问）与交给宿主的命令都记下来。
+ * - `createProjectPortsHarness`：一个假宿主（`ProjectHostPort`），`velaros:sandbox`、`velaros:images` 的操作
+ *   配上 `projectCapabilityPorts` 现装的项目端口。审批（只有危险沙箱命令会问）记进 confirmations。
  * 调用都走代码面的能力端口（createCapabilityPort），和模型的程序是同一条路：失败时程序只看得见 code 与 message。
  */
 
@@ -138,11 +138,10 @@ export interface RecordedConfirmation {
   options?: Parameters<ApprovalPort['awaitConfirmation']>[2]
 }
 
-/** 假宿主的开关：用户点不点确认、宿主怎么回命令、有没有演练沙箱与缩图口子、交图走哪条通道。 */
+/** 假宿主的开关：用户点不点确认、有没有演练沙箱与缩图口子、交图走哪条通道。 */
 export interface ProjectPortsHarnessOptions {
   /** 用户点不点确认（只有危险命令会问）；缺省点头。 */
   approve?: boolean
-  /** 宿主怎么回一条命令（交到这里的每一条都先记进 `runs`）；缺省交回成功的空回执。 */
   /** 宿主的演练沙箱：不给就是这台机器上没有沙箱。 */
   sandbox?: RehearsalSandboxHostPort
   /** 宿主的缩图口子：不给就是宿主没有图像处理能力。 */

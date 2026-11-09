@@ -9,13 +9,17 @@ import { after, before, test } from 'node:test'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { safePackPackage } from '../../../../../scripts/release/safe-package-pack.mjs'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { EnvironmentLimits } from '../../../dist/act/system/contract/constants.js'
 import { VelarSystemEnvironmentModule } from '../../../dist/act/system/contract/surface.js'
 import { createEnvironmentRegistry, environmentModule } from '../../../dist/act/system/index.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from '../../runtime/test/support/runtime-fixture.mjs'
 
 let root
 let server
@@ -264,13 +268,10 @@ test('INV-23 同一已打开会话安装后下一次执行即用，宿主授权�
   const f = await fixture(t)
   let denied = false
   const runtime = await createRuntime({
-    workspace: f.cwd,
-    dataDir: f.dataDir,
+    storage: await createTestStorage(f.dataDir),
+    packageEnvironment: f.registry,
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     authorize: (call) => {
       if (denied && call.operation === 'apply') throw Error('host denied')
@@ -307,13 +308,10 @@ test('INV-23 首帧获知当前 npm，安装升级回滚删除后的模型帧立
     { baseRevision: 3, remove: ['environment-fixture'] },
   ]
   const runtime = await createRuntime({
-    workspace: f.cwd,
-    dataDir: f.dataDir,
+    storage: await createTestStorage(f.dataDir),
+    packageEnvironment: f.registry,
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     model: {
       id: 'environment-context-test',

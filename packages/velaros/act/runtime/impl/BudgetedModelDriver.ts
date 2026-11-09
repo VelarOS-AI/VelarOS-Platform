@@ -74,13 +74,14 @@ export class BudgetedModelDriver implements BudgetedModelDriverApi {
         const failures = results.flatMap((result) =>
           result.status === 'rejected' ? [result.reason] : []
         )
-        if (!isEmpty(failures)) throw new AggregateError(failures, '子模型预算结算失败')
+        if (!isEmpty(failures))
+          throw AppError.withFields('UNAVAILABLE', '子模型预算结算失败', { errors: [...failures] })
       })
     }
     return this.closing
   }
   private async *dispatch(
-    request: ModelTurnRequest,
+    request: ModelTurnRequest & { budgetRequestId: string },
     combined: AbortSignal,
     beforeDispatch: () => Promise<void>
   ): AsyncIterable<ModelTurnDelta> {

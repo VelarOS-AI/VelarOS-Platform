@@ -37,7 +37,7 @@ decisions live in this repository's `docs/` tree.
 
 ## Requirements
 
-- [Bun](https://bun.sh/) 1.3.13
+- [Bun](https://bun.sh/) 1.4.3
 - Node.js 22.15 or newer for the complete workspace, including the JS/TS Skill; Node.js 24.22.0 is the current Windows verification environment. The SQLite adapter alone requires Node.js 22.13 or newer.
 - Individual consumers must also follow each package’s engines and host dependencies
 

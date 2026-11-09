@@ -1,11 +1,4 @@
-import type {
-  ContextCompletionApplicability,
-  ContextContent,
-  ContextFeedback,
-  ContextRef,
-  ContextState,
-  ContextVerificationReport,
-} from '@velaros-ai/context'
+import type { ContextContent, ContextFeedback, ContextRef, ContextState } from '@velaros-ai/context'
 import type { ContextRecord } from '@velaros-ai/context'
 import {
   isArray,
@@ -17,113 +10,17 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ModelDynamicInput, ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { ScriptOutputFormat } from '@velaros-ai/script'
 import { scriptOutputs } from '@velaros-ai/script'
-import type { WorkspaceEntry } from '@velaros-ai/velaros/act/system'
 
-import type {
-  ContextMemoryPolicy,
-  MemoryFrameDisplay,
-  MemoryFrameResult,
-  WorkspaceNote,
-} from '../types/memory.js'
+import { ObservationLimits } from '../contract/constants.js'
+import type { ContextMemoryPolicy, MemoryFrameDisplay, MemoryFrameResult } from '../types/memory.js'
 import type { SegmentFeedback, SegmentHistory, SegmentOutputProof } from '../types/segment.js'
 
 import { decisionStateProjection } from './decision-state.js'
 import { nodeFrameState, nodeGoalState } from './node-context.js'
 import { ActRuntimeTuning } from './tuning.js'
-
-/** 核查细节优先展示失败和未知；原索引绑定适用性与归档，长项不阻断后续诊断。 */
-export function memoryVerificationProjection(
-  identity: Readonly<Record<string, unknown>>,
-  report: ContextVerificationReport,
-  applicability: Optional<Nullable<ContextCompletionApplicability>>,
-  maxChars: number
-): Record<string, unknown> {
-  const ordered = report.checks
-    .map((check, index) => ({ check, index }))
-    .sort(
-      (left, right) =>
-        ['failed', 'unknown', 'passed'].indexOf(left.check.status) -
-          ['failed', 'unknown', 'passed'].indexOf(right.check.status) || left.index - right.index
-    )
-  const checks: Array<Record<string, unknown>> = []
-  const header = { ...identity }
-  const omissions = (selected: ReadonlyArray<Record<string, unknown>>) => {
-    const shown = new Set(selected.map((check) => check.index))
-    return Object.fromEntries(
-      ['passed', 'failed', 'unknown'].map((status) => [
-        status,
-        report.checks.filter((check, index) => check.status === status && !shown.has(index)).length,
-      ])
-    )
-  }
-  const summary = (selected: ReadonlyArray<Record<string, unknown>>) => {
-    const projected: Record<string, unknown> = {
-      ...header,
-      checks: selected,
-      omittedChecks: report.checks.length - selected.length,
-    }
-    if (header.omittedByStatus) projected.omittedByStatus = omissions(selected)
-    return projected
-  }
-  if (JSON.stringify({ ...summary([]), omittedByStatus: omissions([]) }).length <= maxChars)
-    header.omittedByStatus = omissions([])
-  const read = { ref: identity.ref, offset: 0, limit: ActRuntimeTuning.readChars }
-  if (JSON.stringify({ ...summary([]), read }).length <= maxChars) header.read = read
-  const fits = (selected: ReadonlyArray<Record<string, unknown>>) =>
-    JSON.stringify(summary(selected)).length <= maxChars
-  for (const { check, index } of ordered) {
-    const candidate = {
-      index,
-      id: check.id,
-      label: check.label,
-      status: check.status,
-      artifact: check.artifact,
-      checkedAt: check.checkedAt ?? report.checkedAt,
-      applicability: applicability?.checks[index]?.status ?? 'unknown',
-      reusedFrom: check.reusedFrom,
-    }
-    if (
-      JSON.stringify(candidate).length <= ActRuntimeTuning.verificationCheckChars &&
-      fits([...checks, candidate])
-    ) {
-      checks.push(candidate)
-      continue
-    }
-    let labelChars = Math.min(check.label.length, ActRuntimeTuning.verificationLabelChars)
-    while (true) {
-      const compact = {
-        index,
-        status: candidate.status,
-        applicability: candidate.applicability,
-        detailsInReport: true,
-        ...(labelChars
-          ? {
-              label: check.label.slice(0, labelChars),
-              ...(labelChars < check.label.length
-                ? { labelChars: check.label.length, labelTruncated: true }
-                : {}),
-            }
-          : { labelInReport: true }),
-      }
-      if (
-        JSON.stringify(compact).length <= ActRuntimeTuning.verificationCheckChars &&
-        fits([...checks, compact])
-      ) {
-        checks.push(compact)
-        break
-      }
-      if (!labelChars) break
-      labelChars = Math.floor(labelChars / 2)
-    }
-  }
-  const projected: Record<string, unknown> = summary(checks)
-  if (JSON.stringify({ ...projected, scope: report.scope }).length <= maxChars)
-    projected.scope = report.scope
-  return projected
-}
 
 /** 固定宿主分区配置并验证所有配额，防止 NaN 或超额正文绕过预算。 */
 export function memoryPolicy(input: ContextMemoryPolicy = {}): Required<ContextMemoryPolicy> {
@@ -173,18 +70,6 @@ export function adjustedWorkspaceShare(
           : share
   const ceiling = Math.min(0.5, 0.8 - policy.recentShare)
   return Math.round(Math.min(ceiling, Math.max(0.05, next)) * 100) / 100
-}
-
-/** 目录仅携带稳定键、版本与原文位置，正文按引用独立召回。 */
-export function noteEntry(note: WorkspaceNote, record: ContextRecord): WorkspaceEntry {
-  return {
-    key: note.key,
-    revision: note.revision,
-    title: note.title,
-    ref: record.ref,
-    resident: note.resident,
-    chars: note.body.length,
-  }
 }
 
 /** 新文本投影按计量结果直接交付；旧 JSON 材料继续展开原来的块正文。 */
@@ -398,23 +283,7 @@ export function memoryTaskHistory(
 export function memoryPrompt(body: string, previous?: string): string {
   const current = frameDisplay(body)
   const before = isString(previous) ? frameDisplay(previous) : undefined
-  const { task, workspace, notes, observed, source, output, recent, notices, status } = current
-  const sourceInEarlierFrame = Boolean(
-    before &&
-    source &&
-    source === before.source &&
-    same(observed.sourceRef, before.observed.sourceRef)
-  )
-  const outputPresentationInEarlierFrame = Boolean(
-    before &&
-    output &&
-    same(observed.resultRef, before.observed.resultRef) &&
-    same(observed.sourceRef, before.observed.sourceRef) &&
-    stableOutput(output) === stableOutput(before.output)
-  )
-  const outputInEarlierFrame = Boolean(
-    outputPresentationInEarlierFrame && current.outputBodyIncluded && before?.outputBodyIncluded
-  )
+  const { task, workspace, notes, recent, notices, status } = current
   const runtime: Record<string, unknown> = {
     ...current.runtime,
     mandatory: (current.runtime.mandatory as ReadonlyArray<Record<string, unknown>>).map((item) => {
@@ -482,23 +351,6 @@ export function memoryPrompt(body: string, previous?: string): string {
       const { text: _text, ...metadata } = note
       return [JSON.stringify({ ...metadata, bodyInEarlierFrame: true })]
     }),
-    ...(!node || node.observationVisible
-      ? [
-          node ? 'observation：' : '分区 observation：',
-          JSON.stringify({
-            ...observed,
-            sourceInEarlierFrame,
-            outputInEarlierFrame,
-            outputPresentationInEarlierFrame,
-          }),
-        ]
-      : []),
-    ...(source && !sourceInEarlierFrame ? ['当前观察源码：', source] : []),
-    ...(output &&
-    (!outputPresentationInEarlierFrame ||
-      (current.outputBodyIncluded && !before?.outputBodyIncluded))
-      ? ['本次观察输出：', output]
-      : []),
     ...(!node || !isEmpty(recent.results)
       ? [
           node
@@ -639,6 +491,99 @@ function maintenanceDisplay(current: unknown, previous: unknown): unknown {
     if (JSON.stringify(compact).length < JSON.stringify(last).length) display.lastAttempt = compact
   }
   return display
+}
+
+/** 当前观察和显式历史片段独立交付；超限只给真实缺口，不引用上轮动态正文冒充本轮送达。 */
+export function memoryObservation(body: string): { dynamic?: ModelDynamicInput; limited: boolean } {
+  const frame = JSON.parse(body)
+  const observation = frame.partitions.observation
+  if (
+    !observation?.sourceRef &&
+    !observation?.resultRef &&
+    !observation?.history &&
+    !observation?.availability &&
+    !observation?.dynamicExchanges?.length
+  )
+    return { limited: false }
+  const current: Record<string, unknown> = {
+    sourceRef: observation.sourceRef,
+    resultRef: observation.resultRef,
+    bodyIncluded: Boolean(observation.bodyIncluded),
+    totalChars: observation.totalChars,
+    snapshotId: observation.snapshotId,
+    observedAt: observation.observedAt,
+    freshness: observation.freshness,
+    availability: observation.availability,
+    collection: observation.collection,
+    safety: observation.safety,
+    outputChanges: observation.outputChanges,
+    missingOutputs: observation.missingOutputs,
+    exitedOutputs: observation.exitedOutputs,
+    presentationChanges: observation.presentationChanges,
+    missingRequired: observation.missingRequired,
+    health: observation.health && {
+      status: observation.health.status,
+      failures: observation.health.failures,
+      reason: String(observation.health.reason ?? '').slice(0, 256),
+    },
+    requiredMissing: Boolean(observation.missingRequired?.length),
+    truncated: observation.truncated,
+    text: observation.text || undefined,
+    failure: observation.failure
+      ? (isString(observation.failure)
+          ? observation.failure
+          : JSON.stringify(observation.failure)
+        ).slice(0, 256)
+      : undefined,
+  }
+  const payload: Record<string, unknown> = {
+    origin: 'runtime-observation',
+    current,
+    history: observation.history,
+  }
+  const budget = observation.history ? ObservationLimits.maxChars : ObservationLimits.defaultChars
+  let text = JSON.stringify(payload)
+  let limited = false
+  if (text.length > budget) {
+    limited = true
+    delete current.text
+    current.bodyIncluded = false
+    current.limit = {
+      code: 'LIMIT',
+      totalChars: observation.totalChars,
+      advice:
+        '缩小持续观察为状态、摘要、差异或引用；历史使用 observe 的局部读取，普通大材料使用 exec。',
+    }
+    text = JSON.stringify(payload)
+  }
+  if (text.length > budget) {
+    payload.history = {
+      selectionRef: observation.history?.selectionRef,
+      result: {
+        kind: 'unavailable',
+        reason: '历史页超过本轮动态预算，请缩小 limit 或选择更小字段',
+      },
+    }
+    text = JSON.stringify(payload)
+  }
+  if (text.length > ObservationLimits.maxChars) {
+    limited = true
+    text = JSON.stringify({
+      origin: 'runtime-observation',
+      current: {
+        sourceRef: observation.sourceRef,
+        resultRef: observation.resultRef,
+        snapshotId: observation.snapshotId,
+        status: 'LIMIT',
+        bodyIncluded: false,
+        requiresReview: true,
+        omitted: ['safety', 'changes', 'body'],
+        advice:
+          '观察诊断尚未完整交付；请缩小观察或按快照身份选择必要的局部历史。不能将此状态视为安全或已读。',
+      },
+    })
+  }
+  return { dynamic: { id: frame.frameId, text, exchanges: observation.dynamicExchanges }, limited }
 }
 
 /** 消息正文身份忽略缓存标记，仍绑定角色、原样内容与延续状态。 */
@@ -934,4 +879,19 @@ export function memoryReference(state: Nullable<ContextState>, ref: ContextRef) 
   )
     ? record
     : undefined
+}
+
+/** 当前任务原文共用同一授权；当前目标跨任务可读，旧目标仍须当前代次或用户显式重附加。 */
+export function memoryMaterialReference(
+  state: Nullable<ContextState>,
+  sessionId: string,
+  ref: ContextRef
+): Optional<ContextRecord> {
+  const currentGoal = state?.records.findLast((item) => item.title === 'session:goal')
+  return (
+    memoryReference(state, ref) ??
+    (ref.sessionId === sessionId && currentGoal?.kind === 'audit' && currentGoal.ref.id === ref.id
+      ? currentGoal
+      : undefined)
+  )
 }

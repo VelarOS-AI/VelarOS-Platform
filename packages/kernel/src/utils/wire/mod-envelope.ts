@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { isEmpty, isNonBlankString, isPlainObject, isString, toOptional } from '@velaros-ai/core'
+import { isNonBlankString, isPlainObject, isString, toOptional } from '@velaros-ai/core'
 
 import { VelarosModManifestFileName } from '../../contract/constants'
 import type {
@@ -10,6 +10,7 @@ import type {
   VelarosModEnvelopeParseResult,
   VelarosModModuleSection,
 } from '../../types/wire'
+import { isSemanticVersion, isSemanticVersionRange } from '../semver'
 
 export type {
   VelarosModEnvelope,
@@ -25,28 +26,10 @@ const TrimmedIdSchema = z
   .string()
   .transform((value) => value.trim())
   .pipe(z.string().min(1))
-const SemverVersionPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u
-const SemverComparatorPattern = /^(?:\^|~|>=|<=|>|<|=)?\s*(.+)$/u
-const SemverVersionSchema = TrimmedIdSchema.refine((value) => SemverVersionPattern.test(value), {
+const SemverVersionSchema = z.string().min(1).refine(isSemanticVersion, {
   message: '不是合法的 x.y.z 版本号',
 })
-
-/** 判断一个版本范围串解析得了吗；只看写法，不判具体版本满不满足。 */
-function isSemverRangeParsable(range: string): boolean {
-  return range.split('||').every((clause) => {
-    const comparators = clause.trim().split(/\s+/u).filter(Boolean)
-    return (
-      !isEmpty(comparators) &&
-      comparators.every((part) => {
-        if (part === '*' || part === 'x') return true
-        const match = SemverComparatorPattern.exec(part)
-        return !!match && SemverVersionPattern.test(match[1] ?? '')
-      })
-    )
-  })
-}
-
-const SemverRangeSchema = TrimmedIdSchema.refine(isSemverRangeParsable, {
+const SemverRangeSchema = z.string().min(1).refine(isSemanticVersionRange, {
   message: '不是可解析的 semver range',
 })
 
@@ -63,7 +46,7 @@ function tolerantCapabilityRef<TSchema extends z.ZodTypeAny>(schema: TSchema) {
 /** JSON projection of a Kernel capability token. */
 export const VelarosModCapabilityTokenSchema = z.strictObject({
   id: TrimmedIdSchema,
-  version: TrimmedIdSchema.default('1.0.0'),
+  version: SemverVersionSchema.default('1.0.0'),
 }) satisfies z.ZodType<VelarosModCapabilityToken>
 
 /** JSON projection of a Kernel capability requirement. */

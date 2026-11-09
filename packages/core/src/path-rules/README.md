@@ -21,7 +21,7 @@ import { DiscoverySkippedDirectoryNames } from '@velaros-ai/core/path-rules/cont
 pathMatcher.matchesAny('src/api.generated.ts', ['**/*.generated.*']) // true
 pathMatcher.matchesAny('.ENV', ['.env'], { caseSensitive: false }) // true
 
-// 一份 .gitignore 正文：最后命中的规则说了算，! 把路径捞回来
+// 一份 .gitignore 正文：同一级最后命中的规则说了算，! 不能越过已排除的父目录
 const rules = gitignoreRules.parse('*.log\n!keep.log\n')
 gitignoreRules.isIgnored('logs/keep.log', rules, false) // false
 
@@ -59,4 +59,5 @@ await walk('/work/repo', createIgnorePolicy('/work/repo', { rulesFrom: 'reposito
 - 本包不抛自己的错：`.gitignore` 读不了当作没有规则；规则根自己和根外的条目一律不跳，`unrestricted` 什么都不跳，`rulesFrom: 'repository'` 找不到版本库根、或给的根自己被忽略时整次不跳。
 - git 执行口返回 `null` 之后这份策略不再问 git，改按本地规则判；执行口自己抛的错、picomatch 对写坏的 pattern 抛的错都原样透出。
 - 本地规则只认规则根到父目录的各级 `.gitignore`；`.git/info/exclude`、全局 `core.excludesFile` 只有 git 认得，要完整语义就注入执行口。
+- `.gitignore` 按 Git 的模式解释，保留前导空格和反斜杠转义；目标与规则所在目录用 `/` 分隔，POSIX 文件名里的反斜杠仍是字面字符。`dir/**` 只匹配目录内部，`dir/` 排除目录及后代，子文件的 `!` 不能救回仍被排除目录里的文件。产品 `pathMatcher` 的目录前缀与扩展 glob 语义独立保留。
 - `DiscoverySkippedDirectoryNames` 是按名字一刀切的那层，跟 .gitignore 无关，由遍历方自己套；根内约束、拒读拒写这些归调用方。

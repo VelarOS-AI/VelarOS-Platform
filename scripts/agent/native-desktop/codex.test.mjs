@@ -12,7 +12,7 @@ const execute = promisify(execFile)
 test('CLI exit and exact output survive stalled parent asynchronous writes and reads', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'native-capture-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
-  const executable = join(directory, 'fake-codex')
+  const fixture = join(directory, 'exec')
   const lines =
     JSON.stringify({ type: 'thread.started', thread_id: 'capture-control' }) +
     '\n' +
@@ -22,9 +22,8 @@ test('CLI exit and exact output survive stalled parent asynchronous writes and r
     '\n'
   const diagnostic = 'original diagnostic\n'.repeat(1000)
   await writeFile(
-    executable,
-    `#!${process.execPath}\nprocess.stdin.resume(); process.stdin.on('end', () => { require('node:fs').writeFileSync(1, ${JSON.stringify(lines)}); require('node:fs').writeFileSync(2, ${JSON.stringify(diagnostic)}); process.exit(1) });\n`,
-    { mode: 0o700 }
+    fixture,
+    `process.stdin.resume(); process.stdin.on('end', () => { require('node:fs').writeFileSync(1, ${JSON.stringify(lines)}); require('node:fs').writeFileSync(2, ${JSON.stringify(diagnostic)}); process.exit(1) });\n`
   )
   const worker = join(directory, 'worker.mjs')
   await writeFile(
@@ -39,7 +38,7 @@ promises.readFile = () => new Promise(() => {});
 syncBuiltinESMExports();
 const { runCodex } = await import(${JSON.stringify(new URL('./codex.mjs', import.meta.url).href)});
 const deadline = setTimeout(() => { fs.writeFileSync(2, 'capture did not settle'); process.exit(90); }, 2000);
-const result = await runCodex({ executable: ${JSON.stringify(executable)}, workspace: ${JSON.stringify(directory)}, directory: ${JSON.stringify(directory)}, baseURL: 'http://127.0.0.1:1/v1', apiKey: 'fixture', model: 'fixture', prompt: 'input', timeoutMs: 1500 });
+const result = await runCodex({ executable: process.execPath, workspace: ${JSON.stringify(directory)}, directory: ${JSON.stringify(directory)}, baseURL: 'http://127.0.0.1:1/v1', apiKey: 'fixture', model: 'fixture', prompt: 'input', timeoutMs: 1500 });
 clearTimeout(deadline);
 fs.writeFileSync(1, JSON.stringify(result));
 `

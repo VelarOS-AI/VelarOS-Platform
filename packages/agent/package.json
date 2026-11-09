@@ -1,8 +1,8 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "9.12.0",
+  "version": "10.1.1",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
   "license": "Apache-2.0",

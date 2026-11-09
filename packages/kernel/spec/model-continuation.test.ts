@@ -3,6 +3,55 @@ import { expect, test } from 'bun:test'
 import type { ModelHistoryMessage, ModelTurnRequest } from '../src/index.js'
 import { modelRequestEncoder } from '../src/index.js'
 
+test('dynamic observation exchanges and protocol have complete non-retained boundaries', () => {
+  const call = {
+    id: 'observe-1',
+    name: 'observe',
+    input: { code: '', options: { history: { kind: 'list' } } },
+  }
+  const exchange = {
+    text: '',
+    calls: [call],
+    results: [
+      { id: call.id, name: call.name, output: { status: 'selected', selectionRef: 'selection-1' } },
+    ],
+  }
+  const request: ModelTurnRequest = {
+    instructions: 'stable instructions',
+    materials: [],
+    compiledPrompt: 'stable current frame',
+    history: [{ role: 'user', content: 'stable history', cacheBreakpoint: true }],
+    dynamic: { id: 'frame-1', text: 'state A', exchanges: [{ exchange }] },
+    protocol: 'current protocol',
+    response: { type: 'text' },
+    mode: 'work',
+    outputTokens: 100,
+  }
+  const before = structuredClone(request)
+  const first = modelRequestEncoder.layout(request)
+  const second = modelRequestEncoder.layout({
+    ...request,
+    dynamic: { ...request.dynamic!, id: 'frame-2', text: 'state B' },
+  })
+  expect(first.retainablePrefixLength).toBe(2)
+  expect(first.historyPositions).toEqual([0])
+  expect(first.messages.slice(0, first.retainablePrefixLength)).toEqual(
+    second.messages.slice(0, second.retainablePrefixLength)
+  )
+  expect(first.messages[2]).toEqual({ role: 'assistant', content: '', toolExchange: exchange })
+  expect(first.messages.slice(2)).not.toEqual(second.messages.slice(2))
+  expect(first.messages.at(-1)).toEqual({ role: 'user', content: 'current protocol' })
+  expect(first.messages.slice(2).every((message) => !message.cacheBreakpoint)).toBe(true)
+  expect(modelRequestEncoder.messages(request)).toEqual(first.messages)
+  expect(request).toEqual(before)
+  expect(() =>
+    modelRequestEncoder.layout({
+      ...request,
+      dynamic: { id: 'bad', text: '', exchanges: [{ exchange: { ...exchange, results: [] } }] },
+    })
+  ).toThrow()
+})
+
 test('INV-24 opaque continuation envelopes are bounded and kept separate from message text', () => {
   const state = { model: 'fixture', format: 'fixture-v1', data: 'opaque', tokens: 40 }
   expect(modelRequestEncoder.continuation(state)).toEqual(state)

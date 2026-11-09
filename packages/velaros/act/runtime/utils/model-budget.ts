@@ -1,11 +1,8 @@
 import { isArray, isEmpty, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnDelta } from '@velaros-ai/kernel'
-import { modelProviderRetry } from '@velaros-ai/model'
 
 import type { ModelBudgetPort, ModelBudgetSettlement } from '../types/model-budget.js'
-
-import { ActRuntimeTuning } from './tuning.js'
 
 /** 持久回执只能重放到原根任务及其显式祖先，损坏回执不能变成预算事实。 */
 export function readModelBudgetSettlement(
@@ -75,8 +72,8 @@ export async function* reservedModelStream(
   tokens: number,
   signal: AbortSignal,
   dispatch: (beforeDispatch: () => Promise<void>) => AsyncIterable<ModelTurnDelta>,
-  accounting?: Set<Promise<void>>,
-  requestId?: string,
+  accounting: Set<Promise<void>> | undefined,
+  requestId: string,
   beforeDispatch?: () => Promise<void>
 ): AsyncIterable<ModelTurnDelta> {
   signal.throwIfAborted()
@@ -93,18 +90,7 @@ export async function* reservedModelStream(
   let reserved = false
   let dispatched = false
   try {
-    // 父任务到了每小时用量上限就等窗口释放后再预留，不算失败
-    for (;;)
-      try {
-        await parent.reserveModel('context', tokens, requestId)
-        break
-      } catch (error) {
-        if ((error as { code?: string }).code !== 'MODEL_RATE') throw error
-        await modelProviderRetry.wait(
-          (error as { retryAfterMs?: number }).retryAfterMs ?? ActRuntimeTuning.rateRetryMs,
-          signal
-        )
-      }
+    await parent.reserveModel('context', tokens, requestId)
     reserved = true
     signal.throwIfAborted()
   } catch (error) {
@@ -112,9 +98,10 @@ export async function* reservedModelStream(
       try {
         await parent.releaseModel('context', tokens, requestId, true)
       } catch (release) {
-        const failure = Object.assign(
-          new AggregateError([error, release], '模型调用未派发，但预算归还失败'),
-          { code: 'MODEL_RESERVATION_RELEASE' }
+        const failure = AppError.withFields(
+          'MODEL_RESERVATION_RELEASE',
+          '模型调用未派发，但预算归还失败',
+          { errors: [error, release] }
         )
         reject(failure)
         throw failure
@@ -141,7 +128,7 @@ export async function* reservedModelStream(
   try {
     yield* dispatch(async () => {
       signal.throwIfAborted()
-      if (requestId) await parent.dispatchModel?.(requestId)
+      await parent.dispatchModel(requestId)
       signal.throwIfAborted()
       await beforeDispatch?.()
       signal.throwIfAborted()

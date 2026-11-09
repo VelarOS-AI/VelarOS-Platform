@@ -89,8 +89,7 @@ class ModelRequestClient implements ModelRequestClientApi {
   public async generateObject<TOutput = unknown>(
     input: ModelRequestObjectInput<TOutput>
   ): Promise<TOutput> {
-    const output = await this.#requestObject(input)
-    return input.mapOutput ? input.mapOutput(output) : output
+    return this.#requestObject(input)
   }
 
   public async generateDecodedObject<TSchemaOutput, TOutput>(

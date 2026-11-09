@@ -571,7 +571,7 @@ describe('搜索', () => {
     }
   })
 
-  test('INV-4 并行搜索只探测 Google 一次，旧冷却即使无法回写也不滑动延长', async () => {
+  test('INV-4 并行搜索只探测 Google 一次，保留每次请求自己的搜索词', async () => {
     const parallel = webSpace({
       sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
     })
@@ -581,22 +581,29 @@ describe('搜索', () => {
     ])
     expect(results.map((result) => result.query)).toEqual(['one', 'two'])
     expect(parallel.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+  })
+
+  test('INV-4 读取宿主保存的期限不改写它，只有本次来源失败才写入新期限', async () => {
     const clock = fakeClock()
-    const legacy = webSpace({
+    const until = clock.now() + 2 * WebTuning.search.googleBlockedBackoffMs
+    const space = webSpace({
       clock,
-      backoff: { stored: { google: clock.now() + 12 * 60 * 60_000 }, writeFails: true },
+      backoff: { stored: { google: until } },
       sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
     })
-    expect((await legacy.operations.search({ query: 'cooldown' }, legacy.context)).engine).toBe(
+    expect((await space.operations.search({ query: 'cooldown' }, space.context)).engine).toBe(
       'bing'
     )
+    expect(space.record.backoffWrites).toEqual([])
     clock.advance(WebTuning.search.googleBlockedBackoffMs + 1)
-    expect((await legacy.operations.search({ query: 'probe' }, legacy.context)).engine).toBe(
-      'google'
+    expect((await space.operations.search({ query: 'still cooling' }, space.context)).engine).toBe(
+      'bing'
     )
-    expect((await legacy.operations.search({ query: 'probe again' }, legacy.context)).engine).toBe(
-      'google'
-    )
+    expect(space.record.backoffWrites).toEqual([])
+    clock.advance(until - clock.now())
+    expect((await space.operations.search({ query: 'probe' }, space.context)).engine).toBe('google')
+    expect(space.record.backoffWrites).toEqual([])
+    expect(space.record.opened).toBe(space.record.closed)
   })
 
   test('INV-5 两边都搜不了抛 WEB_SEARCH_FAILED，写明两边各自为什么；Bing 明说没有结果交回空的 results', async () => {
@@ -998,6 +1005,12 @@ describe('读网页', () => {
       ['search', { query: 'x', engine: 'bing' }],
       ['read', { url: '' }],
       ['read', { url: 'file:///etc/hosts' }],
+      ['read', { url: 'file:/etc/hosts' }],
+      ['read', { url: 'file:1234' }],
+      ['read', { url: 'mailto:user@example.com' }],
+      ['read', { url: 'mailto:1234' }],
+      ['read', { url: 'tel:12345' }],
+      ['read', { url: 'custom:1234' }],
       ['read', { url: 'javascript:alert(1)' }],
       ['read', { url: 'https://' }],
       ['read', { url: `https://example.com/${'x'.repeat(WebLimits.urlChars)}` }],
@@ -1022,13 +1035,23 @@ describe('读网页', () => {
 
     // 没写协议的网址按 https 读；null 当作没给
     const page = webSpace({
-      sites: sitesOf({ pages: { 'https://example.com/a': pageSite('正文') } }),
+      sites: sitesOf({
+        pages: {
+          'https://example.com/a': pageSite('正文'),
+          'https://example.com:8080/a': pageSite('端口正文'),
+          'https://localhost:8080/a': pageSite('本机端口正文'),
+        },
+      }),
     })
     const read = await page.operations.read(
       { url: ' example.com/a ', offset: null, maxChars: null } as never,
       page.context
     )
     expect([read.url, read.text]).toEqual(['https://example.com/a', '正文'])
+    const port = await page.operations.read({ url: 'Example.com:8080/a' }, page.context)
+    expect([port.url, port.text]).toEqual(['https://example.com:8080/a', '端口正文'])
+    const local = await page.operations.read({ url: 'localhost:8080/a' }, page.context)
+    expect([local.url, local.text]).toEqual(['https://localhost:8080/a', '本机端口正文'])
   })
 })
 

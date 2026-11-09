@@ -4,144 +4,164 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { localContextStorage } from '@velaros-ai/context/node'
+
 import { summarizeModelRequest } from '../../../dist/act/runtime/utils/tracePresentation.js'
 
 import { done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
-const audit = {
-  providerRequest: {
-    schemaVersion: 2,
-    model: 'model',
-    system: 'system instructions',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'user input' },
-          { type: 'image', image: 'data:image/png;base64,PRIVATE_BINARY', mediaType: 'image/png' },
-          { data: { $velarosType: 'bytes', value: 'PRIVATE_BYTES' } },
-        ],
-      },
-    ],
-    outputTokens: 4096,
-    requestFingerprint: { id: 'fp' },
-  },
-  estimate: { tokens: 1200, precision: 'estimate', basis: 'driver' },
+const requestAudit = {
+  schemaVersion: 3,
+  model: 'model',
+  modelTruncated: false,
+  inputTokens: 1200,
+  precision: 'estimate',
+  basis: 'driver',
+  basisTruncated: false,
+  outputTokens: 4096,
+  messageCount: 3,
+  toolCount: 0,
+  requestFingerprint: { id: '1234567890abcdef' },
 }
-test('INV-46 request presentation uses sealed fields and omits binary media', () => {
-  const value = summarizeModelRequest(audit, 100000)
-  assert.equal(value.model, 'model')
-  assert.equal(value.fingerprint, 'fp')
-  assert.equal(value.inputTokens, 1200)
-  assert.equal(value.precision, 'estimate')
-  assert.equal(value.basis, 'driver')
-  assert.equal(value.system, audit.providerRequest.system)
-  assert.equal(value.outputTokens, 4096)
-  assert.equal(value.mediaOmitted, true)
-  assert.match(value.messages, /user input/)
-  assert.doesNotMatch(value.messages, /PRIVATE_BINARY|PRIVATE_BYTES/)
-  assert.equal(
-    audit.providerRequest.messages[0].content[1].image,
-    'data:image/png;base64,PRIVATE_BINARY'
-  )
+
+test('INV-46 request presentation contains bounded metadata without a request replay contract', () => {
+  const summary = summarizeModelRequest({ requestAudit })
+  assert.deepEqual(summary, {
+    model: 'model',
+    modelTruncated: false,
+    fingerprint: '1234567890abcdef',
+    inputTokens: 1200,
+    precision: 'estimate',
+    basis: 'driver',
+    basisTruncated: false,
+    outputTokens: 4096,
+    messageCount: 3,
+    toolCount: 0,
+  })
+  for (const changed of [
+    { outputTokens: -1 },
+    { basis: 'x'.repeat(513) },
+    { inputTokens: null },
+    { schemaVersion: 2 },
+  ])
+    assert.equal(summarizeModelRequest({ requestAudit: { ...requestAudit, ...changed } }), null)
+  assert.equal(summarizeModelRequest({ request: { instructions: 'old request body' } }), null)
 })
-test('small budgets retain request identity and mark truncation; absent facts stay absent', () => {
-  const value = summarizeModelRequest(audit, 9)
-  assert.equal(value.system.length + value.messages.length, 9)
-  assert(value.systemTruncated)
-  assert(value.messagesTruncated)
-  assert.equal(value.fingerprint, 'fp')
-  const missing = summarizeModelRequest({ providerRequest: audit.providerRequest }, 32000)
-  assert.equal(missing.inputTokens, null)
-  assert.equal(missing.precision, null)
-  assert.equal(missing.basis, null)
-  assert.equal(
-    summarizeModelRequest({ request: { instructions: 'legacy inferred body' } }, 32000),
-    null
+
+test('SQLite request audits grow linearly while live history grows; model-free reopen follows the published frame and proof', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'request-audit-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const path = join(directory, 'state.sqlite')
+  const storage = localContextStorage({ path })
+  const live = []
+  const inputs = Array.from(
+    { length: 8 },
+    (_, index) => `PRIVATE_INPUT_${index}: ${'保留原始材料 '.repeat(600)}`
   )
-  assert.equal(
-    summarizeModelRequest(
-      { ...audit, providerRequest: { ...audit.providerRequest, outputTokens: -1 } },
-      32000
-    ),
-    null
-  )
-})
-test('real request summaries share the trace body budget and survive a model-free reopen', async (t) => {
-  const dataDir = await mkdtemp(join(tmpdir(), 'request-view-'))
-  t.after(() => rm(dataDir, { recursive: true, force: true }))
-  const frames = []
   const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+    storage,
+
     context: { maintenance: false },
     model: {
-      id: 'request-view',
-      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      id: 'request-audit',
+      limits: { contextTokens: 1_000_000, inputTokens: 900_000, outputTokens: 4096 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
-        frames.push(request)
-        yield* done(request)
+        live.push(request)
+        yield* done(
+          request,
+          live.length === inputs.length
+            ? 'ORIGINAL_FINAL_RESPONSE'
+            : `ORIGINAL_RESPONSE_${live.length}`
+        )
       },
     },
   })
-  let turnId
+  const summaries = []
   try {
     const session = await runtime.openSession('s')
-    for await (const event of session.submit('check this input'))
-      if (event.type === 'turn') turnId = event.turnId
-    const trace = await session.trace(turnId, 500)
-    assert.equal(trace.requestSummary.model, 'request-view')
-    assert.equal(trace.requestSummary.inputTokens, 1000)
-    assert(frames[0].instructions.startsWith(trace.requestSummary.system))
-    const bodyChars =
-      [
-        trace.request,
-        trace.response,
-        trace.decision,
-        ...trace.records,
-        ...trace.invocations,
-      ].reduce((n, item) => n + (item?.body?.length ?? 0), 0) +
-      trace.requestSummary.system.length +
-      trace.requestSummary.messages.length +
-      trace.invocations.reduce(
-        (n, item) => n + item.summary.input.length + item.summary.output.length,
-        0
+    for (const [index, input] of inputs.entries()) {
+      const events = []
+      for await (const event of session.submit(input)) events.push(event)
+      assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+      assert.equal(live.length, index + 1)
+    }
+    assert(JSON.stringify(live.at(-1)).length > JSON.stringify(live[0]).length + inputs[0].length)
+    const snapshot = await storage.load('s')
+    const records = snapshot.records.filter((record) => record.title === 'model-request')
+    assert.equal(records.length, inputs.length)
+    let auditChars = 0
+    let frameChars = 0
+    for (const [index, record] of records.entries()) {
+      const body = await storage.get('s', record.objectId)
+      assert.equal(record.chars, body.length, 'the persisted contract counts UTF-16 code units')
+      assert(body.length < 2048, `turn ${index}: ${body.length} UTF-16 units`)
+      assert(!body.includes('PRIVATE_INPUT_'))
+      assert(!body.includes('ORIGINAL_RESPONSE_'))
+      const audit = JSON.parse(body)
+      assert.equal(typeof audit.budgetRequest.requestId, 'string')
+      assert.equal(typeof audit.budgetRequest.taskId, 'string')
+      assert(!Object.hasOwn(audit, 'request'))
+      assert(!Object.hasOwn(audit, 'providerRequest'))
+      const frame = snapshot.records.find((item) => item.ref.id === audit.frameRef.id)
+      assert(frame.sequence < record.sequence)
+      const actual = JSON.parse(
+        live[index].materials.find((item) => item.origin === 'runtime-view').text
       )
-    assert(bodyChars <= 500)
+      assert.equal(frame.title, `context:frame:${actual.frameId}`)
+      const frameBody = await storage.get('s', frame.objectId)
+      frameChars += frameBody.length
+      const frameAudit = JSON.parse(frameBody)
+      assert(!Object.hasOwn(frameAudit, 'partitions'))
+      assert(!frameBody.includes('PRIVATE_INPUT_'))
+      const proof = snapshot.records.find(
+        (item) => item.title === `context:request-proof:${actual.frameId}`
+      )
+      assert(proof.sources.some((source) => source.id === frame.ref.id))
+      const trace = await session.trace(record.ref.id)
+      assert(trace.records.some((item) => item.ref.id === frame.ref.id))
+      assert(trace.records.some((item) => item.ref.id === proof.ref.id))
+      assert.equal(trace.requestSummary.inputTokens, 1000)
+      summaries.push(trace.requestSummary)
+      auditChars += body.length
+    }
+    assert(auditChars < inputs.length * 2048)
+    t.diagnostic(
+      JSON.stringify({
+        modelRequestUtf16: auditChars,
+        contextFrameUtf16: frameChars,
+        requests: records.length,
+      })
+    )
+    assert(!snapshot.records.some((record) => record.title === 'model-request:image-data'))
+    const originals = []
+    for (const record of snapshot.records.filter((record) => record.kind === 'user'))
+      originals.push(await storage.get('s', record.objectId))
+    for (const input of inputs) assert(originals.includes(input))
   } finally {
     await runtime.close()
+    await storage.close()
   }
-  const reader = await createRuntime({ dataDir, agents: false, search: false, memory: false })
+  const reopened = localContextStorage({ path })
+  const reader = await createRuntime({
+    storage: reopened,
+  })
   try {
-    const page = await reader.trace('s', { maxChars: 100000 })
-    assert.equal(page.turns[0].turnId, turnId)
-    assert.equal(page.turns[0].requestSummary.system, frames[0].instructions.slice(0, 8000))
-    assert.match(page.turns[0].requestSummary.messages, /check this input/)
+    const page = await reader.trace('s', { limit: 32, fullContent: true })
+    assert.deepEqual(
+      page.turns.map((turn) => turn.requestSummary),
+      summaries
+    )
+    assert(page.turns.at(-1).response.body.includes('ORIGINAL_FINAL_RESPONSE'))
+    for (const turn of page.turns) {
+      const audit = JSON.parse(turn.request.body)
+      assert(turn.records.some((record) => record.ref.id === audit.frameRef.id))
+      assert(!Object.hasOwn(turn.requestSummary, 'system'))
+      assert(!Object.hasOwn(turn.requestSummary, 'messages'))
+    }
   } finally {
     await reader.close()
+    await reopened.close()
   }
-})
-
-test('full request text bypasses summary limits and keeps the media placeholder', () => {
-  const system = `${'系统指令\n'.repeat(2000)}SYSTEM_END`
-  const content = `${'request line\n'.repeat(4000)}MESSAGE_END`
-  const request = {
-    ...audit,
-    providerRequest: {
-      ...audit.providerRequest,
-      system,
-      messages: [...audit.providerRequest.messages, { role: 'user', content }],
-    },
-  }
-  const full = summarizeModelRequest(request, 1, true)
-  assert.equal(full.system, system)
-  assert.equal(JSON.parse(full.messages).at(-1).content, content)
-  assert.equal(full.systemTruncated, false)
-  assert.equal(full.messagesTruncated, false)
-  assert.equal(full.mediaOmitted, true)
-  assert.doesNotMatch(full.messages, /PRIVATE_BINARY|PRIVATE_BYTES/)
 })

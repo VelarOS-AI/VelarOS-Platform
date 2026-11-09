@@ -14,7 +14,9 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
       positionals.push(value)
       continue
     }
-    const [rawName, inlineValue] = value.slice(2).split('=', 2)
+    const separator = value.indexOf('=')
+    const rawName = value.slice(2, separator < 0 ? undefined : separator)
+    const inlineValue = separator < 0 ? undefined : value.slice(separator + 1)
     const next = rest[index + 1]
     if (inlineValue !== undefined) flags[rawName] = inlineValue
     else if (next && !next.startsWith('--')) {

@@ -1,21 +1,21 @@
 # Act 模型自管理空间
 
-正式入口为 `velaros:system`，按当前会话授权导出 `modules`、`goal`、`memory` 和 `store`。实际操作、声明和模板见 [Act 目录](../../packages/velaros/act/README.md)。
+正式入口为 `velaros:system`，按当前会话装配与授权导出 `modules`、`goal`、`memory`、`store`、`programs`、`environment` 和 `executions`。实际操作、声明和模板见 [Act 目录](../../packages/velaros/act/README.md)。
 
 ## 职责与装配
 
 主模型维护 observe 代码、自己的笔记和计划，并声明下一阶段需要什么。整理模型读取固定父快照，提出派生展示补丁。Runtime 决定预算、调度、权限、版本检查和发布时机。宿主配置模型、资源档位、业务权限和生命周期。
 
-系统能力集中在 `packages/velaros/act/system/`。MemoryModule、ModulesModule、StoreModule 定义操作；SystemModules 负责可信身份；SystemCatalog 返回当前会话的真实包投影。RuntimeSession、ContextMemory、ProgramContext、RecentContext 继续承担执行、存储和组帧机制。StoreSession 固定共享对象的访问范围，持久对象与变更记录通过同一 ContextStorage.stores 持久化；默认适配器使用 SQLite，替换约束见 [存储规范](storage.md)。
+系统能力集中在 `packages/velaros/act/system/`。各 `*OperationsApi` 接口提供模型操作定义，生成声明、schema、效果和模板合同；`*Module` 类只绑定生成的模型面与实现。SystemModules 负责可信身份；SystemCatalog 返回当前会话的真实包投影。RuntimeSession、ContextMemory、ProgramContext、RecentContext 继续承担执行、存储和组帧机制。StoreSession 固定共享对象的访问范围，持久对象与变更记录通过同一 ContextStorage.stores 持久化；默认适配器使用 SQLite，替换约束见 [存储规范](storage.md)。
 
 | 会话 | 系统面 | 可委托模型工具 |
 | --- | --- | --- |
-| 主线 | modules；memory 六个本地操作，按配置增加 organize 和 recall/save/remove；store 按授权装配 | 按宿主配置搜索、整理、业务子任务 |
-| 业务子任务 | modules；memory 七个操作；store 继承父任务此刻的空间（ADR 0018） | 按宿主配置搜索、整理 |
-| 搜索 | modules；memory 六个本地操作 | 完成搜索职责 |
+| 主线 | modules；工作记忆按配置增加 organize 和长期记忆；store 按授权装配 | 按宿主配置搜索、整理、业务子任务 |
+| 业务子任务 | modules；工作记忆按配置装配 organize；store 继承父任务此刻的空间（ADR 0018） | 按宿主配置搜索、整理 |
+| 搜索 | modules；工作记忆，不继承长期记忆端口 | 完成搜索职责 |
 | 整理 | context-materials.list/read/submit | 用 submit 交付展示补丁 |
 
-未启用整理的主线或业务子任务也使用六个操作的本地合同。没有获配的能力同时不进入发现、模板、类型声明和执行绑定。主线与本地记忆使用同一个 MemoryModule 实现，仅合同投影不同。
+未启用整理时，工作记忆合同不包含 organize。没有获配的能力同时不进入发现、模板、类型声明和执行绑定。工作记忆与长期记忆的合同投影由同一个 MemoryModule 按配置绑定，完整操作清单以生成合同为准。
 
 ## 模型 API
 
@@ -27,6 +27,7 @@
 | memory.list | 以 kind/query/after/through/limit 发现归档；kind 为 all、notes、inputs、programs、results、history、artifacts |
 | memory.read | 按 ref/offset/limit 读取原文；ref 支持当前会话短 ID 或完整 ContextRef |
 | memory.update | 以 key/baseRevision 更新自己的笔记 |
+| memory.updateActive | 按当前版本与原文证据解决或取代旧未解事项，不修改用户约束 |
 | memory.plan | 只给要改的字段，修改自己维护的任务计划 |
 | memory.retain / release | 控制当前笔记或执行结果的自动展示；原文可召回 |
 | memory.recall | 主线按 id 或 query 召回长期记忆正文，offset/limit 分页；作用域由宿主固定 |
@@ -40,7 +41,7 @@
 | store.publish / share | 发布独立消息，或把会话材料保存为可共享引用 |
 | store.watch | 替换当前会话的持久关注集合；变化随下一模型帧交付 |
 
-list/read/recall 无写效果，可用于观察。update/plan/retain/release/organize/save/remove 只在 execute 调用。结果 retain 的 turns 为 1–32 或 task；笔记保持驻留直到显式释放。驻留不等于全文必定装入窗口。
+list/read/recall 无写效果，可用于观察。update/updateActive/plan/retain/release/organize/save/remove 只在 execute 调用。结果 retain 的 turns 为 1–32 或 task；笔记保持驻留直到显式释放。驻留不等于全文必定装入窗口。
 
 所有材料读取保持当前会话、逻辑任务及搜索授权代次边界。用户输入通过已有分块 readInput 读取；任务 artifact 使用原 readArtifact 权限检查；源码、结果、笔记及诊断引用使用同一存储的有界读取。调用不重跑原脚本。
 
@@ -96,7 +97,7 @@ organize 的输入合同是 `{focus?:string,preserve?:ContextRef[]}`；窗口大
 
 ## 整理发布
 
-整理支线用 context-materials.list/read 读取固定父快照，通过 execute 中的 `submit(patch)` 交付结构化补丁，补丁的类型就是生成合同里的 `ContextPatch`，交付前先过 typecheck。notes 项只允许 `{ref,summary?,resident?}`。ref 绑定当前不可变笔记版本；派生摘要标注 model-interpretation，主模型改写原笔记后该摘要自动失效。
+整理支线通过生成合同中的 context-materials.list/read/submit 读取固定父快照并提交 `ContextPatch`。支持原生工具的模型默认使用数据协议，完整响应及整批参数校验后执行材料操作，不接受源码或启动进程。显式选择 `maintenance.execution: 'script'` 时，才通过受限脚本调用这些操作并检查程序。notes 项只允许 `{ref,summary?,resident?}`。ref 绑定当前不可变笔记版本；派生摘要标注 model-interpretation，主模型改写原笔记后该摘要自动失效。
 
 输入摘要保留已确认约束；卷叙事保留来源、未解事项和否定尝试；观察补丁只修改已认可的输出展示 AST 元数据并重投影已有结果。主模型的笔记正文、任务计划以及原始用户输入保持各自归属。
 
@@ -104,23 +105,17 @@ ContextMaintenanceState 在临时事务视图里组装完整候选五区及图�
 
 ## 包投影与真实调用链
 
-主线映射为：
+`SystemMembers` 登记 system 成员及可绑定的模块身份，SystemModules 装配对应模块，SystemCatalog 按当前会话授权返回实际包映射。memory 根据整理与长期记忆配置选择生成合同，由同一个 MemoryModule 实现；模型从 `velaros:system` 导入 memory。搜索、整理和业务子任务不继承宿主的长期记忆端口。store 根据创建、写入或只读授权选择合同投影；声明、模板、发现与执行绑定共用当前投影。
 
-```json
-{"specifier":"velaros:system","exports":{"modules":"velaros:modules","memory":"velaros:system-memory","store":"velaros:system-store"}}
-```
-
-本地合同的 memory 映射到 `velaros:system-memory-local`。主线装配长期记忆后映射到 `velaros:system-memory-persistent`。三种投影均由同一个 MemoryModule 实现，模型只使用 `velaros:system.memory`。搜索、整理和业务子任务不继承宿主的长期记忆端口。store 的可写投影为 `velaros:system-store-write`，只读投影为 `velaros:system-store-read`，实际分别提供十二项和十项操作；声明、模板和发现共用这份投影。
-
-实际链路：ScriptAct 完整响应预检，KernelScriptSession 使用当前包投影检查脚本，隔离执行器调用 KernelInvocationPort，Kernel 校验 schema、模式、权限和绑定代次，MemoryModule 调用现有 ContextMemory、整理服务或长期 MemoryScopePort，调用回执持久化，下一请求由 Runtime 组帧。
+实际链路：ScriptAct 完整响应预检，KernelScriptSession 使用当前包投影检查脚本，宿主执行口调用 KernelInvocationPort，Kernel 校验 schema、模式、权限和绑定代次，MemoryModule 调用现有 ContextMemory、整理服务或长期 MemoryScopePort，调用回执持久化，下一请求由 Runtime 组帧。
 
 output 在 `velaros`，input/blobs 在 `velaros:program`。绑定释放、权限调整、完整运行诊断与恢复由宿主生命周期负责。
 
 ## 合同与验证
 
-当前系统合同代际为 20，Runtime 合同代际为 16；实际值由各自 contract/constants.ts 维护。系统操作统一从 memory/modules/store 成员访问，持久原文通过 memory.read 读取。
+各模型面的合同版本由生成的 `contract/surface.ts` 给出；模块挂载代际由各自 `contract/constants.ts` 维护，两者不混用。系统操作通过当前 `velaros:system` 成员访问，持久原文通过 memory.read 读取。
 
-共享状态的具体文件、接口与验证见 [Act 模型自管理空间](act-system-space.md)。
+源码、合同与验证入口见 [System 模块](../../packages/velaros/act/system/README.md) 和 [Act 目录](../../packages/velaros/act/README.md)。
 
 ## 长期记忆与工作记忆
 
@@ -154,7 +149,7 @@ store 是一组持久 JSON 对象、访问授权和变更订阅。Agent 可以�
 | remove | `{store,key,baseRevision}` | 删除墓碑，保留递增版本 |
 | watch | `{store,keys?,prefixes?}` | 该空间订阅的 `{revision,after,keys,prefixes}` |
 
-get/list/keys/events/read 可用于 observe；create/set/remove/watch/subscribe/ack/publish/share 只在 execute。set 是完整替换，创建新键的 baseRevision 为 0，后续更新使用 get 返回的 revision。写冲突需要重新读取判断，相同版本写入相同值不制造新变化。get 和写回回执按 `[storeId,key]` 校验依据，不会混淆不同空间的同名对象。
+get/list/keys/events/read 可用于 observe；create/set/remove/watch/subscribe/ack/publish/share 只在 execute。set 是完整替换，创建新键的 baseRevision 为 0，后续更新使用对象的当前 revision。提交核对空间、键、读写授权及 baseRevision；写冲突需要重新读取判断，相同版本写入相同值不制造新变化。
 
 execute 示例：
 
@@ -219,7 +214,7 @@ watch 为每个 Agent 在每个 store 中独立保存关注项及确认位置。
 
 LocalContextStorage 使用 store_catalog、store_creations 管理目录与创建回执，store_heads、store_objects、store_changes、store_consumers、store_commits 管理空间数据。目录的 scope 是宿主边界，数据表的 store 是具体空间标识；写入与新订阅要求空间已创建且处于活动状态。
 
-具体改动和验证见 [Act 模型自管理空间](act-system-space.md)。
+持久化端口与替换约束见 [存储规范](storage.md)。
 
 ## 当前任务的稳定 store 引用
 
@@ -242,4 +237,4 @@ LocalContextStorage 使用 store_catalog、store_creations 管理目录与创建
 
 ## 持久协作
 
-store 同时提供结构化对象、逐条事件和共享材料。对象关注与消息订阅分开，投递确认与处理确认分开。子任务通过持久请求与父任务交互，环境更新只在收束后的续跑边界生效。完整 API、原子性范围、运行中及空闲唤醒、恢复和验证见 [Act 模型自管理空间](act-system-space.md)。
+store 同时提供结构化对象、逐条事件和共享材料。对象关注与消息订阅分开，投递确认与处理确认分开。子任务通过持久请求与父任务交互，环境更新只在收束后的续跑边界生效。当前模型合同见 [Act 目录](../../packages/velaros/act/README.md)，子任务生命周期见 [Agents 模块](../../packages/velaros/act/agents/README.md)。

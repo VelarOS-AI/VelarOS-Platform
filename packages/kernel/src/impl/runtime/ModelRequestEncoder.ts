@@ -7,12 +7,14 @@ import type { ModelRequestEncoderApi } from '../../contract/provides.js'
 import type {
   ModelContinuation,
   ModelHistoryMessage,
+  ModelRequestLayout,
   ModelResponseFormat,
   ModelToolExchange,
   ModelTurnRequest,
 } from '../../types/model.js'
 import {
   driverModelContinuation,
+  driverModelLayout,
   driverModelMessages,
   driverModelPrompt,
   driverModelToolExchange,
@@ -78,6 +80,9 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
 
   public messages(request: ModelTurnRequest): ModelHistoryMessage[] {
     return driverModelMessages(request)
+  }
+  public layout(request: ModelTurnRequest): ModelRequestLayout {
+    return driverModelLayout(request)
   }
   public continuation(value: unknown): ModelContinuation {
     return driverModelContinuation(value)

@@ -1,27 +1,21 @@
-import { isArray } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
-import type {
-  CompiledModelRequest,
-  ModelEstimateCalibration,
-  ProviderRequestSnapshot,
-} from '../../types/compiler.js'
-import { encodeProviderRequestAuditValue } from '../../utils/provider-audit.js'
+import { ModelRequestAuditLimits } from '../../contract/constants.js'
+import type { CompiledModelRequest, ModelEstimateCalibration } from '../../types/compiler.js'
+import { encodeProviderFingerprintValue } from '../../utils/provider-audit.js'
 import { requestFingerprint } from '../../utils/provider-fingerprint.js'
 
 /** 最终发送门只编译物化结果，不持有会话或上下文治理状态。 */
 export interface ProviderRequestCompilerApi {
-  /** 编码、封存并计量实际发送请求，超预算时保留原文并拒绝发送；给了校准就按校准后的估算准入。 */
+  /** 编码并计量实际发送请求，审计只含有界元数据；超预算保留 live 原文并拒绝发送。 */
   compileModelTurn(
     request: ModelTurnRequest,
     driver: ModelDriver,
     reserveTokens: number,
     calibration?: ModelEstimateCalibration
   ): Promise<CompiledModelRequest>
-  /** 核对保存的消息、模型、响应格式和输出预算未被改写。 */
-  verify(snapshot: ProviderRequestSnapshot): Promise<void>
 }
 class ProviderRequestCompiler implements ProviderRequestCompilerApi {
   public async compileModelTurn(
@@ -39,28 +33,25 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       throw new AppError('VALIDATION', '估算固定开销必须是非负整数')
     const request = structuredClone({ ...input, compiledPrompt: modelRequestEncoder.encode(input) })
     request.response = modelRequestEncoder.response(request)
-    const messages = encodeProviderRequestAuditValue(modelRequestEncoder.messages(request))
+    if (!Number.isSafeInteger(request.outputTokens) || request.outputTokens < 1)
+      throw new AppError('VALIDATION', '模型输出预算无效')
+    const messages = modelRequestEncoder.messages(request)
     const responseFormat =
       request.response.type === 'json'
-        ? encodeProviderRequestAuditValue(request.response)
+        ? encodeProviderFingerprintValue(request.response)
         : undefined
     const data = {
       model: driver.id,
       system: request.instructions,
-      messages,
+      messages: encodeProviderFingerprintValue(messages),
       outputTokens: request.outputTokens,
       responseFormat,
       tools:
         request.response.type === 'tools'
-          ? request.response.tools.map((tool) => encodeProviderRequestAuditValue(tool))
+          ? request.response.tools.map((tool) => encodeProviderFingerprintValue(tool))
           : [],
     }
-    const providerRequest: ProviderRequestSnapshot = {
-      schemaVersion: 2,
-      ...data,
-      requestFingerprint: await requestFingerprint(data),
-    }
-    await this.verify(providerRequest)
+    const fingerprint = await requestFingerprint(data)
     const raw = await driver.estimate(request)
     const images = raw.images?.tokens ?? 0
     const opaque = raw.opaqueTokens ?? 0
@@ -97,19 +88,25 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     const okToSend =
       estimate.tokens <= driver.limits.inputTokens &&
       estimate.tokens + request.outputTokens + reserveTokens <= driver.limits.contextTokens
-    return { request, estimate, measured, okToSend, providerRequest }
-  }
-  public async verify(snapshot: ProviderRequestSnapshot): Promise<void> {
-    if (
-      snapshot.schemaVersion !== 2 ||
-      !isArray(snapshot.tools) ||
-      snapshot.tools.length > 32 ||
-      !Number.isSafeInteger(snapshot.outputTokens) ||
-      snapshot.outputTokens < 1 ||
-      JSON.stringify(snapshot.requestFingerprint) !==
-        JSON.stringify(await requestFingerprint(snapshot))
-    )
-      throw new AppError('INVARIANT', '模型请求快照与实际内容指纹不一致')
+    return {
+      request,
+      estimate,
+      measured,
+      okToSend,
+      requestAudit: {
+        schemaVersion: 3,
+        model: driver.id.slice(0, ModelRequestAuditLimits.modelChars),
+        modelTruncated: driver.id.length > ModelRequestAuditLimits.modelChars,
+        inputTokens: estimate.tokens,
+        precision: estimate.precision,
+        basis: estimate.basis.slice(0, ModelRequestAuditLimits.basisChars),
+        basisTruncated: estimate.basis.length > ModelRequestAuditLimits.basisChars,
+        outputTokens: request.outputTokens,
+        messageCount: messages.length,
+        toolCount: data.tools.length,
+        requestFingerprint: fingerprint,
+      },
+    }
   }
 }
 /** 创建无会话状态的统一请求编译器。 */

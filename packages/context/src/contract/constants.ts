@@ -41,12 +41,6 @@ export const DefaultContextViewLimits = Object.freeze({
   evidenceChars: 24000,
   /** 发布冲突后的刷新次数上限。 */
   refreshes: 2,
-  /** 任务模型调用总数上限。 */
-  modelCalls: 128,
-  /** 任务模型 token 总数上限。 */
-  modelTokens: 500000,
-  /** 任务每小时的模型 token 上限（滚动一小时）；缺省不限。 */
-  modelTokensPerHour: Number.MAX_SAFE_INTEGER,
   /** 单次物化时限毫秒。 */
   materializationMs: 30000,
   /** 任务租约时长毫秒。 */
@@ -58,8 +52,6 @@ export const ContextLimits = Object.freeze({
   recordPage: 256,
   /** 未发布对象至少保留一小时，供候选提交与故障诊断。 */
   orphanGraceMs: 3600000,
-  /** 每小时模型用量的滚动窗口，按两个整小时的桶近似。 */
-  hourlyWindowMs: 3600000,
   /** 已整理输入保留可召回的有界原文锚点，避免超大输入使维护永远无效。 */
   inputAnchorChars: 1000,
   /** 单次原文读取上限。 */
@@ -102,25 +94,4 @@ export const TaskCapsuleLimits = Object.freeze({
   items: 16,
   /** 每一条最多多少字符。 */
   itemChars: 1000,
-})
-/** 领域核查报告的有界归档与展示，不扩大原始事实存储额度。 */
-export const ContextVerificationLimits = Object.freeze({
-  /** 范围说明与产物身份的字符上限。 */
-  scopeChars: 2000,
-  /** 单项名称或产物版本的字符上限。 */
-  labelChars: 1000,
-  /** 一个报告的检查项上限。 */
-  checks: 32,
-  /** 每个检查项的证据引用上限。 */
-  evidenceRefs: 8,
-  /** 完整证据报告的 JSON 字符上限；模型视图仍按自己的投影额度呈现。 */
-  reportChars: 262144,
-  /** 单项核查覆盖的精确产物数量上限。 */
-  artifacts: 32,
-  /** 核查或探测一次返回的费用依据上限。 */
-  charges: 64,
-  /** 一次宿主原子版本探测的最长等待。 */
-  probeMs: 2000,
-  /** 当前 helper 生命周期内保留的完整通过证明上限。 */
-  cachedChecks: 128,
 })

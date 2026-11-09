@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 
 import { expect, test } from 'bun:test'
 
+import { AppError } from '../src/error'
 import { fetchWithTimeout } from '../src/utils/fetchWithTimeout'
 
 for (const status of [200, 503]) {
@@ -87,13 +88,14 @@ test('success and parsing failures are preserved; invalid deadlines do not send'
       fetch: async () => new Response('invalid'),
     })
   ).rejects.toBeInstanceOf(SyntaxError)
-  for (const timeoutMs of [-1, NaN, Infinity])
-    await expect(
-      fetchWithTimeout('https://example.invalid', {}, (r) => r.json(), {
-        timeoutMs,
-        fetch: async () => {
-          throw new Error('must not send')
-        },
-      })
-    ).rejects.toBeInstanceOf(RangeError)
+  for (const timeoutMs of [-1, NaN, Infinity]) {
+    const failure = await fetchWithTimeout('https://example.invalid', {}, (r) => r.json(), {
+      timeoutMs,
+      fetch: async () => {
+        throw new Error('must not send')
+      },
+    }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(AppError)
+    expect(failure).toMatchObject({ code: 'VALIDATION' })
+  }
 })

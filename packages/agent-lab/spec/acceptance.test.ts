@@ -22,7 +22,6 @@ import {
   createDetectorRegistry,
   createVerifierRegistry,
   journeyRunner,
-  labArchives,
   labCertification,
   labDrivers,
   labReports,
@@ -33,10 +32,25 @@ import {
 } from '../src/index.js'
 import { canonicalJson } from '../src/utils/canonical-json.js'
 
-import { FullCapabilities, journey, observation, trial } from './support.js'
+import {
+  archive,
+  assertSelfContainedReport,
+  FullCapabilities,
+  journey,
+  observation,
+  trial,
+} from './support.js'
 
 /** 一个总是收敛的假驱动；时钟按段推进，用来把「本段用时」与「整程用时」分开。 */
 function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
+  let completed = 0
+  const cumulative = (phase: Observation['phase']): Observation => {
+    const base = observation(phase)
+    return {
+      ...base,
+      usage: { ...base.usage!, inputTokens: completed, outputTokens: 0, totalTokens: completed },
+    }
+  }
   const session: SessionHandle = {
     id: 'session',
     executorId: 'executor-a',
@@ -62,15 +76,16 @@ function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
     send: async () => undefined,
     waitSettled: async (_session, request) => {
       clock.value += legMs
+      completed += 1
       const decision = await request.onSample({
-        observation: observation('running'),
-        usage: { toolCalls: 0, workingMs: legMs, wallClockMs: legMs, tokens: 1, legs: 0 },
+        observation: cumulative('running'),
+        usage: { toolCalls: 0, workingMs: legMs, wallClockMs: legMs, tokens: 1, legs: 1 },
       })
       if (decision.kind === 'abort')
         return { kind: 'aborted', detectorId: decision.detectorId, reason: decision.reason }
       return { kind: 'settled' }
     },
-    collect: async (_session, phase) => observation(phase),
+    collect: async (_session, phase) => cumulative(phase),
     abort: async () => undefined,
     closeSession: async () => undefined,
   }
@@ -80,22 +95,27 @@ function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
 function sensitiveRecord(): RealTaskRecord {
   return labWire.parseRealTaskRecord({
     schema: 'agent-lab/real-task@1',
-    id: 'task-secret',
+    id: 'SECRET-RECORD-ID',
     capturedAt: 20,
     task: {
-      sessionId: 'session-1',
-      runId: 'run-1',
+      sessionId: 'SECRET-SESSION-ID',
+      runId: 'SECRET-RUN-ID',
       rootInputId: null,
       source: 'user',
       surface: 'project',
-      title: '修一个持久化缺陷',
+      title: 'SECRET-TITLE /srv/evaluation/secret-workspace/title.txt',
       prompt: 'SECRET-PROMPT-TOKEN',
       workspaceRoot: '/srv/evaluation/secret-workspace',
       startedAt: 1,
       finishedAt: 5,
       terminalStatus: 'ok',
     },
-    executor: { executorId: 'executor-a', provider: null, model: null, reasoningProfile: null },
+    executor: {
+      executorId: 'SECRET-EXECUTOR-ID',
+      provider: 'SECRET-PROVIDER',
+      model: 'SECRET-MODEL',
+      reasoningProfile: 'SECRET-REASONING',
+    },
     privacy: {
       classification: 'local-only',
       containsPrompt: true,
@@ -106,12 +126,12 @@ function sensitiveRecord(): RealTaskRecord {
       spans: [],
       assertions: [
         {
-          id: 'file',
+          id: 'SECRET-ASSERTION-ID',
           kind: 'file',
-          description: '文件写对了',
+          description: 'SECRET-ASSERTION-DESCRIPTION',
           outcome: 'pass',
-          detail: 'ok',
-          evidenceRefs: [],
+          detail: 'SECRET-ASSERTION-DETAIL',
+          evidenceRefs: ['SECRET-EVIDENCE-REF'],
         },
       ],
       artifacts: [
@@ -125,8 +145,8 @@ function sensitiveRecord(): RealTaskRecord {
         },
       ],
       finalAnswer: 'SECRET-ANSWER-TOKEN',
-      userFeedback: null,
-      observationGaps: [],
+      userFeedback: { verdict: 'accepted', detail: 'SECRET-FEEDBACK', recordedAt: 10 },
+      observationGaps: ['SECRET-OBSERVATION-GAP'],
     },
   })
 }
@@ -140,7 +160,7 @@ function withCalls(calls: readonly ToolCallRecord[]): Observation {
 }
 
 describe('结果只由独立验证决定', () => {
-  test('INV-1 没有验证器判过的判据是 unknown，不被总分掩盖', async () => {
+  test('INV-1 没有可判权重时门与非门都保持 unknown，不凭空通过', async () => {
     const verifiers = createVerifierRegistry()
     verifiers.register('complete', () => ({
       kind: 'void',
@@ -148,24 +168,33 @@ describe('结果只由独立验证决定', () => {
       detail: '外部真相取不到',
       evidence: {},
     }))
-    const archive = await journeyRunner.runJourney({
-      jobId: 'job',
-      suiteId: 'suite',
-      trial: trial(),
-      journey: journey(),
-      driver: fakeDriver({ value: 0 }, 1),
-      detectors: createDetectorRegistry(),
-      verifiers,
-      workspaceRoot: null,
-      sourceCommit: null,
-      consumerCommit: null,
-    })
+    for (const gate of [true, false]) {
+      const definition = journey()
+      const result = await journeyRunner.runJourney({
+        jobId: 'job',
+        suiteId: 'suite',
+        trial: trial(),
+        journey: {
+          ...definition,
+          legs: definition.legs.map((leg) => ({
+            ...leg,
+            criteria: leg.criteria.map((criterion) => ({ ...criterion, gate })),
+          })),
+        },
+        driver: fakeDriver({ value: 0 }, 1),
+        detectors: createDetectorRegistry(),
+        verifiers,
+        workspaceRoot: null,
+        sourceCommit: null,
+        consumerCommit: null,
+      })
 
-    expect(archive.legs[0]?.passed).toBeNull()
-    expect(archive.legs[0]?.score).toBeNull()
-    expect(archive.drops).toHaveLength(1)
-    expect(archive.drops[0]?.cause).toBe('verifier-unavailable')
-    expect(labStatistics.estimateReliability([archive]).attempts).toBe(0)
+      expect(result.legs[0]?.passed).toBeNull()
+      expect(result.legs[0]?.score).toBeNull()
+      expect(result.drops).toHaveLength(1)
+      expect(result.drops[0]?.cause).toBe('verifier-unavailable')
+      expect(labStatistics.estimateReliability([result]).attempts).toBe(0)
+    }
   })
 })
 
@@ -197,31 +226,50 @@ describe('一个试验失败不影响其它试验', () => {
 })
 
 describe('归档只读与严格校验', () => {
-  test('INV-3 v3 严格校验，历史归档缺的字段保持缺', () => {
+  test('INV-3 归档只接受严格当前 v3，旧格式和额外字段不降级读取', () => {
     const base = journey()
     expect(() => labWire.parseJourney({ ...base, unexpected: true })).toThrow()
 
-    const v0 = labArchives.readRunArchiveView([{ ok: true }])
-    const v1 = labArchives.readRunArchiveView({ sessionId: 's1', rounds: [{ ok: true }] })
-    const v2 = labArchives.readRunArchiveView({ manifest: { runId: 'r2' }, rounds: [] })
-    expect([v0.shape, v1.shape, v2.shape]).toEqual(['v0-array', 'v1-flat', 'v2-manifest'])
-    expect(v0.passed).toBeNull()
-    expect(v1.drops).toBeNull()
-    expect(v2.findings).toBeNull()
-    expect(v2.usage).toBeNull()
+    const current = archive({ score: null })
+    expect(labWire.parseRunArchive(current)).toEqual(current)
+    for (const input of [
+      [{ ok: true }],
+      { sessionId: 's1', rounds: [{ ok: true }] },
+      { manifest: { runId: 'r2' }, rounds: [] },
+      { ...current, unexpected: true },
+      { ...current, manifest: { ...current.manifest, schema: 'agent-lab/run@2' } },
+    ])
+      expect(() => labWire.parseRunArchive(input)).toThrow()
   })
 })
 
 describe('真实任务报告不外泄内容', () => {
   test('INV-4 报告不嵌入提示词、回答、绝对路径与产物正文', () => {
     const record = sensitiveRecord()
-    const assessment: RealTaskAssessment = realTaskWorkload.audit(record, { generatedAt: 1 })
-    const html = labReports.renderRealTaskReportHtml(record, assessment)
+    const audited = realTaskWorkload.audit(record, { generatedAt: 1 })
+    const assessment: RealTaskAssessment = {
+      ...audited,
+      findings: [
+        ...audited.findings,
+        {
+          id: 'SECRET-FINDING-ID',
+          severity: 'info',
+          class: 'policy',
+          title: 'SECRET-FINDING-TITLE',
+          detail: 'SECRET-FINDING-DETAIL',
+          evidenceRefs: ['SECRET-FINDING-REF'],
+        },
+      ],
+    }
+    const html = labReports.renderRealTaskReportHtml(assessment)
 
-    expect(html).not.toContain('SECRET-PROMPT-TOKEN')
-    expect(html).not.toContain('SECRET-ANSWER-TOKEN')
+    expect(html).not.toContain('SECRET-')
     expect(html).not.toContain('/srv/evaluation/secret-workspace')
     expect(html).toContain('verified-pass')
+    expect(html).toContain('data-finding-class="observation-gap"')
+    expect(html).toContain('data-finding-class="policy"')
+    expect(html).toContain('data-value="null">—</span>')
+    expect(/<link\b|<script\b[^>]*\bsrc=|@import\b|https?:\/\//i.test(html)).toBe(false)
   })
 })
 
@@ -239,6 +287,7 @@ describe('测量口径', () => {
     }
     const duplicated: Observation = {
       ...observation(),
+      usage: null,
       turns: [
         { id: 'turn-1', index: 0, toolCalls: [call], finishReasons: [] },
         { id: 'turn-2', index: 1, toolCalls: [{ ...call, turnId: 'turn-2' }], finishReasons: [] },
@@ -262,6 +311,7 @@ describe('测量口径', () => {
     })
 
     expect(archive.manifest.measurementBasis).toBe('unique-tool-call')
+    expect(archive.legs[0]?.settleOutcome.kind).toBe('settled')
     expect(archive.manifest.usage.toolCalls).toBe(1)
     expect(archive.legs[0]?.observation.turns.flatMap((turn) => turn.toolCalls)).toHaveLength(1)
   })
@@ -307,8 +357,14 @@ describe('预算的两本账', () => {
       trial: trial(),
       journey: {
         ...definition,
-        budget: { ...UnlimitedBudget, legs: 2 },
-        legs: [first!, { ...second!, budget: { ...UnlimitedBudget, wallClockMs: 8_000 } }],
+        budget: { ...UnlimitedBudget, tokens: 2, workingMs: 10_000, legs: 2 },
+        legs: [
+          first!,
+          {
+            ...second!,
+            budget: { ...UnlimitedBudget, tokens: 1, workingMs: 6_000, wallClockMs: 8_000 },
+          },
+        ],
       },
       driver: fakeDriver(clock, 5_000),
       detectors: createDetectorRegistry(),
@@ -322,6 +378,9 @@ describe('预算的两本账', () => {
     expect(archive.legs).toHaveLength(2)
     expect(archive.legs[1]?.settleOutcome.kind).toBe('settled')
     expect(archive.manifest.usage.wallClockMs).toBe(10_000)
+    expect(archive.manifest.usage.tokens).toBe(2)
+    expect(archive.manifest.usage.workingMs).toBe(10_000)
+    expect(archive.manifest.usage.legs).toBe(2)
   })
 })
 
@@ -367,12 +426,11 @@ describe('本包不认宿主', () => {
 
 describe('报告自包含', () => {
   test('INV-12 报告不拉任何外部资源，未知显示破折号而不是 0', () => {
-    const view = labArchives.readRunArchiveView({ sessionId: 'legacy', rounds: [] })
-    const html = labReports.renderHistoricalReportHtml([view], { generatedAt: 1 })
+    const model = labReports.createRunReportModel(archive({ score: null }))
+    const html = labReports.renderRunReportHtml([model], { generatedAt: 1 })
 
     expect(html).toContain('data-value="null">—</span>')
-    expect(/<link\b|<script\b[^>]*\bsrc=|@import\b/i.test(html)).toBe(false)
-    expect(/https?:\/\//i.test(html)).toBe(false)
+    assertSelfContainedReport(html)
   })
 })
 

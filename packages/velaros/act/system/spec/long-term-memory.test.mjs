@@ -6,9 +6,8 @@ import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { codeProgramChecker, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { codeProgramChecker } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   LongTermMemoryModuleIds,
   PersistentLocalMemoryModuleId,
@@ -16,8 +15,15 @@ import {
 } from '../../../dist/act/system/contract/constants.js'
 import { createMemoryStore } from '../../../dist/memory/index.js'
 import { done, marker, modelText, turn } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 const prelude = "import {memory,modules} from 'velaros:system';import {output} from 'velaros';"
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const readOnlyCollection = {
+  skip: platformHasDefaultConfinement
+    ? false
+    : 'This mechanism requires a successful read-only Node collection; unavailable-host rejection is covered separately.',
+}
 const entry = (id, content = id) => ({
   id,
   type: 'work',
@@ -38,7 +44,6 @@ async function fixture(t, options = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     memory: () => store.scope('project:shared'),
     ...options,
@@ -107,7 +112,18 @@ test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储�
   assert.equal(description.binding.moduleId, PersistentLocalMemoryModuleId)
   assert.deepEqual(
     [...operations].sort(),
-    ['list', 'read', 'update', 'plan', 'retain', 'release', 'recall', 'save', 'remove'].sort()
+    [
+      'list',
+      'read',
+      'update',
+      'updateActive',
+      'plan',
+      'retain',
+      'release',
+      'recall',
+      'save',
+      'remove',
+    ].sort()
   )
   assert(!operations.includes('organize'))
   assert.equal(
@@ -259,7 +275,6 @@ test('INV-12 作用域在主会话打开时固定，同作用域跨会话与重�
   let scope = 'project:shared'
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     memory: () => {
       mappings++
@@ -348,42 +363,94 @@ test('INV-12 recall 支持正文检索、精确 ID 和有界分页，不自动�
   assert(!JSON.stringify(requests[0]).includes('secret-not-automatically-loaded'))
 })
 
-test('INV-12 observe 每帧可召回最新记忆，但 save/remove 均在派发前拦截', async (t) => {
-  const requests = []
-  const f = await fixture(t, {
-    context: { maintenance: false },
-    model: model(async function* (request) {
-      requests.push(request)
-      yield* done(request)
-    }),
-  })
-  const scope = f.store.scope('project:shared')
-  await scope.save(entry('watched', 'v1-memory'))
-  await f.session.observe({ source: `${prelude}output(await memory.recall({id:"watched"}));` })
-  await submit(f.session)
-  assert.match(JSON.stringify(requests.at(-1)), /v1-memory/)
-  await scope.save(entry('watched', 'v2-memory'))
-  await submit(f.session)
-  assert.match(JSON.stringify(requests.at(-1)), /v2-memory/)
-  for (const source of [
-    `await memory.save(${JSON.stringify(entry('danger'))});`,
-    'await memory.remove({id:"watched"});',
-  ]) {
-    await f.session.observe({ source: prelude + source })
+test(
+  'INV-12 observe 每帧可召回最新记忆，但 save/remove 均在派发前拦截',
+  readOnlyCollection,
+  async (t) => {
+    const requests = []
+    const f = await fixture(t, {
+      context: { maintenance: false },
+      model: model(async function* (request) {
+        requests.push(request)
+        yield* done(request)
+      }),
+    })
+    const scope = f.store.scope('project:shared')
+    await scope.save(entry('watched', 'v1-memory'))
+    await f.session.observe({ source: `${prelude}output(await memory.recall({id:"watched"}));` })
     await submit(f.session)
-    assert.match(JSON.stringify(requests.at(-1)), /OPERATION_MODE_DENIED/)
+    assert.match(JSON.stringify(requests.at(-1)), /v1-memory/)
+    await scope.save(entry('watched', 'v2-memory'))
+    await submit(f.session)
+    assert.match(JSON.stringify(requests.at(-1)), /v2-memory/)
+    for (const source of [
+      `await memory.save(${JSON.stringify(entry('danger'))});`,
+      'await memory.remove({id:"watched"});',
+    ]) {
+      await f.session.observe({ source: prelude + source })
+      await submit(f.session)
+      assert.match(JSON.stringify(requests.at(-1)), /OPERATION_MODE_DENIED/)
+    }
+    assert.deepEqual(
+      (await scope.list()).map((item) => item.id),
+      ['watched']
+    )
+    const records = await createContextInvocationJournal(f.storage).list('main')
+    assert(
+      records
+        .filter((item) => ['save', 'remove'].includes(item.prepared.operation))
+        .every((item) => item.receipt.effect === 'none')
+    )
   }
-  assert.deepEqual(
-    (await scope.list()).map((item) => item.id),
-    ['watched']
-  )
-  const records = await createContextInvocationJournal(f.storage).list('main')
-  assert(
-    records
-      .filter((item) => ['save', 'remove'].includes(item.prepared.operation))
-      .every((item) => item.receipt.effect === 'none')
-  )
-})
+)
+
+test(
+  'INV-12 没有只读进程后端时 observe 明确失败且不触达长期记忆写端口',
+  {
+    skip: platformHasDefaultConfinement
+      ? 'This host provides the read-only backend tested above.'
+      : false,
+  },
+  async (t) => {
+    const requests = []
+    let writes = 0
+    const f = await fixture(t, {
+      context: { maintenance: false },
+      memory: () => ({
+        list: async () => [],
+        save: async () => {
+          writes++
+          assert.fail('an unavailable observation reached save')
+        },
+        remove: async () => {
+          writes++
+          assert.fail('an unavailable observation reached remove')
+        },
+      }),
+      model: model(async function* (request) {
+        requests.push(request)
+        yield* done(request)
+      }),
+    })
+    for (const source of [
+      `await memory.save(${JSON.stringify(entry('danger'))});`,
+      'await memory.remove({id:"watched"});',
+    ]) {
+      await f.session.observe({ source: prelude + source })
+      await submit(f.session)
+      const frame = JSON.parse(
+        requests.at(-1).materials.findLast((item) => item.origin === 'runtime-view').text
+      )
+      assert.equal(frame.partitions.observation.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    }
+    assert.equal(writes, 0)
+    const records = await createContextInvocationJournal(f.storage).list('main')
+    assert.equal(
+      records.filter((item) => ['save', 'remove'].includes(item.prepared.operation)).length,
+      0
+    )
+  }
+)
 
 test('INV-12 宿主授权和既有输入验证保护长期写入，失败回执记录无副作用', async (t) => {
   let denied = false
@@ -434,34 +501,17 @@ test('INV-12 未装配长期记忆时实际合同隐藏三个操作，重复的�
     () =>
       createRuntime({
         storage,
-        runner: nodeSubprocessCodeRunner,
         modules: [{ binding: { moduleId: 'velaros:memory' }, operations: {} }],
       }),
     /memory\(sessionId\)/
   )
 })
 
-test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没有主线长期记忆能力', async (t) => {
+test('INV-12 业务子任务在发现、声明与导入执行层没有主线长期记忆能力', async (t) => {
   let childCalls = 0
-  let searchCalls = 0
   let mappingCalls = 0
   let mainCalls = 0
   const source = `${prelude}output({keys:Object.keys(memory),catalog:await modules.list({space:'system'})});`
-  const searchModel = model(async function* (request) {
-    if (++searchCalls === 1) {
-      yield turn(request, { execute: { source } })
-      yield { type: 'finish', reason: 'stop' }
-    } else {
-      assert(!request.instructions.includes('memory.recall'))
-      assert(!modelText(request).includes('system-memory-persistent'))
-      assert(!modelText(request).includes('memory.save'))
-      yield {
-        type: 'text',
-        text: `${turn(request, { execute: { source: "import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});" } }).text}\n${marker(request)} done`,
-      }
-      yield { type: 'finish', reason: 'stop' }
-    }
-  })
   const child = model(async function* (request) {
     if (++childCalls === 1) {
       yield turn(request, { execute: { source } })
@@ -472,7 +522,10 @@ test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没�
       yield turn(request, { execute: { source: `${prelude}await memory.recall({});` } })
       yield { type: 'finish', reason: 'stop' }
     } else {
-      assert.match(modelText(request), /recall.*does not exist|Property 'recall'/)
+      assert.match(
+        modelText(request),
+        /recall.*does not exist|Property 'recall'|recall is not a function/
+      )
       yield* done(request)
     }
   })
@@ -480,9 +533,7 @@ test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没�
     const source =
       ++mainCalls === 1
         ? "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Inspect capabilities',profile:'worker'});output(await wait({id:job.id}));"
-        : mainCalls === 2
-          ? "import {search} from 'velaros:search';import {output} from 'velaros';output(await search({query:'Inspect capabilities'}));"
-          : null
+        : null
     if (source) {
       yield turn(request, { execute: { source } })
       yield { type: 'finish', reason: 'stop' }
@@ -498,7 +549,60 @@ test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没�
         remove: async () => assert.fail('child delete'),
       }
     },
-    agents: { concurrency: 1, maxChildren: 2, profiles: { worker: { model: child, modules: [] } } },
+    agents: {
+      concurrency: 1,
+      maxChildren: 2,
+      profiles: { worker: { model: child, modules: [], node: true } },
+    },
+  })
+  await submit(f.session, 'Run the business child')
+  assert.equal(childCalls, 3)
+  assert.equal(mappingCalls, 1)
+})
+
+test('INV-12 搜索在发现、声明与导入执行层没有主线长期记忆能力', readOnlyCollection, async (t) => {
+  let searchCalls = 0
+  let mappingCalls = 0
+  let mainCalls = 0
+  const searchModel = model(async function* (request) {
+    if (++searchCalls === 1) {
+      yield turn(request, {
+        execute: {
+          source: `${prelude}output({keys:Object.keys(memory),catalog:await modules.list({space:'system'})});`,
+        },
+      })
+      yield { type: 'finish', reason: 'stop' }
+    } else {
+      assert(!request.instructions.includes('memory.recall'))
+      assert(!modelText(request).includes('system-memory-persistent'))
+      assert(!modelText(request).includes('memory.save'))
+      yield {
+        type: 'text',
+        text: `${turn(request, { execute: { source: "import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});" } }).text}\n${marker(request)} done`,
+      }
+      yield { type: 'finish', reason: 'stop' }
+    }
+  })
+  const f = await fixture(t, {
+    model: model(async function* (request) {
+      if (++mainCalls === 1) {
+        yield turn(request, {
+          execute: {
+            source:
+              "import {search} from 'velaros:search';await search({query:'Inspect capabilities'});",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+    memory: () => {
+      mappingCalls++
+      return {
+        list: async () => [],
+        save: async () => assert.fail('search write'),
+        remove: async () => assert.fail('search delete'),
+      }
+    },
     search: {
       model: searchModel,
       defaultProfile: 'standard',
@@ -520,70 +624,88 @@ test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没�
       },
     },
   })
-  await submit(f.session, 'Run both branches')
-  assert.equal(childCalls, 3)
+  await submit(f.session, 'Run the search branch')
   assert.equal(searchCalls, 2)
   assert.equal(mappingCalls, 1)
 })
 
-test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材料并回传补丁', async (t) => {
-  let mainCalls = 0
-  let toolCalls = 0
-  const organizer = model(async function* (request) {
-    toolCalls++
-    assert(!request.instructions.includes('memory.recall'))
-    assert(!request.instructions.includes('memory.save'))
-    assert.match(request.instructions, /index.json/)
-    const snapshot = JSON.parse(
-      JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-    ).snapshot
-    const patch = {
-      baseRevision: snapshot.baseRevision,
-      summary: 'Keep required progress',
-      unresolved: [],
-    }
-    yield {
-      type: 'text',
-      text: `${turn(request, { execute: { source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));` } }).text}\n${marker(request)} done`,
-    }
-    yield { type: 'finish', reason: 'stop' }
-  })
-  const main = model(async function* (request) {
-    assert.match(request.instructions, /index.json/)
-    assert.match(request.instructions, /capabilities/)
-    assert.match(request.instructions, /documentationPath/)
-    assert.match(request.instructions, /operationPaths/)
-    if (++mainCalls === 1) {
+test(
+  'INV-12 长期记忆与整理共享主入口，整理模型只读固定材料并回传补丁',
+  readOnlyCollection,
+  async (t) => {
+    let mainCalls = 0
+    let toolCalls = 0
+    const organizer = model(async function* (request) {
+      toolCalls++
+      assert(!request.instructions.includes('memory.recall'))
+      assert(!request.instructions.includes('memory.save'))
+      assert.match(request.instructions, /index.json/)
+      const snapshot = JSON.parse(
+        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
+      ).snapshot
+      const patch = {
+        baseRevision: snapshot.baseRevision,
+        summary: 'Keep required progress',
+        unresolved: [],
+      }
       yield {
         type: 'text',
-        text: `${turn(request, { execute: { source: `${prelude}await memory.organize({focus:"Keep progress"});` } }).text}\n${marker(request)} done`,
+        text: `${turn(request, { execute: { source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));` } }).text}\n${marker(request)} done`,
       }
       yield { type: 'finish', reason: 'stop' }
-    } else {
-      assert.equal(
-        JSON.parse(request.materials[0].text).memoryStatus.maintenance.lastAttempt.status,
-        'applied'
-      )
-      yield* done(request)
-    }
-  })
-  const f = await fixture(t, {
-    model: main,
-    context: { sources: [], maintenance: { model: organizer } },
-  })
-  const description = await describeMemory(f.session)
-  assert.equal(description.operations.length, 10)
-  assert.equal(description.binding.moduleId, PersistentMemoryModuleId)
-  assert.equal(
-    codeProgramChecker.typecheck({
-      source: description.template,
-      granted: [{ namespace: 'velaros:system', declarations: description.declarations }],
-    }).ok,
-    true
-  )
-  await f.store.scope('project:shared').save(entry('durable', 'Keep across cleanup'))
-  await submit(f.session)
-  assert.equal(mainCalls, 2)
-  assert.equal(toolCalls, 1)
-  assert.equal((await f.store.scope('project:shared').list())[0].content, 'Keep across cleanup')
-})
+    })
+    const main = model(async function* (request) {
+      assert.match(request.instructions, /index.json/)
+      assert.match(request.instructions, /capabilities/)
+      assert.match(request.instructions, /documentationPath/)
+      assert.match(request.instructions, /operationPaths/)
+      if (++mainCalls === 1) {
+        yield {
+          type: 'text',
+          text: `${turn(request, { execute: { source: `${prelude}await memory.organize({focus:"Keep progress"});` } }).text}\n${marker(request)} done`,
+        }
+        yield { type: 'finish', reason: 'stop' }
+      } else {
+        assert.equal(
+          JSON.parse(request.materials[0].text).memoryStatus.maintenance.lastAttempt.status,
+          'applied'
+        )
+        yield* done(request)
+      }
+    })
+    const f = await fixture(t, {
+      model: main,
+      context: { sources: [], maintenance: { model: organizer } },
+    })
+    const description = await describeMemory(f.session)
+    assert.deepEqual(
+      description.operations.toSorted(),
+      [
+        'list',
+        'read',
+        'update',
+        'updateActive',
+        'plan',
+        'retain',
+        'release',
+        'organize',
+        'recall',
+        'save',
+        'remove',
+      ].sort()
+    )
+    assert.equal(description.binding.moduleId, PersistentMemoryModuleId)
+    assert.equal(
+      codeProgramChecker.typecheck({
+        source: description.template,
+        granted: [{ namespace: 'velaros:system', declarations: description.declarations }],
+      }).ok,
+      true
+    )
+    await f.store.scope('project:shared').save(entry('durable', 'Keep across cleanup'))
+    await submit(f.session)
+    assert.equal(mainCalls, 2)
+    assert.equal(toolCalls, 1)
+    assert.equal((await f.store.scope('project:shared').list())[0].content, 'Keep across cleanup')
+  }
+)

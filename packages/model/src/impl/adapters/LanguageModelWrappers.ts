@@ -1,7 +1,11 @@
 import type { LanguageModel } from 'ai'
 
 import { DefaultReasoningLevel } from '../../contract/constants'
-import type { ModelCallProviderOptions, PromptCacheWireOptions } from '../../types/adapters'
+import type {
+  ModelAdapterConfig,
+  ModelCallProviderOptions,
+  PromptCacheWireOptions,
+} from '../../types/adapters'
 import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { asWrappableLanguageModel } from '../../utils/wire/language-models'
 import { createReasoningProviderOptions } from '../../utils/wire/reasoning'
@@ -33,7 +37,8 @@ export interface LanguageModelWrappersApi {
     provider: ChatProviderId,
     modelId: string,
     level: LooseOptional<ReasoningLevel>,
-    fallback: ReasoningFallbackApi
+    fallback: ReasoningFallbackApi,
+    connection: Pick<ModelAdapterConfig, 'apiKey' | 'baseURL'>
   ): LanguageModel
 }
 
@@ -52,7 +57,8 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
     provider: ChatProviderId,
     modelId: string,
     level: LooseOptional<ReasoningLevel>,
-    fallback: ReasoningFallbackApi
+    fallback: ReasoningFallbackApi,
+    connection: Pick<ModelAdapterConfig, 'apiKey' | 'baseURL'>
   ): LanguageModel {
     // 包不包只看"这一档到底发不发 reasoning"，那个判断与输出上限无关，先按缺省算一遍即可。
     const wrappable = createReasoningProviderOptions(provider, modelId, level)
@@ -61,7 +67,7 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
     if (!wrappable) return model
 
     return new ReasoningLanguageModel(wrappable, {
-      key: `${provider}:${modelId}`,
+      key: JSON.stringify([provider, modelId, connection.baseURL, connection.apiKey]),
       level: level ?? DefaultReasoningLevel,
       fallback,
       resolve: (current, maxOutputTokens) =>

@@ -24,41 +24,27 @@ export class RuntimeDiagnostics implements RuntimeDiagnosticsApi {
           stores: storage.stores,
           leaseOwner: storage.leaseOwner,
           leaseOwnerActive: storage.leaseOwnerActive?.bind(storage),
+          allocateReferenceId: (id) =>
+            this.measure(id, 'allocateReferenceId', () => storage.allocateReferenceId(id)),
           load: (id) => this.measure(id, 'load', () => storage.load(id)),
-          selectSnapshot: optionalWhen(
-            Boolean(storage.selectSnapshot),
-            (...args: Parameters<NonNullable<ContextStorage['selectSnapshot']>>) =>
-              this.measure(args[0], 'selectSnapshot', () => storage.selectSnapshot!(...args))
-          ),
-          loadMetadata: optionalWhen(
-            Boolean(storage.loadMetadata),
-            (...args: Parameters<NonNullable<ContextStorage['loadMetadata']>>) =>
-              this.measure(args[0], 'loadMetadata', () => storage.loadMetadata!(...args))
-          ),
-          compareAndSwapMetadata: optionalWhen(
-            Boolean(storage.compareAndSwapMetadata),
-            (...args: Parameters<NonNullable<ContextStorage['compareAndSwapMetadata']>>) =>
-              this.measure(args[0], 'compareAndSwapMetadata', () =>
-                storage.compareAndSwapMetadata!(...args)
-              )
-          ),
+          selectSnapshot: (...args: Parameters<ContextStorage['selectSnapshot']>) =>
+            this.measure(args[0], 'selectSnapshot', () => storage.selectSnapshot(...args)),
+          loadMetadata: (...args: Parameters<ContextStorage['loadMetadata']>) =>
+            this.measure(args[0], 'loadMetadata', () => storage.loadMetadata(...args)),
+          compareAndSwapMetadata: (...args: Parameters<ContextStorage['compareAndSwapMetadata']>) =>
+            this.measure(args[0], 'compareAndSwapMetadata', () =>
+              storage.compareAndSwapMetadata(...args)
+            ),
           compareAndSwap: (id, version, state) =>
             this.measure(id, 'compareAndSwap', () => storage.compareAndSwap(id, version, state)),
           put: (id, body) => this.measure(id, 'put', () => storage.put(id, body)),
           get: (id, objectId) => this.measure(id, 'get', () => storage.get(id, objectId)),
-          has: optionalWhen(Boolean(storage.has), (id: string, objectId: string) =>
-            this.measure(id, 'has', () => storage.has!(id, objectId))
-          ),
-          records: optionalWhen(
-            Boolean(storage.records),
-            (...args: Parameters<NonNullable<ContextStorage['records']>>) =>
-              this.measure(args[0], 'records', () => storage.records!(...args))
-          ),
-          appendRecord: optionalWhen(
-            Boolean(storage.appendRecord),
-            (...args: Parameters<NonNullable<ContextStorage['appendRecord']>>) =>
-              this.measure(args[0], 'appendRecord', () => storage.appendRecord!(...args))
-          ),
+          has: (id: string, objectId: string) =>
+            this.measure(id, 'has', () => storage.has(id, objectId)),
+          records: (...args: Parameters<ContextStorage['records']>) =>
+            this.measure(args[0], 'records', () => storage.records(...args)),
+          appendRecord: (...args: Parameters<ContextStorage['appendRecord']>) =>
+            this.measure(args[0], 'appendRecord', () => storage.appendRecord(...args)),
           collect: optionalWhen(
             Boolean(storage.collect),
             (...args: Parameters<NonNullable<ContextStorage['collect']>>) =>

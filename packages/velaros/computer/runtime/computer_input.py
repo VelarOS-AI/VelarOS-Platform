@@ -41,7 +41,7 @@ class ComputerInput:
                     import sys
                     print(f"input lease cleanup failed: {error}", file=sys.stderr)
 
-    def _hold(self, kind: str, name: str) -> dict[str, Any]:
+    def _register(self, kind: str, name: str) -> str:
         identity = f"{kind}:{name}"
         if identity in self.held:
             raise ComputerHelperError("CONFLICT", f"{identity} is already held")
@@ -50,13 +50,36 @@ class ComputerInput:
         # 先记账再发按下事件：后端部分成功后抛错也能进入清理。
         self.held[identity] = timer
         try:
+            timer.start()
+        except BaseException:
+            # 此时还没发按下事件，启动租约失败只撤回本次登记。
+            self.held.pop(identity, None)
+            timer.cancel()
+            raise
+        return identity
+
+    def _release_after(self, identity: str, failure: BaseException | None = None) -> None:
+        try:
+            self._release(identity)
+        except Exception as cleanup_error:
+            if failure is None:
+                raise
+            if not isinstance(failure, Exception):
+                raise failure from cleanup_error
+            code = failure.code if isinstance(failure, ComputerHelperError) else "helper_error"
+            raise ComputerHelperError(
+                code, f"{failure}；释放输入 {identity} 失败：{cleanup_error}"
+            ) from failure
+
+    def _hold(self, kind: str, name: str) -> dict[str, Any]:
+        identity = self._register(kind, name)
+        try:
             if kind == "mouse":
                 self.backend().mouseDown(button=name)
             else:
                 self.backend().keyDown(name)
-            timer.start()
-        except BaseException:
-            self._release(identity)
+        except BaseException as failure:
+            self._release_after(identity, failure)
             raise
         return self._state([])
 
@@ -143,10 +166,17 @@ class ComputerInput:
             backend.moveTo(start_x, start_y)
             self.resolve_point(payload["from"])
             self.resolve_point(payload["to"])
+            # dragTo 自己发按下事件，但释放责任仍由同一 held/租约持有。
+            identity = self._register("mouse", button)
         # 拖拽期间不持有状态锁，否则会阻止其他已按住键的租约及时释放。
+        failure: BaseException | None = None
         try:
             backend.dragTo(end_x, end_y, duration=duration, button=button)
+        except BaseException as error:
+            failure = error
+            raise
         finally:
             with self.lock:
-                backend.mouseUp(button=button)
+                if identity in self.held:
+                    self._release_after(identity, failure)
         return {"dragged": True}

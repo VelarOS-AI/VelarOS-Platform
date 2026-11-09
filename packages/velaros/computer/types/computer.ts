@@ -215,8 +215,6 @@ export interface ComputerHelperLaunchSpec {
   packageRoot: string
   /** 平台包版本（读取 package.json，缺省 0.0.0）。 */
   version: string
-  /** 是否命中了随包解释器（兼容字段名）。 */
-  bundledVenv: boolean
 }
 
 /** @AgentView 截图范围；省略 windowId 截主屏，窗口 id 从 windows 获取。 */

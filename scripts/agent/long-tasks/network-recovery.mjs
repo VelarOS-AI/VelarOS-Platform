@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url'
 
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { localContextStorage } from '@velaros-ai/context/node'
 
 import { createRuntime } from '../../../packages/velaros/dist/act/runtime/index.js'
 import {
@@ -22,6 +23,7 @@ import {
 async function exercise(root, phase, mode, outerSignal) {
   const directory = join(root, `${phase}-${mode}`)
   await mkdir(directory)
+  await mkdir(join(directory, 'state'))
   const effects = join(directory, 'effects.jsonl')
   const count = async () =>
     (
@@ -135,13 +137,11 @@ async function exercise(root, phase, mode, outerSignal) {
     for (let attempt = 0; attempt < (mode === 'reopen' ? 2 : 1); attempt++) {
       controller = new AbortController()
       runtime = await createRuntime({
-        dataDir: join(directory, 'state'),
+        binding: { executionIdentity: 'network-recovery', authorizationScope: directory },
+        storage: localContextStorage({ path: join(directory, 'state', 'context.sqlite') }),
         runner: nodeSubprocessCodeRunner,
         protocol: { transport: 'tools' },
         context: { maintenance: false },
-        agents: false,
-        search: false,
-        memory: false,
         limits: { turns: 6, timeoutMs: 30000 },
         modules: [
           {

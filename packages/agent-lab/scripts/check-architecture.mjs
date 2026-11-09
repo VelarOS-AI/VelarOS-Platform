@@ -124,30 +124,10 @@ const requiredFiles = [
   'test/cli.test.ts',
   'test/detectors.test.ts',
   'test/statistics-certification.test.ts',
-  'test/fixtures/legacy-equivalence.tsv',
 ]
 const present = new Set((await files(PackageRoot)).map(packageRelative))
 for (const path of requiredFiles) {
   if (!present.has(path)) fail(`required product surface is missing: ${path}`)
-}
-
-const legacySnapshot = await readFile(
-  join(PackageRoot, 'test/fixtures/legacy-equivalence.tsv'),
-  'utf8'
-).then((source) => source.replaceAll('\r\n', '\n'))
-const legacyRows = legacySnapshot.trim().split('\n')
-if (
-  legacyRows[0] !== 'schema\tagent-lab/legacy-equivalence-snapshot@1' ||
-  !legacyRows[1]?.includes('archives=52') ||
-  legacyRows.length !== 55
-) {
-  fail('legacy equivalence snapshot header or archive count drifted')
-}
-for (const [index, row] of legacyRows.slice(3).entries()) {
-  const fields = row.split('\t')
-  if (fields.length !== 5 || !/^[a-f0-9]{64}$/.test(fields[3] ?? '')) {
-    fail(`legacy equivalence snapshot row ${index + 1} is invalid`)
-  }
 }
 
 if (!process.exitCode) {

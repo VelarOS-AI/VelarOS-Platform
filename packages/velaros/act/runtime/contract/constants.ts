@@ -43,6 +43,22 @@ export const ObservationReuseLimits = Object.freeze({
   identityChars: 2_048,
 })
 
+/** observe 当前状态与显式历史片段的动态展示边界。 */
+export const ObservationLimits = Object.freeze({
+  /** 当前观察业务材料的默认 UTF-16 字符数。 */
+  defaultChars: 2_048,
+  /** 当前观察与显式历史材料合计的最大 UTF-16 字符数。 */
+  maxChars: 4_096,
+  /** 历史目录默认返回的条目数。 */
+  defaultList: 10,
+  /** 历史目录单页最多返回的条目数。 */
+  maxList: 20,
+  /** 历史局部正文默认读取的 UTF-16 字符数。 */
+  defaultReadChars: 1_024,
+  /** 历史局部正文单次最多读取的 UTF-16 字符数。 */
+  maxReadChars: 2_048,
+})
+
 /** 主干缺省预算，覆盖模型回合、请求投影和恢复材料。 */
 export const VelarosRunLimits = Object.freeze({
   /** 一次用户运行最多推进的模型回合。 */
@@ -57,16 +73,6 @@ export const VelarosRunLimits = Object.freeze({
   recoveryChars: 6_000,
   /** 一次运行的墙钟上限。 */
   timeoutMs: 86_400_000,
-})
-
-/** 主线不设总额，只限每小时用量，好让会话一直跑下去；宿主可以另设用户总上限。按真实调用逐次预留，不改变模型窗口。 */
-export const VelarosMainBudget = Object.freeze({
-  /** 一个逻辑任务中主线与支线累计调用上限；缺省不限。 */
-  modelCalls: Number.MAX_SAFE_INTEGER,
-  /** 一个逻辑任务累计预留和实际 token 上限；缺省不限。 */
-  modelTokens: Number.MAX_SAFE_INTEGER,
-  /** 主线及其业务子任务、模型工具每小时的 token 上限（滚动一小时）。 */
-  modelTokensPerHour: 30_000_000,
 })
 
 /** 业务子任务保留足够的独立工作空间，同时受祖先的剩余额度约束。 */
@@ -143,34 +149,6 @@ export const RuntimeModelLimits = Object.freeze({
   /** 每轮输出预留。 */
   outputTokens: 12_000,
 })
-/** 常规项目搜索的有界档位，预留最终交付空间。 */
-export const RuntimeSearchProfile = Object.freeze({
-  /** 含最终交付轮的请求上限。 */
-  modelCalls: 24,
-  /** 累计 token 预算。 */
-  modelTokens: 1_000_000,
-  /** 预留最终交付额度。 */
-  finalizationTokens: 65_536,
-  /** 活动总毫秒上限。 */
-  timeoutMs: 1_200_000,
-  /** 单次请求毫秒上限。 */
-  callTimeoutMs: 120_000,
-  /** 最后交付轮预留毫秒。 */
-  finalizationMs: 90_000,
-  /** 单次输出 token 上限。 */
-  outputTokens: 8_192,
-  /** 搜索活动投影的字符上限。 */
-  projectionChars: 48_000,
-  /** 来源查询次数上限。 */
-  sourceQueries: 128,
-  /** 候选目标数量上限。 */
-  candidates: 256,
-  /** 真实证据读取次数上限。 */
-  reads: 128,
-  /** 真实证据读取字节上限。 */
-  readBytes: 2_000_000,
-})
-
 /** 执行观测的存储、读取与控制通道边界。 */
 export const ExecutionObservabilityLimits = Object.freeze({
   /** 每次读取默认字符数。 */

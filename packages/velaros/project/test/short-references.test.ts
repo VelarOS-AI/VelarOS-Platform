@@ -18,7 +18,7 @@ function context(sessionId: string, root = collisionRoot): ProjectOperationConte
 }
 
 describe('项目短引用', () => {
-  test('两个完整 SHA256 的前 8 位碰撞仍分别定位原回执，旧完整引用精确解析', () => {
+  test('两个完整 SHA256 的前 8 位碰撞仍分别定位原回执，只接受已签发短引用', () => {
     const ctx = context('collision-receipts')
     // 固定绝对根，分别保留 Windows 与 POSIX 的真实 SHA256 前缀碰撞。
     const values = collisionValues
@@ -41,7 +41,7 @@ describe('项目短引用', () => {
         )
         .digest('hex')
       hashes.push(hash)
-      expect(readReceipt(ctx, 'change', `change:${hash}`)).toBe(value)
+      expect(() => readReceipt(ctx, 'change', `change:${hash}`)).toThrow('不是签发出来的引用')
     }
     expect(hashes[0]!.slice(0, 8)).toBe(hashes[1]!.slice(0, 8))
     expect(saveReceipt(ctx, 'change', values[0])).toBe(refs[0])

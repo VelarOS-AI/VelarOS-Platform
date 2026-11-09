@@ -323,7 +323,7 @@ def type_text(payload: "dict[str, Any]") -> "dict[str, Any]":
 
 
 def key_combo(payload: "dict[str, Any]") -> "dict[str, Any]":
-    sequence = str(payload.get("keys") or payload.get("keySequence") or "")
+    sequence = str(payload.get("keys") or "")
     parts = [normalize_key(part) for part in sequence.split("+") if part.strip()]
     if not parts:
         raise ValueError("No keys provided")

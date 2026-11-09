@@ -460,7 +460,7 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
       ignoredExtensionsNote(ignoredExtensions)
     )
     if (isEmpty(extensions))
-      return { files: [], truncated: false, emptyNote: noJsTsExtensionNote(this.extensions) }
+      return { files: [], truncated: false, emptyNote: noJsTsExtensionNote(requestedExtensions) }
 
     const maxDepth = input.maxDepth ?? DevelopmentTuning.navigation.maxDepth
     const selection = await collectSourceFiles(

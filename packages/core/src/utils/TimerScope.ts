@@ -300,7 +300,7 @@ class TimerScope {
     })
 
     try {
-      return await Promise.race([Promise.resolve(task(controller.signal)), abortWaiter])
+      return await Promise.race([(async () => task(controller.signal))(), abortWaiter])
     } finally {
       options.signal?.removeEventListener('abort', relayAbort)
       this.disposeController.signal.removeEventListener('abort', relayAbort)
@@ -347,13 +347,6 @@ class TimerScope {
     }
     debounced.flush = flush
     return debounced
-  }
-
-  /** 取消一个由当前作用域创建的 lease。 */
-  public cancel(lease?: LooseOptional<TimerLease>): boolean {
-    if (!lease) return false
-
-    return this.cancelRecord(lease.id, lease.kind)
   }
 
   /** 按类型或全部取消当前作用域中的任务。 */

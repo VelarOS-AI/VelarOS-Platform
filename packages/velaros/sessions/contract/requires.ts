@@ -29,7 +29,10 @@ export interface SessionsSpacePort {
    * signal 触发时尽快放弃（本单元同时不再等）。
    */
   ask(input: SessionAskInput, signal: AbortSignal): Promise<SessionAnswer>
-  /** 传一句话，不等对方：闲着的马上收到并为它跑一轮，正在跑的这一轮跑完再收到。入参已经核对，to 去掉了首尾空白。 */
+  /**
+   * 向活动运行追加引导，不另开一轮、不等回答，接纳后返回 queued；空闲目标必须拒绝。
+   * 入参已经核对，to 去掉了首尾空白；signal 只撤销尚未接纳的投递，已接纳引导由目标运行持有。
+   */
   tell(input: SessionTellInput, signal: AbortSignal): Promise<SessionTold>
 }
 

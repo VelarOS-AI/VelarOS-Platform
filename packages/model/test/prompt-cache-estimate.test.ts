@@ -4,6 +4,7 @@ import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { expect, test } from 'bun:test'
 
 import type { ModelInputEstimate, ModelTurnRequest } from '@velaros-ai/kernel'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { PromptCacheLanguageModel } from '../src/impl/adapters/PromptCacheLanguageModel.js'
 import {
@@ -343,6 +344,59 @@ test('the driver sends cache markers and reports cache reads and writes', async 
   expect(seen[0].providerOptions).toEqual({ velaros: { promptCacheKey: 'session-1' } })
   expect(seen[0].prompt[1].providerOptions).toEqual({ velaros: { promptCacheBreakpoint: true } })
   expect(seen[0].prompt.at(-1).providerOptions).toBeUndefined()
+})
+
+test('dynamic exchanges and protocol remain current input after native history expansion', async () => {
+  const exchange = (id: string, name: string) =>
+    modelRequestEncoder.toolExchange({
+      text: '',
+      calls: [{ id, name, input: { request: id } }],
+      results: [{ id, name, output: { status: 'recorded', resultRef: `${id}-result` } }],
+    })
+  const request: ModelTurnRequest = {
+    ...base,
+    compiledPrompt: 'stable current frame',
+    history: [{ role: 'assistant', content: '', toolExchange: exchange('old-execution', 'exec') }],
+    dynamic: {
+      id: 'current-observation',
+      text: 'current perception A',
+      exchanges: [{ exchange: exchange('pending-observation', 'observe') }],
+    },
+    protocol: 'current control instructions',
+  }
+  const driver = createAiSdkModelDriver({
+    id: 'mock',
+    model: new MockLanguageModelV3({}),
+    limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
+  })
+  const plain = await driver.estimate({ ...request, dynamic: undefined, protocol: undefined })
+  const complete = await driver.estimate(request)
+  expect(complete.composition!.toolResults).toBeGreaterThan(0)
+  for (const part of ['assistantHistory', 'userHistory', 'toolResults'] as const)
+    expect(complete.composition![part]).toBe(plain.composition![part])
+  expect(complete.composition!.current - plain.composition!.current).toBeGreaterThan(
+    new TextEncoder().encode(request.dynamic!.text + request.protocol!).byteLength
+  )
+  const { unit, total, ...parts } = complete.composition!
+  expect(unit).toBe('utf8-bytes')
+  expect(Object.values(parts).reduce((sum, bytes) => sum + bytes, 0)).toBe(total)
+
+  const compiler = createProviderRequestCompiler()
+  const original = await compiler.compileModelTurn(request, driver, 10)
+  const changed = await compiler.compileModelTurn(
+    { ...request, dynamic: { ...request.dynamic!, text: 'current perception B' } },
+    driver,
+    10
+  )
+  expect(changed.requestAudit.requestFingerprint.prefixHash).toBe(
+    original.requestAudit.requestFingerprint.prefixHash
+  )
+  expect(changed.requestAudit.requestFingerprint.messageHash).not.toBe(
+    original.requestAudit.requestFingerprint.messageHash
+  )
+  expect(changed.requestAudit.requestFingerprint.id).not.toBe(
+    original.requestAudit.requestFingerprint.id
+  )
 })
 
 test('automatic OpenAI boundaries use remaining slots without selecting an existing or unsupported endpoint', () => {
@@ -1055,4 +1109,71 @@ test('GPT-5.6 adds no boundary without an internal marker and keeps three explic
       .map((part) => part.text)
   ).toEqual(['user input', 'retired prefix', 'history end'])
   expect(wires[1]!.input.at(-1)!.content.every((part) => !part.prompt_cache_breakpoint)).toBe(true)
+})
+
+test('Responses dynamic observations preserve stable wire messages across A-A-B-A', async () => {
+  const observation = (state: 'A' | 'B') =>
+    `DYNAMIC_OBSERVATION_${state}: small status and source reference`.padEnd(256, state)
+  const requests: ModelTurnRequest[] = (['A', 'A', 'B', 'A'] as const).map((state, turn) => ({
+    ...base,
+    history: [{ role: 'user', content: 'stable history', cacheBreakpoint: true }],
+    compiledPrompt: 'stable current frame',
+    dynamic: { id: `snapshot-${state}`, text: observation(state) },
+    protocol: `TURN_PROTOCOL_${turn}`,
+    cacheKey: 'offline-dynamic-wire',
+  }))
+  const wires = await captureOpenAiCacheWire('gpt-5.6-sol', requests)
+  let stable: OpenAiCacheWire['input'] | undefined
+  for (const [turn, wire] of wires.entries()) {
+    const text = requests[turn]!.dynamic!.text
+    const boundary = wire.input.findIndex(
+      (message) =>
+        Array.isArray(message.content) && message.content.some((part) => part.text === text)
+    )
+    expect(boundary).toBeGreaterThan(0)
+    const prefix = wire.input.slice(0, boundary)
+    if (stable) expect(prefix).toEqual(stable)
+    else stable = prefix
+    expect(JSON.stringify(prefix)).toContain('stable current frame')
+    expect(JSON.stringify(prefix)).not.toContain('DYNAMIC_OBSERVATION_')
+    const tail = wire.input.slice(boundary).flatMap((message) => message.content)
+    expect(tail.filter((part) => part.text.startsWith('DYNAMIC_OBSERVATION_'))).toEqual([
+      { type: 'input_text', text },
+    ])
+    expect(tail.some((part) => part.text === requests[turn]!.protocol)).toBe(true)
+    expect(tail.every((part) => !part.prompt_cache_breakpoint)).toBe(true)
+    expect(JSON.stringify(wire).match(/DYNAMIC_OBSERVATION_/gu)).toHaveLength(1)
+  }
+
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const factory = composition.agentModelRuntime.createAgentProvider({
+    provider: 'openai',
+    apiKey: 'offline-fixture',
+    baseURL: 'https://api.openai.com/v1',
+    reasoningLevel: 'high',
+  })
+  const driver = createAiSdkModelDriver({
+    id: 'openai/gpt-5.6-sol',
+    model: factory('gpt-5.6-sol'),
+    limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
+  })
+  const compiler = createProviderRequestCompiler()
+  const original = await compiler.compileModelTurn(requests[0]!, driver, 10)
+  const changed = await compiler.compileModelTurn(
+    { ...requests[0]!, dynamic: requests[2]!.dynamic },
+    driver,
+    10
+  )
+  expect(changed.requestAudit.requestFingerprint.prefixHash).toBe(
+    original.requestAudit.requestFingerprint.prefixHash
+  )
+  expect(changed.requestAudit.requestFingerprint.messageHash).not.toBe(
+    original.requestAudit.requestFingerprint.messageHash
+  )
+  expect(changed.requestAudit.requestFingerprint.id).not.toBe(
+    original.requestAudit.requestFingerprint.id
+  )
 })

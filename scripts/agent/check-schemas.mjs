@@ -7,6 +7,7 @@ import { createRuntime } from '../../packages/velaros/dist/act/runtime/index.js'
 import { localContextStorage } from '../../packages/context/dist/node.js'
 import { nodeSubprocessCodeRunner } from '../../packages/script/dist/index.js'
 const runtime = await createRuntime({
+  binding: { executionIdentity: 'schema-gate', authorizationScope: 'schema-gate' },
   storage: localContextStorage({ path: ':memory:' }),
   runner: nodeSubprocessCodeRunner,
   modules: [],

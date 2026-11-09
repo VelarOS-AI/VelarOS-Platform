@@ -206,11 +206,15 @@ function resolveCharacterKey(character: string): BrowserKeyDefinition {
       code: `Digit${character}`,
       keyCode: character.charCodeAt(0),
       text: character,
+      shifted: ')!@#$%^&*('.charAt(Number(character)),
     }
   const punctuation = PunctuationKeys[character]
   if (punctuation) {
     const [code, keyCode] = punctuation
-    return { key: character, code, keyCode, text: character }
+    const shifted = Object.entries(PunctuationKeys).find(
+      ([, entry]) => entry[0] === code && entry[2]
+    )?.[0]
+    return { key: character, code, keyCode, text: character, shifted: shifted ?? character }
   }
   return { key: character, code: '', keyCode: 0, text: character }
 }
@@ -233,7 +237,7 @@ export function modifiersMask(held: Iterable<string>): number {
   return mask
 }
 
-/** 按下一个键的 CDP 事件：Shift 按着时字母大写；Control、Alt、Meta 按着时不上屏；macOS 上 Meta 加 a、c、x、v、z 带编辑命令。 */
+/** 按下一个键的 CDP 事件：Shift 按着时使用美式键盘的字母/数字/标点映射；Control、Alt、Meta 按着时不上屏；macOS 的 Meta 编辑组合带命令。 */
 export function buildKeyDownEvent(
   definition: BrowserKeyDefinition,
   held: ReadonlySet<string>,
@@ -256,7 +260,7 @@ export function buildKeyDownEvent(
   }
   if (text) {
     event.text = text
-    event.unmodifiedText = text
+    event.unmodifiedText = definition.text ?? text
   }
   if (definition.location) event.location = definition.location
   const command = mac && held.has('Meta') ? MacEditingCommands[key] : undefined

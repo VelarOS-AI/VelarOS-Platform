@@ -63,7 +63,7 @@ export function splitAbsolutePathText(
   let text = path.replace(/\\/g, '/')
   if (text.startsWith('//?/') || text.startsWith('//./')) text = text.slice(4)
   if (/^unc\//iu.test(text)) text = `//${text.slice(4)}`
-  const drive = /^([A-Za-z]):(?:\/|$)/u.exec(text)
+  const drive = /^([A-Za-z]):\//u.exec(text)
   if (drive)
     return {
       root: `${drive[1]}:/`,

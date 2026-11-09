@@ -1,3 +1,5 @@
+import { AppError } from '../error'
+
 import { toOptional } from './nullish'
 import { TimerScope } from './TimerScope'
 
@@ -21,7 +23,7 @@ export async function fetchWithTimeout<T>(
   options: FetchTimeoutOptions
 ): Promise<T> {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 0)
-    throw new RangeError('Fetch timeout must be a finite non-negative number')
+    throw new AppError('VALIDATION', 'Fetch timeout must be a finite non-negative number')
   const timers = new TimerScope({ name: 'fetchWithTimeout' })
   try {
     return await timers.withTimeout(

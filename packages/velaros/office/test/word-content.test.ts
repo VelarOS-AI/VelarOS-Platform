@@ -120,4 +120,29 @@ describe('Word 正文解析', () => {
     const preview = await officeOperations.preview({ inputPath: 'plan.docx' }, ctx)
     expect(preview.outline?.map((item) => item.title)).toEqual(['季度报告', '计划'])
   })
+
+  test('富文本字号按磅写成半磅，未给字号仍继承文档样式', async () => {
+    const { root, ctx } = await createContext()
+    await officeOperations.createWord(
+      {
+        outputPath: 'font-size.docx',
+        blocks: [
+          {
+            kind: 'paragraph',
+            runs: [{ text: 'explicit-size', fontSize: 12 }, { text: 'inherited-size' }],
+          },
+        ],
+      },
+      ctx
+    )
+    const zip = await JSZip.loadAsync(await readFile(join(root, 'font-size.docx')))
+    const document = (await zip.file('word/document.xml')?.async('string')) ?? ''
+    const runs = [...document.matchAll(/<w:r>([\s\S]*?)<\/w:r>/g)].map((match) => match[1]!)
+    const explicit = runs.find((run) => run.includes('explicit-size'))
+    expect(explicit).toContain('<w:sz w:val="24"/>')
+    expect(explicit).toContain('<w:szCs w:val="24"/>')
+    const inherited = runs.find((run) => run.includes('inherited-size'))
+    expect(inherited).toBeDefined()
+    expect(inherited).not.toMatch(/<w:sz(?:Cs)?\b/)
+  })
 })

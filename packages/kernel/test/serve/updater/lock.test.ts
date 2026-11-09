@@ -77,12 +77,13 @@ describe('Kernel update lock', () => {
 
   test('reclaims a lock whose recorded process is gone', async () => {
     const path = await lockPath()
-    const stale = await acquireLock({
-      lockPath: path,
-      holderId: 'crashed-product',
-    })
-    // A crashed holder never releases; the file outlives the process.
-    void stale
+    // 崩溃后操作系统已关闭句柄，只留下属主记录；不要在测试进程里遗失活句柄。
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(
+      path,
+      JSON.stringify({ holderId: 'crashed-product', pid: 424242, acquiredAt: 1 }),
+      'utf8'
+    )
 
     const reclaimed = await acquireLock({
       lockPath: path,

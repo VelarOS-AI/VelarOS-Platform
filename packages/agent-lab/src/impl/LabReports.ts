@@ -4,20 +4,18 @@
  */
 import type {
   RealTaskAssessment,
-  RealTaskRecord,
   ReportRenderOptions,
   RunArchive,
-  RunArchiveView,
   RunReportModel,
 } from '../types/agent-lab.js'
 import { createRunReportModel } from '../utils/measure/report-model.js'
-import { renderHistoricalReportHtml } from '../utils/render/historical-report.js'
 import { renderRealTaskReportHtml } from '../utils/render/real-task-report.js'
 import { renderReportHtml } from '../utils/render/run-report.js'
+import { realTaskAssessmentSchema } from '../utils/wire/workload.js'
 
 /**
- * 三种报告的出口：运行报告、历史归档报告、真实任务报告。
- * 三份 HTML 都自包含——不联网、不拉字体图片、不发请求；渲染完当场核对，不合格就抛错而不是写一份坏报告出去。
+ * 当前运行报告与真实任务报告的出口。
+ * HTML 由固定模板与转义文本构成，不联网、不拉字体图片、不发请求；未知保留，非法数值拒绝渲染。
  * 实例归本包，进程里只有一份。
  */
 export interface LabReportsApi {
@@ -25,13 +23,8 @@ export interface LabReportsApi {
   createRunReportModel: (archive: RunArchive) => RunReportModel
   /** 把一批运行报告模型渲染成一份自包含 HTML。 */
   renderRunReportHtml: (models: readonly RunReportModel[], options?: ReportRenderOptions) => string
-  /** 把一批历史归档视图渲染成一份自包含 HTML；缺的字段显示破折号。 */
-  renderHistoricalReportHtml: (
-    views: readonly RunArchiveView[],
-    options?: ReportRenderOptions
-  ) => string
-  /** 渲染一份真实任务报告；它永远不嵌入提示词、回答、绝对路径或产物正文。 */
-  renderRealTaskReportHtml: (record: RealTaskRecord, assessment: RealTaskAssessment) => string
+  /** 校验当前评估并渲染闭集状态、数值和分类计数；自由文本及身份只留在私有 JSON。 */
+  renderRealTaskReportHtml: (assessment: RealTaskAssessment) => string
 }
 
 class LabReports implements LabReportsApi {
@@ -46,15 +39,8 @@ class LabReports implements LabReportsApi {
     return renderReportHtml(models, options)
   }
 
-  public renderHistoricalReportHtml(
-    views: readonly RunArchiveView[],
-    options: ReportRenderOptions = {}
-  ): string {
-    return renderHistoricalReportHtml(views, options)
-  }
-
-  public renderRealTaskReportHtml(record: RealTaskRecord, assessment: RealTaskAssessment): string {
-    return renderRealTaskReportHtml(record, assessment)
+  public renderRealTaskReportHtml(assessment: RealTaskAssessment): string {
+    return renderRealTaskReportHtml(realTaskAssessmentSchema.parse(assessment))
   }
 }
 

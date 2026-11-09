@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { link, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +18,14 @@ afterEach(async () => {
 
 // 编码与原子写入本身的用例在 @velaros-ai/core/text-files；这里只测项目怎么用它：事务的整批语义，以及公共件的失败在文件网关上翻成 ProjectError。
 describe('lossless text and atomic replacement', () => {
+  test.skipIf(process.platform === 'win32')('拒绝读取命名管道，不进入阻塞的正文 IO', async () => {
+    expect(spawnSync('mkfifo', [join(root, 'pipe')]).status).toBe(0)
+    const project = await createProjectKernel({ root })
+    await expect(project.read({ path: 'pipe' })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED' })
+    await expect(project.stat({ path: 'pipe' })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED' })
+    expect((await project.observe()).files).toEqual([])
+  })
+
   test('rejects a malformed late operation before an earlier valid edit is applied', async () => {
     await writeFile(join(root, 'source.txt'), 'original')
     const project = await createProjectKernel({ root })

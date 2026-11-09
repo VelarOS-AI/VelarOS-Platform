@@ -172,7 +172,7 @@ Codex 的 GPT-6 Sol 对照可直接使用官方 Responses。Claude Code 的原�
 
 缓存净节省按同一输入全部使用普通费率的费用减去实际缓存读取/写入费用计算，可为负值；不能只提高命中率却忽略写入开销。
 
-`context.prompt_layout` 从记录的 provider 请求区分完整提示文本和每轮工作帧的字符数，并单列非文本块数量、原始 frame 各分区紧凑 JSON 的大小；缺失请求不补零。字符量只用于定位重复传输和增长的位置，不能替代供应商 token、缓存或费用。Markdown 展示工作帧峰值，完整分布保留在 JSON。
+`context.request_audit` 消费编译器 v3 有界元数据，报告输入计量、输出预留、消息/工具数，以及实际 `model-request` 和引用的 `context:frame` 正文 UTF-16 大小分布。完整 provider 请求、累计历史与图片不归档，旧 prompt-layout、前缀改写和结果可见片段统计随之删除；这些量不能从指纹或引用反推。Markdown 展示请求审计峰值，帧引用与 proof 另行计量，不能据单类审计宣称整个数据库线性增长。`request_audits` 仅验证审计元数据完整性，不证明 SDK 出线或供应商接纳；真实用量、耗时与工具效果仍取各自回执。
 
 本机后续 trial 使用统一的 `BenchmarkDocker` 环境：Debian/Ubuntu 官方包通过阿里镜像取得，保留发行版签名和 TLS 校验，设置有界下载重试；精简镜像使用 certifi 的公开 CA 集完成首次 HTTPS 安装。十题官方 verifier 都使用 [UV 0.7.13](https://github.com/astral-sh/uv/releases/tag/0.7.13)，环境预置该版本官方归档并校验发布的 SHA-256，避免在线安装脚本中断后判分工具不存在。环境启动日志记录配置脚本、CA 集和 UV 归档哈希。它对所有 agent 及 verifier 一致生效，任务源码、判分脚本和时限保持官方版本。比较环境修订前后的结果时须保留该差异，新一轮直接对照统一使用同一环境。
 

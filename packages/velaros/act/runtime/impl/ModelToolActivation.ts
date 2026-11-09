@@ -23,8 +23,8 @@ export interface ModelToolActivationOptions {
   readonly model: ModelDriver
   /** 调用者已经预留 finalizationTokens 的祖先总账。 */
   readonly parent: ModelBudgetPort
-  /** 已预留的收尾轮身份；旧宿主省略时保持聚合兼容。 */
-  readonly finalizationRequestId?: string
+  /** 已预留的收尾轮身份。 */
+  readonly finalizationRequestId: string
   /** 独立活动的绝对硬期限，发布阶段由调用者另行预留。 */
   readonly deadline: number
 }
@@ -171,14 +171,12 @@ export class ModelToolActivation implements ModelToolActivationApi {
       (finalizing && tokens > profile.finalizationTokens)
     )
       throw new AppError('CONTEXT_BUDGET', '本次模型工具 token 预算不足')
-    let requestId: string | undefined = request.budgetRequestId ?? crypto.randomUUID()
+    const requestId = request.budgetRequestId ?? crypto.randomUUID()
     if (finalizing) {
       const reservationId = this.options.finalizationRequestId
-      if (reservationId && parent.transferModelReservation)
-        await parent.transferModelReservation(reservationId, requestId)
-      else requestId = reservationId
+      await parent.transferModelReservation(reservationId, requestId)
     }
-    const identified = { ...request, budgetRequestId: requestId ?? request.budgetRequestId }
+    const identified = { ...request, budgetRequestId: requestId }
     if (!finalizing) {
       yield* reservedModelStream(
         parent,
@@ -196,7 +194,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
         tokens,
         true,
         async () => {
-          if (requestId) await parent.dispatchModel?.(requestId)
+          await parent.dispatchModel(requestId)
           await beforeDispatch?.()
         },
         requestId
@@ -209,7 +207,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
     tokens: number,
     finalizing: boolean,
     beforeDispatch: () => Promise<void>,
-    requestId?: string
+    requestId: string
   ): AsyncIterable<ModelTurnDelta> {
     signal.throwIfAborted()
     const { profile, parent, deadline } = this.options
@@ -279,6 +277,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
       failures.push(error)
     }
     if (failures.length === 1) throw failures[0]
-    if (!isEmpty(failures)) throw new AggregateError(failures, '模型工具预算结算失败')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '模型工具预算结算失败', { errors: [...failures] })
   }
 }

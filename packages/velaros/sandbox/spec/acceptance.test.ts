@@ -30,6 +30,7 @@ import type {
   SandboxDiffInput,
   SandboxDiscardInput,
   SandboxOperationContext,
+  SandboxRecord,
   SandboxRunInput,
   SandboxRunOptions,
   SandboxSurfacePort,
@@ -88,7 +89,23 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }
     created: ['note.txt'],
     modified: ['main.ts'],
   })
+  let record: SandboxRecord = {
+    id: changes.sandboxId,
+    root: `/tmp/sandboxes/${changes.sandboxId}`,
+    source: changes.source,
+    createdAt: 0,
+    network: false,
+    ignored: 'link',
+    fileCount: 3,
+    bytes: 300,
+    linkedDirectories: [],
+    git: false,
+  }
   const port: SandboxSurfacePort = {
+    getSandboxRecord: async (sandboxId) => {
+      if (sandboxId !== record.id) throw new AppError('NOT_FOUND', 'fixture sandbox not found')
+      return structuredClone(record)
+    },
     resolveSource: async (source) => {
       calls.push({ resolveSource: source ?? null })
       if (source === undefined) return options.root
@@ -101,18 +118,13 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }
     },
     createSandbox: async (createOptions) => {
       calls.push({ createSandbox: createOptions?.source ?? null })
-      return {
-        id: changes.sandboxId,
-        root: `/tmp/sandboxes/${changes.sandboxId}`,
+      record = {
+        ...record,
         source: createOptions?.source ?? options.root,
-        createdAt: 0,
         network: createOptions?.network ?? false,
         ignored: createOptions?.ignored ?? 'link',
-        fileCount: 3,
-        bytes: 300,
-        linkedDirectories: [],
-        git: false,
       }
+      return structuredClone(record)
     },
     runInSandbox: async (runOptions) => {
       calls.push({ runInSandbox: runOptions.command, inSandbox: runOptions.sandboxId })

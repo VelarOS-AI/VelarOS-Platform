@@ -5,6 +5,7 @@ import {
   type KernelCallErrorCode,
   KernelCallErrorCodes,
   type KernelClientErrorCode,
+  KernelClientErrorCodes,
   type KernelErrorCode,
   KernelErrorCodes,
   type KernelUpdaterErrorCode,
@@ -160,6 +161,16 @@ export function fromKernelRpcError(rpcError: {
     message: rpcError.message,
     retryable: rpcError.retryable,
     rpcError,
+  })
+}
+
+/** 进程内传输已关闭；可重试表示需要另建连接，原请求不会恢复。 */
+export function inProcessTransportClosedFailure(): KernelClientError {
+  return fromKernelRpcError({
+    code: KernelClientErrorCodes.transportClosed,
+    message: 'Kernel 进程内传输已关闭',
+    retryable: true,
+    details: null,
   })
 }
 

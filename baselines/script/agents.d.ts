@@ -47,8 +47,8 @@ declare module 'velaros:agents' {
     readonly modules: readonly string[]
     readonly turns: number
     readonly timeoutMs: number
-    readonly modelCalls: number
-    readonly modelTokens: number
+    readonly modelCalls?: number
+    readonly modelTokens?: number
   }
 
   /**

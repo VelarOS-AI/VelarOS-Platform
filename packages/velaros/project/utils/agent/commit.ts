@@ -1,4 +1,4 @@
-/** 把模型的最终文件内容和唯一片段编成现有事务计划；所有回执从留存事务读取。 */
+/** 把模型的最终文件内容和唯一片段编成现有事务计划；提交回执保留实际应用事实，不依赖历史继续留存。 */
 import { randomUUID } from 'node:crypto'
 
 import { isArray, isPlainObject, isString, Log, stableStringify } from '@velaros-ai/core'
@@ -6,7 +6,10 @@ import { textCodec } from '@velaros-ai/core/text-files'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { ProjectOperationContext } from '../../contract/requires.js'
-import type { AgentProjectStoredTransaction } from '../../types/agent-port.js'
+import type {
+  AgentProjectApplyResult,
+  AgentProjectStoredTransaction,
+} from '../../types/agent-port.js'
 import type { EditIntent, ReplaceContentOperation } from '../../types/edit.js'
 import type {
   ProjectChangeInput,
@@ -303,8 +306,9 @@ export async function commitFiles(
     })
     return kernel.prepareEdit(plan)
   })
+  let applied: AgentProjectApplyResult
   try {
-    await kernel.applyEdit({ transactionId: prepared.transactionId }, ctx.abortSignal)
+    applied = await kernel.applyEdit({ transactionId: prepared.transactionId }, ctx.abortSignal)
   } catch (error) {
     // 已开始恢复或已落盘的事务不可丢弃；保留原始错误和可查询身份。
     const current = kernel.getTransaction(prepared.transactionId)
@@ -328,7 +332,17 @@ export async function commitFiles(
     }
     throw error
   }
-  const tx = kernel.getTransaction(prepared.transactionId)!
+  // 应用成功的大事务可以立刻被历史预算淘汰；准备时持有的补丁与实际应用回执仍属于本次提交。
+  const tx: AgentProjectStoredTransaction = kernel.getTransaction(prepared.transactionId) ?? {
+    ...prepared,
+    status: 'applied',
+    changedFiles: applied.changedFiles,
+    metadata: {
+      ...prepared.metadata,
+      oldRevisions: applied.oldRevisions,
+      newRevisions: applied.newRevisions,
+    },
+  }
   const result = receipt(tx, requestId)
   if (result.changed)
     ctx.recordProjectCommit?.({

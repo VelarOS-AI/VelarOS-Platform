@@ -2,8 +2,6 @@
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserTargetRefSession } from '../types/session.js'
-
 /** 取一个 ref 的基名（去掉 :g 分代那一段）。 */
 export function readBaseRef(normalizedRef: string): string {
   return normalizedRef.replace(/:g[1-9]\d*$/u, '')
@@ -59,16 +57,4 @@ export function staleRefError(
 /** 给一个基名配上分代，拼成完整的 ref。 */
 export function scopeRef(baseRef: string, generation: number): string {
   return `${readBaseRef(baseRef)}:g${generation}`
-}
-
-/** 在这一次观察的 ref 表里查一个 ref，返回它当时记下的 selector。 */
-export function resolveStoredRef(
-  normalizedRef: string,
-  session: BrowserTargetRefSession
-): Nullable<string> {
-  if (normalizedRef.includes(':g')) return normalizedRef
-
-  // 兼容首个 observation 的历史裸 ref。generation > 1 时裸 @e1 无法表达
-  // 它来自哪次观察，继续解析会把旧目标静默重绑定到新目标，因此必须拒绝。
-  return session.generation === 1 ? scopeRef(normalizedRef, session.generation) : null
 }

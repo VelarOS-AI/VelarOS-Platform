@@ -119,7 +119,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     full = false
   ): Promise<ContextState> {
     signal.throwIfAborted()
-    if (!full && this.cached?.revision === snapshot.baseRevision && this.storage.selectSnapshot) {
+    if (!full && this.cached?.revision === snapshot.baseRevision) {
       const selected = await this.storage.selectSnapshot(this.id, [
         { after: snapshot.through },
         { title: 'script:lease-state', latest: true },

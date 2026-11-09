@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
+import { NodeCommandProvider } from '../impl/kernel/NodeCommandProvider'
 import { isWindowsCommandAvailable } from '../utils/kernel/command-requirements'
 import {
   executableCandidates,
@@ -47,7 +48,7 @@ test('Windows 上只查 PATH：工作目录里的同名 git.exe 不会被选中'
   expect(resolved).toBe('C:\\Program Files\\Git\\cmd\\git.exe')
 })
 
-test('PATH 里前面的目录优先；找不到时返回 undefined，调用方照旧交原名给子进程', () => {
+test('PATH 里前面的目录优先；找不到时返回 undefined', () => {
   const present = new Set(['C:\\tools\\rg.exe', 'C:\\Program Files\\Git\\cmd\\rg.exe'])
   expect(
     resolveExecutableInPath('rg', {
@@ -59,6 +60,23 @@ test('PATH 里前面的目录优先；找不到时返回 undefined，调用方�
   expect(
     resolveExecutableInPath('nope', { platform: 'win32', env: windowsEnv, exists: () => false })
   ).toBeUndefined()
+})
+
+test.skipIf(process.platform !== 'win32')('PATH 缺失时不执行项目目录里的同名命令', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'windows-command-shadow-'))
+  try {
+    await writeFile(join(root, 'velaros-shadow.cmd'), '@echo cwd-shadow-executed\r\n')
+    const result = await new NodeCommandProvider().run({
+      command: 'velaros-shadow',
+      cwd: root,
+      env: { PATH: '', Path: '', PATHEXT: '.CMD' },
+    })
+    expect(result.exitCode).toBe(127)
+    expect(result.stdout).toBe('')
+    expect(result.toolRequirements?.[0]?.kind).toBe('missing-command')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('调用方点名的路径（绝对或带分隔符）原样交回，不去 PATH 里改写它', () => {

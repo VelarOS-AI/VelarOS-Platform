@@ -1,5 +1,4 @@
 import type { ActEvent, ActRunEvent } from '@velaros-ai/agent'
-import { isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ActPresentation, ActRunPresentation } from '../types/presentation.js'
@@ -61,24 +60,11 @@ class ActEventProjector implements ActEventProjectorApi {
       const { notice: _notice, ...rest } = run
       run = { ...rest, turn: turns.size, turnId: event.turnId, preview: '' }
     }
-    // 完成检查没通过的原因留给宿主解释收尾；之后通过就清掉
-    if (event.type === 'verification') {
-      const { verification: _verification, verificationReport: _report, ...rest } = run
-      run = event.completed
-        ? rest
-        : {
-            ...rest,
-            verification: isUndefined(event.recovery)
-              ? { reason: event.reason }
-              : { reason: event.reason, recovery: event.recovery },
-          }
-      if (event.report) run = { ...run, verificationReport: structuredClone(event.report) }
+    // 保留最近一次完成检查的结果，供宿主解释运行终态。
+    if (event.type === 'completion') {
       const { type: _type, runId: _runId, ...completion } = event
-      run = { ...run, completion: structuredClone(completion) }
+      run = { ...run, completion }
     }
-    // 限速等待与无进展暂停只给提示，状态仍以 state 事件为准
-    if (event.type === 'throttled')
-      run = { ...run, notice: { kind: 'throttled', retryAfterMs: event.retryAfterMs } }
     if (event.type === 'stalled')
       run = {
         ...run,

@@ -38,21 +38,21 @@ flowchart TD
 }
 ```
 
-三个贡献字段都可省略，但至少提供一类。`packages` 只列公开给 Agent 的裸包名；其余依赖留在 Skill 内部。包可以公开自己，也可以公开 dependencies 的直接依赖。标准包保持原本的 API、exports 和子路径。
+五类贡献为 `instructions`、`packages`、`capabilities`、`hostCapabilities` 与 `sdkCapabilities`，都可省略，但至少提供一类。`packages` 只列公开给 Agent 的裸包名；其余依赖留在 Skill 内部。包可以公开自己，也可以公开 dependencies 的直接依赖。标准包保持原本的 API、exports 和子路径。`hostCapabilities` 由宿主绑定实际资源，`sdkCapabilities` 允许扩展经 Kernel 调用已声明的宿主 SDK；声明本身不授予权限。
 
 纯说明目录只需要带 name、description frontmatter 的 SKILL.md。安装时在暂存副本生成清单，源目录保持原样。说明、脚本和资源路径均相对 Skill 安装目录。
 
 ## 使用与发现
 
-宿主可通过 `createSkillSession({ registry, selection })` 启用按需会话：全部已安装 Skill 的用途进入发现目录，selection 只预加载工作区默认项与手动选择。模型调用 `load` 或对应能力时才装配所需依赖；并发重复加载合并，每次程序保持自己的固定快照，新增 npm 包从下一次执行使用。session 同时传给能力装配与管理上下文，并提供 Node 的 acquireRuntime。全部前台与后台执行收束后才 release。以下固定选择模式仍供需要显式范围的宿主使用。
+宿主可通过 `createSkillSession({ registry, selection })` 启用按需会话：全部已安装 Skill 的用途进入发现目录，selection 只预加载工作区默认项与手动选择。宿主经 `session.catalog` 发现并调用 `activate`，或在能力调用时装配所需依赖；并发重复加载合并，每次程序保持自己的固定快照，新增 npm 包从下一次执行使用。session 传给能力装配，并以 `acquireRuntime` 提供 Node 快照。全部前台与后台执行收束后才 release。固定选择宿主仍可使用 `registry.acquire()`。
 
 基础任务环境不公开 `typescript` 和 `ts-morph`；它们与格式化、结构搜索及网页测试依赖统一由 `jsts` 按需提供。Script 内部保留工具合同编译所需的 TypeScript 依赖，该内部依赖不进入模型默认包目录。工作区已有 npm 依赖仍按原生 Node 规则优先解析。
 
 基础 npm 只提供 `execa`、`@vscode/ripgrep`、`globby` 和 `diff`；普通文件与 JSON 处理使用 Node 标准库。其他库不作为 Script 基础依赖保存，由实际使用的工作区或能力模块自行声明。宿主模块用于 YAML、校验、Office 等功能的内部依赖不自动进入模型包目录。
 
-设置页管理本机库：从文件夹导入、查看包的说明与贡献、升级和删除。聊天框「+」沿用 Skill 选择菜单和可移除标签，按会话选择所需包；发送和排队保存确切安装代次及声明能力授权。升级后重新选择，已有队列不会自动获得新能力。默认未选择 Skill 的会话使用基础环境。
+产品宿主管理 Feature 的导入、安装、启停和工作区选择，保存确切代次及声明能力授权。升级后重新选择，已有队列不会自动获得新能力。底层 Registry 继续负责静态校验、安装收据、成功发布通知、不可变目录、授权核对和回收；不再接收另一条 plugins 注入轨。宿主现有 Feature 分发与 provider 生命周期保持独立。
 
-模型从 `velaros:skills` 按需 import：guide 查询随包开发规范、管理文档和可写入的示例文件；list 查询安装与本轮可用状态；load 按需加载本轮发现目录中的已安装 Skill 并读取说明；validate 静态校验工作目录中的包；install、remove 经宿主确认修改本机库。普通目录创建和 npm 使用依然由 Node 完成。沙箱限制管理操作的来源目录，真实符号链接也遵循同一边界。
+模型从 `velaros:features` 按需 import：guide 查询 Feature、Codex Skill 导入和宿主 SDK 规范；list 查询能力用途与当前状态；load 按身份读取本轮可用能力的说明和资源；validate 静态校验来源；install、remove 经宿主确认管理本机来源。旧 `velaros:skills` 模型管理面已退役。未挂载 Feature 模块时，经实际 `$VELAROS_HOST_DIR/index.json` 的 skills 目录和 instructions 路径按需读取普通说明文件，不假定管理模块存在。普通目录创建与 npm 使用仍由 Node 执行，来源约束由实际宿主操作核对。
 
 安装默认关闭依赖生命周期脚本，需要时明确申请；进行中的安装可取消。注册处成功发布后通知订阅者，设置页与聊天候选列表直接刷新。说明正文和开发规范只在查询时返回。
 
@@ -69,7 +69,7 @@ flowchart TD
 
 ## 外部能力
 
-外部能力使用 `skill:<名称>`。provider.d.ts 提供自包含的具名函数声明，每个函数接受零个参数或一个 JSON 参数，并写明 `@OperationEffect none` 或 `write`。只在执行入口使用的操作标记 `@OperationModes execute`。合同、参数校验与发现内容由同一 TypeScript 编译器派生。
+外部能力使用 `skill:<名称>` 或 `feature:<身份>`，由实际贡献和宿主装配决定。provider.d.ts 提供自包含的具名函数声明，每个函数接受零个参数或一个 JSON 参数，并写明 `@OperationEffect none` 或 `write`。只在执行入口使用的操作标记 `@OperationModes execute`。合同、参数校验与发现内容由同一 TypeScript 编译器派生。
 
 包源码只在受控 Node 子进程中运行，继承当前工作区的进程权限、时限与取消。能力调用经过 Kernel；本次租约决定能力授权，每次派发重新核对安装代次。卸载或升级会拒绝旧代次的后续调用。已经派发的调用按原执行时限和取消链路收束。
 
@@ -81,7 +81,7 @@ flowchart TD
 
 只有依赖准备、入口合同和内容散列全部通过后，才在跨进程锁内原子切换索引。失败或取消保留之前的有效安装。租约固定依赖版本和能力集合；按需会话在每次执行前取得固定快照，显式选择只决定预加载；新增依赖从下一次程序执行生效。安装只加入本机库，新代次从下一轮进入发现目录。后台任务继续持有依赖租约，确认退出之后才允许回收。启动恢复会清理已经退出的进程留下的租约。
 
-索引 v2 保存安装事实；读取 v1 时保留安装内容并迁移旧字段，会话依据宿主采用的固定选择或按需加载模式装配环境。
+索引只接受当前 v2 安装事实；旧版本或字段错误明确拒绝，不转换、不覆盖原文件。会话依据宿主采用的固定选择或按需加载模式装配环境。
 
 ## 示例与验证
 

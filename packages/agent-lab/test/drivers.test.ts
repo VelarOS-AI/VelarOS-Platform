@@ -1,80 +1,200 @@
 import { expect, test } from 'bun:test'
 
 import { FullCapabilities, journey, observation, trial } from '../spec/support.js'
-import type { NativeExecutionState } from '../src/index.js'
-import { EmptyBudgetUsage, labDrivers, UnlimitedBudget } from '../src/index.js'
+import type { NativeExecutionState, PollingDriverAdapter, SessionHandle } from '../src/index.js'
+import {
+  createDetectorRegistry,
+  createVerifierRegistry,
+  EmptyBudgetUsage,
+  journeyRunner,
+  labDrivers,
+  UnlimitedBudget,
+} from '../src/index.js'
+
+const Policy = { pollMs: 1, settlePolls: 2, defaultWallClockMs: 1_000 }
+const Session: SessionHandle = {
+  id: 'native-session',
+  executorId: 'executor-a',
+  externalId: 'native',
+  metadata: {},
+}
+
+function adapter(overrides: Partial<PollingDriverAdapter> = {}): PollingDriverAdapter {
+  return {
+    id: 'native',
+    capabilities: async () => FullCapabilities,
+    identity: async () => ({
+      executorId: 'executor-a',
+      adapterVersion: '1',
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    }),
+    openSession: async () => Session,
+    prepare: async () => undefined,
+    send: async () => undefined,
+    readState: async () => ({
+      running: false,
+      awaitingConfirmation: false,
+      awaitingInput: false,
+      revision: 'initial',
+      usage: EmptyBudgetUsage,
+      unavailable: null,
+    }),
+    collect: async (_session, phase) => observation(phase),
+    abort: async () => undefined,
+    closeSession: async () => undefined,
+    ...overrides,
+  }
+}
+
+function sessionSpec() {
+  return { trial: trial(), journey: journey(), workspaceRoot: null }
+}
+
+test('polling budgets use native segment counters while the journey counts cumulative observations once', async () => {
+  let leg = 0
+  const closed: string[] = []
+  const driver = labDrivers.createPolling(
+    adapter({
+      send: async () => {
+        leg += 1
+      },
+      readState: async () => ({
+        running: false,
+        awaitingConfirmation: false,
+        awaitingInput: false,
+        revision: `leg-${leg}`,
+        usage:
+          leg === 0
+            ? EmptyBudgetUsage
+            : {
+                toolCalls: leg === 1 ? 5 : 1,
+                tokens: leg === 1 ? 100 : 10,
+                workingMs: 10,
+                wallClockMs: 10,
+                legs: 1,
+              },
+        unavailable: null,
+      }),
+      collect: async (_session, phase) => {
+        const base = observation(phase)
+        const count = leg === 0 ? 0 : leg === 1 ? 5 : 6
+        return {
+          ...base,
+          usage: { ...base.usage!, totalTokens: leg === 0 ? 0 : leg === 1 ? 100 : 110 },
+          turns: [
+            {
+              id: 'turns',
+              index: 1,
+              finishReasons: [],
+              toolCalls: Array.from({ length: count }, (_, index) => ({
+                id: `call-${index}`,
+                turnId: 'turns',
+                name: 'read',
+                input: { index },
+                result: null,
+                isError: false,
+                startedAt: null,
+                finishedAt: null,
+              })),
+            },
+          ],
+        }
+      },
+      closeSession: async (session) => {
+        closed.push(session.id)
+      },
+    }),
+    { ...Policy, settlePolls: 1 }
+  )
+  const definition = journey('journey-a', 2)
+  const verifiers = createVerifierRegistry()
+  verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+  const result = await journeyRunner.runJourney({
+    jobId: 'job',
+    suiteId: 'suite',
+    trial: trial(),
+    journey: {
+      ...definition,
+      budget: { ...UnlimitedBudget, legs: 2 },
+      legs: [
+        definition.legs[0]!,
+        {
+          ...definition.legs[1]!,
+          budget: { ...UnlimitedBudget, toolCalls: 2, tokens: 20 },
+        },
+      ],
+    },
+    driver,
+    detectors: createDetectorRegistry(),
+    verifiers,
+    workspaceRoot: null,
+    sourceCommit: null,
+    consumerCommit: null,
+  })
+  expect(result.legs.map((entry) => entry.settleOutcome.kind)).toEqual(['settled', 'settled'])
+  expect(result.manifest.usage).toMatchObject({ toolCalls: 6, tokens: 110, workingMs: 20, legs: 2 })
+  expect(closed).toEqual([Session.id])
+})
+
+test('polling retains its native segment budget check when the observer continues', async () => {
+  let revision = 0
+  let closed = 0
+  const driver = labDrivers.createPolling(
+    adapter({
+      send: async () => {
+        revision += 1
+      },
+      readState: async () => ({
+        running: false,
+        awaitingConfirmation: false,
+        awaitingInput: false,
+        revision: `${revision}`,
+        usage: { toolCalls: 3, tokens: null, workingMs: null, wallClockMs: 0, legs: 1 },
+        unavailable: null,
+      }),
+      closeSession: async () => {
+        closed += 1
+      },
+    }),
+    { ...Policy, settlePolls: 1 }
+  )
+  const session = await driver.openSession(sessionSpec())
+  await driver.send(session, journey().legs[0])
+  const result = await driver.waitSettled(session, {
+    budget: { ...UnlimitedBudget, toolCalls: 2 },
+    signal: new AbortController().signal,
+    onSample: async () => ({ kind: 'continue' }),
+  })
+  expect(result).toEqual({ kind: 'budget-exhausted', limit: 'toolCalls' })
+  await driver.closeSession(session)
+  expect(closed).toBe(1)
+})
 
 test('polling driver requires executor-native progress and stable idle', async () => {
   const states: NativeExecutionState[] = [
-    {
-      running: false,
-      awaitingConfirmation: false,
-      awaitingInput: false,
-      revision: 'old',
-      usage: EmptyBudgetUsage,
-      unavailable: null,
-    },
-    {
-      running: true,
-      awaitingConfirmation: false,
-      awaitingInput: false,
-      revision: 'old',
-      usage: EmptyBudgetUsage,
-      unavailable: null,
-    },
-    {
-      running: false,
-      awaitingConfirmation: false,
-      awaitingInput: false,
-      revision: 'new',
-      usage: EmptyBudgetUsage,
-      unavailable: null,
-    },
-    {
-      running: false,
-      awaitingConfirmation: false,
-      awaitingInput: false,
-      revision: 'new',
-      usage: EmptyBudgetUsage,
-      unavailable: null,
-    },
-  ]
+    { running: false, revision: 'old' },
+    { running: true, revision: 'old' },
+    { running: false, revision: 'new' },
+    { running: false, revision: 'new' },
+  ].map((state) => ({
+    ...state,
+    awaitingConfirmation: false,
+    awaitingInput: false,
+    usage: EmptyBudgetUsage,
+    unavailable: null,
+  }))
   let cursor = 0
   const driver = labDrivers.createPolling(
-    {
-      id: 'native',
-      capabilities: async () => FullCapabilities,
-      identity: async () => ({
-        executorId: 'executor-a',
-        adapterVersion: '1',
-        cliVersion: null,
-        provider: null,
-        model: null,
-        modelRevision: null,
-        contextWindow: null,
-        reasoningProfile: null,
-        configuration: {},
-      }),
-      openSession: async () => ({
-        id: 's',
-        executorId: 'executor-a',
-        externalId: 'native',
-        metadata: {},
-      }),
-      prepare: async () => undefined,
-      send: async () => undefined,
-      readState: async () => states[Math.min(cursor++, states.length - 1)],
-      collect: async (_session, phase) => observation(phase),
-      abort: async () => undefined,
-      closeSession: async () => undefined,
-    },
-    { pollMs: 1, settlePolls: 2, defaultWallClockMs: 1_000 }
+    adapter({ readState: async () => states[Math.min(cursor++, states.length - 1)] }),
+    Policy
   )
-  const session = await driver.openSession({
-    trial: trial(),
-    journey: journey(),
-    workspaceRoot: null,
-  })
+  const session = await driver.openSession(sessionSpec())
   await driver.send(session, journey().legs[0])
   const outcome = await driver.waitSettled(session, {
     budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
@@ -82,32 +202,67 @@ test('polling driver requires executor-native progress and stable idle', async (
     onSample: async () => ({ kind: 'continue' }),
   })
   expect(outcome.kind).toBe('settled')
+  await driver.closeSession(session)
+})
+
+test('polling refreshes the pre-send fence after awaiting input or abort and still detects synchronous completion', async () => {
+  for (const previous of ['awaiting-input', 'aborted'] as const) {
+    let sends = 0
+    let revision = 'r0'
+    let continuationPolls = 0
+    const driver = labDrivers.createPolling(
+      adapter({
+        send: async () => {
+          sends += 1
+          if (sends !== 2) revision = `r${sends}`
+        },
+        readState: async () => {
+          if (sends === 2) {
+            continuationPolls += 1
+            if (continuationPolls >= 4) revision = 'r2'
+          }
+          return {
+            running: sends === 2 && continuationPolls === 3,
+            awaitingConfirmation: false,
+            awaitingInput: sends === 1 && previous === 'awaiting-input',
+            revision,
+            usage: EmptyBudgetUsage,
+            unavailable: null,
+          }
+        },
+      }),
+      Policy
+    )
+    const session = await driver.openSession(sessionSpec())
+    const request = {
+      budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
+      signal: new AbortController().signal,
+      onSample: async () => ({ kind: 'continue' as const }),
+    }
+    try {
+      await driver.send(session, journey().legs[0]!)
+      const first = await driver.waitSettled(session, {
+        ...request,
+        onSample: async () => ({ kind: 'abort', detectorId: 'fixture', reason: 'stop' }),
+      })
+      expect(first.kind).toBe(previous)
+
+      await driver.send(session, journey().legs[0]!)
+      expect(await driver.waitSettled(session, request)).toEqual({ kind: 'settled' })
+      expect(continuationPolls).toBe(5)
+
+      await driver.send(session, journey().legs[0]!)
+      expect(await driver.waitSettled(session, request)).toEqual({ kind: 'settled' })
+    } finally {
+      await driver.closeSession(session)
+    }
+  }
 })
 
 test('polling driver classifies native executor unavailability as attrition', async () => {
   const driver = labDrivers.createPolling(
-    {
+    adapter({
       id: 'native-unavailable',
-      capabilities: async () => FullCapabilities,
-      identity: async () => ({
-        executorId: 'executor-a',
-        adapterVersion: '1',
-        cliVersion: null,
-        provider: null,
-        model: null,
-        modelRevision: null,
-        contextWindow: null,
-        reasoningProfile: null,
-        configuration: {},
-      }),
-      openSession: async () => ({
-        id: 's',
-        executorId: 'executor-a',
-        externalId: 'native',
-        metadata: {},
-      }),
-      prepare: async () => undefined,
-      send: async () => undefined,
       readState: async () => ({
         running: false,
         awaitingConfirmation: false,
@@ -116,17 +271,10 @@ test('polling driver classifies native executor unavailability as attrition', as
         usage: EmptyBudgetUsage,
         unavailable: { detail: 'authentication_failed' },
       }),
-      collect: async (_session, phase) => observation(phase),
-      abort: async () => undefined,
-      closeSession: async () => undefined,
-    },
-    { pollMs: 1, settlePolls: 1, defaultWallClockMs: 1_000 }
+    }),
+    Policy
   )
-  const session = await driver.openSession({
-    trial: trial(),
-    journey: journey(),
-    workspaceRoot: null,
-  })
+  const session = await driver.openSession(sessionSpec())
   const outcome = await driver.waitSettled(session, {
     budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
     signal: new AbortController().signal,
@@ -137,4 +285,107 @@ test('polling driver classifies native executor unavailability as attrition', as
     cause: 'agent-unavailable',
     detail: 'authentication_failed',
   })
+  await driver.closeSession(session)
+})
+
+test('opening failure before acquisition does not close a session the driver never acquired', async () => {
+  const failure = new Error('native open failed')
+  const closed: SessionHandle[] = []
+  const driver = labDrivers.createPolling(
+    adapter({
+      openSession: async () => {
+        throw failure
+      },
+      closeSession: async (session) => {
+        closed.push(session)
+      },
+    }),
+    Policy
+  )
+  await expect(driver.openSession(sessionSpec())).rejects.toBe(failure)
+  expect(closed).toEqual([])
+})
+
+test('the acquired native session closes exactly once when its first state read fails', async () => {
+  const failure = new Error('native state read failed')
+  const closed: SessionHandle[] = []
+  const driver = labDrivers.createPolling(
+    adapter({
+      readState: async () => {
+        throw failure
+      },
+      closeSession: async (session) => {
+        closed.push(session)
+      },
+    }),
+    Policy
+  )
+  await expect(driver.openSession(sessionSpec())).rejects.toBe(failure)
+  expect(closed).toEqual([Session])
+})
+
+test('failed initial read and failed release retain both errors through the journey boundary', async () => {
+  const readFailure = new Error('native initial state is unreadable')
+  const closeFailure = new Error('native release failed')
+  let closed = 0
+  const driver = labDrivers.createPolling(
+    adapter({
+      readState: async () => {
+        throw readFailure
+      },
+      closeSession: async () => {
+        closed += 1
+        throw closeFailure
+      },
+    }),
+    Policy
+  )
+  const error: unknown = await driver
+    .openSession(sessionSpec())
+    .catch((failure: unknown) => failure)
+  expect(error).toBeInstanceOf(AggregateError)
+  if (error instanceof AggregateError) {
+    expect(error.cause).toBe(readFailure)
+    expect(error.errors).toEqual([readFailure, closeFailure])
+    expect(error.message).toContain(readFailure.message)
+    expect(error.message).toContain(closeFailure.message)
+  }
+  expect(closed).toBe(1)
+
+  const verifiers = createVerifierRegistry()
+  verifiers.register('complete', () => ({ kind: 'pass', credit: 1, evidence: {} }))
+  const archive = await journeyRunner.runJourney({
+    jobId: 'job',
+    suiteId: 'suite',
+    trial: trial(),
+    journey: journey(),
+    driver,
+    detectors: createDetectorRegistry(),
+    verifiers,
+    workspaceRoot: null,
+    sourceCommit: null,
+    consumerCommit: null,
+  })
+  expect(closed).toBe(2)
+  expect(archive.legs).toHaveLength(0)
+  expect(archive.drops).toHaveLength(1)
+  expect(archive.drops[0]?.detail).toContain(readFailure.message)
+  expect(archive.drops[0]?.detail).toContain(closeFailure.message)
+})
+
+test('successful initial sampling transfers the live session to the caller until its explicit close', async () => {
+  const closed: SessionHandle[] = []
+  const driver = labDrivers.createPolling(
+    adapter({
+      closeSession: async (session) => {
+        closed.push(session)
+      },
+    }),
+    Policy
+  )
+  const session = await driver.openSession(sessionSpec())
+  expect(session).toBe(Session)
+  expect(closed).toEqual([])
+  await driver.closeSession(session)
+  expect(closed).toEqual([Session])
 })

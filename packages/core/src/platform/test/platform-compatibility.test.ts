@@ -60,7 +60,12 @@ describe('PlatformCompatibility', () => {
     expect(
       windows.relativePathTextInside('\\\\?\\UNC\\server\\share\\a', '\\\\server\\share')
     ).toBe('a')
-    expect(windows.isPathTextInside('C:', 'C:\\')).toBe(true)
+    expect(windows.isPathTextInside('C:', 'C:\\')).toBe(false)
+    expect(windows.isPathTextInside('C:\\work', 'C:')).toBe(false)
+    expect(windows.isPathTextInside('C:', 'C:')).toBe(false)
+    expect(windows.isPathTextInside('\\\\?\\C:', 'C:\\')).toBe(false)
+    expect(windows.isPathTextInside('C:\\work', '\\\\?\\C:')).toBe(false)
+    expect(windows.relativePathTextInside('C:\\', 'C:/')).toBe('.')
     expect(windows.isPathTextInside('C:foo', 'C:\\')).toBe(false)
     expect(windows.isPathTextInside('\\work\\app', '\\work')).toBe(false)
   })
@@ -144,16 +149,8 @@ describe('PlatformCompatibility', () => {
     expect(macOS.getDefaultInspectableCommands()).toContain('brew')
   })
 
-  test('owns application, app-data, and background-launch conventions', () => {
+  test('owns editor application launch conventions', () => {
     const macOS = createPlatform({ platform: 'darwin' })
-    const linux = createPlatform({
-      platform: 'linux',
-      env: { XDG_CONFIG_HOME: '/home/velaros/.config' },
-    })
-    const windows = createPlatform({
-      platform: 'win32',
-      env: { APPDATA: 'C:\\Users\\velaros\\AppData\\Roaming' },
-    })
 
     expect(
       macOS.getOpenPathWithEditorCommandSpec('/tmp/project', {
@@ -163,23 +160,6 @@ describe('PlatformCompatibility', () => {
       file: 'open',
       args: ['-a', 'Visual Studio Code', '/tmp/project'],
     })
-    expect(macOS.getDefaultAppDataPath('VelarOS', { homeDir: '/Users/velaros' })).toBe(
-      '/Users/velaros/Library/Application Support/VelarOS'
-    )
-    expect(linux.getDefaultAppDataPath('VelarOS')).toBe('/home/velaros/.config/VelarOS')
-    expect(windows.getDefaultAppDataPath('VelarOS')).toBe(
-      'C:\\Users\\velaros\\AppData\\Roaming\\VelarOS'
-    )
-    expect(
-      linux.getBackgroundShellLaunchCommand({
-        command: 'bun run dev',
-        logPath: '/tmp/velaros log.txt',
-        pidMarker: 'PID:',
-        shellPath: '/bin/bash',
-      })
-    ).toBe(
-      "nohup '/bin/bash' -lc 'exec bun run dev' >> '/tmp/velaros log.txt' 2>&1 & printf \"PID:%s\\n\" \"$!\""
-    )
   })
 
   test('owns process inspection and termination command specs', () => {
@@ -196,7 +176,6 @@ describe('PlatformCompatibility', () => {
     expect(windows.getTerminateCommand(42, true, { kind: 'powershell' })).toBe(
       'taskkill.exe /PID 42 /T /F'
     )
-    expect(windows.getFallbackTerminateCommand('bun run dev')).toBeNull()
     const windowsProcessList = windows.getProcessListCommandSpec()
     expect(windowsProcessList).toEqual({ file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] })
     expect(windows.getOpenPortInspectionCommandSpec()).toEqual({
@@ -204,12 +183,10 @@ describe('PlatformCompatibility', () => {
       args: ['-ano', '-p', 'tcp'],
     })
 
-    expect(linux.getProcessKillPid(42)).toBe(-42)
     expect(linux.isProcessMissingError({ code: 'ESRCH' })).toBe(true)
     expect(linux.isProcessMissingError({ errno: 3 })).toBe(true)
     expect(linux.isProcessMissingError({ errno: -3 })).toBe(true)
     expect(linux.isProcessMissingError({ code: 'EPERM' })).toBe(false)
-    expect(linux.getFallbackTerminateCommand('bun   run dev')).toBe("pkill -f 'bun run dev'")
     expect(linux.getCpuUsageCommandSpec()).toEqual({
       file: 'cat',
       args: ['/proc/stat'],

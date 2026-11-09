@@ -7,12 +7,12 @@ import ts from 'typescript'
 
 import { isEmpty, isNotNull, isNull, isUndefined } from '@velaros-ai/core'
 
-import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
+import { CodeSurfaceDiagnosticCodes, NodeRuntimePackagePrefix } from '../contract/constants.js'
 import type { CodeProgramDiagnostic, ScriptModuleExportsSlice } from '../types/script.js'
 
 import { renderDiagnosticFrame } from './diagnostics.js'
 import { readModuleReferences } from './module-form.js'
-import { programForCheck, readCapabilityNamespace } from './program.js'
+import { readCapabilityNamespace } from './program.js'
 import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
 import { CodeSurfaceTuning } from './tuning.js'
 
@@ -196,6 +196,8 @@ export function diagnoseSyntax(
     declarations: string
     path?: string
     modules?: Readonly<Record<string, string>>
+    /** 普通 Node 外部依赖留给原生链接；能力声明仍在这里核对。 */
+    nativeImports?: boolean
   },
   typescript: boolean
 ): CodeProgramDiagnostic[] {
@@ -604,6 +606,7 @@ function readProgramFiles(
     declarations: string
     path?: string
     modules?: Readonly<Record<string, string>>
+    nativeImports?: boolean
   },
   typescript: boolean
 ): {
@@ -622,13 +625,18 @@ function readProgramFiles(
     problems.push({ file, node, code: CodeSurfaceDiagnosticCodes.unresolvedModule, message })
   }
   const seen = new Set(isUndefined(input.path) ? [] : [input.path])
-  const pending = [{ path: input.path, file: parseScript(mainFile, programForCheck(input.source)) }]
+  const pending = [{ path: input.path, file: parseScript(mainFile, input.source) }]
   for (let next = pending.shift(); next; next = pending.shift()) {
     const { path, file } = next
     files.push(file)
     for (const { node: statement, specifier } of readModuleReferences(file)) {
       if (!isRelativeSpecifier(specifier.text)) {
-        const module = declared.get(specifier.text)
+        const namespace = readCapabilityNamespace(specifier.text)
+        const module =
+          declared.get(specifier.text) ??
+          (input.nativeImports && !isNull(namespace) && !namespace.includes(':')
+            ? declared.get(namespace)
+            : undefined)
         if (module) {
           const names = ts.isCallExpression(statement) ? [] : importedNames(statement)
           for (const [node, name] of names)
@@ -641,13 +649,20 @@ function readProgramFiles(
               })
           continue
         }
+        if (
+          input.nativeImports &&
+          (!specifier.text.includes(':') ||
+            /^(?:node|file|data):/u.test(specifier.text) ||
+            specifier.text.startsWith(NodeRuntimePackagePrefix))
+        )
+          continue
         unresolved(file, specifier, unresolvedMessage(specifier.text, null))
-        const namespace = readCapabilityNamespace(specifier.text)
         if (isNotNull(namespace) && !missing.includes(namespace)) missing.push(namespace)
         continue
       }
       const target = resolveLibraryImport(path, specifier.text)
       if (isNull(target) || (target !== input.path && !Object.hasOwn(modules, target))) {
+        if (input.nativeImports) continue
         unresolved(file, specifier, unresolvedMessage(specifier.text, target))
         continue
       }

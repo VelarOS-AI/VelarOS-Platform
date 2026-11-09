@@ -1,12 +1,19 @@
 import { expect, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
+import { OperationLimits } from '../src/contract/constants.js'
 import type {
   InvocationJournal,
   OperationDefinition,
   OperationRuntimeOptions,
 } from '../src/contract/requires.js'
 import { createOperationRuntime } from '../src/impl/runtime/OperationRuntime.js'
-import type { InvocationRecord, OperationSurface } from '../src/types/operations.js'
+import type {
+  InvocationReceipt,
+  InvocationRecord,
+  OperationSurface,
+} from '../src/types/operations.js'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -23,18 +30,22 @@ function fixture(
   surface?: OperationSurface
 ) {
   const records = new Map<string, InvocationRecord>()
+  const writes = { claim: [] as string[], prepare: [] as string[], settle: [] as string[] }
   const journal: InvocationJournal = {
     recordReconciliation: async () => {},
     claim: async (prepared) => {
+      writes.claim.push(JSON.stringify(prepared))
       const prior = records.get(prepared.id)
       if (prior) return prior
       records.set(prepared.id, { phase: 'reserved', prepared })
       return null
     },
     prepare: async (prepared) => {
+      writes.prepare.push(JSON.stringify(prepared))
       records.set(prepared.id, { phase: 'prepared', prepared })
     },
     settle: async (receipt) => {
+      writes.settle.push(JSON.stringify(receipt))
       records.set(receipt.invocation.id, {
         phase: 'settled',
         prepared: receipt.invocation,
@@ -81,7 +92,7 @@ function fixture(
     operation: 'run',
     input: null,
   }
-  return { runtime, records, call, journal, disposed: () => disposed }
+  return { runtime, records, writes, call, journal, disposed: () => disposed }
 }
 
 for (const phase of ['prepare', 'beforeDispatch', 'handler'] as const)
@@ -293,4 +304,218 @@ test('INV-26 a late journal failure stays prepared and is reported by close afte
   expect(f.records.get('call')?.receipt).toBeUndefined()
   expect(f.runtime.pending()).toEqual([])
   expect(f.disposed()).toBe(true)
+})
+
+test('observe payloads and expanded inputs are bounded before journal writes', async () => {
+  const large = 'large-observation-payload:'.padEnd(OperationLimits.observationChars * 2, 'x')
+  const prepareFailure = new AppError('PREPARE_FAILED', large)
+  const dispatchFailure = new AppError('AUTH_FAILED', large)
+  let runs = 0
+  const f = fixture(
+    {
+      effects: 'none',
+      input: { type: 'string' },
+      output: { type: 'string' },
+      prepare: (input) => {
+        if (input === 'prepare-error') throw prepareFailure
+        return input === 'expand-input' ? large : input
+      },
+      run: (input, context) => {
+        runs++
+        if (input === 'large-error') throw new AppError('READ_FAILED', large)
+        if (input === 'large-attachment') {
+          context.attach({
+            type: 'image-data',
+            mediaType: 'image/png',
+            label: 'large',
+            data: 'A'.repeat(8192),
+          })
+          return 'small'
+        }
+        return large
+      },
+    },
+    (prepared) => {
+      if (prepared.input === 'dispatch-error') throw dispatchFailure
+    }
+  )
+  const invoke = (input: string) =>
+    f.runtime.invoke({
+      ...f.call,
+      id: input,
+      executionId: input,
+      mode: 'observe',
+      input,
+    })
+  try {
+    await expect(invoke(large)).rejects.toMatchObject({ code: 'LIMIT' })
+    expect(f.writes).toEqual({ claim: [], prepare: [], settle: [] })
+    const expanded = await invoke('expand-input')
+    expect(expanded).toMatchObject({ outcome: 'failed', effect: 'none', error: { code: 'LIMIT' } })
+    expect(expanded.invocation.input).toBe('expand-input')
+    expect(expanded.lifecycle?.startedAt).toBeUndefined()
+    expect(f.writes.prepare).toHaveLength(0)
+    expect(runs).toBe(0)
+    for (const input of ['large-result', 'large-attachment']) {
+      const receipt = await invoke(input)
+      expect(receipt).toMatchObject({ outcome: 'failed', effect: 'none', error: { code: 'LIMIT' } })
+      expect(receipt.lifecycle?.startedAt).toBeTruthy()
+      expect(receipt.value).toBeUndefined()
+      expect(receipt.attachments).toBeUndefined()
+    }
+    for (const [input, code, total] of [
+      ['large-error', 'READ_FAILED', large.length],
+      ['prepare-error', 'PREPARE_FAILED', String(prepareFailure).length],
+      ['dispatch-error', 'AUTH_FAILED', String(dispatchFailure).length],
+    ] as const) {
+      const receipt = await invoke(input)
+      expect(receipt.error?.code).toBe(code)
+      expect(receipt.error?.message).toContain(`[truncated; totalChars=${total}]`)
+      expect(receipt.error!.message.length).toBeLessThan(OperationLimits.observationChars)
+    }
+    expect(runs).toBe(3)
+    expect([...f.writes.claim, ...f.writes.prepare, ...f.writes.settle].join('\n')).not.toContain(
+      large
+    )
+    expect(f.writes.settle.join('\n')).not.toContain('A'.repeat(8192))
+  } finally {
+    await f.runtime.dispose()
+  }
+})
+
+test('observe execution budgets charge concurrent settlements before storage awaits and leave exec unchanged', async () => {
+  const entered = deferred<void>()
+  const finish = deferred<void>()
+  const settling = deferred<void>()
+  const persist = deferred<void>()
+  const receipts: InvocationReceipt[] = []
+  let runs = 0
+  const f = fixture({
+    effects: 'none',
+    input: { type: 'string' },
+    output: { type: 'string' },
+    run: async (input, context) => {
+      if (context.invocation.mode !== 'observe') return input
+      if (++runs === 3) entered.resolve()
+      await finish.promise
+      return 'x'.repeat(2000)
+    },
+  })
+  const originalSettle = f.journal.settle
+  f.journal.settle = async (receipt) => {
+    receipts.push(receipt)
+    if (receipts.length === 3) settling.resolve()
+    if (receipts.length === 1) {
+      await persist.promise
+    }
+    await originalSettle(receipt)
+  }
+  const firstCall = { ...f.call, id: 'first', input: 'first', mode: 'observe' as const }
+  const first = f.runtime.invoke(firstCall)
+  const second = f.runtime.invoke({ ...firstCall, id: 'second', input: 'second' })
+  const third = f.runtime.invoke({ ...firstCall, id: 'third', input: 'third' })
+  try {
+    await entered.promise
+    finish.resolve()
+    await settling.promise
+    expect(receipts.filter((receipt) => receipt.error?.code === 'LIMIT')).toHaveLength(1)
+    const claims = f.writes.claim.length
+    await expect(f.runtime.invoke({ ...firstCall, id: 'after-limit' })).rejects.toMatchObject({
+      code: 'LIMIT',
+    })
+    expect(f.writes.claim).toHaveLength(claims)
+    expect(runs).toBe(3)
+    persist.resolve()
+    const [original] = await Promise.all([first, second, third])
+    expect(await f.runtime.invoke(firstCall)).toEqual(original)
+    const businessChars = receipts.reduce((sum, receipt) => {
+      const { value, observation, attachments, diagnostic } = receipt
+      const body = JSON.stringify({ value, observation, attachments, diagnostic })
+      return sum + (body === '{}' ? 0 : body.length)
+    }, 0)
+    expect(businessChars).toBeLessThanOrEqual(OperationLimits.observationChars)
+    expect(
+      (await f.runtime.invoke({ ...firstCall, id: 'other-execution', executionId: 'other' })).value
+    ).toHaveLength(2000)
+    expect(
+      (
+        await f.runtime.invoke({
+          ...firstCall,
+          id: 'other-session',
+          sessionId: 'other',
+          binding: f.runtime.bind('other', 'test:lifecycle'),
+        })
+      ).value
+    ).toHaveLength(2000)
+    const large = 'exec-result'.padEnd(OperationLimits.observationChars * 2, 'x')
+    expect(
+      (await f.runtime.invoke({ ...f.call, id: 'exec', mode: 'execute', input: large })).value
+    ).toBe(large)
+  } finally {
+    finish.resolve()
+    persist.resolve()
+    await Promise.allSettled([first, second, third])
+    await f.runtime.dispose()
+  }
+})
+
+test('observe budget cleanup waits for physical completion and preserves cancelled effect receipts', async () => {
+  const entered = deferred<void>()
+  const finish = deferred<void>()
+  const large = 'cancelled-observation-error'.padEnd(OperationLimits.observationChars * 2, 'x')
+  const f = fixture({
+    effects: 'write',
+    input: { type: 'string' },
+    output: { type: 'string' },
+    observe: async (input, context) => {
+      if (input === 'hold') {
+        entered.resolve()
+        await finish.promise
+        context.recordEffect('partial')
+        throw new AppError('READ_FAILED', large)
+      }
+      context.recordEffect('none')
+      return 'x'.repeat(input === 'prime' ? 3000 : 1500)
+    },
+  })
+  const call = { ...f.call, mode: 'observe' as const }
+  const cancel = new AbortController()
+  let observed: Promise<unknown> | undefined
+  try {
+    expect((await f.runtime.invoke({ ...call, id: 'prime', input: 'prime' })).value).toHaveLength(
+      3000
+    )
+    observed = f.runtime
+      .invoke({ ...call, id: 'hold', input: 'hold' }, cancel.signal)
+      .catch(() => null)
+    await entered.promise
+    cancel.abort()
+    await observed
+    f.runtime.release('s', 'test:lifecycle')
+    f.runtime.bind('s', 'test:lifecycle')
+    expect(f.records.get('hold')?.receipt).toBeUndefined()
+    finish.resolve()
+    while (f.runtime.pending().length) await tick()
+    const receipt = f.records.get('hold')!.receipt!
+    expect(receipt).toMatchObject({
+      outcome: 'cancelled',
+      effect: 'partial',
+      retry: 'requires-check',
+      error: { code: 'CANCELLED' },
+    })
+    expect(receipt.error?.message).toContain(`[truncated; totalChars=${large.length}]`)
+    expect(
+      (await f.runtime.invoke({ ...call, id: 'over-budget', input: 'small' })).error?.code
+    ).toBe('LIMIT')
+    while (f.runtime.pending().length) await tick()
+    f.runtime.release('s', 'test:lifecycle')
+    f.runtime.bind('s', 'test:lifecycle')
+    expect(
+      (await f.runtime.invoke({ ...call, id: 'new-lease', input: 'small' })).value
+    ).toHaveLength(1500)
+  } finally {
+    finish.resolve()
+    await observed
+    await f.runtime.dispose()
+  }
 })

@@ -9,11 +9,14 @@ import { localContextStorage } from '@velaros-ai/context/node'
 
 import { RuntimeDiagnostics } from '../../../dist/act/runtime/impl/RuntimeDiagnostics.js'
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker } from './support/model-turn.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
-test('large archived requests cannot consume execution output and call preview budgets', async (t) => {
+test('bounded request metadata leaves the body budget for execution output and call previews', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'output-budget', storage })
@@ -24,13 +27,18 @@ test('large archived requests cannot consume execution output and call preview b
       runId: 'run',
       turn: 0,
       repair: 0,
-      providerRequest: {
-        schemaVersion: 2,
+      requestAudit: {
+        schemaVersion: 3,
         model: 'test',
-        system: 'large archived request '.repeat(100_000),
-        messages: [],
+        modelTruncated: false,
+        inputTokens: 1000,
+        precision: 'exact',
+        basis: 'test',
+        basisTruncated: false,
+        messageCount: 1,
+        toolCount: 0,
         outputTokens: 4096,
-        requestFingerprint: { id: 'fp' },
+        requestFingerprint: { id: '1234567890abcdef' },
       },
     }),
   })
@@ -44,7 +52,7 @@ test('large archived requests cannot consume execution output and call preview b
   const source = await context.append({
     kind: 'audit',
     title: 'program',
-    body: JSON.stringify({ source: 'console.log("visible output")', language: 'node' }),
+    body: JSON.stringify({ source: 'console.log("visible output")' }),
   })
   const result = await context.append({
     kind: 'audit',
@@ -97,20 +105,18 @@ test('large archived requests cannot consume execution output and call preview b
   assert.equal(trace.executions[0].processOutputTruncated, false)
   assert.match(trace.invocations[0].summary.output, /visible call result/)
   assert.equal(trace.invocations[0].summary.outputTruncated, false)
-  assert.equal(trace.request.truncated, true)
+  assert.equal(trace.request.truncated, false)
   const total =
     [trace.request, trace.response, trace.decision, ...trace.records, ...trace.invocations].reduce(
       (n, v) => n + (v?.body?.length ?? 0),
       0
     ) +
     trace.executions.reduce((n, v) => n + v.source.length + (v.processOutput?.length ?? 0), 0) +
-    trace.invocations.reduce((n, v) => n + v.summary.input.length + v.summary.output.length, 0) +
-    trace.requestSummary.system.length +
-    trace.requestSummary.messages.length
+    trace.invocations.reduce((n, v) => n + v.summary.input.length + v.summary.output.length, 0)
   assert(total <= 32_768, 'presentation priority still obeys the total page budget')
 })
 
-test('exhausted trace budgets check presence without loading historical bodies and preserve the legacy projection', async (t) => {
+test('exhausted trace budgets use presence probes without changing trace facts or loading historical bodies', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'budget', storage })
@@ -146,27 +152,29 @@ test('exhausted trace budgets check presence without loading historical bodies a
     )
   const snapshot = await storage.load('budget')
   const objectOf = (ref) => snapshot.records.find((record) => record.ref.id === ref.id).objectId
-  const read = async (indexed, query, missing) => {
+  const read = async (directPresence, query, missing) => {
     const gets = []
     const checks = []
     let chars = 0
     const metrics = []
+    const get = async (id, objectId) => {
+      gets.push(objectId)
+      const body = objectId === missing ? null : await storage.get(id, objectId)
+      chars += body?.length ?? 0
+      return body
+    }
     const port = {
       load: (id) => storage.load(id),
-      get: async (id, objectId) => {
-        gets.push(objectId)
-        const body = objectId === missing ? null : await storage.get(id, objectId)
-        chars += body?.length ?? 0
-        return body
+      get,
+      has: async (id, objectId) => {
+        checks.push(objectId)
+        // Both backends satisfy the current required has contract. The read-through
+        // control measures the body IO that a real existence query avoids.
+        return (
+          objectId !== missing &&
+          (directPresence ? storage.has(id, objectId) : (await get(id, objectId)) !== null)
+        )
       },
-      ...(indexed
-        ? {
-            has: async (id, objectId) => {
-              checks.push(objectId)
-              return objectId !== missing && storage.has(id, objectId)
-            },
-          }
-        : {}),
     }
     const measured = new RuntimeDiagnostics(port, (metric) => metrics.push(metric)).storage
     const startedAt = performance.now()
@@ -175,15 +183,15 @@ test('exhausted trace budgets check presence without loading historical bodies a
   }
   for (const missing of [undefined, objectOf(history[7].ref), objectOf(decision.ref)]) {
     for (const maxChars of [1, 32_768]) {
-      const legacy = await read(false, { limit: 1, maxChars }, missing)
+      const readThrough = await read(false, { limit: 1, maxChars }, missing)
       const indexed = await read(true, { limit: 1, maxChars }, missing)
-      assert.deepEqual(indexed.trace, legacy.trace)
+      assert.deepEqual(indexed.trace, readThrough.trace)
       if (missing !== objectOf(decision.ref)) {
         assert.equal(indexed.trace.turns[0].modelAccounting.usage.inputTokens, 123)
         assert.equal(indexed.trace.accounting.modelRequests.known, 1)
       }
-      assert(indexed.gets.length < legacy.gets.length / 10)
-      assert(indexed.chars < legacy.chars / 10)
+      assert(indexed.gets.length < readThrough.gets.length / 10)
+      assert(indexed.chars < readThrough.chars / 10)
       assert(indexed.metrics.some((metric) => metric.operation === 'has'))
       assert(!indexed.checks.includes(objectOf(request.ref)), 'cached request is not checked twice')
       assert(
@@ -201,14 +209,14 @@ test('exhausted trace budgets check presence without loading historical bodies a
           )
         )
       t.diagnostic(
-        `budget=${maxChars}, missing=${Boolean(missing)}: get ${legacy.gets.length}->${indexed.gets.length}, body chars ${legacy.chars}->${indexed.chars}, elapsed ${legacy.durationMs.toFixed(2)}->${indexed.durationMs.toFixed(2)}ms`
+        `budget=${maxChars}, missing=${Boolean(missing)}: get ${readThrough.gets.length}->${indexed.gets.length}, body chars ${readThrough.chars}->${indexed.chars}, elapsed ${readThrough.durationMs.toFixed(2)}->${indexed.durationMs.toFixed(2)}ms`
       )
     }
   }
-  const legacyFull = await read(false, { limit: 1, maxChars: 1, fullContent: true })
+  const readThroughFull = await read(false, { limit: 1, maxChars: 1, fullContent: true })
   const indexedFull = await read(true, { limit: 1, maxChars: 1, fullContent: true })
-  assert.deepEqual(indexedFull.trace, legacyFull.trace)
-  assert.deepEqual(indexedFull.gets, legacyFull.gets)
+  assert.deepEqual(indexedFull.trace, readThroughFull.trace)
+  assert.deepEqual(indexedFull.gets, readThroughFull.gets)
   assert.deepEqual(indexedFull.checks, [])
 })
 
@@ -224,6 +232,15 @@ test('trace pages use one metadata snapshot and query only associated execution 
     body: '{}',
     sources: [source.ref],
   })
+  const frame = await context.append({
+    kind: 'audit',
+    title: 'context:frame:selected',
+    body: JSON.stringify({
+      frameId: 'selected',
+      entries: [],
+      observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
+    }),
+  })
   const requests = []
   for (let turn = 0; turn < 3; turn++) {
     const request = await context.append({
@@ -233,20 +250,7 @@ test('trace pages use one metadata snapshot and query only associated execution 
         runId: 'run',
         turn,
         repair: 0,
-        request: {
-          materials: [
-            {
-              origin: 'runtime-view',
-              text: JSON.stringify({
-                partitions: {
-                  task: { goals: [] },
-                  observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
-                  recent: { results: [] },
-                },
-              }),
-            },
-          ],
-        },
+        frameRef: frame.ref,
       }),
     })
     requests.push(request)
@@ -270,13 +274,40 @@ test('trace pages use one metadata snapshot and query only associated execution 
       return storage.load(id)
     },
     get: (...args) => storage.get(...args),
+    has: (...args) => storage.has(...args),
   }
+  const diff = '+ visible project change\n'.repeat(225)
   const journal = {
     list: async (sessionId, id) => {
       assert.equal(sessionId, 's')
       assert.equal(id, executionId)
       lookups.push(id)
-      return []
+      return [
+        {
+          prepared: {
+            id: 'project-call',
+            executionId,
+            binding: { moduleId: 'velaros:project' },
+            operation: 'commit',
+            input: {},
+          },
+          receipt: {
+            outcome: 'succeeded',
+            effect: 'committed',
+            value: { diff },
+            diagnostic: {
+              code: 'PROJECT_TRANSACTION_COMMITTED',
+              message: JSON.stringify({
+                root: 'project',
+                transactionId: 'transaction',
+                lifecycle: 'applied',
+                changedFiles: ['file.txt'],
+                omittedFiles: 0,
+              }),
+            },
+          },
+        },
+      ]
     },
   }
   const page = await new RuntimeTrace('s', port, journal).page({ limit: 3 })
@@ -288,6 +319,50 @@ test('trace pages use one metadata snapshot and query only associated execution 
   assert(page.turns.every((turn) => Object.values(turn.timing).every((value) => value === null)))
   assert.equal(page.nextAfter, null)
   assert.equal(page.turns[0].nextTurnId, requests[1].ref.id)
+  const maxChars = 16_384
+  const seen = []
+  let after = 0
+  for (;;) {
+    const bounded = await new RuntimeTrace('s', port, journal).page({ after, limit: 3, maxChars })
+    let total = 0
+    for (const turn of bounded.turns) {
+      total += [
+        turn.request,
+        turn.response,
+        turn.decision,
+        ...turn.records,
+        ...turn.invocations,
+      ].reduce((sum, record) => sum + (record?.body?.length ?? 0), 0)
+      total += turn.invocations.reduce(
+        (sum, call) =>
+          sum +
+          call.summary.input.length +
+          call.summary.output.length +
+          (call.summary.projectChange?.diff.length ?? 0),
+        0
+      )
+      total += turn.executions.reduce(
+        (sum, execution) => sum + execution.source.length + (execution.processOutput?.length ?? 0),
+        0
+      )
+      total +=
+        (turn.observation.registration?.source.length ?? 0) +
+        (turn.observation.run?.source.length ?? 0)
+      assert.equal(turn.invocations[0].summary.projectChange.diff, diff)
+      assert(turn.records.some((record) => record.ref.id === source.ref.id))
+      assert(turn.records.some((record) => record.ref.id === result.ref.id))
+      seen.push(turn.turnId)
+    }
+    assert(total <= maxChars, 'project diffs share the body budget across turns')
+    assert(seen.length <= requests.length)
+    if (bounded.nextAfter === null) break
+    assert(bounded.nextAfter > after, 'the next page advances without losing request references')
+    after = bounded.nextAfter
+  }
+  assert.deepEqual(
+    seen,
+    requests.map((request) => request.ref.id)
+  )
 })
 
 test('execution summaries follow the declarations of their own turn and say why a script failed', async (t) => {
@@ -304,10 +379,8 @@ test('execution summaries follow the declarations of their own turn and say why 
       .join('\n'),
   })
   const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+    storage: await createTestStorage(dataDir),
+
     context: { maintenance: false },
     model: {
       id: 'trace-executions',
@@ -364,10 +437,8 @@ test('observation summaries say what a turn registered and which run fed its req
     text: `${marker(request)} observe\n${source}\n${marker(request)}`,
   })
   const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+    storage: await createTestStorage(dataDir),
+
     context: { maintenance: false },
     protocol: { allowed: ['execute', 'observe', 'done'] },
     model: {
@@ -395,7 +466,6 @@ test('observation summaries say what a turn registered and which run fed its req
         failure: null,
         source: watch,
         sourceTruncated: false,
-        language: 'node',
       },
       run: null,
     })
@@ -429,12 +499,110 @@ test('observation summaries say what a turn registered and which run fed its req
   }
 })
 
+test('observation infrastructure failure has one structured result in the frame, archive and trace', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'trace-observation-rejection-'))
+  const storage = localContextStorage({ path: join(dataDir, 'context.sqlite') })
+  let runtime = null
+  t.after(async () => {
+    if (runtime) await runtime.close()
+    else await storage.close()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+  const watch = "import {output} from 'velaros'; output('observation');"
+  const failure = new Error('observation host cleanup failed: INFRASTRUCTURE_REJECTION_M12')
+  const frames = []
+  let runs = 0
+  runtime = await createRuntime({
+    storage,
+
+    runner: {
+      environment: 'node',
+      cwd: dataDir,
+      async run(request) {
+        assert.equal(request.mode, 'observe')
+        runs++
+        throw failure
+      },
+    },
+    context: {
+      maintenance: false,
+      observation: {
+        scope: async () => 'observation-failure-scope',
+        reuse: {
+          coversNativeIO: true,
+          probe: async () => ({ kind: 'versioned', providerId: 'fixture', token: 'unchanged' }),
+        },
+      },
+    },
+    protocol: { allowed: ['execute', 'observe', 'done'] },
+    model: {
+      id: 'trace-observation-rejection',
+      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+      async *stream(request) {
+        const frame = JSON.parse(
+          request.materials.findLast((item) => item.origin === 'runtime-view').text
+        )
+        frames.push(frame.partitions.observation)
+        assert(frames.length <= 3, 'observer failure must not create an unbounded model loop')
+        if (frames.length <= 2) {
+          yield { type: 'text', text: `${marker(request)} observe\n${watch}\n${marker(request)}` }
+          yield { type: 'finish', reason: 'stop' }
+        } else yield* done(request, 'The observer host failed.')
+      },
+    },
+  })
+  const session = await runtime.openSession('s')
+  const turns = []
+  const events = []
+  for await (const event of session.submit('Register the observer and report its real failure.')) {
+    events.push(event)
+    if (event.type === 'turn') turns.push(event.turnId)
+  }
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(frames.length, 3)
+  assert.equal(runs, 2, 'failed collection cannot establish a reusable healthy baseline')
+  assert.notEqual(frames[1].resultRef, frames[2].resultRef)
+  for (const [index, frame] of frames.entries()) {
+    if (index === 0) continue
+    assert.equal(frame.freshness.status, 'collected')
+    assert.equal(frame.freshness.reason, 'collection-incomplete')
+    assert.notEqual(frame.health.status, 'healthy')
+    assert(frame.text.includes(failure.message))
+    const trace = await session.trace(turns[index])
+    const run = trace.observation.run
+    assert.equal(run.status, 'failed')
+    assert.deepEqual(run.failure, { code: 'PROGRAM_ERROR', message: String(failure), line: null })
+    assert.equal(run.source, watch)
+    assert.equal(run.collection.resultRef, frame.resultRef)
+    assert.equal(run.executionId, frame.freshness.executionId)
+    assert.deepEqual(trace.executions, [])
+    assert.deepEqual(
+      trace.invocations,
+      [],
+      'no Kernel failure may hide a misclassified script result'
+    )
+    const selected = await storage.selectSnapshot('s', [
+      { title: `script:${run.executionId}:result`, latest: true },
+    ])
+    assert.equal(selected.records.length, 1)
+    const record = selected.records[0]
+    const persisted = JSON.parse(await storage.get('s', record.objectId))
+    assert.equal(persisted.executionId, run.executionId)
+    assert.equal(persisted.mode, 'observe')
+    assert.equal(persisted.checked, true)
+    assert.deepEqual(persisted.result.failed, { code: 'PROGRAM_ERROR', message: String(failure) })
+    assert.equal('error' in persisted, false)
+    assert.equal(record.sources[0].id, frame.sourceRef)
+    assert.equal(run.durationMs, persisted.timing.durationMs)
+    assert(Number.isFinite(run.durationMs) && run.durationMs >= 0)
+  }
+})
+
 test('full-content pages retain bodies beyond the normal budget and keep pagination', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 'full', storage })
-  const system = `${'s'.repeat(9000)}SYSTEM_END`
-  const content = `${'m'.repeat(30000)}MESSAGE_END`
   const response = `${'r'.repeat(500_001)}RESPONSE_END`
   const requests = []
   for (let turn = 0; turn < 2; turn++) {
@@ -445,13 +613,18 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
         runId: 'run',
         turn,
         repair: 0,
-        providerRequest: {
-          schemaVersion: 2,
+        requestAudit: {
+          schemaVersion: 3,
           model: 'model',
-          system,
-          messages: [{ role: 'user', content }],
+          modelTruncated: false,
+          inputTokens: 1000,
+          precision: 'exact',
+          basis: 'test',
+          basisTruncated: false,
+          messageCount: 1,
+          toolCount: 0,
           outputTokens: 4096,
-          requestFingerprint: { id: 'fp' },
+          requestFingerprint: { id: '1234567890abcdef' },
         },
       }),
     })
@@ -460,11 +633,10 @@ test('full-content pages retain bodies beyond the normal budget and keep paginat
   }
   const trace = new RuntimeTrace('full', storage, { list: async () => [] })
   const bounded = await trace.page({ limit: 1, maxChars: 500 })
-  assert.equal(bounded.turns[0].requestSummary.systemTruncated, true)
+  assert.equal(bounded.turns[0].response.truncated, true)
   const first = await trace.page({ limit: 1, fullContent: true, maxChars: 500 })
   assert.equal(first.turns.length, 1)
-  assert.equal(first.turns[0].requestSummary.system, system)
-  assert.equal(JSON.parse(first.turns[0].requestSummary.messages)[0].content, content)
+  assert.deepEqual(first.turns[0].requestSummary, bounded.turns[0].requestSummary)
   assert.equal(first.turns[0].response.body, response)
   assert.equal(first.turns[0].response.truncated, false)
   assert.equal(first.nextAfter, requests[0].sequence)
@@ -482,10 +654,8 @@ for (const invalidAt of [0, 1, 'observe']) {
     const sources = [0, 1].map((i) => (i === invalidAt ? typo : `${ok}\n// position ${i}`))
     let calls = 0
     const runtime = await createRuntime({
-      dataDir,
-      agents: false,
-      search: false,
-      memory: false,
+      storage: await createTestStorage(dataDir),
+
       context: { maintenance: false },
       protocol: { allowed: ['execute', 'observe', 'done'] },
       model: {

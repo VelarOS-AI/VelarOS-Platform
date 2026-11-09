@@ -108,6 +108,17 @@ export interface SemanticVersion {
   readonly build?: string
 }
 
+/** 范围中的一个已解析比较项；不保留另一份版本字符串镜像。 */
+export interface SemanticVersionComparator {
+  /** 比较符，精确版本对应等号。 */
+  readonly operator: '=' | '>' | '>=' | '<' | '<=' | '^' | '~'
+  /** 比较所用的版本。 */
+  readonly version: SemanticVersion
+}
+
+/** 备选分句取并集，分句内的比较项取交集；空分句表示任意版本。 */
+export type SemanticVersionRange = ReadonlyArray<readonly SemanticVersionComparator[]>
+
 /** 装一个模块作用域权限面要的东西。 */
 export interface ScopedKernelPermissionBrokerOptions {
   /** 这个模块的清单；权限位以它声明的为准。 */

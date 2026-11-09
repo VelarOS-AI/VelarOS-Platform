@@ -21,11 +21,11 @@ import {
   VelarContextMaterialsModule,
   VelarExecutionsModule,
   VelarModulesModule,
+  VelarProgramsModule,
   VelarSystemGoalModule,
   VelarSystemMemoryPersistentModule,
   VelarSystemStoreModule,
 } from '../../../dist/act/system/contract/surface.js'
-import { VelarProgramsModule } from '../../../dist/act/system/contract/surface.js'
 import { contextModule } from '../../../dist/act/system/impl/ContextModule.js'
 import {
   memoryModule,
@@ -37,7 +37,7 @@ import { MemoryLimits } from '../../../dist/memory/index.js'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
 test('INV-1 memory 的实际操作与模板一致', () =>
   verifyModule(memoryModule, new URL('../memory-template.js', import.meta.url)))
-test('INV-1 本地 memory 只生成五个实际操作', () =>
+test('INV-1 本地 memory 的实际操作与模板一致', () =>
   verifyModule(
     { create: (host) => memoryModule.create(host, false) },
     new URL('../memory-local-template.js', import.meta.url)

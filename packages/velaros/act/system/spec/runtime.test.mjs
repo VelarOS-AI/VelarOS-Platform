@@ -10,16 +10,15 @@ import { createOperationRuntime } from '@velaros-ai/kernel'
 import {
   codeProgramChecker,
   createKernelScriptSession,
-  nodeSubprocessCodeRunner,
   scriptPackageCompiler,
 } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 import { memoryModule } from '../../../dist/act/system/impl/MemoryModule.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 const model = (stream) => ({
   id: 'system-test',
@@ -32,7 +31,6 @@ async function fixture(t, options = {}) {
   const requests = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: model(async function* (request) {
       requests.push(request)
@@ -151,7 +149,6 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
     'memory',
     'store',
   ])
-  assert.equal(listing.value.items[0].operations.length, 31)
   assert.deepEqual(
     listing.value.items[0].operations
       .filter((operation) => operation.startsWith('executions.'))
@@ -175,8 +172,9 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
   await execute(f.session, result.value.template)
   const root = await execute(
     f.session,
-    `${prelude}const description=await system.modules.describe({module:'velaros:system'});if(!description.exports)throw new Error('missing exports');output({template:description.template,modules:description.exports.modules,goal:description.exports.goal});`
+    `${prelude}const description=await system.modules.describe({module:'velaros:system'});if(!description.exports)throw new Error('missing exports');output({template:description.template,modules:description.exports.modules,goal:description.exports.goal,operations:Object.entries(description.exports).flatMap(([member,definition])=>Object.keys(definition.operations).map(name=>member+'.'+name))});`
   )
+  assert.deepEqual(listing.value.items[0].operations.toSorted(), root.value.operations.toSorted())
   await execute(f.session, root.value.template)
   assert.equal(result.value.exports.memory.operations.organize.allowedModes[0], 'execute')
   assert.equal(root.value.modules.operations.release, undefined)
@@ -242,7 +240,12 @@ test('INV-4 observe 无法修改自身状态，execute 后新笔记进入下一�
     source: `${prelude}await system.memory.update({key:'bad',baseRevision:0,body:'must not repeat'});`,
   })
   await submit(f.session)
-  assert.match(f.requests[0].materials[0].text, /OPERATION_MODE_DENIED/)
+  assert.match(
+    f.requests[0].materials[0].text,
+    process.platform === 'darwin' || process.platform === 'linux'
+      ? /OPERATION_MODE_DENIED/
+      : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   const empty = await execute(
     f.session,
     `${prelude}output(await system.memory.list({kind:'notes'}));`
@@ -486,7 +489,7 @@ test('INV-22 真实 Project 合同批量交付减少重复模板与依赖，查�
   })
   t.after(() => kernel.dispose())
   const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
-  const names = ['list', 'read', 'search', 'edit']
+  const names = ['commit', 'snapshot', 'inspect', 'undo']
   const previousShape = names.map((name) => ({
     declarations: catalog.describe('s', { module: VelarProjectModule.specifier, exports: [name] })
       .declarations,
@@ -502,16 +505,16 @@ test('INV-22 真实 Project 合同批量交付减少重复模板与依赖，查�
     `${current.declarations.length} < ${previousChars}`
   )
   assert.equal(current.template, '')
-  assert.equal(current.declarations.split('路径相对当前项目根').length, 2)
+  assert.equal(current.declarations.split('路径相对同一个项目根').length, 2)
   for (const name of names)
     assert.match(current.declarations, new RegExp(`export function ${name}\\(`, 'u'))
-  assert.equal(current.declarations.split('interface ProjectReadInput').length, 2)
+  assert.equal(current.declarations.split('interface ProjectChangeInput').length, 2)
   assert.equal(businessCalls, 0)
   // 对比的是旧返回形状的确定性材料成本；没有生成模型胜率或时间结论。
   assert.equal(previousShape.length, 4)
   assert.equal(
     codeProgramChecker.typecheck({
-      source: "import {read,list,search,edit} from 'velaros:project';",
+      source: "import {commit,snapshot,inspect,undo} from 'velaros:project';",
       granted: [{ namespace: VelarProjectModule.specifier, declarations: current.declarations }],
     }).ok,
     true
@@ -526,7 +529,6 @@ test('INV-8 任意业务包不能占用系统身份或替换系统入口', async
         () =>
           createRuntime({
             storage,
-            runner: nodeSubprocessCodeRunner,
             modules: [{ binding: { moduleId: id }, operations: {} }],
           }),
         /系统保留身份/
@@ -663,7 +665,6 @@ test('INV-11 系统包保存的观察程序与工作笔记可以跨 Runtime 重�
   const open = async () =>
     createRuntime({
       storage: localContextStorage({ path }),
-      runner: nodeSubprocessCodeRunner,
       modules: [],
     })
   let runtime = await open()
@@ -861,7 +862,7 @@ for (const inputText of ['preserve '.repeat(160), '中文 "quoted" \\ path\n'.re
 
 test('memory.updateActive: real Node import, discovery, effect, versioned update and execute-only contract', async (t) => {
   // 显式的测试宿主授权，不放宽产品默认进程策略；临时目录只用于本测试。
-  const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/index.js')
+  const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/node.js')
   const { createLocalShellHost } = await import('../../../dist/execution/local.js')
   const root = await mkdtemp(join(tmpdir(), 'active-question-node-'))
   const host = createLocalShellHost({
@@ -873,7 +874,7 @@ test('memory.updateActive: real Node import, discovery, effect, versioned update
     await rm(root, { recursive: true, force: true })
   })
   const node = createNodeExecutionEnvironment({ cwd: root, directory: join(root, 'runs'), host })
-  const f = await fixture(t, { runner: undefined, node, packageEnvironment: false })
+  const f = await fixture(t, { node })
   const { ActiveContext } = await import('../../../dist/act/runtime/impl/ActiveContext.js')
   await submit(f.session)
   const goal = { ref: (await f.storage.loadMetadata('s')).task.goals.at(-1) }

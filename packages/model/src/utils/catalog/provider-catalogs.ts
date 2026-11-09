@@ -357,15 +357,6 @@ export function listOpenAiOnlyModelIds(): string[] {
   )
 }
 
-/** 全部静态目录里声明过窗口的模型，摊平成「模型 id → 窗口」的条目。 */
-export function listKnownModelContextWindowEntries(): Array<readonly [string, number]> {
-  return SharedProviderCatalogs.flatMap((catalog) =>
-    catalog.models
-      .filter((model) => isNumber(model.contextWindow))
-      .map((model) => [model.id, model.contextWindow!] as const)
-  )
-}
-
 /** OpenRouter 精选目录里声明过窗口的模型；它与整表分开查，因为同名模型在两边窗口可能不同。 */
 export function listOpenRouterCompatibleContextWindowEntries(): Array<readonly [string, number]> {
   return OpenRouterCompatibleModelCatalog.filter((model) => isNumber(model.contextWindow)).map(

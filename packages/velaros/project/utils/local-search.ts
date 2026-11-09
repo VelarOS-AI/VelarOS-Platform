@@ -9,34 +9,26 @@ import { DiscoverySkippedDirectoryNames } from '@velaros-ai/core/path-rules/cont
 import type { FileSearchOptions } from '../types/local-search.js'
 import type { FileSearchProtectedDirectoryInput } from '../types/local-search.js'
 
-/** 按搜索词生成逐行匹配函数，返回一行里每处命中的列号（从 1 开始），支持正则与区分大小写；正则写错时抛 VALIDATION，空的字面搜索词匹配不到任何东西。 */
+import { createGuardedRegexMatcher } from './regex-guard.js'
+
+/** 按搜索词生成逐行匹配函数，列号从 1 开始；正则按剩余额度在时限内扫描，失败抛 VALIDATION，字面搜索仍由调用方按额度惰性取用。 */
 export function buildLineMatcher(input: {
   pattern: string
   regex?: boolean
   caseSensitive?: boolean
-}): (line: string) => Iterable<number> {
+}): (line: string, limit: number) => Iterable<number> {
   if (input.regex) {
     const flags = input.caseSensitive ? 'g' : 'gi'
-    let expression: RegExp
-    try {
-      expression = new RegExp(input.pattern, flags)
-    } catch (err) {
-      const message = AppError.getMessage(err)
-      throw new AppError('VALIDATION', `正则写得不对：${message}`)
-    }
-    return (line) => {
-      const starts: number[] = []
-      expression.lastIndex = 0
-      let match = expression.exec(line)
-      while (match) {
-        starts.push(match.index + 1)
-        if (isEmpty(match[0])) {
-          expression.lastIndex += 1
-        }
-        match = expression.exec(line)
+    const scan = createGuardedRegexMatcher(input.pattern, flags, 'code-unit')
+    const matchLine = (line: string, limit: number): number[] => {
+      try {
+        return scan(line, limit).map((match) => match.index + 1)
+      } catch (error) {
+        throw new AppError('VALIDATION', AppError.getMessage(error))
       }
-      return starts
     }
+    matchLine('', 1)
+    return matchLine
   }
 
   const needle = input.caseSensitive ? input.pattern : input.pattern.toLowerCase()

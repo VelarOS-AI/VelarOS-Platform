@@ -491,26 +491,21 @@ function hasPowerShellRecurse(args: readonly string[]): boolean {
   return args.some((argument) => matchesPowerShellParameter(argument, '-recurse', 2))
 }
 
-/** 读出 `rm` 是否递归、是否强制：POSIX 选项簇、GNU 长选项、PowerShell 参数名三种写法都认。 */
-function readRemoveFlags(args: readonly string[]): { recursive: boolean; force: boolean } {
+/** 读出 `rm` 是否递归：POSIX 选项簇、GNU 长选项、PowerShell 参数名三种写法都认。 */
+function readRemoveFlags(args: readonly string[]): { recursive: boolean } {
   let recursive = false
-  let force = false
   for (const argument of args) {
     if (argument === '--') break
     if (argument.startsWith('--')) {
       const normalized = argument.toLowerCase()
       recursive ||= matchesLongOption(normalized, '--recursive')
-      force ||= matchesLongOption(normalized, '--force')
     } else if (PosixRemoveOptionCluster.test(argument)) {
       recursive ||= /[Rr]/.test(argument)
-      force ||= /f/i.test(argument)
     } else if (argument.length > 1 && argument.startsWith('-')) {
-      // `-f` 在 PowerShell 里有歧义（-Filter / -Force），至少写到 `-fo` 才是 -Force。
       recursive ||= matchesPowerShellParameter(argument, '-recurse', 2)
-      force ||= matchesPowerShellParameter(argument, '-force', 3)
     }
   }
-  return { recursive, force }
+  return { recursive }
 }
 
 /** 读出实参里的 cmd.exe 开关字母（小写），`/s /q` 与 `/s/q` 都拆成 s 与 q。 */
@@ -1078,7 +1073,7 @@ function hasMutatingGitArguments(subcommand: string, args: readonly string[]): b
 /** 判断一条 shell 命令在任何参数组合下都不会写盘：白名单命令加整体否决，拿不准一律判为非只读。 */
 export function isShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
-  if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
+  if (!trimmed || /[\r\n><`$(){}]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
   return trimmed.split(/&&|\|\||;|\|/).every((segment) => {
     // env、xargs 这类前缀命令后面才是真正要跑的程序，按它判断；前缀本身在只读白名单里也不能放行。提权的一律不算只读。
     if (/(?:^|\s)(?:sudo|doas|runas)\b/i.test(segment)) return false

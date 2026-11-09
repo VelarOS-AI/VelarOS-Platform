@@ -176,8 +176,10 @@ test('task accounting avoids full history and task replacement archives atomical
     throw Error('full snapshot loaded')
   })
   await view.renew()
-  await view.reserveModel('main', 10)
-  await view.recordUsage(4, 2)
+  const request = { taskId: (await view.inspect()).id, requestId: 'accounting' }
+  await view.reserveModel('main', 10, request)
+  await view.dispatchModel(request)
+  await view.recordUsage(4, 2, request)
   assert.equal((await view.inspect()).usage.inputTokens, 4)
   assert.equal(load.mock.callCount(), 0)
   await view.end('completed')
@@ -361,17 +363,23 @@ test('journal execution lookup loads matching receipts rather than every session
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   let reads = 0
-  const counted = {
-    load: (id) => storage.load(id),
-    compareAndSwap: (...args) => storage.compareAndSwap(...args),
-    put: (...args) => storage.put(...args),
-    get: (...args) => {
-      reads++
-      return storage.get(...args)
+  const counted = new Proxy(storage, {
+    get(target, key) {
+      const overrides = {
+        load: (id) => storage.load(id),
+        compareAndSwap: (...args) => storage.compareAndSwap(...args),
+        put: (...args) => storage.put(...args),
+        get: (...args) => {
+          reads++
+          return storage.get(...args)
+        },
+        records: (...args) => storage.records(...args),
+        close: async () => {},
+      }
+      const value = Object.hasOwn(overrides, key) ? overrides[key] : target[key]
+      return typeof value === 'function' ? value.bind(target) : value
     },
-    records: (...args) => storage.records(...args),
-    close: async () => {},
-  }
+  })
   const journal = createContextInvocationJournal(counted)
   for (let i = 0; i < 80; i++)
     await journal.claim({
@@ -432,105 +440,66 @@ test('selected snapshots keep one version while another connection commits betwe
   )
 })
 
-test('input recall retains compatibility with archived fixed-width chunks', async (t) => {
+test(`indexed: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
   const files = await fixture(t)
   const storage = files.open()
-  const context = createContextRuntime({ sessionId: 'legacy', storage })
-  const a = await context.append({
-    kind: 'audit',
-    title: 'user:text-chunk',
-    body: 'x'.repeat(8000000),
+  const context = createContextRuntime({ sessionId: 's', storage })
+  const file = await context.append({ kind: 'audit', body: 'attachment text' })
+  const unrelated = await context.append({ kind: 'audit', body: 'private audit' })
+  const otherInput = await context.ingest({
+    files: [{ ref: unrelated.ref, name: 'other', mediaType: 'text/plain' }],
   })
-  const b = await context.append({ kind: 'audit', title: 'user:text-chunk', body: '旧😀尾' })
-  const chunks = [a.ref, b.ref]
-  const input = await context.append({
-    kind: 'user',
-    title: 'user:manifest',
-    body: JSON.stringify({ chars: a.chars + b.chars, chunks, files: [] }),
-    sources: chunks,
+  const text = `${'a'.repeat(7999999)}😀中😀文`
+  const input = await context.ingest({
+    text,
+    files: [{ ref: file.ref, name: 'file', mediaType: 'text/plain' }],
   })
-  assert.equal(
-    (await context.readInput(input.ref, { offset: 7999998, limit: 30 })).text,
-    'xx旧😀尾'
+  await context.summarizeInput({
+    ref: input.ref,
+    baseRevision: 0,
+    summary: 'preserved intent',
+    constraints: ['keep original'],
+    unresolved: [],
+  })
+  const manifest = JSON.parse(await storage.get('s', input.objectId))
+  const forbidden = new Set([otherInput.objectId])
+  const get = storage.get.bind(storage)
+  t.mock.method(storage, 'get', (...args) => {
+    assert(!forbidden.has(args[1]), 'unrelated manifest loaded')
+    return get(...args)
+  })
+  t.mock.method(storage, 'load', () => {
+    throw Error('full input history loaded')
+  })
+  assert.equal((await context.readInput(file.ref, { offset: 3, limit: 7 })).text, 'achment')
+  const restored = await context.readInput(input.ref, { offset: 7999996, limit: 32 })
+  assert.equal(restored.text, text.slice(7999996))
+  for (const offset of [7999998, 7999999, 8000000, 8000001, text.length]) {
+    const page = await context.readInput(input.ref, { offset, limit: 2 })
+    assert.equal(page.text, text.slice(offset, offset + 2))
+    assert.equal(page.totalChars, text.length)
+  }
+  const projected = JSON.parse((await context.projectInput(input.ref, 100)).text)
+  assert.equal(projected.intent.summary, 'preserved intent')
+  assert.equal(projected.summaryRevision, 1)
+  assert.equal(projected.files[0].ref.id, file.ref.id)
+  await assert.rejects(context.readInput(manifest.chunks[0]), { code: 'INPUT_REF' })
+  await assert.rejects(context.readInput({ ...file.ref, sessionId: 'other' }), {
+    code: 'SCOPE_MISMATCH',
+  })
+  await assert.rejects(context.readInput({ sessionId: 's', id: 'missing' }), {
+    code: 'REF_NOT_FOUND',
+  })
+  await context.ingest({ files: [{ ref: file.ref, name: 'again', mediaType: 'text/plain' }] })
+  forbidden.clear()
+  const missing = t.mock.method(storage, 'get', (...args) =>
+    args[1] === input.objectId ? null : get(...args)
   )
-})
-
-for (const mode of ['indexed', 'selection-only', 'fallback'])
-  test(`${mode}: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
-    const files = await fixture(t)
-    const storage = files.open()
-    const port =
-      mode === 'indexed'
-        ? storage
-        : {
-            load: (...args) => storage.load(...args),
-            compareAndSwap: (...args) => storage.compareAndSwap(...args),
-            put: (...args) => storage.put(...args),
-            get: (...args) => storage.get(...args),
-            close: () => storage.close(),
-            ...(mode === 'selection-only'
-              ? { selectSnapshot: (...args) => storage.selectSnapshot(...args) }
-              : {}),
-          }
-    const context = createContextRuntime({ sessionId: 's', storage: port })
-    const file = await context.append({ kind: 'audit', body: 'attachment text' })
-    const unrelated = await context.append({ kind: 'audit', body: 'private audit' })
-    const otherInput = await context.ingest({
-      files: [{ ref: unrelated.ref, name: 'other', mediaType: 'text/plain' }],
-    })
-    const text = `${'a'.repeat(7999999)}😀中😀文`
-    const input = await context.ingest({
-      text,
-      files: [{ ref: file.ref, name: 'file', mediaType: 'text/plain' }],
-    })
-    await context.summarizeInput({
-      ref: input.ref,
-      baseRevision: 0,
-      summary: 'preserved intent',
-      constraints: ['keep original'],
-      unresolved: [],
-    })
-    const manifest = JSON.parse(await storage.get('s', input.objectId))
-    const forbidden = new Set([otherInput.objectId])
-    const get = storage.get.bind(storage)
-    t.mock.method(storage, 'get', (...args) => {
-      assert(!forbidden.has(args[1]), 'unrelated manifest loaded')
-      return get(...args)
-    })
-    if (mode !== 'fallback')
-      t.mock.method(storage, 'load', () => {
-        throw Error('full input history loaded')
-      })
-    assert.equal((await context.readInput(file.ref, { offset: 3, limit: 7 })).text, 'achment')
-    const restored = await context.readInput(input.ref, { offset: 7999996, limit: 32 })
-    assert.equal(restored.text, text.slice(7999996))
-    for (const offset of [7999998, 7999999, 8000000, 8000001, text.length]) {
-      const page = await context.readInput(input.ref, { offset, limit: 2 })
-      assert.equal(page.text, text.slice(offset, offset + 2))
-      assert.equal(page.totalChars, text.length)
-    }
-    const projected = JSON.parse((await context.projectInput(input.ref, 100)).text)
-    assert.equal(projected.intent.summary, 'preserved intent')
-    assert.equal(projected.summaryRevision, 1)
-    assert.equal(projected.files[0].ref.id, file.ref.id)
-    await assert.rejects(context.readInput(manifest.chunks[0]), { code: 'INPUT_REF' })
-    await assert.rejects(context.readInput({ ...file.ref, sessionId: 'other' }), {
-      code: 'SCOPE_MISMATCH',
-    })
-    await assert.rejects(context.readInput({ sessionId: 's', id: 'missing' }), {
-      code: 'REF_NOT_FOUND',
-    })
-    if (mode === 'indexed')
-      await context.ingest({ files: [{ ref: file.ref, name: 'again', mediaType: 'text/plain' }] })
-    forbidden.clear()
-    const missing = t.mock.method(storage, 'get', (...args) =>
-      args[1] === input.objectId ? null : get(...args)
-    )
-    await assert.rejects(context.readInput(input.ref), { code: 'OBJECT_MISSING' })
-    missing.mock.restore()
-    const chunk = (await storage.records('s', { refId: manifest.chunks[1].id })).items[0]
-    t.mock.method(storage, 'get', (...args) => (args[1] === chunk.objectId ? null : get(...args)))
-    await assert.rejects(context.readInput(input.ref, { offset: 8000000, limit: 32 }), {
-      code: 'OBJECT_MISSING',
-    })
+  await assert.rejects(context.readInput(input.ref), { code: 'OBJECT_MISSING' })
+  missing.mock.restore()
+  const chunk = (await storage.records('s', { refId: manifest.chunks[1].id })).items[0]
+  t.mock.method(storage, 'get', (...args) => (args[1] === chunk.objectId ? null : get(...args)))
+  await assert.rejects(context.readInput(input.ref, { offset: 8000000, limit: 32 }), {
+    code: 'OBJECT_MISSING',
   })
+})

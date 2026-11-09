@@ -1,6 +1,7 @@
 import {
   isBoolean,
   isEmpty,
+  isFalse,
   isObject,
   isPlainObject,
   isString,
@@ -47,11 +48,22 @@ export function compileScriptRecords(
       control,
       inputRef,
       clear,
+      history,
       format,
       ...fields
     } = options as Record<string, unknown>
     if (record.kind === 'observe' && !isUndefined(observe))
       throw protocolFailure('一份响应最多更新一次观察', record.line)
+    if (
+      record.kind === 'observe' &&
+      isFalse(config.observationPrograms) &&
+      !Object.hasOwn(options, 'history') &&
+      !Object.hasOwn(options, 'clear')
+    )
+      throw protocolFailure(
+        `只读程序观察不可用：${config.observationUnavailableReason ?? '宿主未声明只读程序约束支持'}；此入口只接受空源码与独立 history 或 clear:true 选项`,
+        record.line
+      )
     if (
       (record.kind === 'observe' &&
         (Object.hasOwn(options, 'async') ||
@@ -63,6 +75,26 @@ export function compileScriptRecords(
         '调度选项无效：async 必须是布尔值；observe 不接受 async、retain 或 timeoutMs，请去掉这些执行专用字段',
         record.line
       )
+    if (!isUndefined(history)) {
+      if (
+        record.kind !== 'observe' ||
+        Object.keys(options).length !== 1 ||
+        !isEmpty(record.body) ||
+        !isEmpty(Object.keys(blobs))
+      )
+        throw protocolFailure(
+          '历史观察只能提供 history 选项并使用空源码，不能附带其他程序或原文选项',
+          record.line
+        )
+      try {
+        const candidate = scriptInputCopy({ observe: { history } })
+        checkScriptSubmission(candidate)
+        observe = candidate.observe
+      } catch (error) {
+        throw protocolFailure(error instanceof Error ? error.message : String(error), record.line)
+      }
+      continue
+    }
     if (!isUndefined(control)) {
       if (
         record.kind !== 'execute' ||
@@ -141,6 +173,8 @@ export function compileScriptRecords(
         throw protocolFailure('完整程序载荷必须是 JSON 对象', record.line)
       }
       if (!isPlainObject(program)) throw protocolFailure('完整程序载荷必须是对象', record.line)
+      if (Object.hasOwn(program, 'history'))
+        throw protocolFailure('history 必须使用独立选项与空源码，不能放入完整程序载荷', record.line)
       if (Object.hasOwn(program, 'timeoutMs'))
         throw protocolFailure('timeoutMs 属于本次执行选项，不能放入源码载荷', record.line)
     } else {

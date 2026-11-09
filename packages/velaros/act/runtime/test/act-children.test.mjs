@@ -5,14 +5,13 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { createMcpModule, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createMcpModule } from '../../../dist/act/runtime/index.js'
 import { createActEventProjector } from '../../../dist/act/runtime/renderer.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker, turn } from './support/model-turn.mjs'
+import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+
 const model = (stream) => ({
   id: 'fixture',
   limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -22,7 +21,6 @@ const model = (stream) => ({
 const setup = async (t, options) => {
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     ...options,
   })
@@ -36,6 +34,7 @@ test('immediate child guidance reaches the same real runtime run before completi
   const path = join(root, 'state.sqlite')
   t.after(() => rm(root, { recursive: true, force: true }))
   const requests = []
+  const entered = Promise.withResolvers()
   let finishResponse
   const guided = new Promise((resolve) => {
     finishResponse = resolve
@@ -44,6 +43,7 @@ test('immediate child guidance reaches the same real runtime run before completi
   const child = model(async function* (request, signal) {
     const text = modelText(request)
     requests.push(text)
+    entered.resolve()
     if (!text.includes('additional-child-constraint')) {
       await guided
       assert.equal(signal.aborted, false)
@@ -64,6 +64,16 @@ test('immediate child guidance reaches the same real runtime run before completi
         },
         summary: 'Test guidance admission barrier',
         operations: {
+          waitStarted: {
+            summary: 'Wait until the first child model request is in flight',
+            input: { type: 'null' },
+            output: { type: 'null' },
+            effects: 'read',
+            run: async () => {
+              await entered.promise
+              return null
+            },
+          },
           release: {
             summary: 'Finish the current response after guidance admission',
             input: { type: 'null' },
@@ -83,7 +93,7 @@ test('immediate child guidance reaches the same real runtime run before completi
       if (++main === 1) {
         yield task(
           request,
-          "import {release} from 'probe:guidance';import {start,send,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'initial child work',profile:'read'});await send({id:job.id,input:'additional-child-constraint'});await release();output(await wait({id:job.id}));"
+          "import {waitStarted,release} from 'probe:guidance';import {start,send,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'initial child work',profile:'read'});await waitStarted();await send({id:job.id,input:'additional-child-constraint'});await release();output(await wait({id:job.id}));"
         )
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request, 'parent complete')
@@ -130,7 +140,6 @@ test('immediate child guidance reaches the same real runtime run before completi
   await f.runtime.close()
   const restored = await createRuntime({
     storage: localContextStorage({ path }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: child,
   })
@@ -181,7 +190,7 @@ test('unknown child effects do not block the parent: it keeps writing, completes
     agents: {
       concurrency: 1,
       maxChildren: 1,
-      profiles: { writer: { model: child, modules: ['probe:uncertain'] } },
+      profiles: { writer: { model: child, modules: ['probe:uncertain'], node: true } },
     },
     model: model(async function* (request) {
       if (++main === 1) {
@@ -375,13 +384,10 @@ test('INV-31 parent and child run the same ScriptAct loop and charge the shared 
     ...bounded.records,
     ...bounded.invocations,
   ].reduce((sum, item) => sum + (item?.body?.length ?? 0), 0)
-  const summaryChars =
-    (bounded.requestSummary?.system.length ?? 0) +
-    (bounded.requestSummary?.messages.length ?? 0) +
-    bounded.invocations.reduce(
-      (sum, item) => sum + item.summary.input.length + item.summary.output.length,
-      0
-    )
+  const summaryChars = bounded.invocations.reduce(
+    (sum, item) => sum + item.summary.input.length + item.summary.output.length,
+    0
+  )
   const executionChars = bounded.executions.reduce(
     (sum, item) => sum + item.source.length + (item.processOutput?.length ?? 0),
     0
@@ -415,7 +421,11 @@ test('shared material is copied with provenance and caller cannot forge another 
     }
   })
   const f = await setup(t, {
-    agents: { profiles: { read: { model: child, modules: [] } }, concurrency: 1, maxChildren: 2 },
+    agents: {
+      profiles: { read: { model: child, modules: [], node: true } },
+      concurrency: 1,
+      maxChildren: 2,
+    },
     model: model(async function* (request) {
       if (++calls === 1) {
         yield task(
@@ -484,7 +494,7 @@ test('a child writes through its modules without claiming anything first, like i
       },
     ],
     agents: {
-      profiles: { read: { model: child, modules: ['probe:world'] } },
+      profiles: { read: { model: child, modules: ['probe:world'], node: true } },
       concurrency: 1,
       maxChildren: 2,
     },
@@ -781,7 +791,11 @@ test(
     })
     const f = await setup(t, {
       context: { maintenance: false },
-      agents: { profiles: { read: { model: child, modules: [] } }, concurrency: 1, maxChildren: 1 },
+      agents: {
+        profiles: { read: { model: child, modules: [], node: true } },
+        concurrency: 1,
+        maxChildren: 1,
+      },
       model: model(async function* (request) {
         main++
         if (main === 1) {
@@ -851,7 +865,7 @@ test(
       agents: {
         profiles: {
           reader: { model: child, modules: [] },
-          writer: { model: child, modules: ['probe:grant'] },
+          writer: { model: child, modules: ['probe:grant'], node: true },
         },
         concurrency: 1,
         maxChildren: 1,

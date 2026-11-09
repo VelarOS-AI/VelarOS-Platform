@@ -155,6 +155,7 @@ export interface OperationRuntimeApi {
 import type {
   ModelContinuation,
   ModelHistoryMessage,
+  ModelRequestLayout,
   ModelResponseFormat,
   ModelToolExchange,
   ModelTurnRequest,
@@ -174,6 +175,8 @@ export interface ModelRequestEncoderApi {
   encode(request: ModelTurnRequest): string
   /** 生成编译审计与供应商实际发送共用的多模态消息。 */
   messages(request: ModelTurnRequest): ModelHistoryMessage[]
+  /** 同时给出稳定前缀及本轮尾区的完整消息边界，不以字符串裁切往返。 */
+  layout(request: ModelTurnRequest): ModelRequestLayout
 }
 
 export type { ApprovalContractsApi } from '../impl/runtime/ApprovalContracts.js'

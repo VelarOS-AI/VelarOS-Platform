@@ -15,7 +15,6 @@ import type { ExternalKernelModuleIsolation } from '../../types/kernel'
 import type {
   CapabilityToken,
   KernelCompositionSnapshot,
-  KernelModuleHealth,
   KernelModulePermissionRequest,
   KernelModuleSnapshot,
   KernelPermissionDecision,
@@ -34,6 +33,7 @@ import {
   disposeModuleLifecycle,
   failModuleRecord,
   HealthyModuleHealth,
+  snapshotModuleHealth,
   toModuleSnapshot,
   UnknownModuleHealth,
 } from '../../utils/runtime/module-record'
@@ -130,11 +130,6 @@ export interface KernelModuleHostApi {
 }
 
 export class KernelModuleHost implements KernelModuleHostApi {
-  /** 还没问过健康度（刚注册、已挂起、已释放）时的占位值。 */
-  private static readonly unknownHealth: KernelModuleHealth = Object.freeze({ status: 'unknown' })
-  /** 模块就绪但自己没实现 `health()` 时的默认值。 */
-  private static readonly healthyHealth: KernelModuleHealth = Object.freeze({ status: 'healthy' })
-
   private readonly modules = new Map<string, ModuleRecord>()
   private readonly serviceStore = new KernelServiceStore()
   private readonly eventHub = new KernelEventHub()
@@ -147,6 +142,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
   private activationOrder: readonly string[] = []
   private startPromise?: Promise<void>
   private disposePromise?: Promise<void>
+  private readonly replacements = new Map<AbortController, Promise<void>>()
   private disposed = false
 
   public constructor(private readonly options: KernelModuleHostOptions) {
@@ -262,6 +258,22 @@ export class KernelModuleHost implements KernelModuleHostApi {
    */
   public async replaceModule(definition: KernelModuleDefinition): Promise<void> {
     this.assertNotDisposed()
+    const controller = new AbortController()
+    // 先登记整次替换，再进入模块代码；关闭也要等暂存回滚和旧代释放实际结束。
+    const replacing = Promise.resolve().then(() => this.replaceOnce(definition, controller))
+    this.replacements.set(controller, replacing)
+    try {
+      await replacing
+    } finally {
+      this.replacements.delete(controller)
+    }
+  }
+
+  private async replaceOnce(
+    definition: KernelModuleDefinition,
+    controller: AbortController
+  ): Promise<void> {
+    this.assertNotDisposed()
     const manifest = cloneManifest(definition.manifest)
     validateManifest(manifest, this.options.apiVersion)
     const previous = this.modules.get(manifest.id)
@@ -295,7 +307,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
     let replacementCommitted = false
     replacement.status = 'activating'
-    replacement.controller = new AbortController()
+    replacement.controller = controller
     replacement.contextActive = true
     let failedPhase: 'activate' | 'ready' = 'activate'
     try {
@@ -304,9 +316,11 @@ export class KernelModuleHost implements KernelModuleHostApi {
         isEventDeliveryEnabled: () => replacementCommitted,
       })
       replacement.lifecycle = lifecycle ?? {}
+      this.assertNotDisposed()
       replacement.status = 'readying'
       failedPhase = 'ready'
       await replacement.lifecycle.ready?.()
+      this.assertNotDisposed()
       replacement.status = 'ready'
       replacement.health = HealthyModuleHealth
     } catch (error) {
@@ -389,6 +403,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
   private async disposeOnce(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    for (const controller of this.replacements.keys()) controller.abort()
     if (this.startPromise) {
       try {
         await this.startPromise
@@ -399,6 +414,9 @@ export class KernelModuleHost implements KernelModuleHostApi {
         })
       }
     }
+    // 替换不等待宿主关闭：取消后自行回滚暂存代，或完成已提交替换的旧代收尾。
+    // 替换失败仍交给原调用方（含回滚错误）；旧代释放失败保持已提交替换的既有日志语义。
+    await Promise.allSettled([...this.replacements.values()])
     const failures: Array<{ moduleId: string; error: Error }> = []
     const orderedIds = new Set(this.activationOrder)
     const remainingIds = [...this.modules.keys()]
@@ -613,16 +631,16 @@ export class KernelModuleHost implements KernelModuleHostApi {
       try {
         record.health = isUndefined(record.lifecycle?.health)
           ? HealthyModuleHealth
-          : await record.lifecycle.health()
+          : snapshotModuleHealth(await record.lifecycle.health())
       } catch (error) {
         log.warn('Kernel module health check failed', {
           error,
           moduleId: record.definition.manifest.id,
         })
-        record.health = {
+        record.health = snapshotModuleHealth({
           status: 'unhealthy',
           message: toError(error).message,
-        }
+        })
       }
     }
     return this.listModules()

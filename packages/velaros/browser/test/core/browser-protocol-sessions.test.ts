@@ -1,12 +1,15 @@
 // 用途：钉住模型那条 CDP 会话在运行时这一侧的账：第一次用到才连、同时来的只连一次；事件序号只增、按方法与域筛、
 // 游标之后才交；缓冲只为守住内存、挤掉的记条数；被拦下没人放行的请求到点由宿主放行并记一条事件；通道断了下次重连。
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 
 import { describe, setSystemTime, test } from 'bun:test'
 
 import { BrowserProtocolLimits } from '../../contract/constants.js'
 import type { BrowserProtocolChannel } from '../../contract/requires.js'
+import { ElectronBrowserRuntime } from '../../impl/electron/ElectronBrowserRuntime.js'
 import { BrowserProtocolSessions } from '../../impl/session/BrowserProtocolSessions.js'
+import { type BrowserTargetRefStore } from '../../impl/session/BrowserTargetRefStore.js'
 
 /** 一条假的通道：记下发出去的命令，能手动推事件、手动断开。 */
 function createChannel() {
@@ -119,6 +122,14 @@ void describe('模型的 CDP 会话', () => {
       requestId: 'released',
       request: { url: 'https://example.test/api/b' },
     })
+    fake.emit(
+      'Fetch.requestPaused',
+      {
+        requestId: 'released',
+        request: { url: 'https://example.test/api/child' },
+      },
+      'child'
+    )
     await sessions.send('s1', open, {
       method: 'Fetch.continueRequest',
       params: { requestId: 'released' },
@@ -132,9 +143,10 @@ void describe('模型的 CDP 会话', () => {
     const continued = fake.sent
       .filter((command) => command.method === 'Fetch.continueRequest')
       .map((command) => (command.params as { requestId: string }).requestId)
-    assert.deepEqual(continued, ['released', 'kept'])
+    assert.deepEqual(continued, ['released', 'kept', 'released'])
+    assert.equal(fake.sent.at(-1)?.sessionId, 'child')
     const note = (await sessions.read('s1', open, { method: 'Velar.requestAutoContinued' })).events
-    assert.equal(note.length, 1)
+    assert.equal(note.length, 2)
     assert.equal(note[0]!.params.url, 'https://example.test/api/a')
     await sessions.dispose()
   })
@@ -203,4 +215,98 @@ void test('protocol sessions can be used again after closing all sessions', asyn
   assert.equal(second.closedTimes(), 0)
   await sessions.dispose()
   assert.equal(second.closedTimes(), 1)
+})
+
+void test('replacing an embedded page retires its model channel and refs without destroying the host page', async () => {
+  const old = createChannel()
+  const current = createChannel()
+  const external = createChannel()
+  const createPage = (id: number) => {
+    let url = `https://page-${id}.test/`
+    return Object.assign(new EventEmitter(), {
+      id,
+      session: new EventEmitter(),
+      isDestroyed: () => false,
+      getURL: () => url,
+      getTitle: () => `Page ${id}`,
+      setWindowOpenHandler: () => undefined,
+      loadURL: async (next: string) => {
+        url = next
+      },
+    })
+  }
+  const firstPage = createPage(1)
+  const secondPage = createPage(2)
+  const runtime = new ElectronBrowserRuntime({
+    externalBrowserLauncher: {
+      launch: async () => {
+        throw new Error('not an external page')
+      },
+    },
+    createPageDriver: ({ webContents }) => ({
+      kind: 'webview',
+      getURL: () => webContents.getURL(),
+      getTitle: () => webContents.getTitle(),
+      isDestroyed: () => webContents.isDestroyed(),
+      executeJavaScript: async () => undefined as never,
+      navigateTo: async () => ({ url: webContents.getURL(), title: webContents.getTitle() }),
+      refreshPageState: async () => ({ url: webContents.getURL(), title: webContents.getTitle() }),
+      bringToFront: async () => undefined,
+      openProtocolChannel: async () => (webContents.id === 1 ? old.channel : current.channel),
+    }),
+  })
+  const owned = runtime as unknown as {
+    attachEmbeddedPageSession(sessionId: string, page: unknown): Promise<unknown>
+    targetRefs: BrowserTargetRefStore
+    interaction: { clearInputState(sessionId: string): void }
+  }
+  const context = { url: firstPage.getURL(), workspaceRoot: '/test-browser' }
+  try {
+    await owned.attachEmbeddedPageSession('s', firstPage)
+    await runtime.sendProtocolCommand('s', context, { method: 'Old.command' })
+    const target = { ref: '@e1', css: '#old', text: null, name: null, role: null, attributes: {} }
+    owned.targetRefs.storeTargets('s', [target])
+    let clearedInputs = 0
+    const clearInputState = owned.interaction.clearInputState.bind(owned.interaction)
+    owned.interaction.clearInputState = (sessionId) => {
+      clearedInputs++
+      clearInputState(sessionId)
+    }
+    await owned.attachEmbeddedPageSession('s', secondPage)
+    assert.equal(old.closedTimes(), 1)
+    assert.equal(clearedInputs, 1)
+    assert.throws(() => owned.targetRefs.hydrateTarget('s', target), { code: 'VALIDATION' })
+    await runtime.sendProtocolCommand('s', context, { method: 'New.command' })
+    assert.deepEqual(
+      old.sent.map((item) => item.method),
+      ['Old.command']
+    )
+    assert.deepEqual(
+      current.sent.map((item) => item.method),
+      ['New.command']
+    )
+    assert.equal(firstPage.getURL(), 'https://page-1.test/')
+    runtime.attachExternalPageDriver('s', {
+      kind: 'external',
+      getURL: () => 'https://external.test/',
+      getTitle: () => 'External',
+      isDestroyed: () => false,
+      executeJavaScript: async () => undefined as never,
+      navigateTo: async () => ({ url: 'https://external.test/', title: 'External' }),
+      refreshPageState: async () => ({ url: 'https://external.test/', title: 'External' }),
+      bringToFront: async () => undefined,
+      openProtocolChannel: async () => external.channel,
+    })
+    await runtime.sendProtocolCommand('s', context, { method: 'External.command' })
+    assert.equal(current.closedTimes(), 1)
+    await owned.attachEmbeddedPageSession('s', firstPage)
+    await runtime.sendProtocolCommand('s', context, { method: 'External.again' })
+    assert.equal(external.closedTimes(), 0)
+    assert.deepEqual(
+      external.sent.map((item) => item.method),
+      ['External.command', 'External.again']
+    )
+  } finally {
+    runtime.dispose()
+  }
 })

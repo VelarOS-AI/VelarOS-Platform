@@ -30,7 +30,7 @@
 | INV-11 | `./catalog` 与 `./contracts` 的整条引用链不碰 Node 内置模块、不读宿主进程环境；根入口不出任何类                                                                                                                  | 门禁     | `check:model-arch`        |
 | INV-12 | 供应商凭据验证复用 Model 协议：缺密钥不发请求，OpenRouter 使用鉴权端点，超时包含错误正文读取                                                                                                                     | 测试     | `spec/acceptance.test.ts` |
 | INV-13 | 思考摘要只转给宿主展示：同一条响应只认一路来源（SDK 思考分片或 Chat Completions 原始分块），分段之间空一行；超出上限只停转发，不判失败                                                                           | 测试     | `spec/acceptance.test.ts` |
-| INV-14 | 型号不认思考参数时往下退档重发、退到底不带思考参数，能用的档在同一份运行时里记住；与思考档位无关的 400（含加密状态、签名、reasoning.context）原样交出，不重发且不污染记住的档位                                                                                              | 测试     | `spec/acceptance.test.ts` |
+| INV-14 | 型号不认思考参数时往下退档重发、退到底不带思考参数，能用的档仅在同一份运行时的相同供应商、型号、已解析端点与凭据之间记住，并发迟到拒绝不抬高已确认上限；与思考档位无关的 400（含加密状态、签名、reasoning.context）原样交出，不重发且不污染记住的档位 | 测试 | `spec/acceptance.test.ts`、`test/chat-reasoning.test.ts`、`test/reasoning-levels.test.ts` |
 | INV-15 | 会话缓存键只发给认它的线路：OpenAI 官方直连与 OpenRouter 译成 `prompt_cache_key`，其余适配器（OpenAI 兼容、DeepSeek、Anthropic、Google、Velar Cloud、脚本与自定义）只剥掉内部标记、不出线                        | 测试     | `spec/acceptance.test.ts` |
 
 | INV-16 | GPT-6 Sol 经正式 Responses 适配器传递用户选择的 high / max 推理档位，移除不兼容的采样参数 | 测试 | `spec/acceptance.test.ts` |
@@ -41,6 +41,8 @@
 
 | INV-20 | 内置 OpenAI Responses 收到完整 completed/incomplete/failed SSE 终端后向 SDK 正常 EOF，usage、continuation 和错误仍由 SDK 校验；只将终端尾 CR 补 LF 为等价分隔符，不等待无关传输尾流；单事件原始字节上限 16 MiB，超限失败，半帧不算成功，取消清理不阻塞终端 | 测试 | `test/responses-terminal.test.ts` |
 
-| INV-21 | 原生工具定义参与请求快照与指纹，驱动只交付完整且已声明的调用；Responses 与 Chat 的调用/回执逐一匹配，已绑定的结果正文原样进入工具回包并只发送一次，保留缓存断点，未绑定时使用原回执；延续状态不能隐藏额外动作；请求估算文本的 UTF-8 字节分项可加总。已知编码的路由用无图真实输入校准 BPE 与附加开销；已见长度内比较覆盖全部样本的增长与固定开销上界，范围外不外推趋势，保留文本计数下界、10% 余量与独立不透明容量，编译器不二次缩小；超窗重置且旧代迟到用量不恢复校准，真实用量独立记录 | 测试 | `test/native-tools.test.ts`、`test/input-estimator.test.ts` |
+| INV-21 | 原生工具定义参与 live 请求与内容指纹，持久审计仅保留有界元数据；驱动只交付完整且已声明的调用。Responses 与 Chat 的调用/回执逐一匹配，已绑定的结果正文原样进入工具回包并只发送一次，保留缓存断点，未绑定时使用原回执；延续状态不能隐藏额外动作；请求估算文本的 UTF-8 字节分项可加总。已知编码的路由用无图真实输入校准 BPE 与附加开销；已见长度内比较覆盖全部样本的增长与固定开销上界，范围外不外推趋势，保留文本计数下界、10% 余量与独立不透明容量，编译器不二次缩小；超窗重置且旧代迟到用量不恢复校准，真实用量独立记录 | 测试 | `test/native-tools.test.ts`、`test/input-estimator.test.ts`、`test/act-compiler.test.ts` |
 
 | INV-22 | SDK 的有界 JSON responseBody 中永久失败机器码优先于可重试 HTTP 状态；客户端收到服务端错误文案，未知或无效正文与请求字段不被序列化进诊断 | 测试 | `test/stream-interruption.test.ts` |
+
+| INV-23 | 模型选择只必填供应商与模型；类型入口和 unknown 入口均从当次系统配置解析未覆盖的凭据与地址，单次覆盖不改写配置，停用或缺失供应商仍拒绝执行；环境与目录默认值接受缺席覆盖 | 测试 | `spec/acceptance.test.ts` |

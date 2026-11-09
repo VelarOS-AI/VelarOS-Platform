@@ -2,12 +2,10 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 20 种合同投影、108 个投影操作、63 项去重后的用法。系统包 `velaros:system` 有 7 个成员（modules、environment、programs、executions、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 18 种合同投影、106 个投影操作、61 项去重后的用法。系统包 `velaros:system` 有 7 个成员（modules、environment、programs、executions、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
-| [runtime/ — completion-validation](runtime/README.md) | `execute` | 完成复核作用域，在本次固定文件副本上执行有界断言 | [completion-validation-template.js](runtime/completion-validation-template.js) |
-| [runtime/ — completion-evidence](runtime/README.md) | `retrieve` | 完成复核作用域，生成合同绑定原生只读接收门 | [completion-evidence-template.js](runtime/completion-evidence-template.js) |
 | [system/ — system-environment](system/README.md) | `list`、`search`、`describe`、`apply`、`rollback` | 宿主绑定持久 npm 环境，沿用会话权限 | [environment-template.js](system/environment-template.js) |
 | [system/ — system-goal](system/README.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
 | [system/ — system-memory-local](system/README.md) | `updateActive`、`list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
@@ -44,8 +42,6 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 
 | 操作 | 允许入口 | 声明效果 | 用途 |
 | --- | --- | --- | --- |
-| `velaros:completion-validation.execute` | `execute` | `write` | 本次复核最多两次。通过 JSON.parse(process.env.VELAR_REVIEW_INPUTS) 取得所选身份对应的只读文件 URL，再 import 或读取。仅临时工作目录可写；网络、子进程和副本外文件不可用，依赖须在所选文件中。回执只证明本次断言；区分产品反例、断言错误和环境缺口。 |
-| `velaros:completion-evidence.retrieve` | `observe`、`execute` | `none` | 一次查询 1..16 项；read.limit 为 1..32000，find.literal 为 1..256 字符，find.limit 为 1..16。一次复核最多 4 批、64 项、131072 正文字节，每批最多 32768 字节；原文读取上限 16777216 字节。按 nextOffset 续读，issue 是缺口；目录元数据不能证明正文正确。 |
 | `system.environment.list` | `observe`、`execute` | `none` | 查看当前版本、直接安装的包和保留的回滚版本；最多直接安装 128 个包，保留最近 16 次发布。 |
 | `system.environment.search` | `observe`、`execute` | `none` | 搜索 npm 包，query 最多 256 字符，limit 默认 10、最多 20。第三方说明作为资料读取。 |
 | `system.environment.describe` | `observe`、`execute` | `none` | 查询包名、版本、Node 要求和依赖。package 最多 256 字符；最多返回 20 个版本，超出时缩小版本范围。 |

@@ -53,7 +53,8 @@ export interface ProviderModelCatalogServiceOptions {
 export interface ProviderModelCatalogApi {
   /** 按远端协议或供应商脚本验证凭据；缺密钥不请求网络，专用运行时返回不支持直接探测。 */
   validateProviderRuntime(
-    request: ValidateProviderRuntimeRequest
+    request: ValidateProviderRuntimeRequest,
+    signal?: AbortSignal
   ): Promise<{ ok: boolean; message: Nullable<string> }>
   /** 列出这个鉴权作用域下的模型；每次调用都强制刷新一次快照。 */
   listProviderModels(
@@ -90,8 +91,10 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
   }
 
   public async validateProviderRuntime(
-    request: ValidateProviderRuntimeRequest
+    request: ValidateProviderRuntimeRequest,
+    signal?: AbortSignal
   ): Promise<{ ok: boolean; message: Nullable<string> }> {
+    signal?.throwIfAborted()
     const preset = this.getProviderPreset(request.provider)
     if (
       !canListRemoteProviderModels(preset.validationKind) &&
@@ -106,14 +109,14 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     try {
       return await timers.withTimeout(
         this.timeoutMs,
-        async (signal) => {
+        async (operationSignal) => {
           if (preset.validationKind === 'provider-script') {
             if (!this.providerScriptRegistry)
               return { ok: false, message: `${preset.label} provider script 未注入。` }
-            return this.providerScriptRegistry.validateProviderRuntime({
-              ...resolvedRequest,
-              baseURL,
-            })
+            return this.providerScriptRegistry.validateProviderRuntime(
+              { ...resolvedRequest, baseURL },
+              operationSignal
+            )
           }
           const probe = createProviderValidationRequest(
             resolvedRequest,
@@ -124,7 +127,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
           const response = await this.fetch(probe.url, {
             method: 'GET',
             headers: [...probe.headers],
-            signal,
+            signal: operationSignal,
           })
           if (response.ok) {
             await response.body?.cancel()
@@ -139,9 +142,10 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
             ),
           }
         },
-        { label: `model.provider.validate:${request.provider}` }
+        { label: `model.provider.validate:${request.provider}`, signal }
       )
     } catch (error) {
+      signal?.throwIfAborted()
       if (
         error instanceof DOMException &&
         (error.name === 'AbortError' || error.name === 'TimeoutError')
@@ -232,7 +236,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     }
 
     if (preset.validationKind === 'provider-script')
-      return this.listProviderScriptModels(resolvedRequest, preset, fetchedAt)
+      return this.listProviderScriptModels(resolvedRequest, preset, fetchedAt, signal)
 
     if (!canListRemoteProviderModels(preset.validationKind))
       return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
@@ -284,7 +288,8 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
   private async listProviderScriptModels(
     request: ListProviderModelsRequest,
     preset: ModelProviderPreset,
-    fetchedAt: number
+    fetchedAt: number,
+    signal?: AbortSignal
   ): Promise<ProviderModelCatalog> {
     if (!this.providerScriptRegistry?.supportsProvider(request.provider))
       return createEmptyRemoteCatalog(
@@ -294,10 +299,10 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       )
 
     try {
-      const models = await this.providerScriptRegistry.listProviderModels({
-        ...request,
-        baseURL: this.providerCollection.resolveBaseURL(request),
-      })
+      const models = await this.providerScriptRegistry.listProviderModels(
+        { ...request, baseURL: this.providerCollection.resolveBaseURL(request) },
+        signal
+      )
       if (isEmpty(models))
         return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
 
@@ -311,6 +316,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
         fetchedAt,
       }
     } catch (error) {
+      signal?.throwIfAborted()
       return createEmptyRemoteCatalog(request.provider, fetchedAt, AppError.getMessage(error))
     }
   }

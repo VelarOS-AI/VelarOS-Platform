@@ -47,8 +47,8 @@ import { ModelAdapter } from './ModelAdapter'
  *    `helpers.createOpenAI.constructor('return process')()` 拿回宿主 realm，隔离等于没有。
  * 3. **JSON 单向搬运**——跨边界只传 JSON 可序列化的值，且**在对侧 realm 内**做 parse/stringify。
  *    直接传对象引用会把宿主原型链一起递过去。
- * 4. **执行墙**——`Script.runInContext` 的 timeout 只能打断同步死循环；事后还有一道时长复核，
- *    兜住"timeout 没能生效"的情形（§0.1 条三）。
+ * 4. **执行墙**——上传适配器的工厂与 embedding hook 都是同步合同；上下文的 `afterEvaluate`
+ *    让排队的 Promise jobs 与同步代码共用 `Script.runInContext` 的 timeout，返回后再复核实际时长。
  *
  * **与 `ProviderScriptRegistry` 的对照（别把两者混为一谈）**：那边是开发者显式登记的脚本，
  * 用 `runInThisContext` 以**宿主全权**执行；这边是普通用户上传的，所以必须沙箱。

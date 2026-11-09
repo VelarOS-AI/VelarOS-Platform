@@ -1,11 +1,37 @@
-import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
 import type { SandboxManifest } from '../types/mirror'
-import { applyMirrorChanges, diffMirror, scanTree } from '../utils/mirror'
+import { applyMirrorChanges, diffMirror, mirrorTree, scanTree } from '../utils/mirror'
+
+test.skipIf(process.platform === 'win32')('符号链接也受同一文件数量上限约束', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sandbox-link-limit-'))
+  const source = join(directory, 'source')
+  const root = join(directory, 'mirror')
+  try {
+    await mkdir(source)
+    await mkdir(root)
+    const target = join(directory, 'target')
+    await writeFile(target, 'untouched')
+    await symlink(target, join(source, 'first'))
+    await symlink(target, join(source, 'second'))
+    const failure = await mirrorTree(source, root, {
+      ignored: 'copy',
+      shouldSkip: async () => false,
+      limits: { files: 1, bytes: 1000 },
+    }).then(
+      () => null,
+      (error: unknown) => error
+    )
+    expect(failure).toMatchObject({ code: 'VALIDATION' })
+    expect(await readFile(target, 'utf8')).toBe('untouched')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 for (const changed of ['mirror', 'source'] as const) {
   test(`same-size same-time ${changed} changes are not hidden by metadata`, async () => {
@@ -21,7 +47,7 @@ for (const changed of ['mirror', 'source'] as const) {
         await utimes(join(dir, 'note.txt'), time, time)
       }
       const manifest = {
-        version: 1,
+        version: 2,
         record: { id: 'fixture', source, root },
         files: await scanTree(source),
         mirror: await scanTree(root),

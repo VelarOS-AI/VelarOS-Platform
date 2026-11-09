@@ -9,7 +9,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnRequest } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
-import { modelProviderRetry, modelRequestDispatcher } from '@velaros-ai/model'
+import { modelRequestDispatcher } from '@velaros-ai/model'
 
 import { ModelToolLimits } from '../contract/constants.js'
 import type { ModelBudgetPort, ModelBudgetSettlement } from '../types/model-budget.js'
@@ -237,11 +237,13 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       parent?.binding.deadline ?? Infinity,
       this.options.deadline(parentSessionId) ?? Infinity
     )
+    const rootTaskId = (await this.options.storage.loadMetadata(rootSessionId))?.task?.id
+    if (!rootTaskId) throw new AppError('MODEL_TOOL_SCOPE', '根会话没有活动逻辑任务')
     const binding: ModelToolBinding = {
       sessionId,
       parentSessionId,
       rootSessionId,
-      rootTaskId: (await this.options.storage.load(rootSessionId))?.task?.id,
+      rootTaskId,
       kind,
       depth,
       deadline,
@@ -283,23 +285,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
           try {
             for (const view of ancestors) {
               combined.throwIfAborted()
-              for (;;) {
-                try {
-                  await view.reserveModel(
-                    role,
-                    tokens,
-                    requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
-                  )
-                  break
-                } catch (error) {
-                  if (!requestId || (error as { code?: string }).code !== 'MODEL_RATE') throw error
-                  await modelProviderRetry.wait(
-                    (error as { retryAfterMs?: number }).retryAfterMs ??
-                      ActRuntimeTuning.rateRetryMs,
-                    combined
-                  )
-                }
-              }
+              await view.reserveModel(role, tokens, { requestId, taskId: taskIds.get(view)! })
               reserved.push(view)
             }
             combined.throwIfAborted()
@@ -308,16 +294,15 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             const failures: unknown[] = [error]
             for (const view of reserved.reverse())
               try {
-                await view.releaseModel(
-                  role,
-                  tokens,
-                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
-                )
+                await view.releaseModel(role, tokens, { requestId, taskId: taskIds.get(view)! })
               } catch (release) {
                 Log.tag('ActRuntime').debug('ModelToolRuntime 已进入异常处理或降级分支')
                 failures.push(release)
               }
-            if (failures.length > 1) throw new AggregateError(failures, '祖先预算预留回收失败')
+            if (failures.length > 1)
+              throw AppError.withFields('UNAVAILABLE', '祖先预算预留回收失败', {
+                errors: [...failures],
+              })
             throw error
           }
         },
@@ -333,7 +318,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先收尾占位转交失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先收尾占位转交失败', {
+              errors: [...failures],
+            })
         },
         dispatchModel: async (requestId) => {
           const failures = (
@@ -342,7 +330,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先模型派发登记失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先模型派发登记失败', {
+              errors: [...failures],
+            })
         },
         releaseModel: async (role, tokens, requestId, confirmedNotDispatched) => {
           const failures = (
@@ -351,17 +342,20 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
                 view.releaseModel(
                   role,
                   tokens,
-                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined,
+                  { requestId, taskId: taskIds.get(view)! },
                   confirmedNotDispatched
                 )
               )
             )
           ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
           if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先预算归还失败')
+          if (!isEmpty(failures))
+            throw AppError.withFields('UNAVAILABLE', '祖先预算归还失败', {
+              errors: [...failures],
+            })
         },
         recordUsage: async (input, output, requestId) => {
-          if (requestId && binding.rootTaskId) {
+          {
             const receipt: ModelBudgetSettlement = {
               requestId,
               rootSessionId,
@@ -393,19 +387,6 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             }
             return
           }
-          const failures = (
-            await Promise.allSettled(
-              ancestors.map((view) =>
-                view.recordUsage(
-                  input,
-                  output,
-                  requestId ? { requestId, taskId: taskIds.get(view)! } : undefined
-                )
-              )
-            )
-          ).flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
-          if (failures.length === 1) throw failures[0]
-          if (!isEmpty(failures)) throw new AggregateError(failures, '祖先用量结算失败')
         },
       },
       close: () => {
@@ -523,7 +504,10 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       result.status === 'rejected' ? [result.reason] : []
     )
     if (failures.length === 1) throw failures[0]
-    if (!isEmpty(failures)) throw new AggregateError(failures, '祖先用量结算失败，持久回执可重试')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '祖先用量结算失败，持久回执可重试', {
+        errors: [...failures],
+      })
     const context = createContextRuntime({
       sessionId: receipt.rootSessionId,
       storage: this.options.storage,

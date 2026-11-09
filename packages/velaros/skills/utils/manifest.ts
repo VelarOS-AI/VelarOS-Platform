@@ -129,24 +129,7 @@ export function skillInstructionsManifest(source: string): unknown {
 
 /** 索引格式在磁盘边界核验，不接受额外行为或未声明字段。 */
 export function parseSkillIndex(value: unknown): SkillIndex {
-  // 迁移已持久化的 v1 索引：安装内容保留，会话加载由显式选择负责。
-  let source = value
-  if (isObject(value) && 'version' in value && value.version === 1) {
-    const legacy = Index.extend({
-      version: z.literal(1),
-      skills: z.array(
-        Index.shape.skills.element.extend({ enabled: z.boolean(), grants: z.array(z.string()) })
-      ),
-    }).safeParse(value)
-    if (!legacy.success)
-      throw new AppError('VALIDATION', `Skill 安装索引无效：${legacy.error.message}`)
-    source = {
-      ...legacy.data,
-      version: 2,
-      skills: legacy.data.skills.map(({ enabled: _enabled, grants: _grants, ...record }) => record),
-    }
-  }
-  const parsed = Index.safeParse(source)
+  const parsed = Index.safeParse(value)
   if (!parsed.success)
     throw new AppError('VALIDATION', `Skill 安装索引无效：${parsed.error.message}`)
   if (

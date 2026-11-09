@@ -1,4 +1,5 @@
 import { browserLoginDetectionScriptFragment } from './login-detection'
+import { browserElementSelector } from './selector'
 
 /** 提取页面标题、正文、标题、链接、动作和表单字段。 */
 export function buildInspectionScript(args: {
@@ -139,37 +140,7 @@ ${browserLoginDetectionScriptFragment}
       }
       return ref
     }
-    const buildCssPath = (node) => {
-      if (!isElementNode(node)) return null
-      const id = node.getAttribute('id')
-      if (id) return '#' + escapeCss(id)
-      for (const attr of ['data-testid', 'data-test', 'data-qa']) {
-        const value = node.getAttribute(attr)
-        if (value) return node.tagName.toLowerCase() + '[' + attr + '="' + value.replace(/"/g, '\\\\"') + '"]'
-      }
-      const name = node.getAttribute('name')
-      if (name) return node.tagName.toLowerCase() + '[name="' + name.replace(/"/g, '\\\\"') + '"]'
-      const ariaLabel = node.getAttribute('aria-label')
-      if (ariaLabel) return node.tagName.toLowerCase() + '[aria-label="' + ariaLabel.replace(/"/g, '\\\\"') + '"]'
-      const href = isHtmlAnchorElement(node) ? node.getAttribute('href') : null
-      if (href) return 'a[href="' + href.replace(/"/g, '\\\\"') + '"]'
-
-      const parts = []
-      let current = node
-      while (current && isElementNode(current) && parts.length < 4) {
-        const parent = current.parentElement
-        const tagName = current.tagName.toLowerCase()
-        if (!parent) {
-          parts.unshift(tagName)
-          break
-        }
-        const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName)
-        const index = siblings.indexOf(current) + 1
-        parts.unshift(siblings.length > 1 ? tagName + ':nth-of-type(' + index + ')' : tagName)
-        current = parent
-      }
-      return parts.join(' > ') || null
-    }
+    const buildCssPath = ${browserElementSelector.toString()}
     const buildTarget = (node, role, text, frame = null) => {
       if (!isElementNode(node)) return null
       const attributes = {}

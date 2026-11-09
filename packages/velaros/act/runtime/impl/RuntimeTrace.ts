@@ -32,8 +32,6 @@ import type {
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
-  ActVerificationAttemptSummary,
-  ActVerificationCostSummary,
   TraceChildPhase,
 } from '../types/trace.js'
 import type { TraceReadState } from '../types/trace-read.js'
@@ -42,11 +40,7 @@ import {
   executionOutcome,
   executionProcessOutput,
 } from '../utils/execution-outcome.js'
-import {
-  modelAccounting,
-  summarizeVerificationAttempt,
-  summarizeVerificationCosts,
-} from '../utils/trace-accounting.js'
+import { modelAccounting } from '../utils/trace-accounting.js'
 import {
   childAnswerText,
   summarizeInvocation,
@@ -58,6 +52,8 @@ import { ActRuntimeTuning } from '../utils/tuning.js'
 export interface RuntimeTraceApi {
   /** 按持久归属读取根会话或已关闭支线。 */
   page(input?: ActTraceQuery): Promise<ActTracePage>
+  /** 只读当前任务的支线目录，不加载模型请求与历史正文。 */
+  branches(): Promise<ActTracePage['branches']>
   /** 在当前会话内解析模型回合，并按总预算读取证据。 */
   read(turnId: string, maxChars?: number): Promise<ActTurnTrace>
 }
@@ -71,6 +67,31 @@ export class RuntimeTrace implements RuntimeTraceApi {
     private readonly storage: ContextStorage,
     private readonly journal: ContextInvocationJournalApi
   ) {}
+
+  public async branches(): Promise<ActTracePage['branches']> {
+    const root = await this.storage.selectSnapshot(this.sessionId, [
+      { titlePrefix: 'model-tool:node:', latestPerTitle: true },
+    ])
+    const bindings = await this.readBindings(root?.records ?? [])
+    return bindings.filter((item) => item.rootTaskId === root?.metadata.task?.id)
+  }
+
+  private async readBindings(records: readonly ContextRecord[]): Promise<ModelToolBinding[]> {
+    const nodes = [
+      ...new Map(
+        records
+          .filter((record) => record.title.startsWith('model-tool:node:'))
+          .map((record) => [record.title, record])
+      ).values(),
+    ]
+    const bindings: ModelToolBinding[] = []
+    for (const record of nodes) {
+      const body = await this.storage.get(this.sessionId, record.objectId)
+      if (isNull(body)) throw new AppError('NOT_FOUND', '模型工具归属记录原文缺失')
+      bindings.push(JSON.parse(body))
+    }
+    return bindings
+  }
 
   public async page(input: ActTraceQuery = {}): Promise<ActTracePage> {
     const {
@@ -101,26 +122,14 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 同步存储的 async 方法只产生微任务；每页先让 IO 和取消回调得到运行机会。
     await TimerScope.sleep(0)
     let root: Nullable<ContextState>
-    if (sessionId !== this.sessionId && this.storage.selectSnapshot) {
+    if (sessionId !== this.sessionId) {
       // 支线只需要根的当前归属目录，不能为每一页重复解析根的全部历史。
       const selected = await this.storage.selectSnapshot(this.sessionId, [
         { titlePrefix: 'model-tool:node:', latestPerTitle: true },
       ])
       root = selected ? { ...selected.metadata, records: selected.records } : null
     } else root = await this.storage.load(this.sessionId)
-    const nodes = [
-      ...new Map(
-        (root?.records ?? [])
-          .filter((record) => record.title.startsWith('model-tool:node:'))
-          .map((record) => [record.title, record])
-      ).values(),
-    ]
-    const bindings: ModelToolBinding[] = []
-    for (const record of nodes) {
-      const body = await this.storage.get(this.sessionId, record.objectId)
-      if (isNull(body)) throw new AppError('NOT_FOUND', '模型工具归属记录原文缺失')
-      bindings.push(JSON.parse(body))
-    }
+    const bindings = await this.readBindings(root?.records ?? [])
     if (
       sessionId !== this.sessionId &&
       !bindings.some(
@@ -162,11 +171,13 @@ export class RuntimeTrace implements RuntimeTraceApi {
           ...value.invocations,
         ].reduce((sum, item) => sum + (item?.body?.length ?? 0), 0) +
         value.invocations.reduce(
-          (sum, item) => sum + item.summary.input.length + item.summary.output.length,
+          (sum, item) =>
+            sum +
+            item.summary.input.length +
+            item.summary.output.length +
+            (item.summary.projectChange?.diff.length ?? 0),
           0
         ) +
-        (value.requestSummary?.system.length ?? 0) +
-        (value.requestSummary?.messages.length ?? 0) +
         value.executions.reduce(
           (sum, item) => sum + item.source.length + (item.processOutput?.length ?? 0),
           0
@@ -195,8 +206,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
           inflight: turns.filter((turn) => turn.modelAccounting.usage.coverage === 'inflight')
             .length,
         },
-        verificationScope: 'session',
-        verificationCost: await this.verificationCost(snapshot),
       },
       nextAfter: requests.some((record) => record.sequence > cursor) ? cursor : null,
       snapshotVersion: toNullable(snapshot?.version),
@@ -307,45 +316,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
     await TimerScope.sleep(0)
     const snapshot = await this.storage.load(this.sessionId)
     return this.readSnapshot(turnId, maxChars, snapshot)
-  }
-
-  private async verificationCost(
-    snapshot: Nullable<ContextState>
-  ): Promise<ActVerificationCostSummary> {
-    const attempts = new Map<string, Array<{ value: unknown; ref: ContextRecord['ref'] }>>()
-    let incomplete = false
-    for (const record of snapshot?.records ?? []) {
-      if (!record.title.startsWith('task:verification:')) continue
-      const identity = /^(task:verification:.+):(started|settled|late-result)$/u.exec(
-        record.title
-      )?.[1]
-      const body = await this.storage.get(record.ref.sessionId, record.objectId)
-      if (!identity || isNull(body)) {
-        incomplete = true
-        continue
-      }
-      let value: unknown
-      try {
-        value = JSON.parse(body)
-      } catch (error) {
-        incomplete = true
-        this.log.debug('核查总账事实正文无法解释', {
-          ref: record.ref,
-          error: AppError.getMessage(error),
-        })
-        continue
-      }
-      const events = attempts.get(identity) ?? []
-      events.push({ value, ref: record.ref })
-      attempts.set(identity, events)
-    }
-    const costs: ActVerificationCostSummary[] = []
-    for (const events of attempts.values()) {
-      const summary = summarizeVerificationAttempt(events)
-      if (!summary || summary.records.length !== events.length) incomplete = true
-      if (summary) costs.push(summary.cost)
-    }
-    return summarizeVerificationCosts(costs, incomplete)
   }
 
   private async readSnapshot(
@@ -492,44 +462,92 @@ export class RuntimeTrace implements RuntimeTraceApi {
           }
       }
     }
-    const material = request.request?.materials?.findLast(
-      (item: { origin: string }) => item.origin === 'runtime-view'
-    )
-    if (material) {
-      const saved = JSON.parse(material.text)
-      // 只关联实际请求选中的帧，容量试探产生的其他帧不代表本次展示预算。
-      if (isString(saved.frameId))
-        select(
-          records.findLast(
-            (record) =>
-              record.title === `context:frame:${saved.frameId}` &&
-              record.sequence < requestRecord.sequence
-          )
-        )
-      const frame = saved.partitions
-        ? {
-            goals: saved.partitions.task.goals,
-            observation: saved.partitions.observation,
-            results: saved.partitions.recent.results,
+    if (request.frameRef?.sessionId === this.sessionId) {
+      // 只关联实际完成发布的帧引用；容量试算与迟到发布都不能冒充本次帧。
+      const frameRecord = byRef(request.frameRef.id)
+      if (
+        frameRecord &&
+        frameRecord.title.startsWith('context:frame:') &&
+        frameRecord.sequence < requestRecord.sequence
+      ) {
+        select(frameRecord)
+        const body = await raw(frameRecord)
+        if (!isNull(body)) {
+          const frame = JSON.parse(body)
+          if (frameRecord.title !== `context:frame:${frame.frameId}`)
+            throw new AppError('INVARIANT', '模型请求的帧引用与真实帧身份不一致')
+          select(byRef(frame.input?.latest?.id))
+          if (frame.input)
+            for (const record of records)
+              if (
+                record.kind === 'user' &&
+                record.sequence > frame.input.after &&
+                record.sequence <= frame.input.through
+              )
+                select(record)
+          for (const entry of frame.entries) select(byRef(entry.ref))
+          observed = frame.observation
+          select(byRef(frame.observation?.sourceRef))
+          select(byRef(frame.observation?.resultRef))
+          const historySelection = byRef(frame.observation?.historySelectionRef)
+          if (historySelection?.title === 'observation:selection') {
+            select(historySelection)
+            const selection = await raw(historySelection)
+            if (!isNull(selection)) {
+              const request = JSON.parse(selection)
+              if (request.kind === 'read' && isString(request.snapshotId)) {
+                const snapshot = byRef(request.snapshotId)
+                if (snapshot?.title === 'observation:snapshot') {
+                  select(snapshot)
+                  const transition = await raw(snapshot)
+                  if (!isNull(transition)) {
+                    const saved = JSON.parse(transition)
+                    for (const ref of [saved.sourceRef, saved.captureRef, saved.resultRef])
+                      if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
+                    const content =
+                      saved.contentRef?.sessionId === this.sessionId
+                        ? byRef(saved.contentRef.id)
+                        : undefined
+                    if (content?.title.startsWith('observation:content:')) {
+                      select(content)
+                      const body = await raw(content)
+                      if (!isNull(body)) {
+                        const locator = JSON.parse(body).locator
+                        const ref =
+                          locator?.kind === 'capture' ? locator.captureRef : locator?.resultRef
+                        if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
-        : saved
-      for (const goal of frame.goals ?? []) select(byRef(goal.record?.ref?.id))
-      observed = frame.observation
-      select(byRef(frame.observation?.sourceRef))
-      select(byRef(frame.observation?.resultRef))
-      const capture = frame.observation?.freshness?.snapshot
-      if (isString(capture?.captureExecutionId)) {
-        executions.add(capture.captureExecutionId)
-        select(byRef(capture.captureResultRef))
-        select(
-          records.find(
-            (record) => record.title === `script:execution:${capture.captureExecutionId}`
-          )
-        )
-      }
-      for (const result of frame.results ?? []) {
-        select(byRef(result.ref))
-        select(byRef(result.sourceRef))
+          const snapshot = byRef(frame.observation?.snapshotId)
+          if (snapshot?.title === 'observation:snapshot') select(snapshot)
+          for (const ref of frame.observation?.dynamicExchangeRefs ?? [])
+            if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
+          const capture = frame.observation?.freshness?.snapshot
+          if (isString(capture?.captureExecutionId)) {
+            executions.add(capture.captureExecutionId)
+            select(byRef(capture.captureResultRef))
+            select(
+              records.find(
+                (record) => record.title === `script:execution:${capture.captureExecutionId}`
+              )
+            )
+          }
+          for (const record of records)
+            if (
+              record.title.startsWith('context:request-proof:') &&
+              record.sources.some(
+                (source) => source.sessionId === this.sessionId && source.id === frameRecord.ref.id
+              )
+            )
+              select(record)
+        }
+      } else if (frameRecord) {
+        gaps.push(`请求帧尚未发布或引用类型错误：${request.frameRef.id}`)
       }
     }
     // 首请求前已接受的引导属于本次运行的前序事实，不能因请求窗口下界丢失。
@@ -597,32 +615,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
       }
     for (const record of records)
       if ([...executions].some((id) => record.title === `script:${id}:result`)) select(record)
-    // 核查 attempt 归最初 started 的请求窗口；迟到阶段始终回到原 attempt，不归到当前任务或当前请求。
-    const verification: ActVerificationAttemptSummary[] = []
-    const verificationStarts = records.filter(
-      (record) =>
-        record.title.startsWith('task:verification:') &&
-        record.title.endsWith(':started') &&
-        record.sequence > requestRecord.sequence &&
-        record.sequence < boundary
-    )
-    for (const start of verificationStarts) {
-      const prefix = start.title.slice(0, -'started'.length)
-      const events: Array<{ record: ContextRecord; value: unknown }> = []
-      for (const record of records.filter((item) => item.title.startsWith(prefix))) {
-        const body = await raw(record)
-        events.push({ record, value: isNull(body) ? undefined : JSON.parse(body) })
-      }
-      const summary = summarizeVerificationAttempt(
-        events.map(({ record, value }) => ({ ref: record.ref, value }))
-      )
-      if (!summary) {
-        gaps.push(`核查尝试无法解释：${start.ref.id}`)
-        continue
-      }
-      verification.push(summary)
-      for (const { record } of events) select(record)
-    }
     // 请求显式关联准备快照；旧请求没有来源时不猜测最近清单。
     for (const ref of requestRecord.sources)
       if (ref.sessionId === this.sessionId) select(byRef(ref.id))
@@ -661,9 +653,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
       // 正文预算耗尽后只核对存在性；不能为返回空字符串再加载整份历史租约。
       // 身份、状态等解析所需的 raw 仍完整读取，已有缓存也保留其缺失事实。
-      const presenceOnly = remaining === 0 && !cache.has(record.ref.id) && !!this.storage.has
+      const presenceOnly = remaining === 0 && !cache.has(record.ref.id)
       const body = presenceOnly
-        ? (await this.storage.has!(this.sessionId, record.objectId))
+        ? (await this.storage.has(this.sessionId, record.objectId))
           ? ''
           : null
         : await raw(record)
@@ -687,15 +679,13 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 程序记录里的源码，按本页剩下的正文预算截取；记录读不出源码时记一处缺口，不让整页读取失败
     const programSource = async (
       ref: Optional<string>
-    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated' | 'language'>> => {
+    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated'>> => {
       const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
       let text: unknown = ''
-      let language: 'node' | 'shell' = 'node'
       if (!isNull(program))
         try {
-          const data = JSON.parse(program) as { source?: unknown; language?: unknown }
+          const data = JSON.parse(program) as { source?: unknown }
           text = data.source
-          if (data.language === 'shell') language = 'shell'
         } catch (error) {
           this.log.debug('程序记录读不出源码', { ref, error: AppError.getMessage(error) })
           gaps.push(`程序记录读不出源码：${ref}`)
@@ -706,7 +696,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
       return {
         source,
         sourceTruncated: source.length < full.length,
-        language,
       }
     }
     // 执行摘要跟踪异步任务的最新事实；历史请求帧仍只关联当时的租约记录。
@@ -754,16 +743,21 @@ export class RuntimeTrace implements RuntimeTraceApi {
       })
     }
     let registration: Nullable<ActObservationRegistration> = null
-    if (registered && ['updated', 'unchanged', 'cleared', 'rejected'].includes(registered.status)) {
+    if (
+      registered &&
+      ['updated', 'unchanged', 'cleared', 'rejected', 'selected'].includes(registered.status)
+    ) {
       const status = registered.status as ActObservationRegistration['status']
       registration = {
         status,
         // 没登记上的控制回执带着诊断，与没过检查的执行同一套原因
         failure: status === 'rejected' ? executionOutcome(registered, []).failure : null,
-        ...(status === 'cleared'
+        ...(status === 'cleared' || status === 'selected'
           ? { source: '', sourceTruncated: false }
           : await programSource(registered.sourceRef ?? registered.draftRef)),
       }
+      if (status === 'selected')
+        Object.assign(registration, { selectionRef: registered.selectionRef })
     }
     let run: Nullable<ActObservationRun> = null
     const observation = observed?.resultRef ? recordById.get(observed.resultRef) : undefined
@@ -875,10 +869,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
         })
       }
     }
-    // 展示摘要先分配预算，原始请求、历史租约和重复 JSON 最后读取。
+    // 原始结果先分配正文预算，元数据和历史租约最后投影。
     // 截图等大正文不能挤掉已成功执行的 stdout、调用结果与子任务回答。
-    const requestSummary = summarizeModelRequest(request, remaining, fullContent)
-    remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
+    const requestSummary = summarizeModelRequest(request)
     const projectedInvocations = invocations.map((invocation) => {
       const record = journal
         .get(invocation.executionId)!
@@ -910,10 +903,6 @@ export class RuntimeTrace implements RuntimeTraceApi {
         firstTextMs: toNullable(decoded?.timing?.firstTextMs),
       },
       modelAccounting: accounting,
-      verification: {
-        attempts: verification,
-        cost: summarizeVerificationCosts(verification.map((attempt) => attempt.cost)),
-      },
       request: requestTrace,
       requestSummary,
       response: responseTrace,

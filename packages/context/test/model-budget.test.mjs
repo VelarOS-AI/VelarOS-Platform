@@ -147,50 +147,6 @@ test('reopening retains unknown requests and permits their later settlement', as
   assert.equal((await reopened.inspect()).usage.budgetTokens, 100)
 })
 
-test('settlement adjusts the original hourly bucket, never the current request bucket', async (t) => {
-  t.mock.timers.enable({ apis: ['Date'], now: 0 })
-  const f = await fixture(t, { modelTokens: 1000, modelTokensPerHour: 100 })
-  const a = await f.reserve('previous', 70)
-  await f.view.dispatchModel(a)
-  t.mock.timers.tick(3_600_000)
-  await f.reserve('current', 30)
-  await f.view.recordUsage(20, 0, a)
-  const usage = (await f.view.inspect()).usage
-  assert.deepEqual(usage.hourly, { start: 3_600_000, tokens: 30, previous: 20 })
-  await f.reserve('next', 50)
-})
-
-test('old hourly settlement and release do not refund unrelated current reservations', async (t) => {
-  t.mock.timers.enable({ apis: ['Date'], now: 0 })
-  const f = await fixture(t, { modelTokens: 1000, modelTokensPerHour: 100 })
-  const a = await f.reserve('old', 40)
-  const b = await f.reserve('old-unsent', 30)
-  await f.view.dispatchModel(a)
-  t.mock.timers.tick(7_200_000)
-  await f.reserve('current', 80)
-  await f.view.recordUsage(20, 0, a)
-  await f.view.releaseModel('main', 30, b)
-  assert.deepEqual((await f.view.inspect()).usage.hourly, {
-    start: 7_200_000,
-    tokens: 80,
-    previous: 0,
-  })
-})
-
-test('legacy aggregate calls retain conservative accounting alongside identified calls', async (t) => {
-  const f = await fixture(t, { modelTokens: 200 })
-  await f.view.reserveModel('main', 70)
-  await f.view.recordUsage(25, 0)
-  await f.measured('identified', 80, 10)
-  assert.equal((await f.view.inspect()).usage.budgetTokens, 80)
-  await f.view.reserveModel('context', 100)
-  assert.equal((await f.view.inspect()).usage.budgetTokens, 180)
-  await f.view.releaseModel('context', 100)
-  assert.equal((await f.view.inspect()).usage.budgetTokens, 80)
-  await f.reserve('next', 120)
-  assert.equal((await f.view.inspect()).usage.unmeasuredCalls, 1)
-})
-
 test('usage requires a dispatched request and unknown identities cannot alter counters', async (t) => {
   const f = await fixture(t)
   const request = await f.reserve('reserved', 50)
@@ -216,7 +172,6 @@ test('finalization holds transfer atomically to a physical request without freei
   let state = await f.view.inspect()
   assert.equal(state.usage.contextCalls, 1)
   assert.equal(state.usage.budgetTokens, 70)
-  assert.equal(state.usage.hourly.tokens, 70)
   await assert.rejects(f.reserve('other', 1), { code: 'MODEL_BUDGET' })
   await assert.rejects(f.view.transferModelReservation(hold, 'second'), {
     code: 'MODEL_REQUEST_CONFLICT',
@@ -226,7 +181,6 @@ test('finalization holds transfer atomically to a physical request without freei
   state = await f.view.inspect()
   assert.equal(state.usage.contextCalls, 1)
   assert.equal(state.usage.budgetTokens, 15)
-  assert.equal(state.usage.hourly.tokens, 15)
   await assert.rejects(f.view.releaseModel('context', 70, hold), {
     code: 'MODEL_REQUEST_DISPATCHED',
   })

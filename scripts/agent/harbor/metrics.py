@@ -312,221 +312,71 @@ def request_metrics(calls):
     }
 
 
-def history_cache_metrics(turns):
-    """Measure body changes in recorded provider requests, not estimated cache tokens."""
-    previous = None
-    transitions, rewritten, retirements = 0, 0, 0
-    prefix_chars = []
-    for turn in turns:
-        body = (turn.get("request") or {}).get("body")
-        provider = json.loads(body).get("providerRequest") if body else None
-        if not provider or not isinstance(provider.get("messages"), list):
-            previous = None
-            continue
-        messages = [{"role": "system", "content": provider.get("system", "")}] + provider["messages"]
-        content = [(m.get("role"), m.get("content")) for m in messages]
-        historical = {}
-        for _, text in content:
-            if not isinstance(text, str) or not text.startswith("{"):
-                continue
-            try:
-                header = json.loads(text.split("\n", 1)[0])
-            except (json.JSONDecodeError, TypeError):
-                continue
-            ref = header.get("ref") if isinstance(header, dict) else None
-            if isinstance(ref, dict) and ref.get("id"):
-                historical[(ref.get("sessionId"), ref["id"])] = (text, header)
-        if previous is not None:
-            transitions += 1
-            length = 0
-            for (role_a, text_a), (role_b, text_b) in zip(previous[0], content):
-                if role_a != role_b or not isinstance(text_a, str) or not isinstance(text_b, str):
-                    break
-                if text_a == text_b:
-                    length += len(text_a)
-                    continue
-                for left, right in zip(text_a, text_b):
-                    if left != right:
-                        break
-                    length += 1
-                break
-            prefix_chars.append(length)
-            for ref in previous[1].keys() & historical.keys():
-                if previous[1][ref][0] != historical[ref][0]:
-                    rewritten += 1
-                    retirements += historical[ref][1].get("reason") == "lease-expired-or-released"
-        previous = (content, historical)
-    return {"measured_transitions": transitions, "historical_body_rewrites": rewritten,
-            "lease_retirements": retirements, "unchanged_prefix_chars": distribution(prefix_chars)}
-
-
-def current_frame_layout(request, provider):
-    """Bind the archived host frame to its recorded compiled provider payload.
-
-    The framing strings belong to the Runtime renderer/compiler contract. Payload
-    text or historical messages cannot establish the current frame's identity.
-    Frozen-renderer semantic equivalence is verified separately by trace audits.
-    """
-    unknown = {"state": "unverified", "frame_id": None, "host_frame_id": None, "display": None,
-               "display_chars": None, "protocol_chars": None, "context_status_chars": None,
-               "current_message_chars": None, "other_current_text_chars": None, "history_chars": None}
-
-    def missing(reason):
-        return {**unknown, "reason": reason}
-
-    def texts(content):
-        if isinstance(content, str):
-            return [content]
-        if isinstance(content, list):
-            return [part["text"] for part in content if isinstance(part, dict) and isinstance(part.get("text"), str)]
-        return []
-
-    if not isinstance(request, dict) or not isinstance(provider, dict):
-        return missing("host_or_provider_request_missing")
-    materials = request.get("materials")
-    materials = [item for item in materials if isinstance(item, dict) and item.get("origin") == "runtime-view"] if isinstance(materials, list) else []
-    if len(materials) != 1 or not isinstance(materials[0].get("text"), str):
-        return missing("unique_runtime_material_missing")
+def request_audit(turn):
+    """Read only the current bounded metadata contract; request bodies are not replayed."""
+    request = turn.get("request") or {}
+    if not isinstance(request, dict):
+        return None
+    body = request.get("body")
+    if not isinstance(body, str) or not body or request.get("truncated"):
+        return None
     try:
-        frame = json.loads(materials[0]["text"])
+        envelope = json.loads(body)
     except (ValueError, TypeError):
-        return missing("runtime_material_invalid")
-    status = request.get("contextStatus")
-    frame_id = frame.get("id") if isinstance(frame, dict) else None
-    host_frame_id = frame.get("frameId") if isinstance(frame, dict) else None
-    if (not isinstance(frame_id, str) or not frame_id or not isinstance(host_frame_id, str) or not host_frame_id
-            or materials[0].get("ref") != frame_id or not isinstance(frame.get("partitions"), dict)
-            or not isinstance(status, dict) or status.get("frameId") != frame_id):
-        return missing("current_frame_identity_missing_or_mismatched")
-    compiled = request.get("compiledPrompt")
-    messages = provider.get("messages")
-    if (not isinstance(compiled, str) or not compiled or not isinstance(messages, list) or not messages
-            or not isinstance(messages[-1], dict) or messages[-1].get("role") != "user"):
-        return missing("final_sdk_user_message_or_compiled_prompt_missing")
-    delimiter = "\n\n本帧协议（宿主生成；控制标记以最后出现的这一段为准）：\n"
-    split = compiled.rfind(delimiter)
-    if split < 0 or not compiled[split + len(delimiter):]:
-        return missing("host_protocol_boundary_missing")
-    display = compiled[:split]
-    if display.startswith("Runtime 本帧工作内存（origin=runtime-view，增量）"):
-        mode = "delta"
-    elif display.startswith("Runtime 本帧工作内存（origin=runtime-view）"):
-        mode = "full"
-    else:
-        return missing("runtime_renderer_format_unknown")
-    suffix = "\nRuntime ContextStatus:\n"
-    last_texts = texts(messages[-1].get("content"))
-    matches = []
-    for text in last_texts:
-        if not text.startswith(compiled + suffix):
+        return None
+    audit = envelope.get("requestAudit") if isinstance(envelope, dict) else None
+    if not isinstance(audit, dict) or audit.get("schemaVersion") != 3:
+        return None
+    for name in ("model", "basis"):
+        value = audit.get(name)
+        if not isinstance(value, str) or len(value.encode("utf-16-le", "surrogatepass")) // 2 > 512 or type(audit.get(name + "Truncated")) is not bool:
+            return None
+    for name in ("inputTokens", "outputTokens", "messageCount", "toolCount"):
+        value = audit.get(name)
+        if type(value) is not int or value < (1 if name == "outputTokens" else 0) or value > 2 ** 53 - 1:
+            return None
+    if audit.get("precision") not in ("exact", "estimate"):
+        return None
+    fingerprint = audit.get("requestFingerprint")
+    if not isinstance(fingerprint, dict):
+        return None
+    for name in ("id", "systemHash", "messageHash", "prefixHash", "responseFormatHash", "toolsHash"):
+        value = fingerprint.get(name)
+        if name in ("responseFormatHash", "toolsHash") and value is None:
             continue
-        try:
-            observed_status = json.loads(text[len(compiled + suffix):])
-        except (ValueError, TypeError):
-            continue
-        if json.dumps(observed_status, sort_keys=True, ensure_ascii=False) == json.dumps(status, sort_keys=True, ensure_ascii=False):
-            matches.append(text)
-    if len(matches) != 1:
-        return missing("recorded_final_provider_payload_missing_or_ambiguous")
-    actual = matches[0]
-    message_chars = sum(map(len, last_texts))
-    return {"state": "verified", "frame_id": frame_id, "host_frame_id": host_frame_id, "display": mode, "reason": None,
-            "display_chars": len(display), "protocol_chars": len(compiled) - split,
-            "context_status_chars": len(actual) - len(compiled), "current_message_chars": message_chars,
-            "other_current_text_chars": message_chars - len(actual),
-            "history_chars": sum(len(text) for message in messages[:-1] if isinstance(message, dict)
-                                 for text in texts(message.get("content")))}
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{16}", value) is None:
+            return None
+    return audit
 
 
-def prompt_layout_metrics(turns):
-    """Count recorded prompt text separately from raw frame partitions and tokens."""
-    provider_sizes, current_frames, system_sizes, other_blocks, partitions, partition_frames = [], [], [], [], {}, []
-    continuation_items, continuation_chars, continuation_tokens, continuation_modes = [], [], [], set()
-    def text_parts(content):
-        if isinstance(content, str):
-            return [content], 0
-        if isinstance(content, list):
-            texts = [block["text"] for block in content if isinstance(block, dict) and isinstance(block.get("text"), str)]
-            return texts, len(content) - len(texts)
-        return [], 0 if content is None else 1
+def request_audit_metrics(turns):
+    """Measure persisted metadata and source identities, never infer absent prompt text."""
+    audits, request_sizes, frame_sizes, seen_frames = [], [], [], set()
     for turn in turns:
-        body = (turn.get("request") or {}).get("body")
-        request = json.loads(body) if body else {}
-        provider = request.get("providerRequest") or {}
-        if not isinstance(provider.get("messages"), list):
+        audit = request_audit(turn)
+        if audit is None:
             continue
-        states = [message["continuation"] for message in provider["messages"]
-                  if isinstance(message.get("continuation"), dict)]
-        continuation_items.append(len(states))
-        continuation_chars.append(sum(len(state.get("data", "")) for state in states if isinstance(state.get("data"), str)))
-        continuation_tokens.append((request.get("estimate") or {}).get("opaqueTokens", 0))
-        for state in states:
-            if state.get("format") != "openai-responses-v1":
+        audits.append(audit)
+        body = turn["request"]["body"]
+        request_sizes.append(len(body.encode("utf-16-le", "surrogatepass")) // 2)
+        reference = json.loads(body).get("frameRef")
+        if not isinstance(reference, dict):
+            continue
+        identity = (reference.get("sessionId"), reference.get("id"))
+        for record in turn.get("records", []):
+            if record.get("ref") != reference or record.get("truncated") or not isinstance(record.get("body"), str) or identity in seen_frames:
                 continue
-            try:
-                mode = json.loads(state["data"]).get("reasoningContext")
-                if isinstance(mode, str):
-                    continuation_modes.add(mode)
-            except (ValueError, TypeError, KeyError, AttributeError):
-                pass
-        texts, unknown = text_parts(provider.get("system"))
-        system_sizes.append(sum(map(len, texts)))
-        for message in provider["messages"]:
-            parts, count = text_parts(message.get("content"))
-            texts.extend(parts)
-            unknown += count
-        provider_sizes.append(sum(map(len, texts)))
-        other_blocks.append(unknown)
-        current = current_frame_layout(request.get("request"), provider)
-        current_frames.append({"turn_id": turn.get("turnId"), **current})
-        host = request.get("request")
-        materials = host.get("materials") if isinstance(host, dict) else None
-        runtime = [item for item in materials if isinstance(item, dict) and item.get("origin") == "runtime-view"] if isinstance(materials, list) else []
-        raw_partitions, partition_reason = None, "unique_runtime_material_missing"
-        if len(runtime) == 1 and isinstance(runtime[0].get("text"), str):
-            try:
-                frame = json.loads(runtime[0]["text"])
-                if isinstance(frame, dict) and isinstance(frame.get("partitions"), dict):
-                    raw_partitions, partition_reason = frame["partitions"], None
-                else:
-                    partition_reason = "runtime_partitions_shape_invalid"
-            except (ValueError, TypeError):
-                partition_reason = "runtime_material_invalid"
-        partition_frames.append({"turn_id": turn.get("turnId"),
-                                 "state": "verified" if raw_partitions is not None else "unverified",
-                                 "reason": partition_reason})
-        if raw_partitions is not None:
-            for name, value in raw_partitions.items():
-                partitions.setdefault(name, []).append(len(json.dumps(value, ensure_ascii=False, separators=(",", ":"))))
-    return {"measured_requests": len(provider_sizes), "unmeasured_requests": len(turns) - len(provider_sizes),
-            "character_unit": "unicode_codepoints",
-            "provider_text_chars": distribution(provider_sizes),
-            "working_frame_text_chars": distribution([frame["display_chars"] for frame in current_frames]),
-            "current_frame": {"verified_requests": sum(frame["state"] == "verified" for frame in current_frames),
-                              "unverified_requests": sum(frame["state"] != "verified" for frame in current_frames),
-                              "evidence_scope": "recorded_compiled_provider_payload",
-                              "display_modes": dict(Counter(frame["display"] for frame in current_frames if frame["state"] == "verified")),
-                              "protocol_text_chars": distribution([frame["protocol_chars"] for frame in current_frames]),
-                              "context_status_text_chars": distribution([frame["context_status_chars"] for frame in current_frames]),
-                              "current_message_text_chars": distribution([frame["current_message_chars"] for frame in current_frames]),
-                              "other_current_text_chars": distribution([frame["other_current_text_chars"] for frame in current_frames]),
-                              "history_text_chars": distribution([frame["history_chars"] for frame in current_frames]),
-                              "frames": current_frames,
-                              "interpretation": "Character counts use Python Unicode codepoints, while Runtime display/result budgets use JavaScript UTF-16 code units. Current display, host protocol, ContextStatus and prior recorded provider message text are separate. Only exact identity-bound compiled provider payloads enter these distributions; unverified frames remain null. This archived compiler snapshot does not alone prove SDK wire delivery or upstream acceptance. Frozen-renderer equivalence and accepted decisions/usage are checked separately."},
-            "system_text_chars": distribution(system_sizes),
-            "non_text_blocks": distribution(other_blocks),
-            "continuation": {"history_items": distribution(continuation_items),
-                             "serialized_chars": distribution(continuation_chars),
-                             "reserved_input_tokens": distribution(continuation_tokens),
-                             "prior_response_reasoning_contexts": sorted(continuation_modes),
-                             "interpretation": "Archived continuation metadata and driver capacity reservation, not separately billed tokens or proof every item was used by the provider."},
-            "raw_partition_json_chars": {name: distribution(sizes) for name, sizes in partitions.items()},
-            "raw_partition_measurement": {"verified_requests": sum(frame["state"] == "verified" for frame in partition_frames),
-                                          "unverified_requests": sum(frame["state"] != "verified" for frame in partition_frames),
-                                          "frames": partition_frames,
-                                          "interpretation": "Only valid archived runtime objects with dictionary partitions enter compact JSON character measurements. Missing, malformed or ambiguous materials retain unverified reasons and no inferred size."},
-            "interpretation": "Recorded Unicode character counts, not token estimates. Raw partition JSON differs from rendered prompt text; non-text payload size is not measured."}
-
+            if not record.get("title", "").startswith("context:frame:"):
+                continue
+            frame_sizes.append(len(record["body"].encode("utf-16-le", "surrogatepass")) // 2)
+            seen_frames.add(identity)
+    return {"measured_requests": len(audits), "unmeasured_requests": len(turns) - len(audits),
+            "input_tokens": distribution([audit["inputTokens"] for audit in audits]),
+            "output_reserve_tokens": distribution([audit["outputTokens"] for audit in audits]),
+            "message_count": distribution([audit["messageCount"] for audit in audits]),
+            "tool_count": distribution([audit["toolCount"] for audit in audits]),
+            "model_request_utf16": distribution(request_sizes), "context_frame_utf16": distribution(frame_sizes),
+            "interpretation": "Bounded v3 compiler metadata and actual persisted UTF-16 body sizes. Frame entries/proofs are measured separately; this does not establish linear growth of the entire database or SDK wire acceptance."}
 
 def agent_metrics(directory):
     traces_path = directory / "agent/traces.json"
@@ -575,37 +425,31 @@ def agent_metrics(directory):
                     "parsed": raw or (previous or {}).get("parsed", {})}
             for execution in turn.get("executions", []):
                 executions[(session_index, execution["executionId"])] = execution
-    contexts, segments, maintenance = [], [], 0
-    result_frames, result_exposures, partial_exposures, reference_exposures = 0, 0, 0, 0
-    omitted_results, visible_sizes, source_sizes = set(), [], []
+    contexts, audits, segments, maintenance = [], [], [], 0
     for kind, session in sessions:
         indices = set()
         for turn in session:
-            request = json.loads(turn["request"]["body"]).get("request", {}) if (turn.get("request") or {}).get("body") else {}
-            context = request.get("contextStatus") or {}
+            audit = request_audit(turn)
+            envelope = json.loads(turn["request"]["body"]) if audit is not None else {}
+            context = envelope.get("context") or {}
             if context:
                 contexts.append(context)
-            for material in request.get("materials", []):
-                if material.get("origin") != "runtime-view":
+            if audit is not None:
+                audits.append(audit)
+            maintenance += kind == "context" or context.get("phase") == "maintenance"
+            reference = envelope.get("frameRef")
+            if not isinstance(reference, dict):
+                continue
+            for record in turn.get("records", []):
+                if record.get("ref") != reference or record.get("truncated") or not isinstance(record.get("body"), str):
                     continue
-                frame = json.loads(material["text"])
-                partitions = frame.get("partitions", {})
-                if "recent" not in partitions:
+                frame = json.loads(record["body"])
+                if record.get("title") != "context:frame:" + str(frame.get("frameId")):
                     continue
-                result_frames += 1
-                results = partitions["recent"].get("results", [])
-                result_exposures += len(results)
-                partial_exposures += sum(r.get("representation") == "excerpt" for r in results)
-                reference_exposures += sum(r.get("bodyIncluded") is False for r in results)
-                omitted_results.update(r["ref"] for r in results if r.get("omitted"))
-                footprint = partitions.get("runtime", {}).get("materialStatus", {}).get("footprint", {})
-                source_sizes.append(footprint.get("leasedResultSources", sum(r.get("size", {}).get("chars", 0) for r in results)))
-                if "leasedResults" in footprint:
-                    visible_sizes.append(footprint["leasedResults"])
-            maintenance += kind == "context" or request.get("mode") == "maintenance"
-            if context.get("segment", {}).get("index") is not None:
-                indices.add(context["segment"]["index"])
-        segments.append(max(0, len(indices) - 1))
+                segment_id = (frame.get("segment") or {}).get("id")
+                if isinstance(segment_id, str):
+                    indices.add(segment_id)
+        segments.append(max(0, len(indices) - 1) if indices else None)
     summaries = [i.get("summary", {}) for i in invocations.values()]
     all_rejected = [json.loads(t["decision"]["body"]) for t in turns
                 if (t.get("decision") or {}).get("body") and json.loads(t["decision"]["body"]).get("status") == "rejected"]
@@ -679,21 +523,15 @@ def agent_metrics(directory):
             "total_response_chars": sum(len(body) for body in response_bodies),
         },
         "context": {
-            "history_cache": [history_cache_metrics(session) for _, session in sessions],
-            "prompt_layout": prompt_layout_metrics(turns),
-            "maintenance_model_calls": maintenance, "observed_segment_transitions": sum(segments),
+            "request_audit": request_audit_metrics(turns),
+            "maintenance_model_calls": maintenance,
+            "observed_segment_transitions": sum(segments) if segments and all(value is not None for value in segments) else None,
             "input_limits": sorted({c["inputLimit"] for c in contexts if "inputLimit" in c}),
-            "peak_estimated_tokens": max((c["inputTokens"] for c in contexts if "inputTokens" in c), default=None),
-            "pressure_frames": sum(c.get("pressure") not in (None, "normal") for c in contexts),
+            "peak_estimated_tokens": max((audit["inputTokens"] for audit in audits), default=None),
+            "pressure_frames": sum(c.get("pressure") not in (None, "normal") for c in contexts) if contexts else None,
             "observed_prepare_seconds": sum((t.get("timing", {}).get("contextMs") or 0) for t in turns) / 1000,
             "preparation_measurements_missing": sum(t.get("timing", {}).get("contextMs") is None for t in turns),
-            "result_visibility": {
-                "frames": result_frames, "exposures": result_exposures,
-                "partial_exposures": partial_exposures, "reference_only_exposures": reference_exposures,
-                "unique_results_with_omissions": len(omitted_results),
-                "peak_visible_leased_chars": max(visible_sizes, default=None),
-                "peak_source_leased_chars": max(source_sizes, default=None),
-            } if result_frames else None,
+
         },
     }
 

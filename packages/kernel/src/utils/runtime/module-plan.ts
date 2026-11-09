@@ -9,8 +9,11 @@ import type {
 } from '../../types/kernel.js'
 import type { KernelCapabilityProvider, KernelModulePlan } from '../../types/runtime'
 import { KernelError } from '../errors'
-
-import { assertSemanticVersion, satisfiesVersionRange } from './version'
+import {
+  parseSemanticVersion,
+  parseSemanticVersionRange,
+  satisfiesSemanticVersionRange,
+} from '../semver'
 
 export type { KernelCapabilityProvider, KernelModulePlan } from '../../types/runtime'
 
@@ -55,6 +58,7 @@ function assertRequirements(
     label,
     moduleId
   )
+  for (const requirement of requirements) parseSemanticVersionRange(requirement.versionRange)
 }
 
 /** 校验清单声明提供的能力令牌：id 与版本非空、版本是合法语义化版本、id 不重复。 */
@@ -68,14 +72,14 @@ function assertProvidedCapabilities(
     moduleId
   )
   for (const capability of capabilities) {
-    assertSemanticVersion(capability.version)
+    parseSemanticVersion(capability.version)
   }
 }
 
 /** 整份模块清单的校验：ABI 版本、id、版本、隔离形态、provides 与两组 requires 逐项过一遍。 */
 export function validateManifest(manifest: KernelModuleManifest, apiVersion: number): void {
   assertNonEmpty(manifest.id, 'module id')
-  assertSemanticVersion(manifest.version)
+  parseSemanticVersion(manifest.version)
   if (!Number.isInteger(manifest.apiVersion) || manifest.apiVersion <= 0) {
     throw new KernelError('INVALID_MANIFEST', `模块 "${manifest.id}" 的 apiVersion 不合法`, {
       moduleId: manifest.id,
@@ -147,7 +151,7 @@ function resolveRequirement(
     )
   }
 
-  if (satisfiesVersionRange(provider.capability.version, requirement.versionRange))
+  if (satisfiesSemanticVersionRange(provider.capability.version, requirement.versionRange))
     return provider.moduleId
   if (optional) return undefined
 

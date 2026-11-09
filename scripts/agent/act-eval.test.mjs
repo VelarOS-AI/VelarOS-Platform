@@ -8,11 +8,16 @@ import { runActEvaluation } from './act-eval.mjs'
 import { configuredModel } from './run-act-eval.mjs'
 import { evaluationScenario } from './act-scenarios.mjs'
 import { runActEvaluationBatch } from './act-eval-batch.mjs'
+import { observationEvidence, observedFiles } from './act-trace.mjs'
 
 const limits = { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 }
-/** 本帧会变的协议与阶段说明在最后一条消息末尾（系统提示在会话内不变）。 */
-const frameText = (request) => request.compiledPrompt ?? ''
-const marker = (request) => frameText(request).match(/当前帧标记：(@@\w+)。/u)[1]
+const readonlyHostUnavailable =
+  process.platform === 'win32'
+    ? 'Windows has no default read-only process confinement backend; rejection is covered separately'
+    : false
+/** 本帧会变的协议与阶段说明从独立 protocol 读取，系统提示在会话内不变。 */
+const protocolText = (request) => request.protocol
+const marker = (request) => protocolText(request).match(/当前帧标记：(@@\w+)。/u)[1]
 const block = (request, kind, source) =>
   `${marker(request)} ${kind}()\n${source}\n${marker(request)}`
 const model = (stream) => ({
@@ -43,7 +48,7 @@ test('workflow local edit runs through formal Runtime and exports evidence metri
           text: block(
             request,
             'execute',
-            "import {edit} from 'velaros:project';await edit({steps:[{action:'replace',path:'settings.txt',oldText:'obsolete hint\\n',newText:''},{action:'replace',path:'settings.txt',oldText:'repeat\\nrepeat',newText:'repeat\\nupdated'},{action:'replace',path:'settings.txt',oldText:'footer',newText:'added\\nfooter'}]});"
+            "import {readFile} from 'node:fs/promises';import {commit} from 'velaros:project';const before=await readFile('settings.txt','utf8');await commit({changes:[{path:'settings.txt',before,after:before.replace('obsolete hint\\n','').replace('repeat\\nrepeat','repeat\\nupdated').replace('footer','added\\nfooter')}]});"
           ),
         }
       } else yield { type: 'text', text: `${marker(request)} done` }
@@ -51,6 +56,7 @@ test('workflow local edit runs through formal Runtime and exports evidence metri
     }),
   })
   assert.equal(result.summary.passed, true, JSON.stringify(result.archive.findings))
+  assert.equal(result.archive.manifest.usage.legs, 1)
   assert.equal(result.summary.workflow.completedWithoutVerification, false)
   assert.equal(result.summary.workflow.totalTokens, null)
   assert.ok(result.summary.workflow.knownToolCalls >= 1)
@@ -157,62 +163,292 @@ test('reconciliation restores host progress from acknowledged ordered revisions 
   await assert.rejects(evaluationScenario('reconciliation').restore({ root, events }), /不一致/)
 })
 
-test('formal Runtime evaluation archives raw requests and independently verifies v1, one edit and v2', async (t) => {
-  let calls = 0
-  const driver = model(async function* (request) {
-    calls++
-    if (calls === 1)
-      yield {
-        type: 'text',
-        text: block(
-          request,
-          'observe',
-          "import {read} from 'velaros:project';import {output} from 'velaros';// 持续核对 state.txt 的真实内容\noutput(await read({files:[{path:'state.txt'}]}));"
-        ),
+test(
+  'formal Runtime evaluation archives request audits and independently verifies v1, one edit and v2',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let calls = 0
+    const driver = model(async function* (request) {
+      calls++
+      if (calls === 1)
+        yield {
+          type: 'text',
+          text: block(
+            request,
+            'observe',
+            "import {snapshot} from 'velaros:project';import {output} from 'velaros';// 持续核对 state.txt 的真实版本和内容\noutput(await snapshot({files:[{path:'state.txt',key:'state',purpose:'Verify the actual state version'}]}));"
+          ),
+        }
+      else if (calls === 2) {
+        assert.match(JSON.parse(request.materials[0].text).partitions.observation.text, /one/)
+        yield {
+          type: 'text',
+          text: block(
+            request,
+            'execute',
+            "import {readFile} from 'node:fs/promises';import {commit} from 'velaros:project';import {output} from 'velaros';const before=await readFile('state.txt','utf8');if(before!=='one\\n')throw Error('unexpected');output(await commit({changes:[{path:'state.txt',before,after:'two\\n'}]}));"
+          ),
+        }
+      } else {
+        assert.match(JSON.parse(request.materials[0].text).partitions.observation.text, /two/)
+        yield { type: 'text', text: `${marker(request)} done` }
       }
-    else if (calls === 2) {
-      assert.match(JSON.parse(request.materials[0].text).partitions.observation.text, /one/)
-      yield {
-        type: 'text',
-        text: block(
-          request,
-          'execute',
-          "import {read,edit} from 'velaros:project';import {output} from 'velaros';const file=(await read({files:[{path:'state.txt'}]})).files[0];if(file.text!=='one\\n')throw Error('unexpected');output(await edit({steps:[{action:'replace',path:'state.txt',oldText:'one',newText:'two'}]}));"
-        ),
-      }
-    } else {
-      assert.match(JSON.parse(request.materials[0].text).partitions.observation.text, /two/)
-      yield { type: 'text', text: `${marker(request)} done` }
+      yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    const result = await runActEvaluation({ model: driver, output: await output(t) })
+    assert.equal(result.summary.passed, true, JSON.stringify(result.archive))
+    assert.equal(result.archive.manifest.usage.legs, 1)
+    assert.equal(calls, 3)
+    assert.equal(result.summary.usage.totalTokens, 360)
+    assert.equal(result.summary.usage.costUsd, null)
+    assert(result.summary.wallClockMs > 0)
+    assert(
+      result.summary.metrics.some(
+        (metric) => metric.phase === 'storage' && metric.operation === 'appendRecord'
+      )
+    )
+    assert.equal(result.summary.requestRetries, 0)
+    assert.equal(result.summary.protocolRejections, 0)
+    assert.equal(result.archive.legs[0].criteria[0].outcome.evidence.successfulCommits, 1)
+    const traces = JSON.parse(await readFile(result.summary.tracePath, 'utf8'))
+    assert(
+      (await readFile(join(result.summary.directory, 'events.ndjson'), 'utf8')).includes('turn')
+    )
+    assert.equal(traces.length, 3)
+    assert(traces.every((trace) => trace.gaps.length === 0))
+    assert(
+      traces.every((trace) =>
+        Object.values(trace.timing).every((value) => typeof value === 'number' && value >= 0)
+      )
+    )
+    assert.equal(JSON.parse(traces[2].request.body).requestAudit.schemaVersion, 3)
+    assert(!Object.hasOwn(JSON.parse(traces[2].request.body), 'request'))
+    assert(!Object.hasOwn(result.summary, 'requestChars'))
+    const evidence = result.archive.legs[0].criteria[0].outcome.evidence
+    assert.equal(evidence.sawOne, true)
+    assert.equal(evidence.sawTwo, true)
+    assert.deepEqual(
+      evidence.observations.map((item) => item.file.text),
+      ['one\n', 'two\n']
+    )
+    assert.notEqual(evidence.observations[0].file.revision, evidence.observations[1].file.revision)
+    assert.notEqual(
+      evidence.observations[0].capture.fingerprint,
+      evidence.observations[1].capture.fingerprint
+    )
+    for (const observation of evidence.observations) {
+      const trace = traces.find((item) => item.turnId === observation.turn),
+        request = JSON.parse(trace.request.body)
+      assert.deepEqual(observation.frameRef, request.frameRef)
+      assert.equal(
+        JSON.parse(trace.records.find((item) => item.ref.id === observation.resultRef.id).body)
+          .executionId,
+        observation.executionId
+      )
     }
-    yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
-    yield { type: 'finish', reason: 'stop' }
-  })
-  const result = await runActEvaluation({ model: driver, output: await output(t) })
-  assert.equal(result.summary.passed, true, JSON.stringify(result.archive))
-  assert.equal(calls, 3)
-  assert.equal(result.summary.usage.totalTokens, 360)
-  assert.equal(result.summary.usage.costUsd, null)
-  assert(result.summary.wallClockMs > 0)
-  assert(
-    result.summary.metrics.some(
-      (metric) => metric.phase === 'storage' && metric.operation === 'appendRecord'
+    const collected = result.archive.legs[0].observation,
+      audits = traces.map((trace) => JSON.parse(trace.request.body).requestAudit)
+    assert.equal(audits[0].inputTokens, 1000)
+    assert.equal(collected.runtime.contextTokens, audits.at(-1).inputTokens)
+    assert.equal(
+      collected.runtime.contextPercent,
+      (audits.at(-1).inputTokens / limits.contextTokens) * 100
     )
-  )
-  assert.equal(result.summary.requestRetries, 0)
-  assert.equal(result.summary.protocolRejections, 0)
-  assert.equal(result.archive.legs[0].criteria[0].outcome.evidence.successfulEdits, 1)
-  const traces = JSON.parse(await readFile(result.summary.tracePath, 'utf8'))
-  assert((await readFile(join(result.summary.directory, 'events.ndjson'), 'utf8')).includes('turn'))
-  assert.equal(traces.length, 3)
-  assert(traces.every((trace) => trace.gaps.length === 0))
-  assert(
-    traces.every((trace) =>
-      Object.values(trace.timing).every((value) => typeof value === 'number' && value >= 0)
+    assert.equal(collected.metadata.requestTokenSource, 'compiler-request-audit')
+    assert(!Object.hasOwn(collected.metadata, 'requestTokensAreEstimates'))
+    assert.equal(collected.contextResidency.length, 3)
+    assert.deepEqual(
+      collected.contextResidency.map((item) => [item.beforeTokens, item.afterTokens]),
+      audits.map((audit, index) => [audits[index - 1]?.inputTokens ?? null, audit.inputTokens])
     )
-  )
-  assert(JSON.parse(traces[2].request.body).providerRequest)
-  assert((await labArchives.readRunArchive(result.summary.archivePath)).archive)
-})
+    assert(
+      collected.contextResidency.every(
+        (item, index) =>
+          item.payload.precision === audits[index].precision &&
+          item.payload.basis === audits[index].basis &&
+          !Object.hasOwn(item.payload, 'materialChars')
+      )
+    )
+    const observed = traces[1]
+    assert.equal(observationEvidence(observed).outputs[0].value.files[0].text, 'one\n')
+    const rewrite = (record, change) => {
+      const value = JSON.parse(record.body)
+      change(value)
+      record.body = JSON.stringify(value)
+    }
+    const frameRecord = (trace) => {
+      const ref = JSON.parse(trace.request.body).frameRef
+      return trace.records.find((record) => record.ref.id === ref.id)
+    }
+    const observationRecord = (trace) => {
+      const ref = JSON.parse(frameRecord(trace).body).observation.resultRef
+      return trace.records.find((record) => record.ref.id === ref)
+    }
+    const changes = [
+      [
+        'missing frame reference',
+        (trace) => rewrite(trace.request, (value) => delete value.frameRef),
+      ],
+      [
+        'foreign frame reference',
+        (trace) =>
+          rewrite(trace.request, (value) => {
+            value.frameRef.sessionId = 'another-session'
+          }),
+      ],
+      [
+        'unpublished frame',
+        (trace) => {
+          frameRecord(trace).sequence = trace.request.sequence
+        },
+      ],
+      [
+        'wrong frame identity',
+        (trace) => {
+          frameRecord(trace).title = 'context:frame:another'
+        },
+      ],
+      [
+        'truncated frame',
+        (trace) => {
+          frameRecord(trace).truncated = true
+        },
+      ],
+      [
+        'reference-only observation',
+        (trace) =>
+          rewrite(frameRecord(trace), (value) => {
+            value.entries.find((entry) => entry.key === 'observation').bodyIncluded = false
+          }),
+      ],
+      [
+        'missing original result',
+        (trace) => {
+          observationRecord(trace).body = null
+        },
+      ],
+      [
+        'truncated original result',
+        (trace) => {
+          observationRecord(trace).truncated = true
+        },
+      ],
+      [
+        'foreign original result',
+        (trace) => {
+          observationRecord(trace).ref.sessionId = 'another-session'
+        },
+      ],
+      [
+        'result from another execution',
+        (trace) =>
+          rewrite(observationRecord(trace), (value) => {
+            value.executionId = 'another-execution'
+          }),
+      ],
+      [
+        'missing source record',
+        (trace) => {
+          const ref = observationRecord(trace).sources[0]
+          trace.records = trace.records.filter((record) => record.ref.id !== ref.id)
+        },
+      ],
+      [
+        'wrong original source',
+        (trace) => {
+          observationRecord(trace).sources = []
+        },
+      ],
+      [
+        'output differs from capture receipt',
+        (trace) =>
+          rewrite(observationRecord(trace), (value) => {
+            value.output.blocks[0].value.value.files[0].text = 'not the captured version\n'
+          }),
+      ],
+      [
+        'wrong captured revision',
+        (trace) =>
+          rewrite(observationRecord(trace), (value) => {
+            value.output.blocks[0].value.value.files[0].revision = 'another-version'
+          }),
+      ],
+      [
+        'output belongs to another capture',
+        (trace) =>
+          rewrite(observationRecord(trace), (value) => {
+            value.output.blocks[0].value.fingerprint = 'another-capture'
+          }),
+      ],
+      [
+        'execute is not observation',
+        (trace) => {
+          for (const record of trace.invocations)
+            rewrite(record, (value) => {
+              value.prepared.mode = 'execute'
+            })
+        },
+      ],
+      [
+        'truncated capture receipt',
+        (trace) => {
+          for (const record of trace.invocations) record.truncated = true
+        },
+      ],
+      [
+        'capture receipt failed',
+        (trace) => {
+          for (const record of trace.invocations)
+            rewrite(record, (value) => {
+              value.receipt.outcome = 'failed'
+            })
+        },
+      ],
+      [
+        'capture belongs to another session',
+        (trace) => {
+          for (const record of trace.invocations)
+            rewrite(record, (value) => {
+              value.prepared.sessionId = 'another-session'
+            })
+        },
+      ],
+    ]
+    for (const [name, change] of changes) {
+      const trace = structuredClone(observed)
+      change(trace)
+      assert.deepEqual(observedFiles(trace), [], name)
+    }
+    const decoy = structuredClone(observed),
+      trial = structuredClone(frameRecord(decoy))
+    trial.ref.id = 'unpublished-trial'
+    rewrite(trial, (value) => {
+      value.entries = []
+    })
+    decoy.records.push(trial)
+    assert.deepEqual(observedFiles(decoy), observedFiles(observed))
+    const oldVersion = structuredClone(traces[2]),
+      previousFrame = frameRecord(observed)
+    oldVersion.records.push(...structuredClone(observed.records))
+    oldVersion.invocations = [
+      ...new Map(
+        [...oldVersion.invocations, ...structuredClone(observed.invocations)].map((item) => [
+          item.id,
+          item,
+        ])
+      ).values(),
+    ]
+    rewrite(oldVersion.request, (value) => {
+      value.frameRef = previousFrame.ref
+    })
+    assert.deepEqual(
+      observedFiles(oldVersion).map((item) => item.file.text),
+      ['one\n']
+    )
+    assert(await labArchives.readRunArchive(result.summary.archivePath))
+  }
+)
 
 test('done without the actual change fails external verification and unknown usage stays null', async (t) => {
   const result = await runActEvaluation({
@@ -228,6 +464,126 @@ test('done without the actual change fails external verification and unknown usa
   assert.equal(await readFile(join(result.summary.directory, 'project/state.txt'), 'utf8'), 'one\n')
 })
 
+test(
+  'a successful commit without a later v2 snapshot cannot pass external verification',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let calls = 0
+    const result = await runActEvaluation({
+      output: await output(t),
+      model: model(async function* (request) {
+        if (++calls === 1)
+          yield {
+            type: 'text',
+            text: block(
+              request,
+              'observe',
+              "import {snapshot} from 'velaros:project';import {output} from 'velaros';output(await snapshot({files:[{path:'state.txt',key:'state',purpose:'Verify the actual state version'}]}));"
+            ),
+          }
+        else
+          yield {
+            type: 'text',
+            text:
+              block(
+                request,
+                'execute',
+                "import {commit} from 'velaros:project';import {output} from 'velaros';output(await commit({changes:[{path:'state.txt',oldText:'one',newText:'two'}]}));"
+              ) +
+              '\n' +
+              marker(request) +
+              ' done',
+          }
+        yield { type: 'finish', reason: 'stop' }
+      }),
+    })
+    const evidence = result.archive.legs[0].criteria[0].outcome.evidence
+    assert.equal(result.summary.passed, false)
+    assert.equal(evidence.text, 'two\n')
+    assert.equal(evidence.successfulCommits, 1)
+    assert.equal(evidence.sawOne, true)
+    assert.equal(evidence.sawTwo, false)
+  }
+)
+
+test(
+  'Windows evaluation rejects an unavailable observation during composite preflight without committing',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    let calls = 0
+    const observe =
+      "import {snapshot} from 'velaros:project';import {output} from 'velaros';output(await snapshot({files:[{path:'state.txt',key:'state',purpose:'Verify the actual committed version'}]}));"
+    const result = await runActEvaluation({
+      output: await output(t),
+      model: model(async function* (request) {
+        if (++calls === 1)
+          yield {
+            type: 'text',
+            text:
+              block(request, 'observe', observe) +
+              '\n' +
+              block(
+                request,
+                'execute',
+                "import {commit} from 'velaros:project';import {output} from 'velaros';output(await commit({changes:[{path:'state.txt',oldText:'one',newText:'two'}]}));"
+              ),
+          }
+        else yield { type: 'text', text: marker(request) + ' done' }
+        yield { type: 'finish', reason: 'stop' }
+      }),
+    })
+    const evidence = result.archive.legs[0].criteria[0].outcome.evidence
+    assert.equal(result.summary.passed, false)
+    assert.equal(evidence.text, 'one\n')
+    assert.equal(evidence.protectedText, 'keep this\n')
+    assert.equal(evidence.commitCalls, 0)
+    assert.equal(evidence.successfulCommits, 0)
+    assert.equal(evidence.sawOne, false)
+    assert.equal(evidence.sawTwo, false)
+    assert.deepEqual(evidence.observations, [])
+    assert.equal(result.summary.usage.totalTokens, null)
+    assert.equal(result.summary.usage.costUsd, null)
+    const traces = JSON.parse(await readFile(result.summary.tracePath, 'utf8')),
+      rejected = []
+    for (const trace of traces) {
+      const request = JSON.parse(trace.request.body)
+      assert.equal(request.requestAudit.schemaVersion, 3)
+      assert(!Object.hasOwn(request, 'request'))
+      const frame = trace.records.find(
+        (record) =>
+          record.ref.sessionId === request.frameRef.sessionId &&
+          record.ref.id === request.frameRef.id
+      )
+      assert(frame && !frame.truncated)
+      assert(frame.sequence < trace.request.sequence)
+      const audit = JSON.parse(frame.body)
+      assert.equal(frame.title, `context:frame:${audit.frameId}`)
+      assert.deepEqual(trace.executions, [])
+      assert.deepEqual(trace.invocations, [])
+      assert.equal(trace.observation.registration, null)
+      assert.equal(trace.observation.run, null)
+      assert.equal(observationEvidence(trace), null)
+      const decision = JSON.parse(trace.decision.body)
+      if (decision.status !== 'rejected') continue
+      assert.equal(decision.error.code, 'SCRIPT_PROTOCOL')
+      assert.match(
+        decision.error.message,
+        /只读程序观察不可用：.+；此入口只接受空源码与独立 history 或 clear:true 选项/u
+      )
+      assert(trace.response && !trace.response.truncated)
+      assert.deepEqual(decision.rawRef, trace.response.ref)
+      assert(trace.response.body.includes(observe))
+      assert(trace.response.body.includes("oldText:'one',newText:'two'"))
+      rejected.push(trace.decision.ref)
+    }
+    assert(
+      rejected.length > 0,
+      'the archive must retain the unavailable observation preflight rejection and original composite source'
+    )
+    assert.equal(result.summary.protocolRejections, rejected.length)
+  }
+)
+
 test('an unclosed execution block never edits disk and rejection evidence is archived', async (t) => {
   const result = await runActEvaluation({
     model: model(async function* (request) {
@@ -239,7 +595,7 @@ test('an unclosed execution block never edits disk and rejection evidence is arc
   assert.equal(result.summary.passed, false)
   assert.equal(result.summary.modelCalls, 1)
   assert(result.traces.every((trace) => JSON.parse(trace.decision.body).status === 'rejected'))
-  assert.equal(result.archive.legs[0].criteria[0].outcome.evidence.editCalls, 0)
+  assert.equal(result.archive.legs[0].criteria[0].outcome.evidence.commitCalls, 0)
 })
 
 test('a stalled model ends at the formal Runtime deadline and leaves a failed archive', async (t) => {
@@ -254,10 +610,7 @@ test('a stalled model ends at the formal Runtime deadline and leaves a failed ar
   assert.equal(result.summary.passed, false)
   assert(Date.now() - started < 3000)
   assert.equal(result.summary.modelCalls, 1)
-  assert.equal(
-    (await labArchives.readRunArchive(result.summary.archivePath)).archive.legs[0].passed,
-    false
-  )
+  assert.equal((await labArchives.readRunArchive(result.summary.archivePath)).legs[0].passed, false)
 })
 
 test('model configuration requires an explicit credential variable and never retains its value in metadata', () => {
@@ -339,193 +692,201 @@ test('evaluation output decoding preserves values before appended receipt snapsh
 const frame = (request) =>
   JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
 
-test('cooperation workload verifies the persisted child write, exact message ack and maintenance independently', async (t) => {
-  let main = 0,
-    child = 0
-  const driver = model(async function* (request) {
-    let code
-    if (frameText(request).includes('你是上下文整理工具')) {
-      // 整理支线分两步：先提交补丁，受理后的下一帧再完成
-      if (frameText(request).includes('当前候选补丁已通过校验并受理'))
-        yield { type: 'text', text: marker(request) + ' done' }
-      else {
-        const snapshot = JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
-        code = `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Keep the verified total and task goal', unresolved: [] })}));`
-        yield { type: 'text', text: block(request, 'execute', code) }
+test(
+  'cooperation workload verifies the persisted child write, exact message ack and maintenance independently',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let main = 0,
+      child = 0
+    const driver = model(async function* (request) {
+      let code
+      if (protocolText(request).includes('你是上下文整理工具')) {
+        // 整理支线分两步：先提交补丁，受理后的下一帧再完成
+        if (protocolText(request).includes('当前候选补丁已通过校验并受理'))
+          yield { type: 'text', text: marker(request) + ' done' }
+        else {
+          const snapshot = JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
+          code = `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Keep the verified total and task goal', unresolved: [] })}));`
+          yield { type: 'text', text: block(request, 'execute', code) }
+        }
+      } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
+        if (++child === 1) {
+          const id = frame(request).partitions.runtime.stores.active.items[0].id
+          code = `import {store} from 'velaros:system';import {readFile} from 'node:fs/promises';import {output} from 'velaros';const numbers=JSON.parse(await readFile('orders.json','utf8'));output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`
+          yield { type: 'text', text: block(request, 'execute', code) }
+        } else yield { type: 'text', text: marker(request) + ' done' }
+      } else {
+        main++
+        if (main === 1)
+          code =
+            "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Order totals and child results'});await store.subscribe({store:space.id,topics:['result/']});await memory.update({key:'progress',baseRevision:0,body:'Await child total, then verify report',sources:[]});output(space);"
+        else if (main === 2) {
+          const id = frame(request).partitions.runtime.stores.active.items[0].id
+          code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Read orders and write total to result/summary with event result/ready',profile:'worker'});output(await wait({id:job.id}));`
+        } else if (main === 3) {
+          const id = frame(request).partitions.runtime.stores.active.items[0].id
+          code = `import {store,memory} from 'velaros:system';import {output} from 'velaros';const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('subscription missing');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});output(await store.events({store:${JSON.stringify(id)}}));output(await memory.organize({focus:'Keep total 50 and next report verification'}));`
+        } else if (main === 4) {
+          code =
+            "import {commit} from 'velaros:project';import {output} from 'velaros';output(await commit({changes:[{path:'report.json',before:null,after:JSON.stringify({total:50,count:4})+'\\n'}]}));"
+          yield {
+            type: 'text',
+            text:
+              block(
+                request,
+                'observe',
+                "import {snapshot} from 'velaros:project';import {output} from 'velaros';// 持续核实报告\noutput(await snapshot({files:[{path:'report.json',key:'report',purpose:'Verify actual report'}]}),{key:'report',purpose:'Verify actual report'});"
+              ) + '\n',
+          }
+        } else yield { type: 'text', text: marker(request) + ' done' }
+        if (code) yield { type: 'text', text: block(request, 'execute', code) }
       }
-    } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
-      if (++child === 1) {
-        const id = frame(request).partitions.runtime.stores.active.items[0].id
-        code = `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const f=(await read({files:[{path:'orders.json'}]})).files[0];const numbers=JSON.parse(f.text);output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`
-        yield { type: 'text', text: block(request, 'execute', code) }
-      } else yield { type: 'text', text: marker(request) + ' done' }
-    } else {
-      main++
-      if (main === 1)
-        code =
-          "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Order totals and child results'});await store.subscribe({store:space.id,topics:['result/']});await memory.update({key:'progress',baseRevision:0,body:'Await child total, then verify report',sources:[]});output(space);"
-      else if (main === 2) {
-        const id = frame(request).partitions.runtime.stores.active.items[0].id
-        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Read orders and write total to result/summary with event result/ready',profile:'worker'});output(await wait({id:job.id}));`
-      } else if (main === 3) {
-        const id = frame(request).partitions.runtime.stores.active.items[0].id
-        code = `import {store,memory} from 'velaros:system';import {output} from 'velaros';const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('subscription missing');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});output(await store.events({store:${JSON.stringify(id)}}));output(await memory.organize({focus:'Keep total 50 and next report verification'}));`
-      } else if (main === 4) {
-        code =
-          "import {edit} from 'velaros:project';import {output} from 'velaros';output(await edit({steps:[{action:'write',path:'report.json',text:JSON.stringify({total:50,count:4})+'\\n'}]}));"
-        yield {
-          type: 'text',
-          text:
-            block(
-              request,
-              'observe',
-              "import {read} from 'velaros:project';import {output} from 'velaros';// 持续核实报告\noutput(await read({files:[{path:'report.json'}]}),{key:'report',purpose:'Verify actual report'});"
-            ) + '\n',
-        }
-      } else yield { type: 'text', text: marker(request) + ' done' }
-      if (code) yield { type: 'text', text: block(request, 'execute', code) }
-    }
-    yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
-    yield { type: 'finish', reason: 'stop' }
-  })
-  const result = await runActEvaluation({
-    model: driver,
-    output: await output(t),
-    scenario: 'system-cooperation',
-  })
-  assert.equal(
-    result.summary.passed,
-    true,
-    JSON.stringify({
-      outcome: result.archive.legs[0].criteria[0].outcome,
-      rootDecisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
-      rootResults: result.traces.flatMap((turn) =>
-        turn.records
-          .filter((record) => record.title.endsWith(':result'))
-          .map((record) => record.body)
-      ),
-      errors: [...result.traces, ...result.branches.flatMap((branch) => branch.turns)]
-        .flatMap((turn) =>
-          turn.invocations.map((value) => {
-            try {
-              return JSON.parse(value.body)
-            } catch {
-              return null
-            }
-          })
-        )
-        .filter((value) => value?.receipt?.outcome !== 'succeeded'),
-      decisions: result.branches.map((branch) =>
-        branch.turns.map((turn) => JSON.parse(turn.decision.body))
-      ),
+      yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
+      yield { type: 'finish', reason: 'stop' }
     })
-  )
-  assert(result.branches.some((branch) => branch.kind === 'agent' && branch.turns.length === 2))
-  assert(result.branches.some((branch) => branch.kind === 'context' && branch.turns.length === 2))
-  assert(
-    result.branches.every((branch) => branch.turns.every((turn) => turn.request && turn.response))
-  )
-})
+    const result = await runActEvaluation({
+      model: driver,
+      output: await output(t),
+      scenario: 'system-cooperation',
+    })
+    assert.equal(
+      result.summary.passed,
+      true,
+      JSON.stringify({
+        outcome: result.archive.legs[0].criteria[0].outcome,
+        rootDecisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
+        rootResults: result.traces.flatMap((turn) =>
+          turn.records
+            .filter((record) => record.title.endsWith(':result'))
+            .map((record) => record.body)
+        ),
+        errors: [...result.traces, ...result.branches.flatMap((branch) => branch.turns)]
+          .flatMap((turn) =>
+            turn.invocations.map((value) => {
+              try {
+                return JSON.parse(value.body)
+              } catch {
+                return null
+              }
+            })
+          )
+          .filter((value) => value?.receipt?.outcome !== 'succeeded'),
+        decisions: result.branches.map((branch) =>
+          branch.turns.map((turn) => JSON.parse(turn.decision.body))
+        ),
+      })
+    )
+    assert(result.branches.some((branch) => branch.kind === 'agent' && branch.turns.length === 2))
+    assert(result.branches.some((branch) => branch.kind === 'context' && branch.turns.length === 2))
+    assert(
+      result.branches.every((branch) => branch.turns.every((turn) => turn.request && turn.response))
+    )
+  }
+)
 
-test('semantic search workload retains real branch evidence and verifies the fixed function at its boundary', async (t) => {
-  let main = 0,
-    search = 0
-  const driver = model(async function* (request) {
-    if (frameText(request).includes('你正在执行有界搜索')) {
-      if (++search === 1)
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'execute',
-            "import {read} from 'velaros:evidence';import {output} from 'velaros';output(await read({target:{kind:'resource',sourceId:'project',resourceId:'src/session.mjs'}}));"
-          ),
-        }
-      else {
-        const evidence = latestOutput(request)
-        assert(evidence?.id)
-        yield {
-          type: 'text',
-          text:
-            block(
+test(
+  'semantic search workload retains real branch evidence and verifies the fixed function at its boundary',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let main = 0,
+      search = 0
+    const driver = model(async function* (request) {
+      if (protocolText(request).includes('你正在执行有界搜索')) {
+        if (++search === 1)
+          yield {
+            type: 'text',
+            text: block(
               request,
               'execute',
-              `import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[{text:'Expiry boundary uses an inclusive comparison',evidenceIds:[${JSON.stringify(evidence.id)}]}],gaps:[],nextSteps:['Use exclusive expiry']});`
-            ) +
-            '\n' +
-            marker(request) +
-            ' done',
+              "import {read} from 'velaros:evidence';import {output} from 'velaros';output(await read({target:{kind:'resource',sourceId:'project',resourceId:'src/session.mjs'}}));"
+            ),
+          }
+        else {
+          const evidence = latestOutput(request)
+          assert(evidence?.id)
+          yield {
+            type: 'text',
+            text:
+              block(
+                request,
+                'execute',
+                `import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[{text:'Expiry boundary uses an inclusive comparison',evidenceIds:[${JSON.stringify(evidence.id)}]}],gaps:[],nextSteps:['Use exclusive expiry']});`
+              ) +
+              '\n' +
+              marker(request) +
+              ' done',
+          }
         }
+      } else {
+        main++
+        if (main === 1)
+          yield {
+            type: 'text',
+            text: block(
+              request,
+              'execute',
+              "import {search} from 'velaros:search';import {output} from 'velaros';output(await search({query:'session expiry'}));"
+            ),
+          }
+        else if (main === 2) {
+          const report = latestOutput(request)
+          assert(report?.ref)
+          yield {
+            type: 'text',
+            text: block(
+              request,
+              'execute',
+              `import {read as refresh} from 'velaros:search';import {readFile} from 'node:fs/promises';import {commit} from 'velaros:project';import {output} from 'velaros';output(await refresh({ref:${JSON.stringify(report.ref)},mode:'current'}));const before=await readFile('src/session.mjs','utf8');if(!before.includes('>='))throw Error('missing');output(await commit({changes:[{path:'src/session.mjs',before,after:before.replace('>=','>')}]}));`
+            ),
+          }
+        } else if (main === 3)
+          yield {
+            type: 'text',
+            text: block(
+              request,
+              'observe',
+              "import {snapshot} from 'velaros:project';import {output} from 'velaros';output(await snapshot({files:[{path:'src/session.mjs',key:'session',purpose:'Verify the current expiry comparison'}]}));"
+            ),
+          }
+        else yield { type: 'text', text: marker(request) + ' done' }
       }
-    } else {
-      main++
-      if (main === 1)
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'execute',
-            "import {search} from 'velaros:search';import {output} from 'velaros';output(await search({query:'session expiry'}));"
-          ),
-        }
-      else if (main === 2) {
-        const report = latestOutput(request)
-        assert(report?.ref)
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'execute',
-            `import {read as refresh} from 'velaros:search';import {read,edit} from 'velaros:project';import {output} from 'velaros';output(await refresh({ref:${JSON.stringify(report.ref)},mode:'current'}));const file=(await read({files:[{path:'src/session.mjs'}]})).files[0];if(!file.text.includes('>='))throw Error('missing');output(await edit({steps:[{action:'replace',path:'src/session.mjs',oldText:'>=',newText:'>'}]}));`
-          ),
-        }
-      } else if (main === 3)
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'observe',
-            "import {read} from 'velaros:project';import {output} from 'velaros';output(await read({files:[{path:'src/session.mjs'}]}));"
-          ),
-        }
-      else yield { type: 'text', text: marker(request) + ' done' }
-    }
-    yield { type: 'finish', reason: 'stop' }
-  })
-  const result = await runActEvaluation({
-    model: driver,
-    output: await output(t),
-    scenario: 'semantic-search',
-  })
-  assert.equal(
-    result.summary.passed,
-    true,
-    JSON.stringify({
-      outcome: result.archive.legs[0].criteria[0].outcome,
-      rootDecisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
-      rootResults: result.traces.flatMap((turn) =>
-        turn.records
-          .filter((record) => record.title.endsWith(':result'))
-          .map((record) => record.body)
-      ),
-      errors: [...result.traces, ...result.branches.flatMap((branch) => branch.turns)]
-        .flatMap((turn) =>
-          turn.invocations.map((value) => {
-            try {
-              return JSON.parse(value.body)
-            } catch {
-              return null
-            }
-          })
-        )
-        .filter((value) => value?.receipt?.outcome !== 'succeeded'),
-      decisions: result.branches.map((branch) =>
-        branch.turns.map((turn) => JSON.parse(turn.decision.body))
-      ),
+      yield { type: 'finish', reason: 'stop' }
     })
-  )
-  assert.equal(search, 2)
-})
+    const result = await runActEvaluation({
+      model: driver,
+      output: await output(t),
+      scenario: 'semantic-search',
+    })
+    assert.equal(
+      result.summary.passed,
+      true,
+      JSON.stringify({
+        outcome: result.archive.legs[0].criteria[0].outcome,
+        rootDecisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
+        rootResults: result.traces.flatMap((turn) =>
+          turn.records
+            .filter((record) => record.title.endsWith(':result'))
+            .map((record) => record.body)
+        ),
+        errors: [...result.traces, ...result.branches.flatMap((branch) => branch.turns)]
+          .flatMap((turn) =>
+            turn.invocations.map((value) => {
+              try {
+                return JSON.parse(value.body)
+              } catch {
+                return null
+              }
+            })
+          )
+          .filter((value) => value?.receipt?.outcome !== 'succeeded'),
+        decisions: result.branches.map((branch) =>
+          branch.turns.map((turn) => JSON.parse(turn.decision.body))
+        ),
+      })
+    )
+    assert.equal(search, 2)
+  }
+)
 
 for (const scenario of ['system-cooperation', 'semantic-search'])
   test(`${scenario} rejects a completion claim without evidence`, async (t) => {
@@ -543,149 +904,150 @@ for (const scenario of ['system-cooperation', 'semantic-search'])
     )
   })
 
-test('reconciliation advances four actual source versions through the same child and durable store', async (t) => {
-  let main = 0,
-    child = 0
-  const seenGoals = new Set()
-  const driver = model(async function* (request) {
-    const view = frame(request)
-    if (frameText(request).includes('你是上下文整理工具')) {
-      // 整理支线分两步：先提交补丁，受理后的下一帧再完成
-      if (frameText(request).includes('当前候选补丁已通过校验并受理'))
-        yield { type: 'text', text: marker(request) + ' done' }
-      else {
-        const snapshot = JSON.parse(view.partitions.task.goals[0].text).snapshot
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'execute',
-            `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Preserve stage progress and store reference', unresolved: [] })}));`
-          ),
-        }
-      }
-    } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
-      child++
-      const goal = view.partitions.task.goals.at(-1).record.ref.id
-      if (!seenGoals.has(goal)) {
-        seenGoals.add(goal)
-        const id = view.partitions.runtime.stores.active.items[0].id
-        yield {
-          type: 'text',
-          text: block(
-            request,
-            'execute',
-            `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const files=(await read({files:Array.from({length:12},(_,i)=>({path:'orders/batch-'+(i+1)+'.json'}))})).files;const orders=files.flatMap(f=>JSON.parse(f.text));const value={totalCents:0,approved:0,pending:0,count:orders.length};for(const order of orders){if(order.status==='approved'){value.totalCents+=order.cents;value.approved++}else value.pending++}const previous=await store.get({store:${JSON.stringify(id)},key:'result/summary'});output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:previous?.revision??0,value,event:{topic:'result/ready',value:{updated:true}}}));`
-          ),
-        }
-      } else yield { type: 'text', text: marker(request) + ' done' }
-    } else {
-      main++
-      const id = view.partitions.runtime.stores?.active.items[0]?.id
-      let code
-      if (main === 1)
-        code =
-          "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Four-stage order reconciliation'});await store.subscribe({store:space.id,topics:['result/']});output(await memory.update({key:'progress',baseRevision:0,body:'Four-stage reconciliation'}));"
-      else if (main === 2) {
-        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Summarize all order batches into result/summary and notify result/ready',profile:'worker'});output(await wait({id:job.id}));`
-        yield {
-          type: 'text',
-          text:
-            block(
+test(
+  'reconciliation advances four actual source versions through the same child and durable store',
+  { skip: readonlyHostUnavailable },
+  async (t) => {
+    let main = 0,
+      child = 0
+    const seenGoals = new Set()
+    const driver = model(async function* (request) {
+      const view = frame(request)
+      if (protocolText(request).includes('你是上下文整理工具')) {
+        // 整理支线分两步：先提交补丁，受理后的下一帧再完成
+        if (protocolText(request).includes('当前候选补丁已通过校验并受理'))
+          yield { type: 'text', text: marker(request) + ' done' }
+        else {
+          const snapshot = JSON.parse(view.partitions.task.goals[0].text).snapshot
+          yield {
+            type: 'text',
+            text: block(
               request,
-              'observe',
-              `import {store} from 'velaros:system';import {output} from 'velaros';// Keep the current validated stage visible\noutput(await store.get({store:${JSON.stringify(id)},key:'result/summary'}),{key:'totals',purpose:'Current stage totals',view:{maxChars:2000}});`
-            ) + '\n',
+              'execute',
+              `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Preserve stage progress and store reference', unresolved: [] })}));`
+            ),
+          }
         }
-      } else if ([4, 6, 8].includes(main)) {
-        const phase = (main - 2) / 2,
-          job = view.partitions.runtime.children[0]
-        code = `import {ask} from 'velaros:interaction';import {resume,wait} from 'velaros:agents';import {output} from 'velaros';await ask({message:'revision:${phase}'});const job=await resume({id:${JSON.stringify(job.id)},input:'Re-read all actual inputs and update the same summary and notification'});output(await wait({id:job.id}));`
-      } else if ([3, 5, 7, 9].includes(main)) {
-        const phase = (main - 3) / 2
-        if (phase === 3)
+      } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
+        child++
+        const goal = view.partitions.task.goals.at(-1).record.ref.id
+        if (!seenGoals.has(goal)) {
+          seenGoals.add(goal)
+          const id = view.partitions.runtime.stores.active.items[0].id
+          yield {
+            type: 'text',
+            text: block(
+              request,
+              'execute',
+              `import {store} from 'velaros:system';import {readFile} from 'node:fs/promises';import {output} from 'velaros';const files=await Promise.all(Array.from({length:12},(_,i)=>readFile('orders/batch-'+(i+1)+'.json','utf8')));const orders=files.flatMap(text=>JSON.parse(text));const value={totalCents:0,approved:0,pending:0,count:orders.length};for(const order of orders){if(order.status==='approved'){value.totalCents+=order.cents;value.approved++}else value.pending++}const previous=await store.get({store:${JSON.stringify(id)},key:'result/summary'});output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:previous?.revision??0,value,event:{topic:'result/ready',value:{updated:true}}}));`
+            ),
+          }
+        } else yield { type: 'text', text: marker(request) + ' done' }
+      } else {
+        main++
+        const id = view.partitions.runtime.stores?.active.items[0]?.id
+        let code
+        if (main === 1)
+          code =
+            "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Four-stage order reconciliation'});await store.subscribe({store:space.id,topics:['result/']});output(await memory.update({key:'progress',baseRevision:0,body:'Four-stage reconciliation'}));"
+        else if (main === 2) {
+          code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Summarize all order batches into result/summary and notify result/ready',profile:'worker'});output(await wait({id:job.id}));`
           yield {
             type: 'text',
             text:
               block(
                 request,
                 'observe',
-                "import {read} from 'velaros:project';import {output} from 'velaros';// Continuously verify the persisted final report\noutput(await read({files:[{path:'report.json'}]}),{key:'final-report',purpose:'Verify the actual final report',view:{maxChars:4000}});"
+                `import {store} from 'velaros:system';import {output} from 'velaros';// Keep the current validated stage visible\noutput(await store.get({store:${JSON.stringify(id)},key:'result/summary'}),{key:'totals',purpose:'Current stage totals',view:{maxChars:2000}});`
               ) + '\n',
           }
-        code = `import {store,memory} from 'velaros:system';import {edit} from 'velaros:project';import {output} from 'velaros';const item=await store.get({store:${JSON.stringify(id)},key:'result/summary'});if(!item)throw Error('missing summary');const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('missing subscription');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});await edit({steps:[{action:'write',path:'stage-${phase}.json',text:JSON.stringify(item.value)+'\\n'}]});await memory.update({key:'stage-${phase}',baseRevision:0,body:'Stage ${phase} verified and persisted'});${phase === 0 ? "output(await memory.organize({focus:'Keep stage progress for continuation'}));" : ''}${phase === 3 ? "await edit({steps:[{action:'write',path:'report.json',text:JSON.stringify(item.value)+'\\n'}]});" : ''}output(item.value);`
-      } else yield { type: 'text', text: marker(request) + ' done' }
-      if (code) yield { type: 'text', text: block(request, 'execute', code) }
-    }
-    yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
-    yield { type: 'finish', reason: 'stop' }
-  })
-  const result = await runActEvaluation({
-    model: driver,
-    output: await output(t),
-    scenario: 'reconciliation',
-  })
-  assert.equal(
-    result.summary.passed,
-    true,
-    JSON.stringify({
-      evidence: result.archive.legs[0].criteria[0].outcome,
-      decisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
-      results: result.traces.flatMap((turn) =>
-        turn.records
-          .filter((record) => record.title.endsWith(':result'))
-          .map((record) => record.body)
-      ),
+        } else if ([4, 6, 8].includes(main)) {
+          const phase = (main - 2) / 2,
+            job = view.partitions.runtime.children[0]
+          code = `import {ask} from 'velaros:interaction';import {resume,wait} from 'velaros:agents';import {output} from 'velaros';await ask({message:'revision:${phase}'});const job=await resume({id:${JSON.stringify(job.id)},input:'Re-read all actual inputs and update the same summary and notification'});output(await wait({id:job.id}));`
+        } else if ([3, 5, 7, 9].includes(main)) {
+          const phase = (main - 3) / 2
+          if (phase === 3)
+            yield {
+              type: 'text',
+              text:
+                block(
+                  request,
+                  'observe',
+                  "import {snapshot} from 'velaros:project';import {output} from 'velaros';// Continuously verify the persisted final report\noutput(await snapshot({files:[{path:'report.json',key:'final-report',purpose:'Verify the actual final report'}]}),{key:'final-report',purpose:'Verify the actual final report',view:{maxChars:4000}});"
+                ) + '\n',
+            }
+          code = `import {store,memory} from 'velaros:system';import {commit} from 'velaros:project';import {output} from 'velaros';const item=await store.get({store:${JSON.stringify(id)},key:'result/summary'});if(!item)throw Error('missing summary');const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('missing subscription');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});await commit({changes:[{path:'stage-${phase}.json',before:null,after:JSON.stringify(item.value)+'\\n'}]});await memory.update({key:'stage-${phase}',baseRevision:0,body:'Stage ${phase} verified and persisted'});${phase === 0 ? "output(await memory.organize({focus:'Keep stage progress for continuation'}));" : ''}${phase === 3 ? "await commit({changes:[{path:'report.json',before:null,after:JSON.stringify(item.value)+'\\n'}]});" : ''}output(item.value);`
+        } else yield { type: 'text', text: marker(request) + ' done' }
+        if (code) yield { type: 'text', text: block(request, 'execute', code) }
+      }
+      yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
+      yield { type: 'finish', reason: 'stop' }
     })
-  )
-  assert.equal(seenGoals.size, 4)
-  assert(child >= 8 && child <= 16)
-  assert.equal(main, 10)
-  const root = join(result.summary.directory, 'project'),
-    checker = evaluationScenario('reconciliation')
-  await checker.restore({
-    root,
-    events: JSON.parse(await readFile(result.summary.eventsPath, 'utf8')),
-  })
-  const verify = (traces) =>
-    checker.verify({
+    const result = await runActEvaluation({
+      model: driver,
+      output: await output(t),
+      scenario: 'reconciliation',
+    })
+    assert.equal(
+      result.summary.passed,
+      true,
+      JSON.stringify({
+        evidence: result.archive.legs[0].criteria[0].outcome,
+        decisions: result.traces.map((turn) => JSON.parse(turn.decision.body)),
+        results: result.traces.flatMap((turn) =>
+          turn.records
+            .filter((record) => record.title.endsWith(':result'))
+            .map((record) => record.body)
+        ),
+      })
+    )
+    assert.equal(seenGoals.size, 4)
+    assert(child >= 8 && child <= 16)
+    assert.equal(main, 10)
+    const root = join(result.summary.directory, 'project'),
+      checker = evaluationScenario('reconciliation')
+    await checker.restore({
       root,
-      traces,
-      branches: result.branches,
-      statePath: join(result.summary.directory, 'state/context.sqlite'),
-      status: 'completed',
+      events: JSON.parse(await readFile(result.summary.eventsPath, 'utf8')),
     })
-  assert.equal((await verify(result.traces)).passed, true)
-  const executedReads = structuredClone(result.traces)
-  for (const turn of executedReads)
-    for (const record of turn.invocations) {
-      const call = JSON.parse(record.body)
-      call.prepared.mode = 'execute'
-      record.body = JSON.stringify(call)
+    const verify = (traces) =>
+      checker.verify({
+        root,
+        traces,
+        branches: result.branches,
+        statePath: join(result.summary.directory, 'state/context.sqlite'),
+        status: 'completed',
+      })
+    assert.equal((await verify(result.traces)).passed, true)
+    const executedReads = structuredClone(result.traces)
+    for (const turn of executedReads)
+      for (const record of turn.invocations) {
+        const call = JSON.parse(record.body)
+        call.prepared.mode = 'execute'
+        record.body = JSON.stringify(call)
+      }
+    assert.equal((await verify(executedReads)).evidence.checks.observedReport, false)
+    const hidden = structuredClone(result.traces)
+    for (const turn of hidden) {
+      const ref = JSON.parse(turn.request.body).frameRef,
+        record = turn.records.find((item) => item.ref.id === ref.id),
+        frame = JSON.parse(record.body)
+      for (const entry of frame.entries) if (entry.key === 'observation') entry.bodyIncluded = false
+      record.body = JSON.stringify(frame)
     }
-  assert.equal((await verify(executedReads)).evidence.checks.observedReport, false)
-  const hidden = structuredClone(result.traces)
-  for (const turn of hidden) {
-    const request = JSON.parse(turn.request.body)
-    for (const material of request.request.materials) {
-      if (material.origin !== 'runtime-view') continue
-      const frame = JSON.parse(material.text)
-      frame.partitions.observation.bodyIncluded = false
-      material.text = JSON.stringify(frame)
-    }
-    turn.request.body = JSON.stringify(request)
+    assert.equal((await verify(hidden)).evidence.checks.observedReport, false)
+    const finalPath = join(root, 'report.json'),
+      original = await readFile(finalPath, 'utf8')
+    await writeFile(
+      finalPath,
+      JSON.stringify({ ...JSON.parse(original), extra: 'not part of the requested report' })
+    )
+    assert.equal((await verify(result.traces)).evidence.checks.final, false)
+    await writeFile(finalPath, original)
+    const stagePath = join(root, 'stage-0.json'),
+      stage = JSON.parse(await readFile(stagePath, 'utf8'))
+    await writeFile(stagePath, JSON.stringify({ ...stage, extra: true }))
+    assert.equal((await verify(result.traces)).evidence.checks.stages, false)
   }
-  assert.equal((await verify(hidden)).evidence.checks.observedReport, false)
-  const finalPath = join(root, 'report.json'),
-    original = await readFile(finalPath, 'utf8')
-  await writeFile(
-    finalPath,
-    JSON.stringify({ ...JSON.parse(original), extra: 'not part of the requested report' })
-  )
-  assert.equal((await verify(result.traces)).evidence.checks.final, false)
-  await writeFile(finalPath, original)
-  const stagePath = join(root, 'stage-0.json'),
-    stage = JSON.parse(await readFile(stagePath, 'utf8'))
-  await writeFile(stagePath, JSON.stringify({ ...stage, extra: true }))
-  assert.equal((await verify(result.traces)).evidence.checks.stages, false)
-})
+)

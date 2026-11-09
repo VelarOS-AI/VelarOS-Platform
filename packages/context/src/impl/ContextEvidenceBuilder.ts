@@ -12,7 +12,6 @@ import type {
   ContextCandidate,
   ContextEvidence,
   ContextGap,
-  ContextPlan,
   ContextSelection,
   ContextSourceRead,
   ContextTarget,
@@ -239,19 +238,10 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       for (const intent of semantic)
         gaps.push(contextGap(intent, 'INSUFFICIENT_EVIDENCE', '确定性候选尚未证明语义需求已覆盖'))
     }
-    const plan: ContextPlan = {
-      id: crypto.randomUUID(),
-      scope,
-      selections: [...direct, ...chosen],
-      degraded,
-    }
-    await this.options.context.append(
-      { kind: 'audit', title: 'context:plan', body: JSON.stringify(plan) },
-      signal
-    )
+    const selections = [...direct, ...chosen]
     const evidence: ContextEvidence[] = []
     let chars = 0
-    for (const selection of plan.selections) {
+    for (const selection of selections) {
       const candidate = candidates.find((item) => item.id === selection.candidateId)!
       const intent = task.intents.find((item) => selection.intentIds.includes(item.id))!
       try {
@@ -400,7 +390,6 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
         ))
       )
         return false
-      if (evidence.freshness === 'historical') continue
       for (const stamp of evidence.readSet) {
         if (stamp.sourceId === 'artifact') continue
         const source = this.source(stamp.sourceId)
@@ -416,6 +405,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
         )
           return false
         if (
+          evidence.freshness !== 'historical' &&
           stamp.consistency === 'revision-checkable' &&
           (await awaitContextOperation(source.validate(view.scope, stamp, signal), signal)) !==
             'current'

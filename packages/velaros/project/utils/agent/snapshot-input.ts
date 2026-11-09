@@ -1,3 +1,5 @@
+import { isAbsolute } from 'node:path'
+
 import {
   isArray,
   isBoolean,
@@ -13,10 +15,16 @@ import { ProjectSnapshotLimits } from '../../contract/constants.js'
 import type { ProjectSnapshotEntry, ProjectSnapshotInput } from '../../types/observation.js'
 import { readLineRange } from '../editing/line-range.js'
 
-/** 领域目录和真实捕获使用同一份计划核对；未知字段不能偷偷加入新的依赖。 */
+/** 领域目录和真实捕获共用核对；保留根路由请求供每次捕获重新授权，未知字段不引入新依赖。 */
 export function snapshotInput(input: unknown): ProjectSnapshotInput {
-  if (!isPlainObject(input) || Object.keys(input).some((key) => key !== 'files'))
-    throw new AppError('VALIDATION', 'snapshot 只接受 files')
+  if (
+    !isPlainObject(input) ||
+    Object.keys(input).some((key) => key !== 'files' && key !== 'projectRoot')
+  )
+    throw new AppError('VALIDATION', 'snapshot 只接受 files 和 projectRoot')
+  const projectRoot = input.projectRoot
+  if (!isUndefined(projectRoot) && (!isString(projectRoot) || !isAbsolute(projectRoot)))
+    throw new AppError('VALIDATION', 'snapshot.projectRoot 必须是项目绝对路径')
   if (
     !isArray(input.files) ||
     isEmpty(input.files) ||
@@ -91,5 +99,5 @@ export function snapshotInput(input: unknown): ProjectSnapshotInput {
     if (!isUndefined(required)) entry.required = required
     return entry
   })
-  return { files }
+  return isUndefined(projectRoot) ? { files } : { projectRoot, files }
 }

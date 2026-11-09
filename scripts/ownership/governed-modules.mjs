@@ -85,14 +85,12 @@ export const GovernedModules = [
         'SkillComposition.ts',
         'SkillCapabilityModules.ts',
         'NpmSkillInstaller.ts',
-        'SkillsOperations.ts',
         'SkillSession.ts',
       ],
       ['BuiltinSkills.ts'],
       ['SkillPackageFiles.ts'],
     ],
     browserSafeEntries: ['contracts.ts'],
-    surfaceFile: 'skills/impl/SkillsOperations.ts',
     assets: ['resources'],
     invariants: 'skills/spec/invariants.md',
     acceptance: 'skills/spec/acceptance.test.ts',
@@ -105,7 +103,6 @@ export const GovernedModules = [
     types: 'act/runtime/types',
     impl: 'act/runtime/impl',
     utils: 'act/runtime/utils',
-    surfaceFile: 'act/runtime/impl/CompletionEvidenceOperations.ts',
     layers: [
       [
         'CapabilityModules.ts',
@@ -117,16 +114,12 @@ export const GovernedModules = [
         'ModelToolActivation.ts',
         'MemoryConsolidation.ts',
         'ContextMaintenance.ts',
-        'CompletionReview.ts',
-        'CompletionEvidence.ts',
-        'CompletionEvidenceOperations.ts',
-        'CompletionValidation.ts',
-        'CompletionValidationOperations.ts',
-        'NodeCompletionValidationHost.ts',
         'ContextPatchStore.ts',
         'SessionGoal.ts',
         'RuntimeSession.ts',
         'ContextMemory.ts',
+        'SessionNotes.ts',
+        'SessionControl.ts',
         'ActiveContext.ts',
         'ScriptTurnDecoder.ts',
         'NativeTurnDecoder.ts',
@@ -136,7 +129,9 @@ export const GovernedModules = [
         'StandardModules.ts',
         'NodeExecutionEnvironment.ts',
         'RuntimeBootstrap.ts',
-        'RuntimeWorkspaceBinding.ts',
+        'SessionExecutionBinding.ts',
+        'NodeRuntime.ts',
+        'NodeRuntimeBinding.ts',
         'ChildTaskMaterials.ts',
         'EventDelivery.ts',
         'EffectScheduler.ts',
@@ -253,14 +248,13 @@ export const GovernedModules = [
       ['ContextViewSession.ts', 'LocalContextStorage.ts', 'TurnContextSessionLedgers.ts'],
       [
         'ContextEvidenceBuilder.ts',
-        'ContextVerificationSession.ts',
         'SessionContext.ts',
         'ContextInvocationJournal.ts',
         'LocalStoreStorage.ts',
         'LocalContextObjects.ts',
         'TurnContextLedger.ts',
       ],
-      ['EvidenceAccess.ts', 'TurnContextAppendHub.ts', 'ContextReferenceAllocator.ts'],
+      ['EvidenceAccess.ts', 'TurnContextAppendHub.ts'],
     ],
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     invariants: 'spec/invariants.md',
@@ -455,6 +449,7 @@ export const GovernedModules = [
       ['plugins/'],
       ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
       // 语言查询与外部语言服务；只借内核的类型与只读端口。
+      ['language/SkillProjectCodeQuery.ts'],
       ['language/ProjectCodeQuery.ts', 'language/ExternalLanguageService.ts'],
       ['language/LanguageQueries.ts', 'language/ExternalLanguageServerClient.ts'],
       ['language/LanguageServiceRegistry.ts'],
@@ -490,7 +485,7 @@ export const GovernedModules = [
       ['ComputerOperations.ts'],
       // 运行时：拉起 Python helper、JSON Lines 协议、按 id 关联请求
       ['ComputerSidecarManager.ts'],
-      // helper 定位：按平台与资源根找脚本与自带 venv
+      // helper 定位：按平台与资源根找脚本与自包含 Python
       ['ComputerHelperLocator.ts'],
     ],
     invariants: 'computer/spec/invariants.md',
@@ -506,7 +501,6 @@ export const GovernedModules = [
     portable: 'memory.ts',
     impl: 'memory/impl',
     utils: 'memory/utils',
-    tuning: 'tuning.ts',
     // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     // 作用域端口：三个操作经 ctx.memory 调它；每个方法都必须有操作在调
@@ -518,7 +512,7 @@ export const GovernedModules = [
       ['MemoryOperations.ts'],
       // 记忆库：根目录下按作用域分目录，列出有记忆的作用域
       ['MemoryStore.ts'],
-      // 一个作用域：读写目录里的条目，排会话开场的索引
+      // 一个作用域：读写目录里的条目
       ['MemoryScope.ts'],
     ],
     invariants: 'memory/spec/invariants.md',
@@ -536,7 +530,7 @@ export const GovernedModules = [
     impl: 'office/impl',
     utils: 'office/utils',
     tuning: 'tuning.ts',
-    // 根入口要 docx / exceljs / pdfjs 与磁盘，渲染入口要 canvas 与 pdfjs，都只给 Node；渲染进程只能加载可移植数据
+    // 操作入口按调用加载执行组，渲染入口直接加载引擎；locator 只定位资源。可移植数据才供渲染进程加载。
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'OfficeEnvironmentVariables',
     // 空间端口：九个操作经 ctx.office 调它；每个方法都必须有操作在调
@@ -552,6 +546,28 @@ export const GovernedModules = [
       ['operations/'],
       // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
       ['runtime/'],
+    ],
+    lazyImports: [
+      {
+        specifier: './operations/OfficeDocumentOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际创建 Word、PowerPoint 或 Excel 时才加载文档生成引擎和共享写队列',
+      },
+      {
+        specifier: './operations/OfficePdfOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际调用 PDF 操作时才加载 PDF 引擎、Canvas 与转换执行组',
+      },
+      {
+        specifier: './operations/OfficePreviewOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际预览文档时才加载解析和原生渲染引擎',
+      },
+      {
+        specifier: './operations/OfficeMarkdownOperations.js',
+        file: 'office/impl/OfficeOperations.ts',
+        reason: '只有实际转 Markdown 时才加载转换执行组与默认资源定位器',
+      },
     ],
     invariants: 'office/spec/invariants.md',
     acceptance: 'office/spec/acceptance.test.ts',

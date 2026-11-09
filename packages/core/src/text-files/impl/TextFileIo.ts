@@ -32,6 +32,7 @@ export interface TextFileIoApi {
    * 原子替换一个文件的全部字节，路径是符号链接时写到它指向的普通文件：同目录临时文件 → 写完 fsync → 改名覆盖 → fsync 目录（Windows 不做最后一步）。
    * 已有文件精确恢复它的权限位；新文件用 mode 并精确设上，不给就由 umask 定。给了 expected 时写前、改名前各核对一次磁盘上的字节，对不上抛 externalEdit、什么都不写。
    * signal 在开始准备及最终 rename 前核对；rename 已完成时保留真实成功，不因迟到取消推翻提交。
+   * rename 后的新内容已经可见；随后目录 fsync 或资源收尾失败仍原样抛错，拒绝回执不表示目标未改动，事务调用方应核对实际内容。
    * 已有的不是普通文件或有多个硬链接抛 notRegular；mode 不在 0–0777 抛 invalidMode；上级目录不存在、没有权限这类文件系统错误原样抛出。
    */
   writeBytes(

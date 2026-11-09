@@ -47,7 +47,7 @@ export interface SandboxOperationsApi {
   /**
    * @AgentView
    * 在镜像里跑一条命令，工作目录钉在镜像根。命令自己失败（非零退出、超时）是正常回执、不抛错，照 success 判。
-   * 危险命令（递归删除、丢未提交改动的 git 这类）照常先问用户，用户不点头就抛错、命令不跑。
+   * 危险命令（递归删除这类）照常先问用户，用户不点头就抛错、命令不跑。
    * 镜像里连不上网，除非建沙箱时把 network 开了。
    * @OperationEffect write
    */

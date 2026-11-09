@@ -13,7 +13,7 @@ Security vulnerabilities must follow [SECURITY.md](SECURITY.md), not the public 
 
 ## Development setup
 
-VelarOS Platform uses the Bun version pinned in package.json (currently 1.3.13) and Node.js 22.15 or newer for the complete workspace. The SQLite adapter alone requires Node.js 22.13 or newer.
+VelarOS Platform uses the Bun version pinned in package.json (currently 1.4.3) and Node.js 22.15 or newer for the complete workspace. The SQLite adapter alone requires Node.js 22.13 or newer.
 
 ```bash
 bun install --frozen-lockfile

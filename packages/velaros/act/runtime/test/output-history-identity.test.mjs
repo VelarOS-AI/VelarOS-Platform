@@ -2,15 +2,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { materialHistoryDelta, projectMaterial } from '../../../dist/act/runtime/utils/materials.js'
 
 import { historyEntries } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 
@@ -19,7 +19,6 @@ async function fixture(t) {
   const requests = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: {
       id: 'output-history-identity',
@@ -663,4 +662,111 @@ test('INV-69 raw arrays retain indexes and small or unrelated fields keep their 
     materialHistoryDelta('{"small":"a"}', '{"small":"a"}', '{"small":"a"}', ref),
     undefined
   )
+})
+
+test('dynamic observation exchanges stay out of projected, frozen, cut and sealed history', async (t) => {
+  const f = await fixture(t)
+  await project(f, 30000, true)
+  const segment = await f.recent.segment(signal)
+  const ordinaryCalls = [
+    { id: 'ordinary-exec', name: 'exec', input: { code: 'console.log("ordinary")' } },
+  ]
+  const ordinaryText = 'ORDINARY_EXEC_SENTINEL'
+  const ordinary = await f.session.context.append({
+    kind: 'assistant',
+    body: JSON.stringify({ text: ordinaryText, calls: ordinaryCalls }),
+  })
+  const result = await archiveRaw(f, 'ORDINARY_EXEC_RESULT')
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'model-tool-exchange',
+    sources: [ordinary.ref],
+    body: JSON.stringify({
+      text: ordinaryText,
+      calls: ordinaryCalls,
+      results: [
+        { id: 'ordinary-exec', name: 'exec', output: { status: 'recorded', resultRef: result.id } },
+      ],
+      delivery: 'history',
+    }),
+  })
+  const calls = [
+    { id: 'dynamic-observe', name: 'observe', input: { code: 'console.log("small state")' } },
+  ]
+  const text = 'DYNAMIC_OBSERVE_SENTINEL'
+  const body = JSON.stringify({ text, calls })
+  const observer = await f.session.context.append({ kind: 'assistant', body })
+  const exchange = await f.session.context.append({
+    kind: 'audit',
+    title: 'model-tool-exchange',
+    sources: [observer.ref],
+    body: JSON.stringify({
+      text,
+      calls,
+      results: [
+        {
+          id: 'dynamic-observe',
+          name: 'observe',
+          output: {
+            status: 'completed',
+            effect: 'none',
+            receipt: { status: 'updated', executed: false, effective: 'next-model-turn' },
+          },
+        },
+      ],
+      delivery: 'dynamic',
+    }),
+  })
+  const observation = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    sources: [observer.ref],
+    body: JSON.stringify({ mode: 'observe', result: { value: 'DYNAMIC_RESULT_SENTINEL' } }),
+  })
+  await f.session.context.append({ kind: 'assistant', body: 'SECOND_ORDINARY_RESPONSE' })
+  const legacy = {
+    ...segment,
+    entries: [
+      ...segment.entries,
+      {
+        ref: observer.ref.id,
+        sequence: observer.sequence,
+        role: 'assistant',
+        objectId: observer.objectId,
+        chars: body.length,
+        representation: 'full',
+      },
+    ],
+  }
+  const history = await f.recent.project(legacy, [], 30000, signal)
+  assert(history.items.some((item) => item.ref === ordinary.ref.id))
+  assert(history.items.some((item) => item.ref === result.id))
+  assert(
+    history.messages.some((message) =>
+      message.toolExchange?.calls.some((call) => call.name === 'exec')
+    )
+  )
+  assert(
+    !history.items.some((item) => item.ref === observer.ref.id || item.ref === observation.ref.id)
+  )
+  assert.doesNotMatch(
+    JSON.stringify(history.messages),
+    /DYNAMIC_OBSERVE_SENTINEL|DYNAMIC_RESULT_SENTINEL/
+  )
+  assert.equal(
+    await f.recent.cut(legacy, 1, signal),
+    undefined,
+    'Only the two ordinary responses count toward a cut'
+  )
+  const sealed = await f.recent.seal(segment.from, observer.sequence, signal)
+  const volume = (await f.recent.volumes(signal)).find((item) => item.ref.id === sealed.id).volume
+  assert.equal(volume.turns, 1)
+  assert.equal(volume.results, 1)
+  assert.doesNotMatch(volume.skeleton, /DYNAMIC_OBSERVE_SENTINEL|DYNAMIC_RESULT_SENTINEL/)
+  const audits = await f.storage.selectSnapshot('s', [
+    { kind: 'audit', title: 'model-tool-exchange' },
+  ])
+  const retained = audits.records.find((record) => record.ref.id === exchange.ref.id)
+  assert(retained, 'The real exchange remains available to audit and trace')
+  assert.equal(JSON.parse(await f.storage.get('s', retained.objectId)).delivery, 'dynamic')
 })

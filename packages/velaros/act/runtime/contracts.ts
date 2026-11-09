@@ -18,6 +18,10 @@ export type {
   ModelToolModelProfile,
   ModelToolPolicy,
 } from './types/model-tools.js'
+export type {
+  ObservationHistoryRequest,
+  ObservationHistorySelectionReceipt,
+} from './types/observation.js'
 export type { ScriptRetention } from './types/results.js'
 export type {
   ObservationRegistration,

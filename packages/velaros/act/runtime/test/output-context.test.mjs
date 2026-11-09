@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   executionMaterial,
   projectMaterial,
@@ -17,9 +18,49 @@ import {
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
-async function fixture(t, source, modelOverride, options = {}) {
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const readOnlyObservation = {
+  skip: platformHasDefaultConfinement
+    ? false
+    : 'This successful observation body/image needs the default read-only process backend.',
+}
+test(
+  'required observation remains unread when the host rejects its read-only process',
+  {
+    skip: platformHasDefaultConfinement
+      ? 'This host has a default read-only backend; successful required output is covered below.'
+      : false,
+  },
+  async (t) => {
+    const source =
+      "import {read} from 'test:world';import {output} from 'velaros';output(await read(),{key:'critical',required:true,view:{mode:'full'}});"
+    const f = await fixture(t, source)
+    const events = []
+    for await (const event of f.session.submit('Read required evidence')) events.push(event)
+    assert.equal(events.at(-1).status, 'failed')
+    assert(
+      events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
+    )
+    assert.equal(f.reads, 0)
+    const frame = JSON.parse(
+      f.requests[0].materials.find((item) => item.origin === 'runtime-view').text
+    )
+    const observed = frame.partitions.observation
+    assert.equal(observed.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert((observed.blocks ?? []).every((block) => block.bodyIncluded !== true))
+    const archived = JSON.parse((await f.programs.read(observed.resultRef)).text)
+    assert.equal(archived.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(archived.result.process, undefined)
+    assert.equal(archived.output, undefined)
+    const saved = JSON.parse((await f.programs.readProgram(f.initial.sourceRef)).text)
+    assert.equal(saved.source, source)
+    assert(f.requests.every((request) => (request.images?.length ?? 0) === 0))
+  }
+)
+async function fixture(t, source, modelOverride, options = {}, registration = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const requests = []
   let reads = 0
@@ -35,7 +76,6 @@ async function fixture(t, source, modelOverride, options = {}) {
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [
       {
@@ -65,7 +105,15 @@ async function fixture(t, source, modelOverride, options = {}) {
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
   await session.context.append({ kind: 'user', body: 'Observe current state' })
-  const initial = await session.observe({ source })
+  let initial
+  let registrationError
+  try {
+    initial = await session.observe({ source })
+  } catch (error) {
+    if (!registration.optional || !(error instanceof AppError) || error.code !== 'UNAVAILABLE')
+      throw error
+    registrationError = error
+  }
   const programs = new ProgramContext('root', session.context, storage)
   const maintenance = new ContextMaintenanceState('root', storage)
   async function run() {
@@ -96,6 +144,7 @@ async function fixture(t, source, modelOverride, options = {}) {
     memory,
     maintenance,
     initial,
+    registrationError,
     requests,
     run,
     project,
@@ -118,6 +167,29 @@ async function fixture(t, source, modelOverride, options = {}) {
     set value(v) {
       value = v
     },
+  }
+}
+async function assertUnavailableObservation(f) {
+  assert.ok(f.registrationError instanceof AppError)
+  assert.equal(f.registrationError.code, 'UNAVAILABLE')
+  assert.ok(f.registrationError.message.length > 0)
+  assert.equal(f.initial, undefined)
+  assert.equal((await f.programs.state()).observation, undefined)
+  assert.equal(f.reads, 0)
+  const records = (await f.storage.load('root')).records
+  assert.equal(records.filter((record) => record.title.startsWith('script:version:')).length, 0)
+  assert.equal(records.filter((record) => record.title.startsWith('script:execution:')).length, 0)
+  assert.equal(records.filter((record) => /^script:[^:]+:result$/u.test(record.title)).length, 0)
+  assert.equal((await createContextInvocationJournal(f.storage).list('root')).length, 0)
+  assert.ok(f.requests.length > 0)
+  for (const request of f.requests) {
+    assert.ok(request.dynamic)
+    assert.deepEqual(JSON.parse(request.dynamic.text).current.availability, {
+      available: false,
+      reason: f.registrationError.message,
+    })
+    assert.ok(!request.compiledPrompt.includes(f.registrationError.message))
+    assert.ok(!baseText(request).includes(f.registrationError.message))
   }
 }
 const source = `import {output} from 'velaros';import {read} from 'test:world';
@@ -221,7 +293,7 @@ test('INV-58 uncapped full demand keeps capacity and explicit caps authoritative
       for await (const event of f.session.submit('Continue observing')) events.push(event)
       assert.equal(events.at(-1).status, 'failed')
       assert(
-        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+        events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
       )
       assert(f.requests.length > 0, 'the bounded projection must reach a real model request')
       for (const request of f.requests) {
@@ -281,84 +353,90 @@ test('INV-58 uncapped full demand keeps capacity and explicit caps authoritative
     })
 })
 
-test('INV-58 ordinary JSON text fit reaches sealed provider messages with matching required proof', async (t) => {
-  const value = {
-    state: 1,
-    lines: Array.from({ length: 450 }, (_, i) => `\trow ${i}: "界😀" \\path\r`).join('\n'),
-  }
-  for (const cap of [16000, 9000]) {
-    const f = await fixture(
-      t,
-      `import {output} from 'velaros';import {read} from 'test:world';output.configure({maxChars:${cap}});const state=await read();output({...${JSON.stringify(value)},state},{key:'data',purpose:'inspect synthetic multiline JSON',required:true,view:{mode:'full'}});`
-    )
-    const events = []
-    for await (const event of f.session.submit('Continue observing')) events.push(event)
-    assert.equal(
-      events.at(-1).status,
-      cap === 16000 ? 'completed' : 'failed',
-      JSON.stringify({ cap, events })
-    )
-    if (cap === 9000)
-      assert(
-        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+test(
+  'INV-58 ordinary JSON text fit reaches sealed provider messages with matching required proof',
+  readOnlyObservation,
+  async (t) => {
+    const value = {
+      state: 1,
+      lines: Array.from({ length: 450 }, (_, i) => `\trow ${i}: "界😀" \\path\r`).join('\n'),
+    }
+    for (const cap of [16000, 9000]) {
+      const f = await fixture(
+        t,
+        `import {output} from 'velaros';import {read} from 'test:world';output.configure({maxChars:${cap}});const state=await read();output({...${JSON.stringify(value)},state},{key:'data',purpose:'inspect synthetic multiline JSON',required:true,view:{mode:'full'}});`
       )
-    const request = f.requests[0]
-    const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
-    const observed = frame.partitions.observation
-    const record = await f.programs.read(observed.resultRef, 0, 1)
-    const archived = JSON.parse(await f.storage.get('root', record.record.objectId))
-    assert.deepEqual(archived.output.blocks[0].value, value)
-    const actual = scriptOutputs.project(
-      archived.output,
-      observed.resultRef,
-      cap,
-      undefined,
-      undefined,
-      undefined,
-      'text'
-    )
-    const json = scriptOutputs.project(archived.output, observed.resultRef, cap)
-    const block = actual.blocks.find((item) => item.key === 'data')
-    assert.equal(observed.text, actual.prompt)
-    assert.equal(observed.presentation.format, 'text')
-    assert.equal(observed.presentation.allocatedChars, cap)
-    assert.equal(observed.blocks[0].contentHash, scriptOutputs.hash(value))
-    assert.equal(json.blocks[0].representation, 'reference')
-    assert.equal(block.representation, cap === 16000 ? 'full' : 'reference')
-    assert.equal(observed.bodyIncluded, cap === 16000)
-    assert.equal(observed.truncated, cap !== 16000)
-    assert.equal(
-      frame.partitions.runtime.decision.missing.some((item) => item.key === 'data'),
-      cap !== 16000
-    )
-    const messages = modelRequestEncoder.messages(request)
-    const wire = messages
-      .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
-      .join('\n')
-    assert(
-      wire.includes(actual.prompt),
-      'the complete actual text encoding reaches provider messages'
-    )
-    if (cap === 16000) {
-      assert.deepEqual(JSON.parse(block.text), value)
-      assert(
-        wire.includes(JSON.stringify(value, null, 2)),
-        'outer request serialization preserves every body character'
+      const events = []
+      for await (const event of f.session.submit('Continue observing')) events.push(event)
+      assert.equal(
+        events.at(-1).status,
+        cap === 16000 ? 'completed' : 'failed',
+        JSON.stringify({ cap, events })
       )
-      const fullJson = scriptOutputs.project(
-        { ...archived.output, config: { maxChars: 200000 } },
+      if (cap === 9000)
+        assert(
+          events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
+        )
+      const request = f.requests[0]
+      const frame = JSON.parse(
+        request.materials.find((item) => item.origin === 'runtime-view').text
+      )
+      const observed = frame.partitions.observation
+      const record = await f.programs.read(observed.resultRef, 0, 1)
+      const archived = JSON.parse(await f.storage.get('root', record.record.objectId))
+      assert.deepEqual(archived.output.blocks[0].value, value)
+      const actual = scriptOutputs.project(
+        archived.output,
         observed.resultRef,
-        200000
+        cap,
+        undefined,
+        undefined,
+        undefined,
+        'text'
       )
-      assert(fullJson.prompt.length > cap)
-    } else assert(!wire.includes(JSON.stringify(value, null, 2)))
-    assert.equal(
-      f.reads,
-      f.requests.length,
-      'each business round captures once through its authorized operation'
-    )
+      const json = scriptOutputs.project(archived.output, observed.resultRef, cap)
+      const block = actual.blocks.find((item) => item.key === 'data')
+      assert.equal(observed.text, actual.prompt)
+      assert.equal(observed.presentation.format, 'text')
+      assert.equal(observed.presentation.allocatedChars, cap)
+      assert.equal(observed.blocks[0].contentHash, scriptOutputs.hash(value))
+      assert.equal(json.blocks[0].representation, 'reference')
+      assert.equal(block.representation, cap === 16000 ? 'full' : 'reference')
+      assert.equal(observed.bodyIncluded, cap === 16000)
+      assert.equal(observed.truncated, cap !== 16000)
+      assert.equal(
+        frame.partitions.runtime.decision.missing.some((item) => item.key === 'data'),
+        cap !== 16000
+      )
+      const messages = modelRequestEncoder.messages(request)
+      const wire = messages
+        .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
+        .join('\n')
+      assert(
+        wire.includes(actual.prompt),
+        'the complete actual text encoding reaches provider messages'
+      )
+      if (cap === 16000) {
+        assert.deepEqual(JSON.parse(block.text), value)
+        assert(
+          wire.includes(JSON.stringify(value, null, 2)),
+          'outer request serialization preserves every body character'
+        )
+        const fullJson = scriptOutputs.project(
+          { ...archived.output, config: { maxChars: 200000 } },
+          observed.resultRef,
+          200000
+        )
+        assert(fullJson.prompt.length > cap)
+      } else assert(!wire.includes(JSON.stringify(value, null, 2)))
+      assert.equal(
+        f.reads,
+        f.requests.length,
+        'each business round captures once through its authorized operation'
+      )
+    }
   }
-})
+)
 
 test('INV-58 plain output retains bounded code evidence inside large arrays instead of only a receipt shell', () => {
   const original = {
@@ -1163,56 +1241,70 @@ test('INV-58 managed structured text reaches the next request without rereading 
   assert.deepEqual(JSON.parse(await f.storage.get('root', raw.record.objectId)), archived)
 })
 
-test('INV-22 emergency source edit rerenders archived observation without another read, and next normal round refreshes', async (t) => {
-  const f = await fixture(t, source)
-  await f.run()
-  assert.equal(f.reads, 1)
-  const snap = await f.maintenance.snapshot(10000, signal)
-  const ref = snap.observation.resultRef
-  await f.maintenance.apply(
-    snap,
-    patch(snap, {
-      sourceRef: snap.observationRef,
-      config: { maxChars: 3000 },
-      outputs: [{ key: 'logs', view: { maxItems: 2, edge: 'tail', maxChars: 800 } }],
-    }),
-    signal
-  )
-  assert.equal(f.reads, 1)
-  const frame = await f.project(ref)
-  assert.notEqual(frame.observation.sourceRef, f.initial.sourceRef)
-  assert.equal(frame.observation.collectedSourceRef, f.initial.sourceRef)
-  assert.equal(frame.observation.resultRef, ref)
-  assert.equal(frame.observation.adjustment.executed, false)
-  assert.equal(frame.observation.presentation.requestedChars, 3000)
-  assert.match(frame.observation.source, /"maxItems":2/)
-  assert.equal(frame.observation.presentation.format, 'text')
-  assert.deepEqual(frame.observation.blocks.find((b) => b.key === 'logs').selection, {
-    from: 38,
-    shown: 2,
-    total: 40,
-    unit: 'items',
-  })
-  assert(
-    frame.observation.text.includes(
-      JSON.stringify(
-        [38, 39].map((i) => ({ i, text: 'e'.repeat(100) })),
-        null,
-        2
+test(
+  'INV-22 emergency source edit rerenders archived observation without another read, and next normal round refreshes',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(t, source)
+    await f.run()
+    assert.equal(f.reads, 1)
+    const snap = await f.maintenance.snapshot(10000, signal)
+    const ref = snap.observation.resultRef
+    await f.maintenance.apply(
+      snap,
+      patch(snap, {
+        sourceRef: snap.observationRef,
+        config: { maxChars: 3000 },
+        outputs: [{ key: 'logs', view: { maxItems: 2, edge: 'tail', maxChars: 800 } }],
+      }),
+      signal
+    )
+    assert.equal(f.reads, 1)
+    const frame = await f.project(ref)
+    assert.notEqual(frame.observation.sourceRef, f.initial.sourceRef)
+    assert.equal(frame.observation.collectedSourceRef, f.initial.sourceRef)
+    assert.equal(frame.observation.resultRef, ref)
+    assert.equal(frame.observation.adjustment.executed, false)
+    assert.equal(frame.observation.presentation.requestedChars, 3000)
+    assert.match(frame.observation.source, /"maxItems":2/)
+    assert.equal(frame.observation.presentation.format, 'text')
+    assert.deepEqual(frame.observation.blocks.find((b) => b.key === 'logs').selection, {
+      from: 38,
+      shown: 2,
+      total: 40,
+      unit: 'items',
+    })
+    assert(
+      frame.observation.text.includes(
+        JSON.stringify(
+          [38, 39].map((i) => ({ i, text: 'e'.repeat(100) })),
+          null,
+          2
+        )
       )
     )
-  )
-  f.value = 2
-  await f.run()
-  assert.equal(f.reads, 2)
-  const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
-  assert.equal(next.collectedSourceRef, next.presentationSourceRef)
-  assert.equal(next.blocks.find((b) => b.key === 'state').representation, 'full')
-  assert(next.text.includes(JSON.stringify({ state: 2 }, null, 2)))
-})
+    f.value = 2
+    await f.run()
+    assert.equal(f.reads, 2)
+    const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
+    assert.equal(next.collectedSourceRef, next.presentationSourceRef)
+    assert.equal(next.blocks.find((b) => b.key === 'state').representation, 'full')
+    assert(next.text.includes(JSON.stringify({ state: 2 }, null, 2)))
+  }
+)
 
 test('INV-23 late invalid metadata keeps source and all other changes unpublished', async (t) => {
-  const f = await fixture(t, source)
+  const f = await fixture(t, source, undefined, {}, { optional: true })
+  if (f.registrationError) {
+    await t.test('unavailable backend rejects observation before metadata staging', async () => {
+      await f.run()
+      await assertUnavailableObservation(f)
+      assert(
+        !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+      )
+    })
+    return
+  }
   await f.run()
   const note = await f.note()
   const snap = await f.maintenance.snapshot(10000, signal)
@@ -1237,71 +1329,86 @@ test('INV-23 late invalid metadata keeps source and all other changes unpublishe
   assert.equal(f.reads, 1)
 })
 
-test('summary binds original content and user goal generation; stale or forged summaries cannot pass', async (t) => {
-  const f = await fixture(t, source)
-  await f.run()
-  const snap = await f.maintenance.snapshot(10000, signal)
-  const state = snap.observation.blocks.find((b) => b.key === 'state')
-  const summary = {
-    key: 'state',
-    resultRef: snap.observation.resultRef,
-    contentHash: state.contentHash,
-    text: 'Current state is one.',
-  }
-  await assert.rejects(
-    f.maintenance.apply(
+test(
+  'summary binds original content and user goal generation; stale or forged summaries cannot pass',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(t, source)
+    await f.run()
+    const snap = await f.maintenance.snapshot(10000, signal)
+    const state = snap.observation.blocks.find((b) => b.key === 'state')
+    const summary = {
+      key: 'state',
+      resultRef: snap.observation.resultRef,
+      contentHash: state.contentHash,
+      text: 'Current state is one.',
+    }
+    await assert.rejects(
+      f.maintenance.apply(
+        snap,
+        patch(snap, {
+          sourceRef: snap.observationRef,
+          summaries: [{ ...summary, contentHash: 'forged' }],
+        }),
+        signal
+      ),
+      /不匹配/
+    )
+    await f.maintenance.apply(
       snap,
       patch(snap, {
         sourceRef: snap.observationRef,
-        summaries: [{ ...summary, contentHash: 'forged' }],
+        outputs: [{ key: 'state', view: { mode: 'summary' } }],
+        summaries: [summary],
       }),
       signal
-    ),
-    /不匹配/
-  )
-  await f.maintenance.apply(
-    snap,
-    patch(snap, {
-      sourceRef: snap.observationRef,
-      outputs: [{ key: 'state', view: { mode: 'summary' } }],
-      summaries: [summary],
-    }),
-    signal
-  )
-  const rendered = await f.project(snap.observation.resultRef)
-  assert.equal(rendered.observation.blocks.find((b) => b.key === 'state').representation, 'summary')
-  f.value = 2
-  await f.run()
-  const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
-  assert.equal(next.blocks.find((b) => b.key === 'state').reason, 'summary-unavailable')
-})
+    )
+    const rendered = await f.project(snap.observation.resultRef)
+    assert.equal(
+      rendered.observation.blocks.find((b) => b.key === 'state').representation,
+      'summary'
+    )
+    f.value = 2
+    await f.run()
+    const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
+    assert.equal(next.blocks.find((b) => b.key === 'state').reason, 'summary-unavailable')
+  }
+)
 
-test('failure preserves completed blocks and reports missing outputs separately from empty successful values', async (t) => {
-  const f = await fixture(
-    t,
-    `import {output} from 'velaros';output([],{key:'empty',type:'list'});throw Error('read unavailable');output(3,{key:'later'});`
-  )
-  await f.run()
-  const view = JSON.parse(f.requests[0].materials[0].text).partitions.observation
-  assert.equal(view.collection, 'partial')
-  assert.match(view.failure.message, /read unavailable/)
-  assert.deepEqual(view.missingOutputs, [{ key: 'later', status: 'not-produced' }])
-  assert.equal(view.presentation.format, 'text')
-  const displayed = await f.display(view.resultRef, 12000)
-  assert.equal(displayed.blocks[0].text, '[]')
-  assert.equal(view.text, displayed.prompt)
-})
+test(
+  'failure preserves completed blocks and reports missing outputs separately from empty successful values',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';output([],{key:'empty',type:'list'});throw Error('read unavailable');output(3,{key:'later'});`
+    )
+    await f.run()
+    const view = JSON.parse(f.requests[0].materials[0].text).partitions.observation
+    assert.equal(view.collection, 'partial')
+    assert.match(view.failure.message, /read unavailable/)
+    assert.deepEqual(view.missingOutputs, [{ key: 'later', status: 'not-produced' }])
+    assert.equal(view.presentation.format, 'text')
+    const displayed = await f.display(view.resultRef, 12000)
+    assert.equal(displayed.blocks[0].text, '[]')
+    assert.equal(view.text, displayed.prompt)
+  }
+)
 
-test('duplicate managed keys surface a repairable observation failure rather than breaking context assembly', async (t) => {
-  const f = await fixture(
-    t,
-    `import {output} from 'velaros';output(1,{key:'x'});try{output(2,{key:'x'})}catch{}`
-  )
-  await f.run()
-  const view = JSON.parse(f.requests[0].materials[0].text).partitions.observation
-  assert.equal(view.collection, 'partial')
-  assert.match(view.collectionIssues.join(), /重复/)
-})
+test(
+  'duplicate managed keys surface a repairable observation failure rather than breaking context assembly',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';output(1,{key:'x'});try{output(2,{key:'x'})}catch{}`
+    )
+    await f.run()
+    const view = JSON.parse(f.requests[0].materials[0].text).partitions.observation
+    assert.equal(view.collection, 'partial')
+    assert.match(view.collectionIssues.join(), /重复/)
+  }
+)
 
 test('large once-only output remains fully recallable while its declared view stays bounded', async (t) => {
   const f = await fixture(t, source)
@@ -1319,43 +1426,47 @@ test('large once-only output remains fully recallable while its declared view st
   assert.equal(frame.partitions.recent.results[0].remainingTurns, 2)
 })
 
-test('native image is delivered, and emergency reference policy detaches it without another observation', async (t) => {
-  const data =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWAAAAABJRU5ErkJggg=='
-  const f = await fixture(
-    t,
-    `import {output} from 'velaros';output({type:'image-data',mediaType:'image/png',data:${JSON.stringify(data)},label:'pixel'},{key:'image',type:'image'});`
-  )
-  await f.run()
-  assert.equal(f.requests[0].images.length, 1)
-  assert(!JSON.parse(f.requests[0].materials[0].text).partitions.observation.text.includes(data))
-  const snap = await f.maintenance.snapshot(12000, signal)
-  await f.maintenance.apply(
-    snap,
-    patch(snap, {
-      sourceRef: snap.observationRef,
-      outputs: [{ key: 'image', view: { mode: 'reference' } }],
-    }),
-    signal
-  )
-  const raw = await f.session.context.read(
-    { sessionId: 'root', id: snap.observation.resultRef },
-    { limit: 60000 }
-  )
-  const saved = JSON.parse(raw.text)
-  const imageRecord = await f.session.context.read(saved.attachments[0], { limit: 60000 })
-  const frame = await f.programs.project(
-    (await f.session.view.inspect()).view,
-    { sessionId: 'root', id: snap.observation.resultRef },
-    [JSON.parse(imageRecord.text)],
-    signal,
-    16000
-  )
-  assert.equal(frame.images.length, 0)
-  const body = JSON.parse(frame.body)
-  assert.equal(body.observation.nativeImages[0].attached, false)
-  assert.equal(body.observation.presentationChanges[0].key, 'image')
-})
+test(
+  'native image is delivered, and emergency reference policy detaches it without another observation',
+  readOnlyObservation,
+  async (t) => {
+    const data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWAAAAABJRU5ErkJggg=='
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';output({type:'image-data',mediaType:'image/png',data:${JSON.stringify(data)},label:'pixel'},{key:'image',type:'image'});`
+    )
+    await f.run()
+    assert.equal(f.requests[0].images.length, 1)
+    assert(!JSON.parse(f.requests[0].materials[0].text).partitions.observation.text.includes(data))
+    const snap = await f.maintenance.snapshot(12000, signal)
+    await f.maintenance.apply(
+      snap,
+      patch(snap, {
+        sourceRef: snap.observationRef,
+        outputs: [{ key: 'image', view: { mode: 'reference' } }],
+      }),
+      signal
+    )
+    const raw = await f.session.context.read(
+      { sessionId: 'root', id: snap.observation.resultRef },
+      { limit: 60000 }
+    )
+    const saved = JSON.parse(raw.text)
+    const imageRecord = await f.session.context.read(saved.attachments[0], { limit: 60000 })
+    const frame = await f.programs.project(
+      (await f.session.view.inspect()).view,
+      { sessionId: 'root', id: snap.observation.resultRef },
+      [JSON.parse(imageRecord.text)],
+      signal,
+      16000
+    )
+    assert.equal(frame.images.length, 0)
+    const body = JSON.parse(frame.body)
+    assert.equal(body.observation.nativeImages[0].attached, false)
+    assert.equal(body.observation.presentationChanges[0].key, 'image')
+  }
+)
 
 test('source or user changes invalidate an in-flight output patch', async (t) => {
   const f = await fixture(t, source)
@@ -1382,142 +1493,149 @@ test('source or user changes invalidate an in-flight output patch', async (t) =>
   )
 })
 
-test('the actual independent maintenance tool publishes output policy before the next main request without observer replay', async (t) => {
-  let reads = 0
-  let toolCalls = 0
-  let mainCalls = 0
-  const limits = { contextTokens: 100000, inputTokens: 90000, outputTokens: 8192 }
-  const estimate = async () => ({ tokens: 1000, precision: 'exact', basis: 'test' })
-  const main = {
-    id: 'main',
-    limits,
-    estimate,
-    async *stream(request) {
-      mainCalls++
-      const frame = JSON.parse(request.materials[0].text)
-      const observation = frame.partitions.observation
-      assert.equal(observation.presentation.requestedChars, 1500)
-      if (mainCalls === 1)
-        assert.notEqual(observation.collectedSourceRef, observation.presentationSourceRef)
-      else {
-        assert.equal(observation.collectedSourceRef, observation.presentationSourceRef)
-        assert.equal(frame.partitions.runtime.progress.script.changed, false)
-      }
-      yield* done(request)
-    },
-  }
-  const maintenance = {
-    id: 'maintenance',
-    limits,
-    estimate,
-    async *stream(request) {
-      toolCalls++
-      const snap = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
-      const proposed = patch(snap, {
-        sourceRef: snap.observationRef,
-        config: { maxChars: 1500 },
-        outputs: [{ key: 'state', view: { maxChars: 500 } }],
-      })
-      const response = turn(request, {
-        execute: {
-          source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(proposed)}));`,
-        },
-      })
-      yield { ...response, text: `${response.text}\n${marker(request)} done` }
-      yield { type: 'finish', reason: 'stop' }
-    },
-  }
-  const storage = localContextStorage({ path: ':memory:' })
-  const runtime = await createRuntime({
-    storage,
-    runner: nodeSubprocessCodeRunner,
-    model: main,
-    context: { sources: [], maintenance: { model: maintenance } },
-    modules: [
-      {
-        binding: {
-          moduleId: 'test:world',
-          instanceId: 'world',
-          generation: 1,
-          schemaRevision: '1',
-        },
-        summary: 'counter',
-        operations: {
-          read: {
-            summary: 'read',
-            input: { type: 'null' },
-            output: { type: 'integer' },
-            effects: 'none',
-            run: () => {
-              reads++
-              return 1
+test(
+  'the actual independent maintenance tool publishes output policy before the next main request without observer replay',
+  readOnlyObservation,
+  async (t) => {
+    let reads = 0
+    let toolCalls = 0
+    let mainCalls = 0
+    const limits = { contextTokens: 100000, inputTokens: 90000, outputTokens: 8192 }
+    const estimate = async () => ({ tokens: 1000, precision: 'exact', basis: 'test' })
+    const main = {
+      id: 'main',
+      limits,
+      estimate,
+      async *stream(request) {
+        mainCalls++
+        const frame = JSON.parse(request.materials[0].text)
+        const observation = frame.partitions.observation
+        assert.equal(observation.presentation.requestedChars, 1500)
+        if (mainCalls === 1)
+          assert.notEqual(observation.collectedSourceRef, observation.presentationSourceRef)
+        else {
+          assert.equal(observation.collectedSourceRef, observation.presentationSourceRef)
+          assert.equal(frame.partitions.runtime.progress.script.changed, false)
+        }
+        yield* done(request)
+      },
+    }
+    const maintenance = {
+      id: 'maintenance',
+      limits,
+      estimate,
+      async *stream(request) {
+        toolCalls++
+        const snap = JSON.parse(
+          JSON.parse(request.materials[0].text).partitions.task.goals[0].text
+        ).snapshot
+        const proposed = patch(snap, {
+          sourceRef: snap.observationRef,
+          config: { maxChars: 1500 },
+          outputs: [{ key: 'state', view: { maxChars: 500 } }],
+        })
+        const response = turn(request, {
+          execute: {
+            source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(proposed)}));`,
+          },
+        })
+        yield { ...response, text: `${response.text}\n${marker(request)} done` }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    }
+    const storage = localContextStorage({ path: ':memory:' })
+    const runtime = await createRuntime({
+      storage,
+      model: main,
+      context: { sources: [], maintenance: { model: maintenance } },
+      modules: [
+        {
+          binding: {
+            moduleId: 'test:world',
+            instanceId: 'world',
+            generation: 1,
+            schemaRevision: '1',
+          },
+          summary: 'counter',
+          operations: {
+            read: {
+              summary: 'read',
+              input: { type: 'null' },
+              output: { type: 'integer' },
+              effects: 'none',
+              run: () => {
+                reads++
+                return 1
+              },
             },
           },
         },
-      },
-    ],
-  })
-  t.after(() => runtime.close())
-  const session = await runtime.openSession('root')
-  await session.context.append({ kind: 'user', body: 'work' })
-  await session.observe({
-    source: `import {output} from 'velaros';import {read} from 'test:world';output(await read(),{key:'state',view:{maxChars:2000}});`,
-  })
-  const scheduled = await session.execute({
-    source: `import {memory as context} from 'velaros:system';await context.organize({focus:'next investigate'});`,
-  })
-  assert(!scheduled.result.failed)
-  const events = []
-  for await (const event of session.submit('Observe the current value')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.deepEqual({ reads, toolCalls, mainCalls }, { reads: 1, toolCalls: 1, mainCalls: 1 })
-  t.diagnostic(
-    JSON.stringify({
-      observationReads: reads,
-      maintenanceCalls: toolCalls,
-      mainCalls,
-      policyInSource: true,
-      replayed: false,
+      ],
     })
-  )
-  for await (const event of session.submit('Check again')) {
-    assert.equal(typeof event.type, 'string')
+    t.after(() => runtime.close())
+    const session = await runtime.openSession('root')
+    await session.context.append({ kind: 'user', body: 'work' })
+    await session.observe({
+      source: `import {output} from 'velaros';import {read} from 'test:world';output(await read(),{key:'state',view:{maxChars:2000}});`,
+    })
+    const scheduled = await session.execute({
+      source: `import {memory as context} from 'velaros:system';await context.organize({focus:'next investigate'});`,
+    })
+    assert(!scheduled.result.failed)
+    const events = []
+    for await (const event of session.submit('Observe the current value')) events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert.deepEqual({ reads, toolCalls, mainCalls }, { reads: 1, toolCalls: 1, mainCalls: 1 })
+    t.diagnostic(
+      JSON.stringify({
+        observationReads: reads,
+        maintenanceCalls: toolCalls,
+        mainCalls,
+        policyInSource: true,
+        replayed: false,
+      })
+    )
+    for await (const event of session.submit('Check again')) {
+      assert.equal(typeof event.type, 'string')
+    }
+    assert.deepEqual({ reads, toolCalls, mainCalls }, { reads: 2, toolCalls: 1, mainCalls: 2 })
   }
-  assert.deepEqual({ reads, toolCalls, mainCalls }, { reads: 2, toolCalls: 1, mainCalls: 2 })
-})
+)
 
-test('a maintenance candidate cannot hide required content and all staged metadata stays unpublished', async (t) => {
-  const f = await fixture(
-    t,
-    `import {output} from 'velaros';output({value:1},{key:'critical',required:true});`
-  )
-  await f.run()
-  const note = await f.note()
-  const snap = await f.maintenance.snapshot(10000, signal)
-  await assert.rejects(
-    f.maintenance.apply(
-      snap,
-      {
-        ...patch(snap, {
-          sourceRef: snap.observationRef,
-          outputs: [{ key: 'critical', view: { mode: 'reference' } }],
-        }),
-        notes: [{ ref: note.ref, summary: 'candidate' }],
-      },
-      signal
-    ),
-    { code: 'CONTEXT_REQUIRED' }
-  )
-  assert.equal((await f.programs.state()).observation, snap.observationRef)
-  assert(
-    !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
-  )
-})
+test(
+  'a maintenance candidate cannot hide required content and all staged metadata stays unpublished',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';output({value:1},{key:'critical',required:true});`
+    )
+    await f.run()
+    const note = await f.note()
+    const snap = await f.maintenance.snapshot(10000, signal)
+    await assert.rejects(
+      f.maintenance.apply(
+        snap,
+        {
+          ...patch(snap, {
+            sourceRef: snap.observationRef,
+            outputs: [{ key: 'critical', view: { mode: 'reference' } }],
+          }),
+          notes: [{ ref: note.ref, summary: 'candidate' }],
+        },
+        signal
+      ),
+      { code: 'CONTEXT_REQUIRED' }
+    )
+    assert.equal((await f.programs.state()).observation, snap.observationRef)
+    assert(
+      !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+    )
+  }
+)
 
 test('the parent model budget validator rejects a fully staged candidate before CAS publication', async (t) => {
-  const f = await fixture(t, source)
+  const f = await fixture(t, source, undefined, {}, { optional: true })
   await f.run()
   let previews = 0
   const state = new ContextMaintenanceState('root', f.storage, {
@@ -1534,63 +1652,68 @@ test('the parent model budget validator rejects a fully staged candidate before 
     { code: 'CONTEXT_BUDGET' }
   )
   assert.equal(previews, 2)
-  assert.equal(f.reads, 1)
+  assert.equal(f.reads, f.registrationError ? 0 : 1)
+  if (f.registrationError) await assertUnavailableObservation(f)
   assert(
     !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
   )
 })
 
-test('an oversized maintenance candidate uses the parent recovery projection before rejecting the patch', async (t) => {
-  const f = await fixture(
-    t,
-    `import {output} from 'velaros';import {read} from 'test:world';
+test(
+  'an oversized maintenance candidate uses the parent recovery projection before rejecting the patch',
+  readOnlyObservation,
+  async (t) => {
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';import {read} from 'test:world';
 await read();
 output({value:'required-state'},{key:'critical',required:true,view:{mode:'full'}});
 `
-  )
-  await f.run()
-  await f.session.execute({ source: "console.log('optional-detail-'.repeat(2000))" }, 'task')
-  const candidates = []
-  const state = new ContextMaintenanceState('root', f.storage, {
-    recoveryChars: 3000,
-    validateCandidate: async (candidate) => {
-      const frame = JSON.parse(candidate.body)
-      const content = JSON.stringify(
-        modelRequestEncoder.messages({
-          instructions: 'Parent instructions',
-          history: candidate.history,
-          compiledPrompt: candidate.prompt,
-          response: { type: 'text' },
-        })
-      )
-      candidates.push({ frame, chars: content.length })
-      assert.match(content, /required-state/)
-      assert.deepEqual(frame.partitions.runtime.decision.missing, [])
-      assert.match(baseText(candidate), /candidate/)
-      if (content.length > 16000)
-        throw Object.assign(Error('input budget'), {
-          code: 'CONTEXT_BUDGET',
-          sizes: candidates.map((c) => c.chars),
-        })
-    },
-  })
-  const note = await f.note()
-  const snap = await state.snapshot(64000, signal)
-  const input = { ...patch(snap), notes: [{ ref: note.ref, summary: 'candidate' }] }
-  await state.validate(snap, input, signal)
-  assert.equal(candidates.length, 2, JSON.stringify(candidates.map((c) => c.chars)))
-  assert(candidates[0].chars > 16000)
-  assert(candidates[1].chars <= 16000)
-  assert(
-    !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
-  )
-  await state.apply(snap, input, signal)
-  assert.equal(candidates.length, 4)
-  assert.equal(f.reads, 1, 'candidate preparation must not execute the observation again')
-  assert(
-    (await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
-  )
-})
+    )
+    await f.run()
+    await f.session.execute({ source: "console.log('optional-detail-'.repeat(2000))" }, 'task')
+    const candidates = []
+    const state = new ContextMaintenanceState('root', f.storage, {
+      recoveryChars: 3000,
+      validateCandidate: async (candidate) => {
+        const frame = JSON.parse(candidate.body)
+        const content = JSON.stringify(
+          modelRequestEncoder.messages({
+            instructions: 'Parent instructions',
+            history: candidate.history,
+            compiledPrompt: candidate.prompt,
+            response: { type: 'text' },
+          })
+        )
+        candidates.push({ frame, chars: content.length })
+        assert.match(content, /required-state/)
+        assert.deepEqual(frame.partitions.runtime.decision.missing, [])
+        assert.match(baseText(candidate), /candidate/)
+        if (content.length > 16000)
+          throw Object.assign(Error('input budget'), {
+            code: 'CONTEXT_BUDGET',
+            sizes: candidates.map((c) => c.chars),
+          })
+      },
+    })
+    const note = await f.note()
+    const snap = await state.snapshot(64000, signal)
+    const input = { ...patch(snap), notes: [{ ref: note.ref, summary: 'candidate' }] }
+    await state.validate(snap, input, signal)
+    assert.equal(candidates.length, 2, JSON.stringify(candidates.map((c) => c.chars)))
+    assert(candidates[0].chars > 16000)
+    assert(candidates[1].chars <= 16000)
+    assert(
+      !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+    )
+    await state.apply(snap, input, signal)
+    assert.equal(candidates.length, 4)
+    assert.equal(f.reads, 1, 'candidate preparation must not execute the observation again')
+    assert(
+      (await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+    )
+  }
+)
 
 test('process log head-tail projection keeps conclusions, exact gaps and history safety', async () => {
   const { materialHistoryDelta } = await import('../../../dist/act/runtime/utils/materials.js')

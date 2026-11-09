@@ -104,7 +104,7 @@ export interface SearchActivationDependencies {
   /** 父任务预算与当前空间。 */
   readonly parent: ModelBudgetPort
   /** 当前预留收尾轮的请求身份。 */
-  readonly finalizationRequestId?: string
+  readonly finalizationRequestId: string
   /** 实际来源授权作用域。 */
   readonly scope: ContextTaskScope
   /** 独立绝对截止时间。 */
@@ -424,6 +424,7 @@ export class SearchActivation implements SearchActivationApi {
   }
 
   public async refresh(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted()
     const valid: SearchEvidence[] = []
     for (const item of this.state.evidence) {
       try {
@@ -435,12 +436,28 @@ export class SearchActivation implements SearchActivationApi {
           )) !== 'changed'
         )
           valid.push(item)
-      } catch {
-        Log.tag('ActRuntime').debug('SearchActivation 已进入异常处理或降级分支')
+      } catch (error) {
         signal.throwIfAborted()
+        if (!(error instanceof AppError) || error.code !== 'DENIED') throw error
       }
     }
-    if (valid.length === this.state.evidence.length) return
+    let candidateRevoked = false
+    // 候选摘录也是来源正文；尚未 read 的目标同样须在每轮投影前重新核权。
+    for (const candidate of this.state.candidates) {
+      try {
+        await this.dependencies.evidence.authorize(
+          this.dependencies.scope,
+          candidate.target,
+          signal
+        )
+      } catch (error) {
+        signal.throwIfAborted()
+        if (!(error instanceof AppError) || error.code !== 'DENIED') throw error
+        candidateRevoked = true
+      }
+    }
+    signal.throwIfAborted()
+    if (valid.length === this.state.evidence.length && !candidateRevoked) return
     this.state = { ...this.state, evidence: valid, candidates: [] }
     this.failures.push('EVIDENCE_CHANGED_OR_REVOKED')
     this.draft = undefined

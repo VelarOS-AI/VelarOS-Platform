@@ -1,6 +1,6 @@
 /**
  * 内核编辑操作的形状（replace_lines、replace_text、add_import 等）写成 schema：内核测试用它核对自己构造的操作合法，
- * 不是模型面的东西——模型面在 `velaros:project` 的 edit（整份写入）与项目空间的端口里。
+ * 不是模型面的东西；模型面由操作接口生成，不在这里复制。
  */
 
 import { z } from 'zod'
@@ -53,7 +53,7 @@ const JsonPatchSchema = z.discriminatedUnion('op', [
   }),
 ])
 
-const ProjectModelEditOperationSchemas = [
+const ProjectEditOperationSchemas = [
   z
     .strictObject({
       type: z.literal('replace_lines'),
@@ -273,10 +273,10 @@ function validateMatchSelection(
     })
   }
 }
-// SDK 保留历史删除操作；模型用 replace_text + newText: '' 表达同一意图。
+// SDK 的文本删除操作与内部整段替换也按各自的形状核对。
 const ProjectEditOperationSchema = z
   .discriminatedUnion('type', [
-    ...ProjectModelEditOperationSchemas,
+    ...ProjectEditOperationSchemas,
     z.strictObject({
       type: z.literal('replace_content'),
       path: ProjectPathSchema,
@@ -303,59 +303,4 @@ const ProjectEditOperationSchema = z
     }),
   ])
   .superRefine(validateMatchSelection)
-const ProjectModelEditOperationSchema = z
-  .discriminatedUnion('type', [
-    ...ProjectModelEditOperationSchemas,
-    z.strictObject({
-      type: z.literal('replace_selection'),
-      selectionRef: z
-        .string()
-        .min(1)
-        .describe('project:read 返回的 editTarget；自动包含路径、版本和行范围。'),
-      newLines: z.array(
-        z
-          .string()
-          .refine((line) => !line.includes('\n') && !line.includes('\r'), '每项只能包含一行源码')
-      ),
-    }),
-  ])
-  .superRefine(validateMatchSelection)
-
-const ProjectEditIntentSchema = z.strictObject({
-  operation: ProjectEditOperationSchema,
-  reason: z.string().optional(),
-  constraints: z
-    .strictObject({
-      maxChangedLines: z.number().int().positive().optional(),
-      expectedMatches: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe(
-          '兼容字段：断言匹配总数，不选择要修改的匹配；新调用优先放在具体文本 operation 内。'
-        ),
-    })
-    .optional(),
-})
-
-const ProjectEditOperationsSchema = z.array(ProjectEditIntentSchema)
-
-/** 模型只提交扁平操作；内部事务意图包装由 Agent 适配层负责。 */
-const ProjectModelEditSchema = z.strictObject({
-  edits: z.array(ProjectModelEditOperationSchema).min(1).max(1000),
-  cwd: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      '当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'
-    ),
-  baseRevisions: z.record(z.string().min(1), z.string().min(1)).optional(),
-})
-export {
-  ProjectEditIntentSchema,
-  ProjectEditOperationSchema,
-  ProjectEditOperationsSchema,
-  ProjectModelEditSchema,
-}
+export { ProjectEditOperationSchema }

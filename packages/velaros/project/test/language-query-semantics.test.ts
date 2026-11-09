@@ -7,12 +7,15 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
 
 import { createProjectKernel } from '@velaros-ai/velaros/project'
 
+import { LanguageQueries } from '../impl/language/LanguageQueries'
+import { LanguageServiceRegistry } from '../impl/language/LanguageServiceRegistry'
 import { typeScriptProjectPool } from '../impl/language/TypeScriptProjectPool'
 import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../index'
+import type { LanguageNavigationService } from '../types/language'
 
 setDefaultTimeout(30_000)
 
@@ -168,4 +171,90 @@ describe('find_references 的引用数口径', () => {
     expect(result.note).toContain('引用数是下限')
     expect(result.referenceCount).toBeGreaterThan(2)
   })
+})
+
+test('影响分析保留 importer 截断事实，多个完整语言结果合并截断也如实标记', async () => {
+  const unused = async () => {
+    throw new Error('纯 stub 影响分析不应调用其他端口')
+  }
+  const context: LanguageToolContext = {
+    abortSignal: new AbortController().signal,
+    project: { getRootPath: () => '/unused', kernel: unused },
+  }
+  let importerCoverage = { truncated: false, fileListTruncated: false }
+  const services: LanguageNavigationService[] = ['stub-ts', 'stub-py'].map((language) => ({
+    id: language,
+    label: language,
+    extensions: [],
+    findSymbols: async () => ({
+      symbols: [
+        {
+          language,
+          path: `${language}.ts`,
+          name: 'value',
+          kind: 'const',
+          line: 1,
+          column: 1,
+          exported: true,
+        },
+      ],
+      symbolCount: 1,
+      scannedFiles: 1,
+      scannedSymbols: 1,
+      fileListTruncated: false,
+      truncated: false,
+    }),
+    findReferences: async () => ({
+      references: [{ language, path: `${language}.ts`, line: 2, column: 1, excerpt: 'value' }],
+      referenceCount: 1,
+      scannedFiles: 1,
+      truncated: false,
+    }),
+    findImporters: async () => ({
+      importers: [
+        {
+          language,
+          path: `${language}.test.ts`,
+          line: 1,
+          column: 1,
+          specifier: './value',
+          isRelative: true,
+          isTypeOnly: false,
+          importedNames: ['value'],
+          raw: "import { value } from './value'",
+        },
+      ],
+      importerCount: 1,
+      scannedFiles: 1,
+      ...importerCoverage,
+    }),
+    listExports: unused,
+    findImports: unused,
+  }))
+  const selected = spyOn(
+    LanguageServiceRegistry.prototype,
+    'selectLanguageServices'
+  ).mockReturnValue(services)
+  try {
+    const queries = new LanguageQueries()
+    const input = { action: 'analyze_symbol_impact', symbol: 'value', limit: 1 } as const
+    const merged = (await queries.run(input, context)) as PlainObject
+    expect(merged.references).toHaveLength(1)
+    expect(merged.importers).toHaveLength(1)
+    expect(merged.languages).toMatchObject([{ truncated: false }, { truncated: false }])
+    expect(merged.truncated).toBe(true)
+
+    selected.mockReturnValue([services[0]!])
+    for (const coverage of [
+      { truncated: true, fileListTruncated: false },
+      { truncated: false, fileListTruncated: true },
+      { truncated: false, fileListTruncated: false },
+    ]) {
+      importerCoverage = coverage
+      const single = (await queries.run(input, context)) as PlainObject
+      expect(single.truncated).toBe(coverage.truncated || coverage.fileListTruncated)
+    }
+  } finally {
+    selected.mockRestore()
+  }
 })

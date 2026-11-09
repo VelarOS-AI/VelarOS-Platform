@@ -1,25 +1,9 @@
-/** 能力那一侧的几件整形：调了个没有的操作怎么说、抛出来的东西怎么变成程序看得懂的错误、哪些失败算「被拒」。都不碰实例状态。 */
+/** 能力错误整形与拒绝识别；保留调用方提供的错误码和取消原因。 */
 
-import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeCapabilityOutcome } from '../contract/requires.js'
-import type { CapabilityNamespaceOperations } from '../types/operations.js'
-
-/** 调了个没有的操作时，把这个命名空间**有**哪些一并说了——模型下一轮才改得对。 */
-export function describeUnknownOperation(
-  call: { namespace: string; operation: string },
-  namespace: Optional<CapabilityNamespaceOperations>
-): NonNullable<CodeCapabilityOutcome['error']> {
-  const available = isUndefined(namespace) ? '' : Object.keys(namespace).join('、')
-  return {
-    code: CodeSurfaceErrorCodes.unknownOperation,
-    message:
-      available.length === 0
-        ? `没有 ${call.namespace} 这个命名空间。`
-        : `${call.namespace} 里没有 ${call.operation} 这个操作。有的是：${available}。`,
-  }
-}
 
 /**
  * 把操作抛出来的东西整形成程序里看得懂的错误。
@@ -29,8 +13,9 @@ export function describeUnknownOperation(
  */
 export function shapeOperationFailure(cause: unknown): NonNullable<CodeCapabilityOutcome['error']> {
   const known = cause as { code?: unknown; message?: unknown }
-  const message = isString(known.message) && !isEmpty(known.message) ? known.message : String(cause)
-  return isString(known.code) && !isEmpty(known.code)
+  const message =
+    isString(known?.message) && !isEmpty(known.message) ? known.message : String(cause)
+  return isString(known?.code) && !isEmpty(known.code)
     ? { code: known.code, message }
     : { code: CodeSurfaceErrorCodes.operationFailed, message }
 }

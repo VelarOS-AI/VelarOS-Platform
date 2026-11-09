@@ -102,7 +102,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       this.webContents.debugger.attach('1.3')
     }
     const existing = electronDebuggerHolds.getNetwork(this.webContents)
-    if (existing) return existing
+    if (existing) {
+      await existing.ready
+      return existing
+    }
 
     const diagnostics: BrowserPageDiagnosticEntry[] = []
     const controller = new BrowserCdpNetworkController({
@@ -126,9 +129,28 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       controller.handleCdpEvent(method, params)
     }
     this.webContents.debugger.on('message', messageListener)
-    const hold = { controller, diagnostics, messageListener }
+    const debuggerFace = this.webContents.debugger
+    const clear = (): void => {
+      try {
+        debuggerFace.off('message', messageListener)
+        debuggerFace.off('detach', clear)
+      } catch (error) {
+        embeddedDriverLog.debug('页面销毁时网络监听清理未完成', {
+          error: AppError.from(error).message,
+        })
+      }
+      if (electronDebuggerHolds.getNetwork(this.webContents) === hold)
+        electronDebuggerHolds.deleteNetwork(this.webContents)
+      controller.reset()
+    }
+    this.webContents.debugger.on('detach', clear)
+    const hold = { controller, diagnostics, messageListener, ready: Promise.resolve() }
     electronDebuggerHolds.setNetwork(this.webContents, hold)
-    await controller.enableNetworkCapture()
+    hold.ready = controller.enableNetworkCapture().catch((error: unknown) => {
+      clear()
+      throw error
+    })
+    await hold.ready
     return hold
   }
 
@@ -165,12 +187,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
    * 那是一次「看看有什么」的读操作;把原因带回去,让回执说清楚为什么列不到网络事件。
    */
   public async ensureNetworkCapture(): Promise<BrowserPageDriverNetworkCaptureState> {
-    if (electronDebuggerHolds.hasNetwork(this.webContents))
-      return { startedNow: false, unavailableReason: null }
-
+    const alreadyStarted = electronDebuggerHolds.hasNetwork(this.webContents)
     try {
       await this.ensureNetworkHold()
-      return { startedNow: true, unavailableReason: null }
+      return { startedNow: !alreadyStarted, unavailableReason: null }
     } catch (error) {
       const reason = AppError.from(error).message
       embeddedDriverLog.debug('内嵌页面的网络采集未能建立', {
@@ -313,22 +333,11 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
    * 视口空间，与页面内 getBoundingClientRect/elementFromPoint 同一坐标系。
    * 持久 attach、不主动 detach（与 emulation/network hold 的语义一致）。
    */
-  private async dispatchCdpMouseEvents(events: Array<Record<string, unknown>>): Promise<boolean> {
-    if (this.webContents.isDestroyed()) return false
-
-    try {
-      if (!this.webContents.debugger.isAttached()) {
-        this.webContents.debugger.attach('1.3')
-      }
-      for (const event of events) {
-        await this.debuggerSend('Input.dispatchMouseEvent', event)
-      }
-      return true
-    } catch (error) {
-      embeddedDriverLog.debug('CDP 鼠标事件派发失败，回退 sendInputEvent', {
-        error: AppError.from(error).message,
-      })
-      return false
+  private async dispatchCdpMouseEvents(events: Array<Record<string, unknown>>): Promise<void> {
+    this.ensureInputDebugger()
+    // 任一事件都可能已经生效；失败后不能换坐标系重放整段输入。
+    for (const event of events) {
+      await this.debuggerSend('Input.dispatchMouseEvent', event)
     }
   }
 
@@ -341,34 +350,11 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     this.webContents.focus()
 
     const buttons = cdpMouseButtonsMask(button)
-    const dispatched = await this.dispatchCdpMouseEvents([
+    await this.dispatchCdpMouseEvents([
       { type: 'mouseMoved', x, y, button: 'none', buttons: 0, modifiers },
       { type: 'mousePressed', x, y, button, buttons, clickCount, modifiers },
       { type: 'mouseReleased', x, y, button, buttons: 0, clickCount, modifiers },
     ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-    }
 
     options.onPointerEvent?.({ x, y, phase: 'down', button })
     options.onPointerEvent?.({ x, y, phase: 'up', button })
@@ -379,18 +365,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     const y = Math.round(options.y)
     this.webContents.focus()
 
-    const dispatched = await this.dispatchCdpMouseEvents([
-      { type: 'mouseMoved', x, y, button: 'none', buttons: 0 },
-    ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x,
-        y,
-        button: 'left',
-        clickCount: 1,
-      })
-    }
+    await this.dispatchCdpMouseEvents([{ type: 'mouseMoved', x, y, button: 'none', buttons: 0 }])
 
     options.onPointerEvent?.({ x, y, phase: 'move' })
   }
@@ -413,7 +388,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
 
     const modifiers = options.modifiers ?? 0
     this.webContents.focus()
-    const dispatched = await this.dispatchCdpMouseEvents([
+    await this.dispatchCdpMouseEvents([
       { type: 'mouseMoved', x: startX, y: startY, button: 'none', buttons: 0, modifiers },
       {
         type: 'mousePressed',
@@ -442,38 +417,6 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
         modifiers,
       },
     ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: startX,
-        y: startY,
-        button: 'left',
-        clickCount: 1,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x: startX,
-        y: startY,
-        button: 'left',
-        clickCount: 1,
-      })
-      for (const point of path) {
-        this.webContents.sendInputEvent({
-          type: 'mouseMove',
-          x: point.x,
-          y: point.y,
-          button: 'left',
-          clickCount: 1,
-        })
-      }
-      this.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x: endX,
-        y: endY,
-        button: 'left',
-        clickCount: 1,
-      })
-    }
 
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'move' })
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'down', button: 'left' })

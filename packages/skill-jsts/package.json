@@ -5,13 +5,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "engines": {
     "node": ">=22.15.0"
   },
   "files": [
-    "SKILL.md"
+    "SKILL.md",
+    "feature.json"
   ],
   "dependencies": {
     "ts-morph": "28.0.0",

@@ -120,7 +120,8 @@ export class KernelEventHub implements KernelEventHubApi {
         if (disposed) return
         disposed = true
         subscriptions.delete(subscription)
-        if (subscriptions.size === 0) this.subscriptions.delete(type)
+        if (subscriptions.size === 0 && this.subscriptions.get(type) === subscriptions)
+          this.subscriptions.delete(type)
       },
     }
   }

@@ -1,16 +1,17 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import type { ProviderRequestFingerprint, ProviderRequestSnapshot } from '../types/compiler.js'
+import type { ProviderFingerprintValue, ProviderRequestFingerprint } from '../types/compiler.js'
 
 import { shortHash } from './provider-hash.js'
 /** 请求指纹同时绑定实际消息、模型、系统指令、响应格式和输出预算。 */
-export async function requestFingerprint(
-  input: Pick<
-    ProviderRequestSnapshot,
-    'model' | 'system' | 'messages' | 'responseFormat' | 'outputTokens'
-  > &
-    Partial<Pick<ProviderRequestSnapshot, 'tools'>>
-): Promise<ProviderRequestFingerprint> {
+export async function requestFingerprint(input: {
+  readonly model: string
+  readonly system: string
+  readonly messages: ProviderFingerprintValue
+  readonly responseFormat?: ProviderFingerprintValue
+  readonly outputTokens: number
+  readonly tools: readonly ProviderFingerprintValue[]
+}): Promise<ProviderRequestFingerprint> {
   const systemHash = await shortHash(input.system)
   const messageHash = await shortHash(JSON.stringify(input.messages))
   const responseFormatHash = isUndefined(input.responseFormat)

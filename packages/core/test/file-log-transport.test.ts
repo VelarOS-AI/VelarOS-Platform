@@ -65,15 +65,44 @@ test('errors, BigInt and cyclic payloads retain diagnostics without breaking wri
   const entry = record('diagnostics')
   entry.context.self = entry.context
   entry.context.count = 4n
-  if (entry.kind === 'message')
-    entry.error = new AppError('IO', 'fixture failure', new Error('cause'))
+  entry.context.customJson = {
+    value: 7,
+    toJSON(this: { value: number }) {
+      const own = this.hasOwnProperty
+      return { value: own.call(this, 'value') ? this.value : 0 }
+    },
+  }
+  let getterReads = 0
+  class Opaque {
+    get hidden(): string {
+      getterReads++
+      return 'unread'
+    }
+  }
+  entry.context.opaque = new Opaque()
+  const cause = new Error('cause')
+  const inner = new AppError('INNER', 'inner failure', cause)
+  const child = new AppError('CHILD', 'child failure', new Error('child cause'))
+  const failure = AppError.withFields('IO', 'fixture failure', { errors: [child] }, inner)
+  cause.cause = failure
+  if (entry.kind === 'message') entry.error = failure
   await transport.write(entry)
   const [saved] = await lines(resolveDatedLogFilePath(path, entry.timestamp))
   expect(saved!.context.count).toBe('4')
+  expect(saved!.context.customJson).toEqual({ value: 7 })
   expect(saved!.context.self).toBe('[Circular]')
   expect(saved!.error.code).toBe('IO')
   expect(saved!.error.stack).toContain('fixture failure')
-  expect(saved!.error.cause.message).toBe('cause')
+  expect(saved!.error.cause.message).toBe('inner failure')
+  expect(saved!.error.cause.stack).toContain('inner failure')
+  expect(saved!.error.cause.cause.message).toBe('cause')
+  expect(saved!.error.cause.cause.stack).toContain('cause')
+  expect(saved!.error.cause.cause.cause).toBe('[Circular]')
+  expect(saved!.error.errors[0].stack).toContain('child failure')
+  expect(saved!.error.errors[0].cause.message).toBe('child cause')
+  expect(getterReads).toBe(0)
+  expect(failure.toJSON()).not.toHaveProperty('cause')
+  expect(failure.toJSON()).not.toHaveProperty('errors')
   await transport.dispose?.()
 })
 

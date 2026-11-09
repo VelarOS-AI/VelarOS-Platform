@@ -313,31 +313,41 @@ export class AdvancedSearch implements AdvancedSearchApi {
     ])
     // 续查时只带仍可授权的原始材料；范围变化时旧自由历史不发送。
     let evidence = previous?.state.evidence ?? []
+    const candidates = previous?.state.candidates ?? []
+    const scope = { sessionId: call.invocation.sessionId, revision: task.revision }
     const accessible = []
     for (const item of evidence) {
       try {
         if (item.target.kind === 'resource' && sources.includes(item.target.sourceId)) {
-          await this.dependencies.evidence.authorize(
-            { sessionId: call.invocation.sessionId, revision: task.revision },
-            item.target,
-            preflightSignal
-          )
+          await this.dependencies.evidence.authorize(scope, item.target, preflightSignal)
           if (
-            (await this.dependencies.evidence.validate(
-              { sessionId: call.invocation.sessionId, revision: task.revision },
-              item.stamp,
-              preflightSignal
-            )) !== 'changed'
+            (await this.dependencies.evidence.validate(scope, item.stamp, preflightSignal)) !==
+            'changed'
           )
             accessible.push(item)
         }
-      } catch {
-        Log.tag('ActRuntime').debug('AdvancedSearch 已进入异常处理或降级分支')
+      } catch (error) {
         preflightSignal.throwIfAborted()
+        if (!(error instanceof AppError) || error.code !== 'DENIED') throw error
+      }
+    }
+    let candidateRevoked = false
+    for (const candidate of candidates) {
+      if (candidate.target.kind !== 'resource' || !sources.includes(candidate.target.sourceId)) {
+        candidateRevoked = true
+        continue
+      }
+      try {
+        await this.dependencies.evidence.authorize(scope, candidate.target, preflightSignal)
+      } catch (error) {
+        preflightSignal.throwIfAborted()
+        if (!(error instanceof AppError) || error.code !== 'DENIED') throw error
+        candidateRevoked = true
       }
     }
     const narrowed =
       accessible.length !== evidence.length ||
+      candidateRevoked ||
       Boolean(previous?.state.sources.some((source) => !sources.includes(source)))
     evidence = accessible
     const state: SearchState = {
@@ -348,7 +358,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       profile: profileName,
       sources,
       evidence,
-      candidates: narrowed ? [] : (previous?.state.candidates ?? []),
+      candidates: narrowed ? [] : candidates,
       queries: previous?.state.queries ?? [],
       report: previous?.state.report,
       activation: activationId,
@@ -429,7 +439,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
         storage: this.dependencies.storage,
         parent: activity.budget,
         finalizationRequestId,
-        scope: { sessionId: call.invocation.sessionId, revision: task.revision },
+        scope,
         deadline: modelDeadline,
         save: (value) => {
           saveTail = saveTail.then(() => this.saveState(value, activationId))
@@ -577,12 +587,10 @@ export class AdvancedSearch implements AdvancedSearchApi {
     }
     if (!isEmpty(failures)) {
       const errors = [...(failed ? [primary] : []), ...failures]
-      throw Object.assign(
-        new AggregateError(
-          errors,
-          `搜索收尾失败；已尝试预算、会话和执行权清理：${errors.map((error) => (error instanceof Error ? error.message : String(error))).join('；')}`
-        ),
-        { code: 'SEARCH_CLEANUP' }
+      throw AppError.withFields(
+        'SEARCH_CLEANUP',
+        `搜索收尾失败；已尝试预算、会话和执行权清理：${errors.map((error) => (error instanceof Error ? error.message : String(error))).join('；')}`,
+        { errors: [...errors] }
       )
     }
     if (failed) throw primary

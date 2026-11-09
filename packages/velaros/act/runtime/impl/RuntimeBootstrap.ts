@@ -1,104 +1,64 @@
-import { createHash } from 'node:crypto'
-import { mkdir, realpath, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { isAbsolute, join, relative, sep } from 'node:path'
-
 import type { ActRunLimits } from '@velaros-ai/agent'
-import type { ContextStorage } from '@velaros-ai/context'
-import { localContextStorage } from '@velaros-ai/context/node'
 import {
   isArray,
   isBoolean,
-  isFalse,
+  isEmpty,
   isFunction,
   isNonBlankString,
   isPlainObject,
   isString,
-  isTrue,
   isUndefined,
 } from '@velaros-ai/core'
-import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { OperationModuleDefinition } from '@velaros-ai/kernel'
-import type { ModelDriver } from '@velaros-ai/model'
-import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
 import type { CodeRunnerApi } from '@velaros-ai/script'
-import { createNodeCodeRunner, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner } from '@velaros-ai/script'
 
-import { createLocalShellHost } from '../../../execution/local.js'
-import { createLocalImagePort } from '../../../images/local.js'
-import type { MemoryScopePort } from '../../../memory/index.js'
-import { createMemoryStore } from '../../../memory/index.js'
-import type { ProjectCodeIndexApi, ProjectSpacePort } from '../../../project/index.js'
-import {
-  createProjectCodeQuery,
-  createProjectContextSource,
-  createProjectKernel,
-  createProjectObservationProvider,
-} from '../../../project/index.js'
-import { skillCapabilityModules } from '../../../skills/index.js'
-import type { VelarosSearchOptions } from '../../search/index.js'
 import { SystemCatalogLimits } from '../../system/contract/constants.js'
-import { createEnvironmentRegistry } from '../../system/impl/EnvironmentRegistry.js'
-import {
-  ModelToolLimits,
-  RuntimeModelLimits,
-  RuntimeSearchProfile,
-  VelarosRunLimits,
-} from '../contract/constants.js'
-import type {
-  VelarosAgentsOptions,
-  VelarosProjectOptions,
-  VelarosRuntimeOptions,
-} from '../contract/requires.js'
+import { VelarosRunLimits } from '../contract/constants.js'
+import type { VelarosRuntimeOptions } from '../contract/requires.js'
 import { withPackageEnvironment } from '../utils/package-environment.js'
 
-import { createNodeExecutionEnvironment } from './NodeExecutionEnvironment.js'
-import {
-  createProjectCapabilityModule,
-  createProjectCodeModule,
-  createProjectImagesModule,
-} from './StandardModules.js'
-
-/** 在同一正式入口内建立缺省依赖，具体机制仍归原能力单元。 */
+/** 核验已解析的执行与能力端口，不建立产品或环境资源。 */
 export interface RuntimeBootstrapApi {
-  /** 核验配置并解析为现有运行时的具体依赖。 */
+  /** 固定本次装配的真实模块与执行口。 */
   prepare(options: VelarosRuntimeOptions): Promise<RuntimeBootstrapOptions>
 }
-/** 完成默认装配之后注入唯一运行时的具体依赖。 */
+/** 注入唯一运行时的具体执行依赖。 */
 export interface RuntimeBootstrapOptions extends Omit<
   VelarosRuntimeOptions,
-  'storage' | 'runner' | 'modules' | 'model' | 'memory' | 'search' | 'agents' | 'limits'
+  'runner' | 'modules' | 'limits'
 > {
-  /** 已建立的唯一持久存储。 */
-  readonly storage: ContextStorage
   /** 已选定的隔离执行器。 */
   readonly runner: CodeRunnerApi
   /** 实际挂载的业务模块。 */
   readonly modules: readonly OperationModuleDefinition[]
-  /** 已解析的模型驱动。 */
-  readonly model?: ModelDriver
-  /** 长期记忆作用域工厂。 */
-  readonly memory?: (sessionId: string) => MemoryScopePort
-  /** 已解析的高级搜索配置。 */
-  readonly search?: VelarosSearchOptions
-  /** 已解析的业务子任务配置。 */
-  readonly agents?: VelarosAgentsOptions
   /** 完整主运行预算。 */
   readonly limits: ActRunLimits
 }
 
 class RuntimeBootstrap implements RuntimeBootstrapApi {
-  /** 没有代码图谱后端：语言服务照常答，图谱类查询报 UNAVAILABLE（不可用时不会调 query）。 */
-  private static readonly NoCodeGraph: ProjectCodeIndexApi = {
-    isAvailable: () => false,
-    query: async () => ({}),
-  }
-
   public async prepare(options: VelarosRuntimeOptions): Promise<RuntimeBootstrapOptions> {
+    for (const retired of ['workspace', 'project', 'skills', 'dataDir'])
+      if (Object.hasOwn(options, retired))
+        throw new AppError('VALIDATION', `已删除隐式装配配置 ${retired}，请显式注入能力与环境`)
+    if (options.model && !isFunction(options.model.stream))
+      throw new AppError('VALIDATION', '基础 Runtime 只接收已解析 ModelDriver')
+    for (const configuration of [
+      options.agents,
+      options.search,
+      options.memory,
+      options.packageEnvironment,
+    ])
+      if (isBoolean(configuration))
+        throw new AppError('VALIDATION', '能力配置必须显式提供端口，省略即不装配')
+    if (
+      options.resources &&
+      (new Set(options.resources).size !== options.resources.length ||
+        options.resources.some((resource) => !resource || !isFunction(resource.close)))
+    )
+      throw new AppError('VALIDATION', 'resources 必须是互不重复且提供 close 的资源')
     const modules = [...(options.modules ?? [])]
-    const projectEnabled = !isFalse(options.project)
-    const extras: VelarosProjectOptions = isPlainObject(options.project) ? options.project : {}
     const sources = [...(options.context?.sources ?? [])]
     const snapshots = [...(options.context?.snapshots ?? [])]
     if (
@@ -147,302 +107,53 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       )
     if (!isUndefined(options.environment) && !isFunction(options.environment))
       throw new AppError('VALIDATION', 'environment 必须是返回宿主环境条目的函数')
-    let workspace: Optional<string>
-    if (options.workspace) {
-      if (!isAbsolute(options.workspace)) throw new AppError('VALIDATION', 'workspace 需要绝对路径')
-      workspace = await realpath(options.workspace)
-      if (!(await stat(workspace)).isDirectory())
-        throw new AppError('VALIDATION', 'workspace 必须是已有目录')
-      if (
-        projectEnabled &&
-        (modules.some((module) => module.binding.moduleId === 'velaros:project') ||
-          sources.some((source) => source.id === 'project'))
-      )
-        throw new AppError('VALIDATION', 'workspace 已装配 project，不能重复挂载同一能力或来源')
-    }
-    const dataDir = options.dataDir
-    if (dataDir) {
-      if (!isAbsolute(dataDir)) throw new AppError('VALIDATION', 'dataDir 需要绝对路径')
-      if (workspace) {
-        const path = relative(workspace, dataDir)
-        if (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-          throw new AppError(
-            'VALIDATION',
-            'dataDir 应位于业务工作区之外，避免被项目能力当作任务文件处理'
-          )
-      }
-      await mkdir(dataDir, { recursive: true })
-      if (workspace) {
-        const path = relative(workspace, await realpath(dataDir))
-        if (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-          throw new AppError('VALIDATION', 'dataDir 的真实位置不能在业务工作区内')
-      }
-    }
-    if (!options.storage && !dataDir)
-      throw new AppError('VALIDATION', '需要 dataDir 保存运行状态，或注入 ContextStorage')
-    if (workspace && (projectEnabled || isTrue(extras.images))) {
-      const root = workspace
-      const transactionStatePath = dataDir
-        ? join(
-            dataDir,
-            'projects',
-            createHash('sha256').update(root).digest('hex'),
-            'transactions.json'
-          )
-        : undefined
-      const kernel = await createProjectKernel({ root, transactionStatePath })
-      const code = extras.code
-      const codeIndex =
-        isUndefined(code) || isBoolean(code)
-          ? isTrue(code)
-            ? RuntimeBootstrap.NoCodeGraph
-            : undefined
-          : code
-      const languageOwners =
-        (options.skills?.session?.catalog ?? options.skills?.lease.skills)?.filter((skill) =>
-          skill.grants.some((name) => name.startsWith('project:language:'))
-        ) ?? []
-      const query = codeIndex
-        ? createProjectCodeQuery(
-            codeIndex,
-            options.skills
-              ? languageOwners.flatMap((skill) =>
-                  skill.grants
-                    .filter((name) => name.startsWith('project:language:'))
-                    .map((name) => name.slice('project:language:'.length))
-                )
-              : undefined
-          )
-        : undefined
-      const project: ProjectSpacePort = {
-        getRootPath: () => root,
-        kernel: async () => kernel,
-        queryCode: async (input, context) => {
-          if (!query) throw new AppError('UNAVAILABLE', '此项目没有装配代码智能端口')
-          const languageGrants = new Set(
-            languageOwners.flatMap((skill) =>
-              skill.grants.filter((name) => name.startsWith('project:language:'))
-            )
-          )
-          for (const grant of languageGrants) {
-            const checks = await Promise.allSettled(
-              languageOwners
-                .filter((skill) => skill.grants.includes(grant))
-                .map((skill) =>
-                  options.skills!.registry.assertGranted(
-                    skill.manifest.name,
-                    skill.generation,
-                    grant
-                  )
-                )
-            )
-            if (!checks.some((check) => check.status === 'fulfilled'))
-              throw new AppError('PERMISSION', `语言 Skill 授权已失效：${grant}`)
-          }
-          for (const owner of languageOwners)
-            await options.skills?.session?.activate(owner.manifest.name, context.abortSignal)
-          return query(input, context)
-        },
-      }
-      if (projectEnabled) {
-        modules.push(
-          createProjectCapabilityModule({
-            instanceId: root,
-            project,
-            resolveProject: extras.resolveProject,
-          })
-        )
-        if (codeIndex) modules.push(createProjectCodeModule({ instanceId: root, project }))
-        sources.push(createProjectContextSource({ id: 'project', kernel }))
-        snapshots.push(createProjectObservationProvider())
-      }
-      if (isTrue(extras.images))
-        modules.push(
-          createProjectImagesModule({
-            instanceId: root,
-            project,
-            // 本机看图端口只借它的缩图（macOS 的 sips）；看哪张图仍由项目端口钳在项目里。
-            resizeImage: createLocalImagePort({ resolvePath: (path) => path }).resizeImage,
-          })
-        )
-    }
-    if (options.skills) {
-      if (!options.node) throw new AppError('UNAVAILABLE', 'Skill 环境需要标准 Node 执行口')
-      modules.push(
-        ...(await skillCapabilityModules.create({
-          ...options.skills,
-          node: options.node,
-        }))
-      )
-    }
+    if (!options.storage) throw new AppError('VALIDATION', '需要显式 ContextStorage')
+    if (
+      !isNonBlankString(options.binding?.executionIdentity) ||
+      !isNonBlankString(options.binding?.authorizationScope)
+    )
+      throw new AppError('VALIDATION', '需要已核验的 executionIdentity 和 authorizationScope')
+    if (!options.node && !options.runner)
+      throw new AppError('VALIDATION', '需要显式 Node 环境或隔离执行器')
+    if (options.node && options.runner)
+      throw new AppError('VALIDATION', 'Node 环境与独立执行器不能重复装配')
     if (new Set(snapshots.map((provider) => provider.id)).size !== snapshots.length)
       throw new AppError('VALIDATION', '纯快照提供者身份不能重复')
-    let model: RuntimeBootstrapOptions['model']
-    if (options.model && 'stream' in options.model) model = options.model
-    else if (options.model) {
-      const config = options.model
-      const limits = { ...RuntimeModelLimits, ...config.limits }
-      if (!config.model?.trim() || !config.apiKey?.trim())
-        throw new AppError('VALIDATION', '模型配置需要 model 和 apiKey')
-      const url = new URL(config.baseURL)
-      if (
-        !['http:', 'https:'].includes(url.protocol) ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        throw new AppError('VALIDATION', '模型 baseURL 需要不含凭据或查询参数的 HTTP(S) 地址')
-      if (
-        Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1) ||
-        limits.inputTokens + limits.outputTokens + VelarosRunLimits.safetyTokens >
-          limits.contextTokens
-      )
-        throw new AppError('VALIDATION', '模型窗口预算需要覆盖输入、输出和安全余量')
-      const providers = createModelRuntimeComposition({
-        environment: {},
-        providerScripts: { configPaths: [] },
-      })
-      const factory = providers.modelAdapterRegistry.createLanguageModelFactory(config)
-      model = createAiSdkModelDriver({
-        id: `${config.provider}/${config.model}`,
-        model: factory(config.model),
-        limits,
-      })
-    }
-    const baseNode =
-      options.node ??
-      (!options.runner
-        ? createNodeExecutionEnvironment({
-            cwd: workspace ?? process.cwd(),
-            directory: join(dataDir ?? tmpdir(), 'velaros-node'),
-            host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
-          })
-        : undefined)
-    const packageEnvironment = isFalse(options.packageEnvironment)
-      ? undefined
-      : (options.packageEnvironment ??
-        (baseNode?.npm && dataDir
-          ? createEnvironmentRegistry({
-              directory: join(dataDir, 'environments', 'default'),
-              npm: baseNode.npm,
-              reservedPackages: baseNode.runtime?.packages.map((pkg) => pkg.name),
-            })
-          : undefined))
-    if (packageEnvironment && !baseNode)
+    if (options.packageEnvironment && !options.node)
       throw new AppError('VALIDATION', '持久 npm 环境需要标准 Node 执行口')
-    if (packageEnvironment && workspace) {
-      const path = relative(workspace, packageEnvironment.directory)
-      if (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path))
-        throw new AppError('VALIDATION', 'npm 环境必须位于业务工作区之外')
-      await mkdir(packageEnvironment.directory, { recursive: true, mode: 0o700 })
-      const actual = relative(workspace, await realpath(packageEnvironment.directory))
-      if (!actual.startsWith(`..${sep}`) && actual !== '..' && !isAbsolute(actual))
-        throw new AppError('VALIDATION', 'npm 环境真实路径必须位于业务工作区之外')
-    }
     const node =
-      baseNode && packageEnvironment
-        ? withPackageEnvironment(baseNode, packageEnvironment)
-        : baseNode
-    const observationNode =
-      node ??
-      (options.runner === nodeSubprocessCodeRunner
-        ? createNodeExecutionEnvironment({
-            cwd: workspace ?? process.cwd(),
-            directory: join(dataDir ?? tmpdir(), 'velaros-node'),
-            host: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
-          })
-        : undefined)
-    const defaults = Boolean(options.workspace || (options.model && !('stream' in options.model)))
-    const search = isFalse(options.search)
-      ? undefined
-      : options.search && !isTrue(options.search)
-        ? options.search
-        : (defaults || isTrue(options.search)) && model && !isEmpty(sources)
-          ? {
-              model,
-              profiles: {
-                standard: {
-                  ...RuntimeSearchProfile,
-                  outputTokens: Math.min(
-                    RuntimeSearchProfile.outputTokens,
-                    model.limits.outputTokens
-                  ),
-                },
-              },
-              defaultProfile: 'standard',
-            }
-          : undefined
-    if (isTrue(options.search) && !search)
-      throw new AppError('VALIDATION', '启用搜索需要模型和真实证据来源')
-    const agents = isFalse(options.agents)
-      ? undefined
-      : options.agents && !isTrue(options.agents)
-        ? options.agents
-        : (defaults || isTrue(options.agents)) && model
-          ? {
-              profiles: {
-                worker: {
-                  model,
-                  node: Boolean(node),
-                  modules: [
-                    ...modules.map((module) => module.binding.moduleId),
-                    ...(search ? ['velaros:search'] : []),
-                  ],
-                },
-              },
-              concurrency: ModelToolLimits.concurrency,
-              maxChildren: ModelToolLimits.maxChildren,
-            }
-          : undefined
-    if (isTrue(options.agents) && !agents) throw new AppError('VALIDATION', '启用子任务需要模型')
-    if (!node && Object.values(agents?.profiles ?? {}).some((profile) => profile.node))
+      options.node && options.packageEnvironment
+        ? withPackageEnvironment(options.node, options.packageEnvironment)
+        : options.node
+    if (!node && Object.values(options.agents?.profiles ?? {}).some((profile) => profile.node))
       throw new AppError('VALIDATION', '子任务的标准 Node 范围需要宿主先给父任务提供 Node 环境')
-    const scope = createHash('sha256')
-      .update(workspace ?? dataDir ?? 'injected')
-      .digest('hex')
-    const memoryStore =
-      dataDir && isUndefined(options.memory)
-        ? createMemoryStore({ root: join(dataDir, 'memory') })
-        : undefined
-    const memory = isFalse(options.memory)
-      ? undefined
-      : (options.memory ?? (memoryStore ? () => memoryStore.scope(scope) : undefined))
-    // 存储最后建立；此前的配置失败不会遗留数据库句柄。
-    const storage =
-      options.storage ?? localContextStorage({ path: join(dataDir!, 'context.sqlite') })
     return {
       ...options,
-      workspace,
-      dataDir,
-      storage,
-      model,
+      binding: Object.freeze({ ...options.binding }),
+      resources: options.resources ? [...options.resources] : undefined,
       modules,
       node,
-      packageEnvironment,
-      runner: observationNode
+      runner: node
         ? createNodeCodeRunner({
-            cwd: observationNode.cwd,
-            directory: observationNode.directory,
-            packageDirectory: observationNode.packageDirectory,
-            runtime: observationNode.runtime,
-            acquireRuntime:
-              'acquireRuntime' in observationNode ? observationNode.acquireRuntime : undefined,
+            cwd: node.cwd,
+            directory: node.directory,
+            packageDirectory: node.packageDirectory,
+            runtime: node.runtime,
+            acquireRuntime: 'acquireRuntime' in node ? node.acquireRuntime : undefined,
             execute: (request, output, signal) =>
-              observationNode.execute({ ...request, mode: 'observe' }, output, signal),
+              node.execute({ ...request, mode: 'observe' }, output, signal),
           })
-        : (options.runner ?? nodeSubprocessCodeRunner),
-      memory,
-      search,
-      agents,
+        : options.runner!,
       context: { ...options.context, sources, snapshots },
       limits: {
         ...VelarosRunLimits,
-        outputTokens: model ? model.limits.outputTokens : VelarosRunLimits.outputTokens,
+        outputTokens: options.model
+          ? options.model.limits.outputTokens
+          : VelarosRunLimits.outputTokens,
         ...options.limits,
       },
     }
   }
 }
-/** 普通配置与底层端口共享的默认装配器。 */
+/** 正式 Runtime 的单一端口核验器。 */
 export const runtimeBootstrap: RuntimeBootstrapApi = new RuntimeBootstrap()

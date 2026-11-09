@@ -50,13 +50,15 @@ export function responseContinuation(
   })
 }
 
-/** 同模型、同路由、原文未改写才恢复状态；其他消息只保留中立正文与缓存标记。 */
+/** 同模型、同路由、原文未改写才恢复状态；当前帧起点随同一次工具展开换算成恢复后坐标。 */
 export function restoreResponseContinuations(
   messages: readonly ModelHistoryMessage[],
   model: LanguageModel,
-  id: string
-): { messages: ModelMessage[]; opaqueTokens: number } {
+  id: string,
+  currentFrom = messages.length - 1
+): { messages: ModelMessage[]; opaqueTokens: number; currentFrom: number } {
   let opaqueTokens = 0
+  let currentStart = 0
   const marked = markPromptCacheBreakpoints(messages)
   const restored = marked.flatMap((base, index): ModelMessage[] => {
     const source = messages[index]!
@@ -88,8 +90,8 @@ export function restoreResponseContinuations(
           ],
         }
       : base
-    const result = (): ModelMessage[] =>
-      exchange
+    const result = (): ModelMessage[] => {
+      const expanded: ModelMessage[] = exchange
         ? [
             message,
             {
@@ -109,6 +111,9 @@ export function restoreResponseContinuations(
             },
           ]
         : [message]
+      if (index < currentFrom) currentStart += expanded.length
+      return expanded
+    }
     const state = source.role === 'assistant' ? source.continuation : undefined
     if (
       !state ||
@@ -138,7 +143,7 @@ export function restoreResponseContinuations(
     message = { ...message, role: 'assistant' as const, content }
     return result()
   })
-  return { messages: restored, opaqueTokens }
+  return { messages: restored, opaqueTokens, currentFrom: currentStart }
 }
 
 /** 供应商状态中的调用必须与已接收调用逐一相同；不接受隐藏动作。 */

@@ -28,6 +28,7 @@
       "@velaros-ai/velaros/memory/contracts": ["packages/velaros/memory/contracts.ts"],
       "@velaros-ai/velaros/office": ["packages/velaros/office/index.ts"],
       "@velaros-ai/velaros/office/contracts": ["packages/velaros/office/contracts.ts"],
+      "@velaros-ai/velaros/office/locator": ["packages/velaros/office/locator.ts"],
       "@velaros-ai/velaros/office/renderer": ["packages/velaros/office/renderer.ts"],
       "@velaros-ai/velaros/browser": ["packages/velaros/browser/index.ts"],
       "@velaros-ai/velaros/browser/contracts": ["packages/velaros/browser/contracts.ts"],
@@ -44,7 +45,8 @@
       "@velaros-ai/velaros/act/search": ["packages/velaros/act/search/index.ts"],
       "@velaros-ai/velaros/act/agents": ["packages/velaros/act/agents/index.ts"],
       "@velaros-ai/velaros/skills": ["packages/velaros/skills/index.ts"],
-      "@velaros-ai/velaros/skills/contracts": ["packages/velaros/skills/contracts.ts"]
+      "@velaros-ai/velaros/skills/contracts": ["packages/velaros/skills/contracts.ts"],
+      "@velaros-ai/velaros/node": ["packages/velaros/act/runtime/node.ts"]
     }
   },
   "include": [

@@ -6,17 +6,17 @@ import { test } from 'node:test'
 
 import { createContextRuntime } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { createKernelScriptSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createKernelScriptSession } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const observed = "import {output} from 'velaros'; const count = 1; output(count);"
 const write = "import {write} from 'test:world'; await write(1);"
 const signal = () => new AbortController().signal
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 async function fixture(
   t,
   stream = async function* (request) {
@@ -55,7 +55,7 @@ async function fixture(
     },
   ]
   let storage = localContextStorage({ path })
-  let runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+  let runtime = await createRuntime({ storage, modules, model })
   let session = await runtime.openSession('s')
   await session.context.append({ kind: 'user', body: 'Update the counter and observe progress.' })
   const f = {
@@ -80,7 +80,7 @@ async function fixture(
     restart: async () => {
       await runtime.close()
       storage = localContextStorage({ path })
-      runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules, model })
+      runtime = await createRuntime({ storage, modules, model })
       session = await runtime.openSession('s')
     },
     submit: async () => {
@@ -160,7 +160,10 @@ test('observe edits publish atomically; no-op and automatic observation reruns r
   await f.submit()
   await f.submit()
   assert.equal(f.frames[0].observation.resultSourceRef, v2.sourceRef)
-  assert.match(f.frames[0].observation.text, /"default": 2/)
+  assert.match(
+    f.frames[0].observation.text,
+    platformHasDefaultConfinement ? /"default": 2/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   assert.equal(
     (await f.records()).filter((r) => /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36})$/.test(r.title))
       .length,
@@ -243,7 +246,10 @@ test('module edits preserve untouched modules, input and blobs, while explicit o
   assert.deepEqual(saved.input, { new: true })
   assert.deepEqual(saved.blobs, { a: 'old' })
   await f.submit()
-  assert.match(f.frames[0].observation.text, /"default": 5/)
+  assert.match(
+    f.frames[0].observation.text,
+    platformHasDefaultConfinement ? /"default": 5/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
 })
 
 test('execution edits run once, return actual identities, and leave stable observer unchanged', async (t) => {
@@ -314,9 +320,12 @@ test('successive model turns advance the observation precondition and expose sep
   await f.submit()
   assert.equal(f.world.writes, 1)
   assert.match(edited.observation.source, /count = 3/)
-  assert.match(edited.observation.text, /"default": 3/)
+  assert.match(
+    edited.observation.text,
+    platformHasDefaultConfinement ? /"default": 3/ : /SHELL_CONFINEMENT_UNAVAILABLE/
+  )
   assert.equal(edited.progress.script.changed, true)
-  assert.equal(edited.progress.observation.changed, true)
+  assert.equal(edited.progress.observation.changed, platformHasDefaultConfinement)
   const requests = (await f.records()).filter((r) => r.title === 'model-request')
   const controls = (await f.records()).filter((r) => r.title.startsWith('script:control:'))
   assert.equal(requests.length, 3)
@@ -348,62 +357,66 @@ test('CAS rejects a concurrent head change and preserves unrelated context appen
   const f = await fixture(t)
   const v1 = await f.session.observe({ source: observed })
   const storage2 = localContextStorage({ path: f.path })
-  const context2 = createContextRuntime({ sessionId: 's', storage: storage2 })
-  const other = new ProgramContext('s', context2, storage2)
-  t.after(() => storage2.close())
-  const original = f.storage.compareAndSwapMetadata.bind(f.storage)
-  let raced = false
-  f.storage.compareAndSwapMetadata = async (id, expected, state, append = []) => {
-    if (
-      !raced &&
-      append.some(
-        (r) => r.title.startsWith('script:version:') && r.title !== `script:version:${v1.sourceRef}`
-      )
-    ) {
-      raced = true
-      const control = {
-        id: crypto.randomUUID(),
-        fingerprint: 'other',
-        expectedObservation: v1.sourceRef,
-      }
-      const sourceRef = crypto.randomUUID()
-      await other.publish(
-        [
-          {
-            program: { source: observed.replace('count = 1', 'count = 9') },
-            version: {
-              sourceRef,
-              parentRef: v1.sourceRef,
-              baseObservation: v1.sourceRef,
-              kind: 'observation',
+  try {
+    const context2 = createContextRuntime({ sessionId: 's', storage: storage2 })
+    const other = new ProgramContext('s', context2, storage2)
+    const original = f.storage.compareAndSwapMetadata.bind(f.storage)
+    let raced = false
+    f.storage.compareAndSwapMetadata = async (id, expected, state, append = []) => {
+      if (
+        !raced &&
+        append.some(
+          (r) =>
+            r.title.startsWith('script:version:') && r.title !== `script:version:${v1.sourceRef}`
+        )
+      ) {
+        raced = true
+        const control = {
+          id: crypto.randomUUID(),
+          fingerprint: 'other',
+          expectedObservation: v1.sourceRef,
+        }
+        const sourceRef = crypto.randomUUID()
+        await other.publish(
+          [
+            {
+              program: { source: observed.replace('count = 1', 'count = 9') },
+              version: {
+                sourceRef,
+                parentRef: v1.sourceRef,
+                baseObservation: v1.sourceRef,
+                kind: 'observation',
+              },
+              receipt: { status: 'updated', sourceRef, executed: false },
             },
-            receipt: { status: 'updated', sourceRef, executed: false },
+          ],
+          control,
+          {
+            status: 'completed',
+            executed: false,
+            observe: { status: 'updated', sourceRef, executed: false },
           },
-        ],
-        control,
-        {
-          status: 'completed',
-          executed: false,
-          observe: { status: 'updated', sourceRef, executed: false },
-        },
-        true,
-        false,
-        signal()
-      )
-      await context2.append({ kind: 'event', title: 'concurrent-event', body: 'must survive' })
+          true,
+          false,
+          signal()
+        )
+        await context2.append({ kind: 'event', title: 'concurrent-event', body: 'must survive' })
+      }
+      return original(id, expected, state, append)
     }
-    return original(id, expected, state, append)
+    const error = await rejection(
+      f.session.observe({
+        sourceRef: v1.sourceRef,
+        edits: [{ oldText: 'count = 1', newText: 'count = 2' }],
+      }),
+      'SCRIPT_CONFLICT'
+    )
+    assert.match((await f.source(error.currentRef)).source, /count = 9/)
+    assert.ok((await f.records()).some((r) => r.title === 'concurrent-event'))
+    assert.equal((await f.records()).filter((r) => r.title.startsWith('script:version:')).length, 2)
+  } finally {
+    await storage2.close()
   }
-  const error = await rejection(
-    f.session.observe({
-      sourceRef: v1.sourceRef,
-      edits: [{ oldText: 'count = 1', newText: 'count = 2' }],
-    }),
-    'SCRIPT_CONFLICT'
-  )
-  assert.match((await f.source(error.currentRef)).source, /count = 9/)
-  assert.ok((await f.records()).some((r) => r.title === 'concurrent-event'))
-  assert.equal((await f.records()).filter((r) => r.title.startsWith('script:version:')).length, 2)
 })
 
 test('publication retries an unrelated CAS change without dropping leases or the event', async (t) => {

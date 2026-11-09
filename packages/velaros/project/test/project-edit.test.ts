@@ -208,7 +208,14 @@ describe('edit：几步合成一个事务', () => {
     expect(inspected.newRevisions['moved.txt']).toBe('deleted')
     expect(inspected.diff).toContain('-complete')
     const undone = await call('project', 'undo', { changeRef: deleted.changeRef })
-    expect(undone).toEqual({ changeRef: deleted.changeRef, changedFiles: ['moved.txt'] })
+    expect(undone).toEqual({
+      changeRef: deleted.changeRef,
+      status: 'rolled_back',
+      changed: true,
+      changedFiles: ['moved.txt'],
+      diff: expect.stringContaining('+complete'),
+      diffTruncated: false,
+    })
     expect((await call('project', 'inspect', { changeRef: deleted.changeRef })).status).toBe(
       'rolled_back'
     )
@@ -551,7 +558,7 @@ describe('inspect 与 undo', () => {
     expect(unknown.code).toBe('INVALID_INPUT')
     expect(unknown.message).toContain('changeRef')
     expect((await failureOf(call('project', 'inspect', { changeRef: 'view:abc' }))).code).toBe(
-      'INVALID_INPUT'
+      'TARGET_NOT_FOUND'
     )
     expect(await disk('a.txt')).toBe('three\n')
     expect((await call('project', 'inspect', { changeRef: edited.changeRef })).status).toBe(

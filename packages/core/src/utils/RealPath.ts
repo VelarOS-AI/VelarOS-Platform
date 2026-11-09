@@ -3,7 +3,7 @@
  */
 
 import { readlink, realpath } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 
 import { isNotNull } from '../typeGuards.js'
 
@@ -24,7 +24,12 @@ export async function resolveRealPath(path: string): Promise<string> {
   let hops = 0
   while (true) {
     const real = await realpath(current).catch(() => null)
-    if (isNotNull(real)) return isEmpty(trailing) ? real : join(real, ...[...trailing].reverse())
+    if (isNotNull(real)) {
+      // Windows 的真实盘根必须保留分隔符，不能把盘符当前目录当成已经解析的绝对路径。
+      const absolute =
+        process.platform === 'win32' && /^[A-Za-z]:$/u.test(real) ? `${real}${sep}` : real
+      return isEmpty(trailing) ? absolute : join(absolute, ...[...trailing].reverse())
+    }
     const target = await readlink(current).catch(() => null)
     if (isNotNull(target)) {
       hops += 1

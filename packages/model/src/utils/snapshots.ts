@@ -24,26 +24,3 @@ export function createReadonlySetSnapshot<T>(values: Iterable<T>): ReadonlySet<T
 
   return snapshot
 }
-
-/** 只读映射快照：和 {@link createReadonlySetSnapshot} 同样的道理，出包的查表不许带 `set` 与 `delete`。 */
-export function createReadonlyMapSnapshot<K, V>(
-  entries: Iterable<readonly [K, V]>
-): ReadonlyMap<K, V> {
-  const items = new Map(entries)
-  const snapshot: ReadonlyMap<K, V> = Object.freeze({
-    get size(): number {
-      return items.size
-    },
-    get: (key: K) => items.get(key),
-    has: (key: K) => items.has(key),
-    entries: () => items.entries(),
-    keys: () => items.keys(),
-    values: () => items.values(),
-    forEach: (callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) => {
-      for (const [key, value] of items) callback.call(thisArg, value, key, snapshot)
-    },
-    [Symbol.iterator]: () => items[Symbol.iterator](),
-  })
-
-  return snapshot
-}

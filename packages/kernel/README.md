@@ -140,7 +140,9 @@ await client.dispose()
 - 错误类不出包：一律按 `error.code` 对常量表判断（能力调用 `KernelCallErrorCodes` 进程内与 wire 同码，模块宿主 `KernelErrorCodes`，客户端 `KernelClientErrorCodes`，更新器 `KernelUpdaterErrorCodes`，远程节点 `RemoteNodeErrorCodes`），`message` 只给人看，出事的能力、操作与权限挂在 `details` 上。
 - 不给 `permissionBroker` 就是全拒；操作要的权限位必须同时写进模块清单的 `permissions`，没写的一律拒绝；未知操作在求权限之前就失败，任何一条被拒 provider 代码都不会运行。
 - 模块只能在 `start()` 之前登记；`start()` 与 `dispose()` 只真正跑一次，启动先按依赖序全部激活、再全部就绪，任一步失败按逆序回滚；`lifecycleFailureMode: 'degrade'` 时失败不抛，只交给 `onLifecycleFailure`。
+- 模块、能力令牌与更新清单共用严格 SemVer：`major.minor.patch[-prerelease][+build]`，核心数字必须是可精确表示的整数，数字预发布标识不带前导零，不接受前导 `v` 或外侧空白；预发布逐段排序，build 不参与比较。依赖范围支持精确版本、`*`、`^`、`~`、比较符交集与 `||`，缺席表示任意，显式空串、空分句和 `x` 写法拒绝；所有显式范围在登记时完整校验，包括没有提供方的可选依赖。
 - `describeComposition()` 是只读观测面：能力的 `active: false` 表示只是声明了、这一代还没注册服务，依赖图解析不了的原因在 `resolutionError`；没有反向改写运行时的入口。
+- 模块健康度采样为独立、递归冻结的 JSON 诊断快照；模块继续修改自己的诊断原件不会改变旧快照。非法 JSON 诊断按本次健康检查失败标记 `unhealthy`，不影响组合诊断或其他模块。
 - `createOperationRuntime`：模块 id 写成 `域:名`（如 `velaros:project`）；调用前先 `bind(sessionId, moduleId)`；操作自己的失败不抛，落在回执的 `outcome` 与 `error.code` 里，调用本身不成立（没绑定、未知操作、参数不合 schema、调用号冲突）才抛。
 - 领域可通过 `OperationContext.recordDiagnostic` 提供独立诊断摘要，随原始回执冻结保存并在同号重放时返回；重复记录采用最新摘要，超长显式标记截断。诊断是观察数据，Kernel 不据此改写成败、效果或重试策略。
 - 同一 `(sessionId, id)` 再调一次交回已存的回执、不会重跑，换了参数抛 `IDEMPOTENCY_CONFLICT`；`retry` 不是 `safe` 的调用别盲目重跑，效果未知的可以用 `reconcile` 按领域登记的核对器只读确认。

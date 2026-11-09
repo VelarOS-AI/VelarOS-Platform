@@ -146,7 +146,9 @@ export class LocalFileSearch implements LocalFileSearchApi {
 
         abortSignal?.throwIfAborted()
         // 认不出是文本（二进制、非法字节、认不出的编码）的文件跳过，不读成替换字符再去匹配。
-        const textFile = textCodec.decode(await readFile(absolutePath).catch(() => Buffer.alloc(0)))
+        const bytes = await readFile(absolutePath).catch(() => null)
+        if (bytes === null) return false
+        const textFile = textCodec.decode(bytes)
         if (!textFile) return false
 
         let perFileMatches = 0
@@ -154,7 +156,10 @@ export class LocalFileSearch implements LocalFileSearchApi {
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
           abortSignal?.throwIfAborted()
           const line = lines[lineIndex] ?? ''
-          for (const column of matcher(line)) {
+          for (const column of matcher(
+            line,
+            Math.min(limit - matches.length, maxResultsPerFile - perFileMatches)
+          )) {
             matches.push({
               path: relative(rootPath, absolutePath) || basename(absolutePath),
               line: lineIndex + 1,

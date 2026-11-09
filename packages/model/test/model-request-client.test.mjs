@@ -42,27 +42,26 @@ test('accepts a third-party transport and preserves caller endpoint', async () =
     schemaDescription: 'fixture schema',
     decodeOutput: async (output) => output.value,
   })
-  const legacyMappedObject = await client.generateObject({
-    endpoint: 'third-party.legacy-extract',
+  const schemaObject = await client.generateObject({
+    endpoint: 'third-party.schema-extract',
     model: 'fixture-model',
     system: 'extract',
     messages: [{ role: 'user', content: 'hello' }],
     schema: {},
-    schemaName: 'LegacyFixture',
-    schemaDescription: 'legacy fixture schema',
-    mapOutput: (output) => output.value,
+    schemaName: 'SchemaFixture',
+    schemaDescription: 'schema fixture',
   })
 
   assert.equal(text, 'transport response')
   assert.equal(object, 42)
-  assert.equal(legacyMappedObject, 42)
+  assert.deepEqual(schemaObject, { value: 42 })
   assert.deepEqual(
     envelopes.map((envelope) => envelope.endpoint),
-    ['third-party.summary', 'third-party.extract', 'third-party.legacy-extract']
+    ['third-party.summary', 'third-party.extract', 'third-party.schema-extract']
   )
 })
 
-test('legacy service remains an instanceof the generic client', () => {
+test('creates the generic request client', () => {
   const transport = {
     generateText: async () => ({ text: '', output: undefined }),
     streamText: () => {

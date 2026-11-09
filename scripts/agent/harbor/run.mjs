@@ -5,10 +5,18 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 
-import { createRuntime, createNodeExecutionEnvironment } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
+import * as projectPackage from '@velaros-ai/velaros/project'
+import * as imagePackage from '@velaros-ai/velaros/images/local'
+import * as modelPackage from '@velaros-ai/model'
+import { evaluationCapabilities, evaluationModel } from './evaluation-runtime.mjs'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import { createTraceExporter, snapshot } from './trace-export.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
+}
 
 // 这是正式 Runtime 的无人值守宿主；任务正文直接来自 Harbor，验收由 Harbor 在运行结束后执行。
 export async function runTask({
@@ -22,13 +30,10 @@ export async function runTask({
   isolatedContainer = false,
 }) {
   await mkdir(output, { recursive: true })
-  const host = createLocalShellHost({ cwd: workspace })
-  let discovery
-  let shellInspection
-  const inspect = async () => {
-    discovery = await discoverProjectCommands(workspace)
-    shellInspection = await host.inspectEnvironment(discovery.commands)
-  }
+  const host = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'danger-full-access' },
+  })
   const denied = async () => {
     throw new Error('Interactive approval is unavailable in this benchmark run')
   }
@@ -38,30 +43,63 @@ export async function runTask({
     failure = null
   const modelName = model.model ?? model.id
   let traceExporter
-  const cancel = () => session?.cancel()
+  let executionError
+  const cancellation = new AbortController()
+  const cancel = () => {
+    cancellation.abort()
+    session?.cancel()
+  }
   process.on('SIGTERM', cancel)
   process.on('SIGINT', cancel)
   try {
-    await inspect()
-    runtime = await createRuntime({
-      workspace,
-      dataDir: join(output, 'state'),
-      model,
-      project: identity?.runtimeOptions?.project,
-      node: createNodeExecutionEnvironment({
-        cwd: workspace,
-        directory: join(output, 'node'),
-        host,
-        authorize: isolatedContainer ? async () => {} : denied,
-      }),
+    const discovery = await discoverProjectCommands(workspace)
+    cancellation.signal.throwIfAborted()
+    const shellInspection = await host.inspectEnvironment(discovery.commands)
+    cancellation.signal.throwIfAborted()
+    const resolvedModel = evaluationModel(model, modelPackage)
+    const capabilityOptions = await evaluationCapabilities({
+      projectPackage,
+      imagePackage,
+      root: workspace,
+      stateDirectory: join(output, 'state'),
+      model: resolvedModel,
+      project: identity?.runtimeOptions?.project !== false,
+      code: identity?.runtimeOptions?.project?.code ?? false,
+      images: Boolean(identity?.runtimeOptions?.project?.images),
+      agents: true,
+      search: identity?.runtimeOptions?.project !== false,
+    })
+    cancellation.signal.throwIfAborted()
+    runtime = await createNodeRuntime({
+      cwd: workspace,
+      binding: {
+        executionIdentity: 'harbor-evaluation',
+        authorizationScope: isolatedContainer
+          ? 'isolated-container-unattended'
+          : 'interactive-approval-required',
+      },
+      stateDirectory: join(output, 'state'),
+      model: resolvedModel,
+      ...capabilityOptions,
+      host,
+      execution: { authorize: isolatedContainer ? async () => {} : denied },
       residentModules: identity?.runtimeOptions?.residentModules ?? [
         { module: 'velaros:project' },
         ...(identity?.runtimeOptions?.project?.images ? [{ module: 'velaros:images' }] : []),
       ],
-      memory: false,
       modelTools: { concurrency: 1 },
       protocol: identity?.runtimeOptions?.protocol,
-      context: identity?.runtimeOptions?.context,
+      context: {
+        ...identity?.runtimeOptions?.context,
+        sources: [
+          ...(identity?.runtimeOptions?.context?.sources ?? []),
+          ...capabilityOptions.context.sources,
+        ],
+        snapshots: [
+          ...(identity?.runtimeOptions?.context?.snapshots ?? []),
+          ...capabilityOptions.context.snapshots,
+        ],
+      },
       environment: () => ({
         os: `${platform()} ${arch()}`,
         workspace,
@@ -86,7 +124,9 @@ export async function runTask({
         'Complete the task autonomously in this isolated environment. Inspect the project, make the necessary changes, and verify the result using its normal development tools. No user is available for follow-up questions. Preserve unrelated files. Do not inspect hidden evaluation tests, solutions, reward files, or benchmark infrastructure. Use Node.js with Execa for commands and project for transactional edits.',
       limits: { turns, timeoutMs, outputTokens: 32768, safetyTokens: 2048 },
     })
+    cancellation.signal.throwIfAborted()
     session = await runtime.openSession(`harbor-task-${randomUUID()}`)
+    cancellation.signal.throwIfAborted()
     traceExporter = createTraceExporter({
       trace: (query) => runtime.trace(session.id, query),
       output,
@@ -95,6 +135,7 @@ export async function runTask({
       identity,
       model: modelName,
     })
+    cancellation.signal.throwIfAborted()
     for await (const event of session.submit(instruction)) {
       await appendFile(join(output, 'events.jsonl'), JSON.stringify(event) + '\n')
       if (event.type === 'state') {
@@ -109,26 +150,48 @@ export async function runTask({
       if (event.type === 'turn') await traceExporter.export({ status, failure })
     }
   } catch (error) {
-    failure = error instanceof Error ? error.message : String(error)
+    executionError = { error }
+    failure = errorMessage(error)
     status = 'failed'
     session?.cancel()
   } finally {
+    const primaryFailure = failure
+    const cleanupFailures = []
+    const finish = async (stage, action) => {
+      try {
+        await action()
+      } catch (error) {
+        cleanupFailures.push({ stage, error })
+        failure ??= errorMessage(error)
+        status = 'failed'
+      }
+    }
     try {
       // Settle cancellation and foreground receipts before the authoritative
       // snapshot; runtime storage remains readable until runtime.close().
-      try {
-        await session?.close()
-      } catch (error) {
-        failure ??= error instanceof Error ? error.message : String(error)
-        status = 'failed'
-      }
-      if (traceExporter) await traceExporter.export({ final: true, status, failure })
-      else await snapshot(join(output, 'status.json'), { status, failure })
+      await finish('session.close', () => session?.close())
+      await finish('trace.export', () =>
+        traceExporter
+          ? traceExporter.export({ final: true, status, failure })
+          : snapshot(join(output, 'status.json'), { status, failure })
+      )
+      await finish('runtime.close', () => runtime?.close())
+      await finish('host.dispose', () => host.dispose())
     } finally {
-      await runtime?.close()
-      await host.dispose()
       process.off('SIGTERM', cancel)
       process.off('SIGINT', cancel)
+    }
+    if (cleanupFailures.length) {
+      const errors = cleanupFailures.map(({ error }) => error)
+      if (executionError) errors.unshift(executionError.error)
+      else if (primaryFailure !== null) errors.unshift(primaryFailure)
+      throw new AggregateError(
+        errors,
+        [
+          ...(primaryFailure === null ? [] : ['Task failed: ' + primaryFailure]),
+          ...cleanupFailures.map(({ stage, error }) => stage + ': ' + errorMessage(error)),
+        ].join('; ')
+      )
     }
   }
   return { status, failure }

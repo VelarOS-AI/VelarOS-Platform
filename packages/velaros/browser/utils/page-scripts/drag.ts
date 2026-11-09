@@ -91,14 +91,29 @@ export function buildDragTargetScript(options: BrowserDragOptions): string {
 
       if (!(element instanceof Element)) {
         return {
-          matched: false,
+          element: null,
           selector: target.css || null,
           text: null,
-          point: null,
         };
       }
 
-      element.scrollIntoView({ block: 'center', inline: 'center' });
+      return {
+        element,
+        selector: matchedSelector || target.css || null,
+        text: elementText(element) || null,
+      };
+    };
+
+    const sourceElement = resolveElement(payload.source);
+    const targetElement = resolveElement(payload.target);
+    if (sourceElement.element && targetElement.element) {
+      sourceElement.element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      targetElement.element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    }
+    // 两端的坐标必须来自同一个最终视口；第二次滚动后不能继续用旧的起点。
+    const describe = (resolved) => {
+      const { element, selector, text } = resolved;
+      if (!element) return { matched: false, selector, text, point: null };
       const rect = element.getBoundingClientRect();
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -112,19 +127,21 @@ export function buildDragTargetScript(options: BrowserDragOptions): string {
 
       return {
         matched: point !== null,
-        selector: matchedSelector || target.css || null,
-        text: elementText(element) || null,
+        selector,
+        text,
         point,
       };
     };
 
-    const source = resolveElement(payload.source);
-    const target = resolveElement(payload.target);
-    const failureReason = !source.matched
+    const source = describe(sourceElement);
+    const target = describe(targetElement);
+    const failureReason = !sourceElement.element
       ? 'source-not-found'
-      : !target.matched
+      : !targetElement.element
         ? 'target-not-found'
-        : null;
+        : !source.matched || !target.matched
+          ? 'not-interactable'
+          : null;
 
     return {
       url: location.href,

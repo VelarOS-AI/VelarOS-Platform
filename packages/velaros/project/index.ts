@@ -27,6 +27,11 @@ export type {
   ProjectFileOperationsCommitApi,
 } from './impl/operations/ProjectFileOperations.js'
 export { projectFileOperations } from './impl/operations/ProjectFileOperations.js'
+export {
+  createProjectCapabilityModule,
+  createProjectCodeModule,
+  createProjectImagesModule,
+} from './impl/operations/ProjectModules.js'
 export type { ProjectObservationProviderApi } from './impl/operations/ProjectObservationProvider.js'
 export { createProjectObservationProvider } from './impl/operations/ProjectObservationProvider.js'
 export type { ProjectVerificationPolicyApi } from './impl/operations/ProjectVerificationPolicy.js'
@@ -47,12 +52,15 @@ export type {
   LoggerProvider,
   PatchStrategy,
   PipelineStage,
+  ProjectCapabilityModuleOptions,
   ProjectChangeFeedWriter,
   ProjectCodeIntelligenceHost,
   ProjectFixer,
   ProjectHook,
   ProjectHostPort,
   ProjectImagesHost,
+  ProjectImagesModuleOptions,
+  ProjectLanguageSkillHost,
   ProjectOperationContext,
   ProjectPlugin,
   ProjectPluginContext,
@@ -279,8 +287,10 @@ export { createExternalLanguageService } from './impl/language/ExternalLanguageS
 export type { LocalFileSearchOptions } from './contract/requires.js'
 export type { LocalFileSearchApi } from './impl/files/LocalFileSearch.js'
 export { createLocalFileSearch } from './impl/files/LocalFileSearch.js'
+export { createSkillProjectCodeQuery } from './impl/language/SkillProjectCodeQuery.js'
 export type { TypeScriptProjectsApi } from './impl/language/TypeScriptProjectPool.js'
 export { typeScriptProjects } from './impl/language/TypeScriptProjectPool.js'
+export type { ProjectLanguageSkillOwner } from './types/language-skills.js'
 export type {
   FileSearchEntry,
   FileSearchMatch,

@@ -7,16 +7,14 @@ import { test } from 'node:test'
 import { createContextRuntime } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
 
-import { baseText, modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker, turn } from './support/model-turn.mjs'
+import { baseText, done, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 
 /** 段状态的最小形态：第 1 段，还没有冻结条目。 */
 function segment(overrides = {}) {
@@ -56,7 +54,6 @@ async function fixture(t, handler, extra = {}, driver = {}) {
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model,
     ...extra,
@@ -83,14 +80,21 @@ async function run(f, input) {
 test('long user text is archived, summarized after intent extraction, and recoverable exactly', async (t) => {
   const original = `请保留所有图片。${'一些重复的背景说明。'.repeat(50000)}最后要求：只调查，不改文件。`
   const seen = []
+  let inputRef
   const maintenance = {
     id: 'input-organizer',
+    nativeTools: true,
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
-      const frame = JSON.parse(request.materials[0].text)
-      const snapshot = JSON.parse(frame.partitions.task.goals[0].text).snapshot
-      for (const page of frame.partitions.runtime.modelTool.inputs) {
+      const { snapshot, material } = JSON.parse(request.materials[0].text)
+      if (snapshot) inputRef = snapshot.goals[0]
+      assert(inputRef)
+      const reads = (request.history ?? []).flatMap((message) =>
+        (message.toolExchange?.results ?? []).filter((result) => result.name === 'read')
+      )
+      for (const result of reads) assert.equal(result.output.error, undefined)
+      for (const page of [...material.inputs, ...reads.map((result) => result.output)]) {
         assert.equal(page.text, original.slice(page.offset, page.offset + page.text.length))
         seen.push({ start: page.offset, end: page.offset + page.text.length })
       }
@@ -101,22 +105,23 @@ test('long user text is archived, summarized after intent extraction, and recove
       }
       if (through < original.length) {
         yield {
-          type: 'text',
-          text: block(
-            request,
-            `import {read} from 'velaros:context-materials';await read({ref:${JSON.stringify(snapshot.goals[0])},offset:${through},limit:12000});`
-          ),
+          type: 'tool-call',
+          value: {
+            id: `read-${through}`,
+            name: 'read',
+            input: { ref: inputRef, offset: through, limit: 12000 },
+          },
         }
         yield { type: 'finish', reason: 'stop' }
         return
       }
       const patch = {
-        baseRevision: snapshot.baseRevision,
+        baseRevision: material.baseRevision,
         summary: '理解用户意图',
         unresolved: [],
         inputs: [
           {
-            ref: snapshot.goals[0],
+            ref: inputRef,
             summary: '调查环境',
             constraints: ['保留图片', '只调查，不改文件'],
             unresolved: [],
@@ -125,8 +130,8 @@ test('long user text is archived, summarized after intent extraction, and recove
         ],
       }
       yield {
-        type: 'text',
-        text: `${block(request, `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`)}\n${marker(request)} done`,
+        type: 'tool-call',
+        value: { id: 'summarize-input', name: 'submit', input: patch },
       }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -155,7 +160,12 @@ test('long user text is archived, summarized after intent extraction, and recove
         yield* done(request)
       }
     },
-    { context: { sources: [], maintenance: { model: maintenance, profile: { modelCalls: 64 } } } }
+    {
+      context: {
+        sources: [],
+        maintenance: { model: maintenance, execution: 'data', profile: { modelCalls: 64 } },
+      },
+    }
   )
   await run(f, original)
   const ref = (await f.session.view.inspect()).goals[0]
@@ -632,117 +642,114 @@ test('INV-15 sealed history stays discoverable in bounded stable pages and origi
   await assert.rejects(history.list({}, aborted), { name: 'AbortError' })
 })
 
-test('INV-16 forty business rounds keep runtime context bounded while leases expire and original results survive', async (t) => {
-  const samples = []
-  const started = Date.now()
-  let durableRef
-  const f = await fixture(
-    t,
-    async function* (request, f) {
-      const frame = runtimeFrame(request)
-      samples.push({
-        round: f.calls,
-        chars: request.materials[0].text.length,
-        visible: frame.results.length,
-        completedTurns: frame.programFrame.completedTurns,
-      })
-      assert.equal(request.contextStatus.mode, 'partitioned')
-      // 段内历史只往后加；租约已结束的冻结正文在容量不足时一次性退成引用卡，请求始终在窗口内
-      assert(
-        requestSize(request) / 4 <= request.contextStatus.inputLimit,
-        JSON.stringify(samples.at(-1))
-      )
-      assert(frame.results.length <= 3, JSON.stringify(samples.at(-1)))
-      assert.match(frame.observation.text, /persistent-observation/)
-      if (f.calls > 4) {
+test(
+  'INV-16 forty business rounds keep runtime context bounded while leases expire and original results survive',
+  {
+    skip: platformHasDefaultConfinement
+      ? false
+      : 'The successful persistent observation needs the default read-only process backend; rejection is covered by context-memory tests.',
+  },
+  async (t) => {
+    const samples = []
+    const started = Date.now()
+    let durableRef
+    const f = await fixture(
+      t,
+      async function* (request, f) {
+        const frame = runtimeFrame(request)
+        samples.push({
+          round: f.calls,
+          chars: request.materials[0].text.length,
+          visible: frame.results.length,
+          completedTurns: frame.programFrame.completedTurns,
+        })
+        assert.equal(request.contextStatus.mode, 'partitioned')
+        // 段内历史只往后加；租约已结束的冻结正文在容量不足时一次性退成引用卡，请求始终在窗口内
         assert(
-          !frame.results.some(
-            (item) => item.remainingTurns !== 'task' && item.text.includes('"iteration":1,')
-          )
+          requestSize(request) / 4 <= request.contextStatus.inputLimit,
+          JSON.stringify(samples.at(-1))
         )
-      }
-      const durable = frame.results.find((item) => item.remainingTurns === 'task')
-      if (durable) durableRef = durable.ref
-      if (f.calls === 41) {
-        yield* done(request)
-        return
-      }
-      const release =
-        f.calls === 16
-          ? `import {memory as memoryApi} from 'velaros:system';const {release}=memoryApi;await release({ref:${JSON.stringify(durableRef)}});`
-          : ''
-      yield {
-        type: 'text',
-        text: `${marker(request)} execute({retain:${f.calls === 1 ? '"task"' : 2}})\n${release}import {output} from 'velaros';output({iteration:${f.calls},detail:'x'.repeat(12000)});\n${marker(request)}`,
-      }
-      yield { type: 'finish', reason: 'stop' }
-    },
-    {
-      limits: {
-        turns: 42,
-        outputTokens: 2048,
-        safetyTokens: 1024,
-        projectionChars: 24000,
-        recoveryChars: 6000,
-        timeoutMs: 90000,
+        assert(frame.results.length <= 3, JSON.stringify(samples.at(-1)))
+        assert.match(frame.observation.text, /persistent-observation/)
+        if (f.calls > 4) {
+          assert(
+            !frame.results.some(
+              (item) => item.remainingTurns !== 'task' && item.text.includes('"iteration":1,')
+            )
+          )
+        }
+        const durable = frame.results.find((item) => item.remainingTurns === 'task')
+        if (durable) durableRef = durable.ref
+        if (f.calls === 41) {
+          yield* done(request)
+          return
+        }
+        const release =
+          f.calls === 16
+            ? `import {memory as memoryApi} from 'velaros:system';const {release}=memoryApi;await release({ref:${JSON.stringify(durableRef)}});`
+            : ''
+        yield {
+          type: 'text',
+          text: `${marker(request)} execute({retain:${f.calls === 1 ? '"task"' : 2}})\n${release}import {output} from 'velaros';output({iteration:${f.calls},detail:'x'.repeat(12000)});\n${marker(request)}`,
+        }
+        yield { type: 'finish', reason: 'stop' }
       },
-    },
-    // 估算与请求大小成正比：过期结果的冻结正文靠容量规划退成引用卡，而不是随轮数累积
-    {
-      limits: { contextTokens: 24000, inputTokens: 20000, outputTokens: 2048 },
-      estimate: async (request) => ({
-        tokens: Math.ceil(requestSize(request) / 4),
-        precision: 'estimate',
-        basis: 'chars/4',
-      }),
-    }
-  )
-  await f.session.observe({
-    source: "import {output} from 'velaros';output('persistent-observation');",
-  })
-  await run(f, 'Run a long task with expiring results')
-  assert.equal(f.calls, 41)
-  const state = await f.storage.load('s')
-  const leases = await f.programs.state()
-  assert(leases.leases.length <= 2)
-  assert(!leases.leases.some((item) => item.task))
-  assert.equal(state.records.filter((item) => item.kind === 'assistant').length, 41)
-  assert.equal(
-    state.records.filter((item) => /^script:[0-9a-f-]{36}:result$/.test(item.title)).length,
-    81
-  )
-  assert((await f.programs.read(durableRef, 0, 60000)).text.includes('"iteration":1'))
-  const steady = samples.slice(5)
-  const maxChars = Math.max(...steady.map((item) => item.chars))
-  assert(maxChars < 40000, JSON.stringify(samples))
-  assert(samples.at(-1).chars <= samples[5].chars + 2000)
-  t.diagnostic(
-    JSON.stringify({
-      modelCalls: f.calls,
-      scriptRuns: 81,
-      records: state.records.length,
-      elapsedMs: Date.now() - started,
-      maxFrameChars: maxChars,
-      finalFrameChars: samples.at(-1).chars,
-      retainedLeases: leases.leases.length,
-    })
-  )
-})
-
-/** 请求里实际发送的文字字符数。 */
-function requestSize(request) {
-  return (
-    request.instructions.length +
-    (request.compiledPrompt ?? '').length +
-    (request.history ?? []).reduce(
-      (sum, message) =>
-        sum +
-        (typeof message.content === 'string'
-          ? message.content.length
-          : JSON.stringify(message.content).length),
-      0
+      {
+        limits: {
+          turns: 42,
+          outputTokens: 2048,
+          safetyTokens: 1024,
+          projectionChars: 24000,
+          recoveryChars: 6000,
+          timeoutMs: 90000,
+        },
+      },
+      // 估算与请求大小成正比：过期结果的冻结正文靠容量规划退成引用卡，而不是随轮数累积
+      {
+        limits: { contextTokens: 24000, inputTokens: 20000, outputTokens: 2048 },
+        estimate: async (request) => ({
+          tokens: Math.ceil(requestSize(request) / 4),
+          precision: 'estimate',
+          basis: 'chars/4',
+        }),
+      }
     )
-  )
+    await f.session.observe({
+      source: "import {output} from 'velaros';output('persistent-observation');",
+    })
+    await run(f, 'Run a long task with expiring results')
+    assert.equal(f.calls, 41)
+    const state = await f.storage.load('s')
+    const leases = await f.programs.state()
+    assert(leases.leases.length <= 2)
+    assert(!leases.leases.some((item) => item.task))
+    assert.equal(state.records.filter((item) => item.kind === 'assistant').length, 41)
+    assert.equal(
+      state.records.filter((item) => /^script:[0-9a-f-]{36}:result$/.test(item.title)).length,
+      81
+    )
+    assert((await f.programs.read(durableRef, 0, 60000)).text.includes('"iteration":1'))
+    const steady = samples.slice(5)
+    const maxChars = Math.max(...steady.map((item) => item.chars))
+    assert(maxChars < 40000, JSON.stringify(samples))
+    assert(samples.at(-1).chars <= samples[5].chars + 2000)
+    t.diagnostic(
+      JSON.stringify({
+        modelCalls: f.calls,
+        scriptRuns: 81,
+        records: state.records.length,
+        elapsedMs: Date.now() - started,
+        maxFrameChars: maxChars,
+        finalFrameChars: samples.at(-1).chars,
+        retainedLeases: leases.leases.length,
+      })
+    )
+  }
+)
+
+/** 请求指令及全部编码消息的字符计量。 */
+function requestSize(request) {
+  return request.instructions.length + JSON.stringify(modelRequestEncoder.messages(request)).length
 }
 /** 每轮净增长约 240 token，这个窗口大约在第 19 轮封一次段。 */
 const WINDOW = 9000
@@ -776,7 +783,7 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
         recoveryChars: 6000,
         timeoutMs: 120000,
       },
-      // 只测按剩余轮数封段；自动封段后的补写叙事另有用例
+      // 只测按剩余轮数封段；显式整理的卷叙事另有用例
       context: { sources: [], maintenance: false },
     },
     // 估算与请求大小成正比、窗口较小，让封段在几十轮内发生
@@ -806,48 +813,38 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
     assert(statuses[index].segment.index >= statuses[index - 1].segment.index)
 })
 
-test('INV-53 automatic folds persist each busy volume narrative once, whether pressure or boundary maintenance supplies it', async (t) => {
+test('INV-53 automatic folds preserve mechanical volumes without paid narration; explicit organize narrates the selected sealed volume once', async (t) => {
   const detailChars = 3000
-  // Leave room for at least one busy sealed volume after the recent tail is carried forward.
-  const narrationWindow = WINDOW + Math.ceil((detailChars * ActRuntimeTuning.narrateTurns) / 4)
-  const narrated = []
   const maintenanceCalls = []
+  let automaticVolumes
+  let originalResult
   const maintenance = {
     id: 'narrator',
+    nativeTools: true,
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
-      const call = { volume: null }
-      maintenanceCalls.push(call)
-      if (request.response.type === 'json') {
-        const material = JSON.parse(request.materials[0].text)
-        assert.equal(material.kind, 'context-narration')
-        call.volume = material.volume.ref.id
-        narrated.push(call.volume)
-        yield {
-          type: 'text',
-          text: JSON.stringify({
-            summary: `Volume ${material.volume.from + 1}-${material.volume.through} printed step outputs`,
-            unresolved: ['decide the final format'],
-            negativeAttempts: [`printing again after ${material.volume.through}`],
-          }),
-        }
-        yield { type: 'finish', reason: 'stop' }
-        return
+      const { snapshot, material } = JSON.parse(request.materials[0].text)
+      const explicit = snapshot.requestId !== undefined
+      if (explicit) {
+        assert.equal(f.calls, 43)
+        assert.equal(snapshot.intent.focus, 'Narrate the sealed step outputs')
+        assert(snapshot.volume)
+        assert.match(snapshot.volume.skeleton, /结果 #/)
+        assert.deepEqual(material.volume.ref, snapshot.volume.ref)
       }
-      const snapshot = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
-      // 压力整理可能发生在还没有封卷的段里，那时只提交摘要
-      if (snapshot.volume) {
-        call.volume = snapshot.volume.ref.id
-        narrated.push(call.volume)
-      }
+      maintenanceCalls.push({
+        sessionId: request.cacheKey,
+        explicit,
+        volume: explicit ? snapshot.volume.ref.id : null,
+      })
       const patch = {
-        baseRevision: snapshot.baseRevision,
-        summary: 'Narrated the sealed volume',
+        baseRevision: material.baseRevision,
+        summary: explicit
+          ? 'Narrated the sealed volume'
+          : 'Preserved step outputs under capacity pressure',
         unresolved: [],
-        ...(snapshot.volume
+        ...(explicit
           ? {
               volume: {
                 summary: `Volume ${snapshot.volume.from + 1}-${snapshot.volume.through} printed step outputs`,
@@ -858,12 +855,7 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
             }
           : {}),
       }
-      const part = turn(request, {
-        execute: {
-          source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`,
-        },
-      })
-      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      yield { type: 'tool-call', value: { id: 'narrate-volume', name: 'submit', input: patch } }
       yield { type: 'finish', reason: 'stop' }
     },
   }
@@ -883,9 +875,34 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
         yield* done(request)
         return
       }
+      assert(!maintenanceCalls.some((call) => call.explicit))
+      if (f.calls === 43) {
+        automaticVolumes = await new RecentContext('s', f.session.context, f.storage).volumes(
+          new AbortController().signal
+        )
+        assert(automaticVolumes.length > 0)
+        assert(automaticVolumes.every((item) => !item.narrative))
+        assert(automaticVolumes.some((item) => /结果 #/.test(item.volume.skeleton)))
+        const state = await f.storage.load('s')
+        for (const record of state.records.filter(
+          (item) => item.title === 'context-maintenance:outcome'
+        )) {
+          const outcome = JSON.parse(await f.storage.get('s', record.objectId))
+          assert.equal(outcome.reason, 'pressure')
+          assert(!outcome.changes?.volume)
+        }
+        const record = state.records.find((item) =>
+          /^script:[0-9a-f-]{36}:result$/u.test(item.title)
+        )
+        originalResult = { ref: record.ref, body: await f.storage.get('s', record.objectId) }
+      }
+      const organize =
+        f.calls === 43
+          ? "import {memory} from 'velaros:system';await memory.organize({focus:'Narrate the sealed step outputs'});"
+          : ''
       yield {
         type: 'text',
-        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(${detailChars})});\n${marker(request)}`,
+        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(${detailChars})});${organize}\n${marker(request)}`,
       }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -899,15 +916,14 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
         // 44 次真实 Node 执行必须留在维护的 90 秒收尾预留之前；截止期另有确定性测试。
         timeoutMs: 300000,
       },
-      context: { sources: [], maintenance: { model: maintenance } },
-      // Keep real output until the segment seals: expiring it after two turns can avoid
-      // pressure entirely with compact history and would never exercise narration.
+      context: { sources: [], maintenance: { model: maintenance, execution: 'data' } },
+      // 保留真实输出直到封段，验证自动骨架及后续显式整理均不重放业务程序。
       protocol: { defaultRetain: 'segment' },
     },
     {
       limits: {
-        contextTokens: narrationWindow + 4000,
-        inputTokens: narrationWindow,
+        contextTokens: WINDOW + 4000,
+        inputTokens: WINDOW,
         outputTokens: 2048,
       },
       estimate: async (request) => ({
@@ -921,65 +937,52 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
   assert.equal(events.at(-1).status, 'completed')
   assert.equal(f.calls, 44)
   assert(statuses.every((status) => status.inputTokens <= statuses[0].inputLimit))
-  // 调度可先由压力整理交付叙事；后续边界消费自动意图时不得再分配一次模型调用。
-  assert.equal(new Set(narrated).size, narrated.length)
+  assert(automaticVolumes.length > 0)
+  const explicitCalls = maintenanceCalls.filter((call) => call.explicit)
+  assert.equal(explicitCalls.length, 1)
   const state = await f.storage.load('s')
   const outcomes = await Promise.all(
     state.records
       .filter((record) => record.title === 'context-maintenance:outcome')
       .map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
   )
-  assert(
-    narrated.length >= 1,
-    JSON.stringify({
-      maintenanceCalls,
-      outcomes,
-      segments: statuses.map((status) => status.segment),
-    })
-  )
   assert.equal(
-    outcomes.filter((item) => item.changes?.volume).length,
-    narrated.length,
+    outcomes.length,
+    new Set(maintenanceCalls.map((call) => call.sessionId)).size,
     JSON.stringify(outcomes)
   )
-  assert.equal(outcomes.length, maintenanceCalls.length, JSON.stringify(outcomes))
+  assert.equal(outcomes.filter((item) => item.changes?.volume).length, 1, JSON.stringify(outcomes))
   assert.equal(
     outcomes.reduce((calls, item) => calls + item.usage.calls, 0),
     maintenanceCalls.length,
     'every real maintenance model call is accounted for, including any failed attempt'
   )
-  assert(
-    outcomes.every(
-      (item) =>
-        ['narrate', 'pressure'].includes(item.reason) &&
-        item.status === 'applied' &&
-        item.error === null &&
-        item.delivery.status === 'completed'
-    ),
-    JSON.stringify(outcomes)
-  )
+  for (const outcome of outcomes) {
+    const calls = maintenanceCalls.filter((call) => call.sessionId === outcome.sessionId)
+    assert(calls.length > 0)
+    assert.equal(outcome.usage.calls, calls.length)
+    assert.equal(outcome.status, 'applied', JSON.stringify(outcome))
+    assert.equal(outcome.error, null)
+    assert.equal(outcome.delivery.status, 'completed')
+    if (calls.some((call) => call.explicit)) {
+      assert.equal(outcome.reason, 'boundary')
+      assert(outcome.changes.volume)
+    } else {
+      assert.equal(outcome.reason, 'pressure')
+      assert(!outcome.changes.volume)
+    }
+  }
   const volumes = await new RecentContext('s', f.session.context, f.storage).volumes(
     new AbortController().signal
   )
-  const busy = volumes.filter(
-    (item) =>
-      (item.volume.turns >= ActRuntimeTuning.narrateTurns ||
-        item.volume.results >= ActRuntimeTuning.narrateResults) &&
-      !item.volume.notes.length
-  )
-  assert(busy.length >= 1)
-  for (const item of busy) {
-    assert(item.narrative, `busy sealed volume ${item.ref.id} has no persisted narrative`)
-    assert.equal(
-      maintenanceCalls.filter((call) => call.volume === item.ref.id).length,
-      1,
-      `busy sealed volume ${item.ref.id} must be supplied by exactly one model call`
-    )
-    assert.match(item.narrative.summary, /printed step outputs/)
-  }
-  for (const call of maintenanceCalls.filter((item) => item.volume)) {
-    assert(volumes.some((item) => item.ref.id === call.volume && item.narrative))
-  }
+  const narrated = volumes.filter((item) => item.narrative)
+  assert.equal(narrated.length, 1)
+  assert.equal(narrated[0].ref.id, explicitCalls[0].volume)
+  assert.match(narrated[0].narrative.summary, /printed step outputs/)
+  const restored = (await f.programs.read(originalResult.ref.id, 0, 60000)).text
+  assert.equal(restored, originalResult.body)
+  assert.match(restored, /"step":1/)
+  assert(restored.includes('y'.repeat(detailChars)))
   // 叙事和长期单随下一次底座重建进入主线请求
   const narrated_base = bases.find((base) => base.includes('这一卷的叙事'))
   assert(narrated_base)

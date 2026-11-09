@@ -4,23 +4,27 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { createAiSdkModelDriver } from '@velaros-ai/model'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/surface.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { baseText, done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const readOnlyScript = {
+  skip: platformHasDefaultConfinement
+    ? false
+    : 'This successful observation/script transport needs the default read-only process backend.',
+}
 async function fixture(t, options = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     ...options,
   })
@@ -63,17 +67,17 @@ const patch = (snapshot, extra = {}) => ({
   ...extra,
 })
 
-test('archived model image audit does not invalidate maintenance or enter its material snapshot', async (t) => {
+test('request audit metadata does not invalidate maintenance or enter its material snapshot', async (t) => {
   const f = await fixture(t)
   const snapshot = await f.state.snapshot(8000, signal)
   await f.session.context.append({
     kind: 'audit',
-    title: 'model-request:image-data',
-    body: 'PRIVATE_IMAGE_PIXELS',
+    title: 'model-request',
+    body: JSON.stringify({ requestAudit: { schemaVersion: 3, model: 'AUDIT_METADATA_ONLY' } }),
   })
   await f.state.apply(snapshot, patch(snapshot), signal)
   const next = await f.state.snapshot(8000, signal)
-  assert(!JSON.stringify(next).includes('PRIVATE_IMAGE_PIXELS'))
+  assert(!JSON.stringify(next).includes('AUDIT_METADATA_ONLY'))
 })
 
 test('cancelling a stalled candidate validator returns promptly and a late result cannot publish', async (t) => {
@@ -285,8 +289,13 @@ test('a late invalid operation rolls back the entire context patch', async (t) =
 test('new user input invalidates maintenance while accounting and heartbeats do not', async (t) => {
   const f = await fixture(t)
   const snapshot = await f.state.snapshot(8000, signal)
-  await f.session.view.reserveModel('context', 2000)
-  await f.session.view.recordUsage(100, 30)
+  const request = {
+    taskId: (await f.session.view.inspect()).id,
+    requestId: 'maintenance-accounting',
+  }
+  await f.session.view.reserveModel('context', 2000, request)
+  await f.session.view.dispatchModel(request)
+  await f.session.view.recordUsage(100, 30, request)
   await f.session.view.renew(signal)
   const receipt = await f.state.apply(snapshot, patch(snapshot), signal)
   assert(receipt.id)
@@ -315,70 +324,68 @@ test('maintenance reads are paged and tied to the fixed parent snapshot', async 
   })
 })
 
-for (const indexed of [true, false])
-  test(`maintenance catalog fills pages with working materials across noisy internal history: indexed=${indexed}`, async (t) => {
-    const f = await fixture(t)
-    if (!indexed) f.storage.selectSnapshot = undefined
-    const expected = [f.input]
-    for (let batch = 0; batch < 3; batch++) {
-      for (let index = 0; index < 35; index++)
-        await f.session.context.append({
-          kind: 'audit',
-          title: [
-            'act:event',
-            'script:lease-state',
-            'context:frame:internal',
-            'model-continuation',
-            'runtime:frame-marker:internal',
-          ][index % 5],
-          body: '{}',
-        })
-      expected.push(
-        await f.session.context.append({ kind: 'assistant', body: `Observed batch ${batch}` })
-      )
-      expected.push(
-        await f.session.context.append({
-          kind: 'audit',
-          title: `script:execution-${batch}:result`,
-          body: `Result ${batch}`,
-        })
+test('maintenance catalog fills pages with working materials across noisy internal history', async (t) => {
+  const f = await fixture(t)
+  const expected = [f.input]
+  for (let batch = 0; batch < 3; batch++) {
+    for (let index = 0; index < 35; index++)
+      await f.session.context.append({
+        kind: 'audit',
+        title: [
+          'act:event',
+          'script:lease-state',
+          'context:frame:internal',
+          'model-continuation',
+          'runtime:frame-marker:internal',
+        ][index % 5],
+        body: '{}',
+      })
+    expected.push(
+      await f.session.context.append({ kind: 'assistant', body: `Observed batch ${batch}` })
+    )
+    expected.push(
+      await f.session.context.append({
+        kind: 'audit',
+        title: `script:execution-${batch}:result`,
+        body: `Result ${batch}`,
+      })
+    )
+  }
+  const note = await f.note()
+  const snapshot = await f.state.snapshot(8000, signal)
+  let after = 0
+  const ids = []
+  let pages = 0
+  for (;;) {
+    const page = await f.state.list(snapshot, after, 2, signal)
+    pages++
+    assert(page.items.length > 0, 'internal records cannot consume a visible page')
+    for (const record of page.items) {
+      assert(record.sequence > after)
+      assert(!/^(act:|runtime:|model-|context:frame:|script:lease-state$)/u.test(record.title))
+      ids.push(record.ref.id)
+      assert.equal(
+        (await f.state.read(snapshot, record.ref, 0, 100, signal)).record.ref.id,
+        record.ref.id
       )
     }
-    const note = await f.note()
-    const snapshot = await f.state.snapshot(8000, signal)
-    let after = 0
-    const ids = []
-    let pages = 0
-    for (;;) {
-      const page = await f.state.list(snapshot, after, 2, signal)
-      pages++
-      assert(page.items.length > 0, 'internal records cannot consume a visible page')
-      for (const record of page.items) {
-        assert(record.sequence > after)
-        assert(!/^(act:|runtime:|model-|context:frame:|script:lease-state$)/u.test(record.title))
-        ids.push(record.ref.id)
-        assert.equal(
-          (await f.state.read(snapshot, record.ref, 0, 100, signal)).record.ref.id,
-          record.ref.id
-        )
-      }
-      if (page.nextAfter === null) break
-      assert.equal(page.items.length, 2)
-      assert.equal(page.nextAfter, page.items.at(-1).sequence)
-      after = page.nextAfter
-    }
-    assert.deepEqual(ids, [...expected.map((record) => record.ref.id), note.ref.id])
-    assert.equal(pages, 4)
-    assert.deepEqual(await f.state.list(snapshot, snapshot.through, 2, signal), {
-      items: [],
-      nextAfter: null,
-    })
-    await f.session.context.append({
-      kind: 'user',
-      body: 'Changed authorization and task requirements',
-    })
-    await assert.rejects(f.state.list(snapshot, 0, 2, signal), { code: 'CONTEXT_CONFLICT' })
+    if (page.nextAfter === null) break
+    assert.equal(page.items.length, 2)
+    assert.equal(page.nextAfter, page.items.at(-1).sequence)
+    after = page.nextAfter
+  }
+  assert.deepEqual(ids, [...expected.map((record) => record.ref.id), note.ref.id])
+  assert.equal(pages, 4)
+  assert.deepEqual(await f.state.list(snapshot, snapshot.through, 2, signal), {
+    items: [],
+    nextAfter: null,
   })
+  await f.session.context.append({
+    kind: 'user',
+    body: 'Changed authorization and task requirements',
+  })
+  await assert.rejects(f.state.list(snapshot, 0, 2, signal), { code: 'CONTEXT_CONFLICT' })
+})
 
 test('maintenance catalog respects task resets and explicit reattachment of an old input', async (t) => {
   const f = await fixture(t)
@@ -437,53 +444,57 @@ test('volume narrative rejection identifies every invalid evidence reference wit
   assert(receipt.id)
 })
 
-test('observation display policy applies to fresh results each turn and reports original references', async (t) => {
-  const requests = []
-  const model = {
-    id: 'maintenance-fixture',
-    limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
-    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
-    async *stream(request) {
-      requests.push(request)
-      yield* done(request)
-    },
+test(
+  'observation display policy applies to fresh results each turn and reports original references',
+  readOnlyScript,
+  async (t) => {
+    const requests = []
+    const model = {
+      id: 'maintenance-fixture',
+      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream(request) {
+        requests.push(request)
+        yield* done(request)
+      },
+    }
+    const f = await fixture(t, { model })
+    await f.session.view.end()
+    const observe = await f.session.observe({
+      source: "import {output} from 'velaros';output('x'.repeat(20000));",
+    })
+    for await (const event of f.session.submit('Observe')) {
+      assert.equal(typeof event.type, 'string')
+    }
+    const snapshot = await f.state.snapshot(12000, signal)
+    await f.state.apply(
+      snapshot,
+      patch(snapshot, {
+        observation: { sourceRef: observe.sourceRef, config: { maxChars: 100 } },
+      }),
+      signal
+    )
+    for await (const event of f.session.submit('Continue')) {
+      assert.equal(typeof event.type, 'string')
+    }
+    for await (const event of f.session.submit('Continue again')) {
+      assert.equal(typeof event.type, 'string')
+    }
+    const first = JSON.parse(requests.at(-2).materials[0].text)
+    const second = JSON.parse(requests.at(-1).materials[0].text)
+    assert(first.partitions.observation.text.length <= 100)
+    assert(second.partitions.observation.text.length <= 100)
+    assert.notEqual(first.partitions.observation.resultRef, second.partitions.observation.resultRef)
+    assert.notEqual(second.partitions.observation.sourceRef, observe.sourceRef)
+    assert.match(second.partitions.observation.source, /configure/)
+    assert.equal(
+      second.partitions.observation.read.input.ref,
+      second.partitions.observation.resultRef
+    )
+    assert(second.memoryStatus.maintenance.report.id)
+    assert((await f.programs.read(second.partitions.observation.resultRef)).totalChars > 20000)
   }
-  const f = await fixture(t, { model })
-  await f.session.view.end()
-  const observe = await f.session.observe({
-    source: "import {output} from 'velaros';output('x'.repeat(20000));",
-  })
-  for await (const event of f.session.submit('Observe')) {
-    assert.equal(typeof event.type, 'string')
-  }
-  const snapshot = await f.state.snapshot(12000, signal)
-  await f.state.apply(
-    snapshot,
-    patch(snapshot, {
-      observation: { sourceRef: observe.sourceRef, config: { maxChars: 100 } },
-    }),
-    signal
-  )
-  for await (const event of f.session.submit('Continue')) {
-    assert.equal(typeof event.type, 'string')
-  }
-  for await (const event of f.session.submit('Continue again')) {
-    assert.equal(typeof event.type, 'string')
-  }
-  const first = JSON.parse(requests.at(-2).materials[0].text)
-  const second = JSON.parse(requests.at(-1).materials[0].text)
-  assert(first.partitions.observation.text.length <= 100)
-  assert(second.partitions.observation.text.length <= 100)
-  assert.notEqual(first.partitions.observation.resultRef, second.partitions.observation.resultRef)
-  assert.notEqual(second.partitions.observation.sourceRef, observe.sourceRef)
-  assert.match(second.partitions.observation.source, /configure/)
-  assert.equal(
-    second.partitions.observation.read.input.ref,
-    second.partitions.observation.resultRef
-  )
-  assert(second.memoryStatus.maintenance.report.id)
-  assert((await f.programs.read(second.partitions.observation.resultRef)).totalChars > 20000)
-})
+)
 
 const driver = (
   stream,
@@ -495,9 +506,17 @@ const driver = (
   stream,
 })
 const finish = { type: 'finish', reason: 'stop' }
+const dataDriver = (stream) => ({ ...driver(stream), nativeTools: true })
+const dataSnapshotOf = (request) => JSON.parse(request.materials[0].text).snapshot
+const dataMaterialOf = (request) => JSON.parse(request.materials[0].text).material
+const dataCall = (name, input, id = name) => ({ type: 'tool-call', value: { id, name, input } })
+async function* deliverDataPatch(request, extra = {}) {
+  yield dataCall('submit', patch(dataMaterialOf(request), extra))
+  yield finish
+}
 const execute = (request, source) => ({
   type: 'text',
-  text: `${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} execute()\n${source}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]}`,
+  text: `${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} execute()\n${source}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]}`,
 })
 const snapshotOf = (request) =>
   JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
@@ -509,7 +528,7 @@ async function* deliverPatch(request, extra = {}) {
   )
   yield {
     ...part,
-    text: `${part.text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
+    text: `${part.text}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} done`,
   }
   yield finish
 }
@@ -517,7 +536,6 @@ async function setupTool(t, main, maintenance, extra = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: main,
     context: { sources: [], maintenance: { model: maintenance, execution: 'script' } },
@@ -534,24 +552,94 @@ async function runTool(f, input = 'work') {
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
   return events
 }
+async function setupDataTool(t, main, maintenance, extra = {}) {
+  return setupTool(t, main, maintenance, {
+    ...extra,
+    context: {
+      ...extra.context,
+      sources: [],
+      maintenance: { ...extra.context?.maintenance, model: maintenance, execution: 'data' },
+    },
+  })
+}
 
-test('a truncated maintenance request remains pageable through the available read operation', async (t) => {
-  let calls = 0
-  const estimates = []
-  const marker = 'COMPLETE_REQUEST_RECALLED'
-  const maintenance = {
-    ...driver(
-      async function* (request) {
-        calls++
-        const frame = JSON.parse(request.materials[0].text)
-        const goal = frame.partitions.task.goals[0]
-        let code
-        if (calls === 1) {
-          assert(goal.text.length < goal.totalChars)
-          const local = await f.storage.load(goal.record.ref.sessionId)
-          const audit = local.records.find((record) => record.kind === 'audit')
-          assert(audit)
-          code = `import {read} from 'velaros:context-materials';
+test(
+  'unavailable read-only script maintenance archives rejection without changing primary notes',
+  {
+    skip: platformHasDefaultConfinement
+      ? 'This host has a default read-only backend; successful script transport is covered below.'
+      : false,
+  },
+  async (t) => {
+    let calls = 0
+    const maintenance = driver(async function* (request) {
+      calls++
+      yield* deliverPatch(request)
+    })
+    const f = await setupTool(t, driver(done), maintenance, {
+      context: {
+        sources: [],
+        maintenance: { model: maintenance, execution: 'script', profile: { modelCalls: 2 } },
+      },
+    })
+    const saved = await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system';await memory.update({key:'protected',baseRevision:0,body:'Keep the primary evidence'});await memory.organize({focus:'Preserve original evidence'});",
+    })
+    assert.equal(saved.result.failed, undefined, JSON.stringify(saved))
+    const primary = (await f.storage.load('root')).records.findLast(
+      (record) => record.title === 'workspace:note:protected'
+    )
+    const original = await f.storage.get('root', primary.objectId)
+    await runTool(f)
+    assert.equal(calls, 2)
+    const state = await f.storage.load('root')
+    assert(!state.records.some((record) => record.title === 'context-maintenance:applied'))
+    const current = state.records.findLast((record) => record.title === primary.title)
+    assert.equal(await f.storage.get('root', current.objectId), original)
+    const record = state.records.findLast(
+      (record) => record.title === 'context-maintenance:outcome'
+    )
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    assert.equal(outcome.status, 'failed')
+    const branch = await f.storage.load(outcome.sessionId)
+    const rejected = branch.records.filter((item) =>
+      /^script:[0-9a-f-]{36}:result$/u.test(item.title)
+    )
+    assert.equal(rejected.length, 2)
+    for (const failed of rejected) {
+      const result = JSON.parse(await f.storage.get(outcome.sessionId, failed.objectId))
+      assert.equal(result.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+      assert.equal(result.result.process, undefined)
+      const sourceRef = failed.sources.find((ref) => ref.sessionId === outcome.sessionId)
+      const sourceRecord = branch.records.find((item) => item.ref.id === sourceRef.id)
+      const source = JSON.parse(await f.storage.get(outcome.sessionId, sourceRecord.objectId))
+      assert.match(source.source, /velaros:context-materials/)
+      assert.match(source.source, /submit/)
+    }
+  }
+)
+
+test(
+  'a truncated maintenance request remains pageable through the available read operation',
+  readOnlyScript,
+  async (t) => {
+    let calls = 0
+    const estimates = []
+    const marker = 'COMPLETE_REQUEST_RECALLED'
+    const maintenance = {
+      ...driver(
+        async function* (request) {
+          calls++
+          const frame = JSON.parse(request.materials[0].text)
+          const goal = frame.partitions.task.goals[0]
+          let code
+          if (calls === 1) {
+            assert(goal.text.length < goal.totalChars)
+            const local = await f.storage.load(goal.record.ref.sessionId)
+            const audit = local.records.find((record) => record.kind === 'audit')
+            assert(audit)
+            code = `import {read} from 'velaros:context-materials';
 const ref=${JSON.stringify(goal.record.ref)};
 const first=await read({ref,offset:0,limit:1500});
 const next=await read({ref,offset:1500,limit:32000});
@@ -560,103 +648,122 @@ if(!original.snapshot.intent.focus.includes(${JSON.stringify(marker)}) || first.
 for(const ref of [${JSON.stringify(audit.ref)},{sessionId:'unrelated',id:'secret'}]) {
  let denied=false; try {await read({ref})} catch(error) {if(error.code!=='SCOPE_MISMATCH')throw error;denied=true} if(!denied)throw Error('unexpected access');
 }`
-        } else {
-          assert.equal(calls, 2)
-          const local = await f.storage.load(goal.record.ref.sessionId)
-          const result = local.records.findLast((record) => /^script:.*:result$/.test(record.title))
-          assert(result)
-          const archived = JSON.parse(
-            await f.storage.get(goal.record.ref.sessionId, result.objectId)
-          )
-          assert.equal(archived.result.failed, undefined, JSON.stringify(archived.result.failed))
-          code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify({ baseRevision: frame.partitions.runtime.modelTool.baseRevision, summary: 'Recovered the complete maintenance request.', unresolved: [] })}));`
+          } else {
+            assert.equal(calls, 2)
+            const local = await f.storage.load(goal.record.ref.sessionId)
+            const result = local.records.findLast((record) =>
+              /^script:.*:result$/.test(record.title)
+            )
+            assert(result)
+            const archived = JSON.parse(
+              await f.storage.get(goal.record.ref.sessionId, result.objectId)
+            )
+            assert.equal(archived.result.failed, undefined, JSON.stringify(archived.result.failed))
+            code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify({ baseRevision: frame.partitions.runtime.modelTool.baseRevision, summary: 'Recovered the complete maintenance request.', unresolved: [] })}));`
+          }
+          yield {
+            type: 'tool-call',
+            value: { id: `request-read-${calls}`, name: 'exec', input: { code } },
+          }
+          yield finish
+        },
+        async (request) => {
+          const goal = JSON.parse(request.materials[0].text).partitions.task.goals[0]
+          estimates.push({ shown: goal.text.length, total: goal.totalChars, calls })
+          return {
+            tokens: calls || goal.text.length < goal.totalChars ? 1000 : 100000,
+            precision: 'exact',
+            basis: 'force the initial request into recovery projection',
+          }
         }
+      ),
+      nativeTools: true,
+    }
+    const f = await setupTool(t, driver(done), maintenance)
+    await f.session.execute({
+      source: `import {memory} from 'velaros:system';await memory.plan({decisions:Array.from({length:8},(_,index)=>index+': '+'context '.repeat(110))});await memory.organize({focus:${JSON.stringify('f'.repeat(900) + marker + 'g'.repeat(900))}});`,
+    })
+    await runTool(f)
+    const state = await f.storage.load('root')
+    const record = state.records.findLast((r) => r.title === 'context-maintenance:outcome')
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    assert.equal(
+      calls,
+      2,
+      JSON.stringify({ error: outcome.error, status: outcome.status, estimates })
+    )
+    assert(estimates.some((item) => item.calls === 0 && item.shown === item.total))
+    assert(estimates.some((item) => item.calls === 0 && item.shown < item.total))
+    assert.equal(outcome.status, 'applied', outcome.error)
+    assert.equal(outcome.error, null)
+    const branch = await f.storage.load(outcome.sessionId)
+    const audits = branch.records.filter((item) => item.title === 'model-request')
+    assert.equal(audits.length, 2)
+    for (const audit of audits) {
+      const body = await f.storage.get(outcome.sessionId, audit.objectId)
+      assert(body.length < 2048)
+      const data = JSON.parse(body)
+      assert.equal(data.requestAudit.schemaVersion, 3)
+      assert(!Object.hasOwn(data, 'request'))
+      assert(!Object.hasOwn(data, 'providerRequest'))
+      assert(!body.includes(marker))
+    }
+  }
+)
+
+test(
+  'context maintenance publishes a validated native Node patch in one model request',
+  readOnlyScript,
+  async (t) => {
+    let mainCalls = 0
+    let toolCalls = 0
+    const main = driver(async function* (request) {
+      assert(!request.instructions.includes(VelarContextMaterialsModule.declarations))
+      if (++mainCalls === 1) {
+        yield execute(
+          request,
+          "import {memory} from 'velaros:system'; await memory.organize({focus:'Keep verified progress'});"
+        )
+        yield finish
+      } else yield* done(request)
+    })
+    const maintenance = {
+      ...driver(async function* (request) {
+        toolCalls++
+        assert.equal(request.response.type, 'tools')
+        assert.match(request.compiledPrompt, /当前运行状态/)
+        assert.doesNotMatch(request.instructions, /snapshotPlans/)
+        assert(
+          request.instructions.includes(VelarContextMaterialsModule.declarations),
+          'the invoked maintenance tool receives its generated contract before its first response'
+        )
+        assert.deepEqual(
+          request.response.tools.map((tool) => tool.name),
+          ['blobs', 'exec', 'done']
+        )
+        assert.equal(toolCalls, 1)
         yield {
           type: 'tool-call',
-          value: { id: `request-read-${calls}`, name: 'exec', input: { code } },
+          value: {
+            id: 'patch',
+            name: 'exec',
+            input: {
+              code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
+            },
+          },
         }
         yield finish
-      },
-      async (request) => {
-        const goal = JSON.parse(request.materials[0].text).partitions.task.goals[0]
-        estimates.push({ shown: goal.text.length, total: goal.totalChars, calls })
-        return {
-          tokens: calls || goal.text.length < goal.totalChars ? 1000 : 100000,
-          precision: 'exact',
-          basis: 'force the initial request into recovery projection',
-        }
-      }
-    ),
-    nativeTools: true,
+      }),
+      nativeTools: true,
+    }
+    const f = await setupTool(t, main, maintenance)
+    await runTool(f)
+    assert.equal(mainCalls, 2)
+    assert.equal(toolCalls, 1)
+    const state = await f.storage.load('root')
+    assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
   }
-  const f = await setupTool(t, driver(done), maintenance)
-  await f.session.execute({
-    source: `import {memory} from 'velaros:system';await memory.plan({decisions:Array.from({length:8},(_,index)=>index+': '+'context '.repeat(110))});await memory.organize({focus:${JSON.stringify('f'.repeat(900) + marker + 'g'.repeat(900))}});`,
-  })
-  await runTool(f)
-  const state = await f.storage.load('root')
-  const record = state.records.findLast((r) => r.title === 'context-maintenance:outcome')
-  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  assert.equal(
-    calls,
-    2,
-    JSON.stringify({ error: outcome.error, status: outcome.status, estimates })
-  )
-  assert(estimates.some((item) => item.calls === 0 && item.shown === item.total))
-  assert(estimates.some((item) => item.calls === 0 && item.shown < item.total))
-  assert.equal(outcome.status, 'applied', outcome.error)
-  assert.equal(outcome.error, null)
-})
-
-test('context maintenance publishes a validated native Node patch in one model request', async (t) => {
-  let mainCalls = 0
-  let toolCalls = 0
-  const main = driver(async function* (request) {
-    assert(!request.instructions.includes(VelarContextMaterialsModule.declarations))
-    if (++mainCalls === 1) {
-      yield execute(
-        request,
-        "import {memory} from 'velaros:system'; await memory.organize({focus:'Keep verified progress'});"
-      )
-      yield finish
-    } else yield* done(request)
-  })
-  const maintenance = {
-    ...driver(async function* (request) {
-      toolCalls++
-      assert.equal(request.response.type, 'tools')
-      assert.match(request.compiledPrompt, /当前运行状态/)
-      assert.doesNotMatch(request.instructions, /snapshotPlans/)
-      assert(
-        request.instructions.includes(VelarContextMaterialsModule.declarations),
-        'the invoked maintenance tool receives its generated contract before its first response'
-      )
-      assert.deepEqual(
-        request.response.tools.map((tool) => tool.name),
-        ['blobs', 'exec', 'done']
-      )
-      assert.equal(toolCalls, 1)
-      yield {
-        type: 'tool-call',
-        value: {
-          id: 'patch',
-          name: 'exec',
-          input: {
-            code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
-          },
-        },
-      }
-      yield finish
-    }),
-    nativeTools: true,
-  }
-  const f = await setupTool(t, main, maintenance)
-  await runTool(f)
-  assert.equal(mainCalls, 2)
-  assert.equal(toolCalls, 1)
-  const state = await f.storage.load('root')
-  assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
-})
+)
 
 test('maintenance facts include bounded recent original records with recall ranges and respect task reset', async (t) => {
   const f = await fixture(t)
@@ -696,7 +803,7 @@ test('maintenance facts include bounded recent original records with recall rang
   assert.deepEqual(f.state.material(fresh, 8000).recent, [])
 })
 
-test('automatic narration preloads the sealed interval and rejects evidence from later work', async (t) => {
+test('sealed volume maintenance preloads its interval and rejects evidence from later work', async (t) => {
   const f = await fixture(t)
   const first = await f.session.context.append({ kind: 'assistant', body: 'Inspect the adapter' })
   const last = await f.session.context.append({ kind: 'assistant', body: 'Inspection is complete' })
@@ -821,298 +928,321 @@ test('explicit non-input recall enters maintenance facts at its exact range and 
   assert.deepEqual(f.state.material(fresh, 2000).recent, [])
 })
 
-test('native maintenance publishes a validated final-call patch without another model request', async (t) => {
-  let calls = 0
-  const maintenance = {
-    ...driver(async function* (request) {
-      calls++
-      assert(calls <= 2)
-      if (calls === 2) assert.equal(request.contextStatus.phase, 'finalizing')
-      yield {
-        type: 'tool-call',
-        value: {
-          id: `step-${calls}`,
-          name: 'exec',
-          input: {
-            code:
-              calls === 1
-                ? "console.log('Review the supplied snapshot')"
-                : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request), { unresolved: ['Verify remaining work'] }))}));`,
-          },
-        },
-      }
-      yield finish
-    }),
-    nativeTools: true,
-  }
-  const f = await setupTool(
-    t,
-    driver(async function* (request) {
-      yield* done(request)
-    }),
-    maintenance,
-    {
-      context: {
-        sources: [],
-        maintenance: { execution: 'script', model: maintenance, profile: { modelCalls: 2 } },
-      },
-    }
-  )
-  await f.session.execute({
-    source:
-      "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
-  })
-  await runTool(f)
-  assert.equal(calls, 2)
-  const state = await f.storage.load('root')
-  assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
-  const record = state.records.findLast((record) => record.title === 'context-maintenance:outcome')
-  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  assert.equal(outcome.status, 'applied')
-  assert.equal(outcome.error, null)
-})
-
-test('native maintenance recovers an oversized initial projection and can read before submitting', async (t) => {
-  let calls = 0
-  let recovered = false
-  const maintenance = {
-    ...driver(
-      async function* (request) {
+test(
+  'native maintenance publishes a validated final-call patch without another model request',
+  readOnlyScript,
+  async (t) => {
+    let calls = 0
+    const maintenance = {
+      ...driver(async function* (request) {
         calls++
-        assert.equal(request.contextStatus.phase, 'work')
         assert(calls <= 2)
-        if (calls === 2) assert.match(JSON.stringify(request.history), /items/)
+        if (calls === 2) assert.equal(request.contextStatus.phase, 'finalizing')
         yield {
           type: 'tool-call',
           value: {
-            id: `recover-${calls}`,
+            id: `step-${calls}`,
             name: 'exec',
             input: {
               code:
                 calls === 1
-                  ? "import {list} from 'velaros:context-materials'; console.log(await list({limit:8}));"
-                  : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
+                  ? "console.log('Review the supplied snapshot')"
+                  : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request), { unresolved: ['Verify remaining work'] }))}));`,
             },
           },
         }
         yield finish
-      },
-      async (request) => {
-        const small = request.materials[0].text.length < 12000
-        if (small) recovered = true
-        return {
-          tokens: small || calls > 0 ? 1000 : 100000,
-          precision: 'exact',
-          basis: 'fixture: initial full projection exceeds the window',
-        }
-      }
-    ),
-    nativeTools: true,
-  }
-  const f = await setupTool(
-    t,
-    driver(async function* (request) {
-      yield* done(request)
-    }),
-    maintenance
-  )
-  await f.session.context.append({ kind: 'assistant', body: 'Verified records\n'.repeat(1500) })
-  await f.session.execute({
-    source:
-      "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
-  })
-  await runTool(f)
-  assert.equal(recovered, true)
-  assert.equal(calls, 2)
-  const state = await f.storage.load('root')
-  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
-  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  assert.equal(outcome.status, 'applied')
-  assert.equal(outcome.error, null)
-})
-
-test('shared provider usage lets maintenance deliver the full original in its first native request', async (t) => {
-  const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
-  let activeRequest
-  let mainCalls = 0
-  let maintenanceCalls = 0
-  let firstInputChars = 0
-  const standard = createAiSdkModelDriver({
-    id: 'offline-shared-input-estimator',
-    model: {
-      specificationVersion: 'v3',
-      provider: 'openai.chat',
-      modelId: 'gpt-4o',
-      supportedUrls: {},
-      async doStream() {
-        const frame = JSON.parse(activeRequest.materials[0].text)
-        const facts = frame.partitions.runtime.modelTool
-        let code
-        if (facts) {
-          maintenanceCalls++
-          const input = facts.inputs.find((item) => item.text.startsWith('Review all source'))
-          firstInputChars = input?.text.length ?? 0
-          assert.equal(
-            input?.text,
-            original,
-            'shared route calibration preserves the complete first input'
-          )
-          assert.equal(maintenanceCalls, 1)
-          const candidate = {
-            baseRevision: facts.baseRevision,
-            summary: 'Preserved the complete input and its pending review.',
-            unresolved: ['Review source batches'],
-            inputs: [
-              {
-                ref: input.ref,
-                baseRevision: 0,
-                summary: 'Review all source batches',
-                constraints: ['Preserve every original constraint'],
-                unresolved: ['Review source batches'],
-              },
-            ],
-          }
-          code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`
-        } else if (++mainCalls === 1) {
-          code =
-            "import {memory} from 'velaros:system';console.log('Observed source records; verification remains pending. '.repeat(1200));await memory.organize({focus:'Preserve the complete task'});"
-        }
-        const chunks = [
-          { type: 'stream-start', warnings: [] },
-          ...(code
-            ? [
-                {
-                  type: 'tool-call',
-                  toolCallId: `call-${mainCalls}-${maintenanceCalls}`,
-                  toolName: 'exec',
-                  input: JSON.stringify({ code }),
-                },
-              ]
-            : [
-                {
-                  type: 'tool-call',
-                  toolCallId: `done-${mainCalls}`,
-                  toolName: 'done',
-                  input: JSON.stringify({ message: 'Finished the fixture.' }),
-                },
-              ]),
-          {
-            type: 'finish',
-            finishReason: {
-              unified: code ? 'tool-calls' : 'stop',
-              raw: code ? 'tool_calls' : 'stop',
-            },
-            usage: {
-              inputTokens: {
-                total: facts ? 12000 : 6000,
-                noCache: facts ? 12000 : 6000,
-                cacheRead: 0,
-                cacheWrite: 0,
-              },
-              outputTokens: { total: 100, text: 100, reasoning: 0 },
-            },
-          },
-        ]
-        return {
-          stream: new ReadableStream({
-            start(controller) {
-              chunks.forEach((part) => controller.enqueue(part))
-              controller.close()
-            },
-          }),
-        }
-      },
-    },
-    limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 8192 },
-  })
-  const shared = {
-    id: standard.id,
-    nativeTools: true,
-    limits: standard.limits,
-    estimate: (request) => standard.estimate(request),
-    stream(request, signal) {
-      activeRequest = request
-      return standard.stream(request, signal)
-    },
-  }
-  const f = await setupTool(t, shared, shared)
-  await runTool(f, original)
-  const state = await f.storage.load('root')
-  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
-  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  t.diagnostic(
-    JSON.stringify({ mainCalls, maintenanceCalls, firstInputChars, originalChars: original.length })
-  )
-  assert.equal(outcome.status, 'applied', outcome.error)
-  assert.equal(mainCalls, 2)
-  assert.equal(maintenanceCalls, 1)
-})
-
-test('native maintenance preserves large accepted evidence through the next request and publishes a grounded patch', async (t) => {
-  const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
-  let previous
-  let calls = 0
-  const maintenance = {
-    ...driver(async function* (request) {
-      calls++
-      const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
-      const input = facts.inputs.find((item) => item.text === original)
-      assert(input, 'the audit frame keeps the complete original')
-      const sent = modelRequestEncoder.messages(request).map(({ role, content }) => ({
-        role,
-        content,
-      }))
-      const visible = sent.map((message) => message.content).join('\n')
-      assert.equal(visible.split(original).length, 2, 'the actual model request contains it once')
-      if (previous) {
-        assert.deepEqual(sent.slice(0, previous.length), previous)
-        assert(!request.compiledPrompt.includes(original))
-        assert.match(request.compiledPrompt, /bodyInEarlierFrame/)
-      }
-      previous = sent
-      const candidate = {
-        baseRevision: facts.baseRevision,
-        summary: 'Kept the supplied constraints and the pending review.',
-        unresolved: ['Review source batches'],
-        inputs: [
-          {
-            ref: input.ref,
-            baseRevision: 0,
-            summary: 'Review all source batches',
-            constraints: ['Preserve every original constraint'],
-            unresolved: ['Review source batches'],
-          },
-        ],
-      }
-      yield {
-        type: 'tool-call',
-        value: {
-          id: `retained-material-${calls}`,
-          name: 'exec',
-          input: {
-            code:
-              calls === 1
-                ? "console.log('Verified the supplied original constraints.');"
-                : `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`,
-          },
+      }),
+      nativeTools: true,
+    }
+    const f = await setupTool(
+      t,
+      driver(async function* (request) {
+        yield* done(request)
+      }),
+      maintenance,
+      {
+        context: {
+          sources: [],
+          maintenance: { execution: 'script', model: maintenance, profile: { modelCalls: 2 } },
         },
       }
-      yield finish
-    }),
-    nativeTools: true,
+    )
+    await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
+    })
+    await runTool(f)
+    assert.equal(calls, 2)
+    const state = await f.storage.load('root')
+    assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
+    const record = state.records.findLast(
+      (record) => record.title === 'context-maintenance:outcome'
+    )
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    assert.equal(outcome.status, 'applied')
+    assert.equal(outcome.error, null)
   }
-  const f = await setupTool(t, driver(done), maintenance)
-  await f.session.execute({
-    source:
-      "import {memory} from 'velaros:system';await memory.organize({focus:'Preserve original constraints'});",
-  })
-  await runTool(f, original)
-  const state = await f.storage.load('root')
-  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
-  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  assert.equal(outcome.status, 'applied', outcome.error)
-  assert.equal(calls, 2)
-})
+)
+
+test(
+  'native maintenance recovers an oversized initial projection and can read before submitting',
+  readOnlyScript,
+  async (t) => {
+    let calls = 0
+    let recovered = false
+    const maintenance = {
+      ...driver(
+        async function* (request) {
+          calls++
+          assert.equal(request.contextStatus.phase, 'work')
+          assert(calls <= 2)
+          if (calls === 2) assert.match(JSON.stringify(request.history), /items/)
+          yield {
+            type: 'tool-call',
+            value: {
+              id: `recover-${calls}`,
+              name: 'exec',
+              input: {
+                code:
+                  calls === 1
+                    ? "import {list} from 'velaros:context-materials'; console.log(await list({limit:8}));"
+                    : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
+              },
+            },
+          }
+          yield finish
+        },
+        async (request) => {
+          const small = request.materials[0].text.length < 12000
+          if (small) recovered = true
+          return {
+            tokens: small || calls > 0 ? 1000 : 100000,
+            precision: 'exact',
+            basis: 'fixture: initial full projection exceeds the window',
+          }
+        }
+      ),
+      nativeTools: true,
+    }
+    const f = await setupTool(
+      t,
+      driver(async function* (request) {
+        yield* done(request)
+      }),
+      maintenance
+    )
+    await f.session.context.append({ kind: 'assistant', body: 'Verified records\n'.repeat(1500) })
+    await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
+    })
+    await runTool(f)
+    assert.equal(recovered, true)
+    assert.equal(calls, 2)
+    const state = await f.storage.load('root')
+    const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    assert.equal(outcome.status, 'applied')
+    assert.equal(outcome.error, null)
+  }
+)
+
+test(
+  'shared provider usage lets maintenance deliver the full original in its first native request',
+  readOnlyScript,
+  async (t) => {
+    const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
+    let activeRequest
+    let mainCalls = 0
+    let maintenanceCalls = 0
+    let firstInputChars = 0
+    const standard = createAiSdkModelDriver({
+      id: 'offline-shared-input-estimator',
+      model: {
+        specificationVersion: 'v3',
+        provider: 'openai.chat',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        async doStream() {
+          const frame = JSON.parse(activeRequest.materials[0].text)
+          const facts = frame.partitions.runtime.modelTool
+          let code
+          if (facts) {
+            maintenanceCalls++
+            const input = facts.inputs.find((item) => item.text.startsWith('Review all source'))
+            firstInputChars = input?.text.length ?? 0
+            assert.equal(
+              input?.text,
+              original,
+              'shared route calibration preserves the complete first input'
+            )
+            assert.equal(maintenanceCalls, 1)
+            const candidate = {
+              baseRevision: facts.baseRevision,
+              summary: 'Preserved the complete input and its pending review.',
+              unresolved: ['Review source batches'],
+              inputs: [
+                {
+                  ref: input.ref,
+                  baseRevision: 0,
+                  summary: 'Review all source batches',
+                  constraints: ['Preserve every original constraint'],
+                  unresolved: ['Review source batches'],
+                },
+              ],
+            }
+            code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`
+          } else if (++mainCalls === 1) {
+            code =
+              "import {memory} from 'velaros:system';console.log('Observed source records; verification remains pending. '.repeat(1200));await memory.organize({focus:'Preserve the complete task'});"
+          }
+          const chunks = [
+            { type: 'stream-start', warnings: [] },
+            ...(code
+              ? [
+                  {
+                    type: 'tool-call',
+                    toolCallId: `call-${mainCalls}-${maintenanceCalls}`,
+                    toolName: 'exec',
+                    input: JSON.stringify({ code }),
+                  },
+                ]
+              : [
+                  {
+                    type: 'tool-call',
+                    toolCallId: `done-${mainCalls}`,
+                    toolName: 'done',
+                    input: JSON.stringify({ message: 'Finished the fixture.' }),
+                  },
+                ]),
+            {
+              type: 'finish',
+              finishReason: {
+                unified: code ? 'tool-calls' : 'stop',
+                raw: code ? 'tool_calls' : 'stop',
+              },
+              usage: {
+                inputTokens: {
+                  total: facts ? 12000 : 6000,
+                  noCache: facts ? 12000 : 6000,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: { total: 100, text: 100, reasoning: 0 },
+              },
+            },
+          ]
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                chunks.forEach((part) => controller.enqueue(part))
+                controller.close()
+              },
+            }),
+          }
+        },
+      },
+      limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 8192 },
+    })
+    const shared = {
+      id: standard.id,
+      nativeTools: true,
+      limits: standard.limits,
+      estimate: (request) => standard.estimate(request),
+      stream(request, signal) {
+        activeRequest = request
+        return standard.stream(request, signal)
+      },
+    }
+    const f = await setupTool(t, shared, shared)
+    await runTool(f, original)
+    const state = await f.storage.load('root')
+    const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    t.diagnostic(
+      JSON.stringify({
+        mainCalls,
+        maintenanceCalls,
+        firstInputChars,
+        originalChars: original.length,
+      })
+    )
+    assert.equal(outcome.status, 'applied', outcome.error)
+    assert.equal(mainCalls, 2)
+    assert.equal(maintenanceCalls, 1)
+  }
+)
+
+test(
+  'native maintenance preserves large accepted evidence through the next request and publishes a grounded patch',
+  readOnlyScript,
+  async (t) => {
+    const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
+    let previous
+    let calls = 0
+    const maintenance = {
+      ...driver(async function* (request) {
+        calls++
+        const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
+        const input = facts.inputs.find((item) => item.text === original)
+        assert(input, 'the audit frame keeps the complete original')
+        const sent = modelRequestEncoder.messages(request).map(({ role, content }) => ({
+          role,
+          content,
+        }))
+        const visible = sent.map((message) => message.content).join('\n')
+        assert.equal(visible.split(original).length, 2, 'the actual model request contains it once')
+        if (previous) {
+          assert.deepEqual(sent.slice(0, previous.length), previous)
+          assert(!request.compiledPrompt.includes(original))
+          assert.match(request.compiledPrompt, /bodyInEarlierFrame/)
+        }
+        previous = sent
+        const candidate = {
+          baseRevision: facts.baseRevision,
+          summary: 'Kept the supplied constraints and the pending review.',
+          unresolved: ['Review source batches'],
+          inputs: [
+            {
+              ref: input.ref,
+              baseRevision: 0,
+              summary: 'Review all source batches',
+              constraints: ['Preserve every original constraint'],
+              unresolved: ['Review source batches'],
+            },
+          ],
+        }
+        yield {
+          type: 'tool-call',
+          value: {
+            id: `retained-material-${calls}`,
+            name: 'exec',
+            input: {
+              code:
+                calls === 1
+                  ? "console.log('Verified the supplied original constraints.');"
+                  : `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`,
+            },
+          },
+        }
+        yield finish
+      }),
+      nativeTools: true,
+    }
+    const f = await setupTool(t, driver(done), maintenance)
+    await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system';await memory.organize({focus:'Preserve original constraints'});",
+    })
+    await runTool(f, original)
+    const state = await f.storage.load('root')
+    const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+    const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+    assert.equal(outcome.status, 'applied', outcome.error)
+    assert.equal(calls, 2)
+  }
+)
 
 test('native maintenance locally sizes its initial evidence using the standard provider estimate', async (t) => {
   const original = 'Review every batch and preserve each original constraint. '.repeat(40)
@@ -1263,13 +1393,13 @@ test('explicit context request runs a separate leaf at a safe boundary; scripts 
       yield* done(request)
     }
   })
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* (request) {
     toolCalls++
-    assert.match(request.compiledPrompt, /上下文整理工具/)
+    assert.match(request.instructions, /上下文整理工具/)
     yield { type: 'usage', inputTokens: 11, outputTokens: 7 }
-    yield* deliverPatch(request)
+    yield* deliverDataPatch(request)
   })
-  const f = await setupTool(t, main, maintenance, { modelTools: { concurrency: 1 } })
+  const f = await setupDataTool(t, main, maintenance, { modelTools: { concurrency: 1 } })
   await f.session.observe({ source: "import {output} from 'velaros';output('fresh observation');" })
   await runTool(f)
   assert.equal(mainCalls, 2)
@@ -1311,12 +1441,12 @@ test('a frame exceeding capacity delegates to maintenance before the first busin
       basis: 'fixture',
     })
   )
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     main,
-    driver(async function* (request) {
+    dataDriver(async function* (request) {
       toolCalls++
-      yield* deliverPatch(request)
+      yield* deliverDataPatch(request)
     })
   )
   const pixel =
@@ -1366,29 +1496,45 @@ test('fitting large notes permit successful business turns without paid pressure
   assert.equal(state.records.filter((r) => r.title === 'workspace:note:large').length, 1)
 })
 
-test('maintenance has only fixed-snapshot reads and cannot discover or import system management', async (t) => {
+test('data maintenance has only fixed-snapshot reads and cannot discover system management', async (t) => {
   let calls = 0
-  const f = await setupTool(
+  let parentInput
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       yield* done(request)
     }),
-    driver(async function* (request) {
+    dataDriver(async function* (request) {
       calls++
       assert(!request.instructions.includes('memory.organize'))
       assert(!request.instructions.includes('modules.describe'))
-      assert.match(request.instructions, /index.json/)
+      assert.deepEqual(
+        request.response.tools.map((tool) => tool.name),
+        ['list', 'read', 'submit']
+      )
       if (calls === 1) {
-        yield execute(request, "import {modules} from 'velaros:system';await modules.list({});")
+        parentInput = dataMaterialOf(request).inputs[0].ref
+        yield dataCall('list', { limit: 1 })
         yield finish
       } else if (calls === 2) {
-        assert.match(JSON.stringify(request), /velaros:system|PERMISSION/)
-        yield execute(
-          request,
-          "import {output} from 'velaros';import {list,read} from 'velaros:context-materials';const page=await list({limit:1});if(page.items.length)output((await read({ref:page.items[0].ref,limit:1000})).text);else output(page);"
-        )
+        assert.match(JSON.stringify(request.history), /items/)
+        yield dataCall('read', { ref: parentInput, offset: 0, limit: 1000 }, 'allowed-read')
+        yield dataCall('read', { ref: { sessionId: 'unrelated', id: 'private' } }, 'denied-read')
         yield finish
-      } else yield* deliverPatch(request)
+      } else {
+        const exchange = request.history.findLast((message) =>
+          message.toolExchange?.results.some((result) => result.id === 'allowed-read')
+        ).toolExchange
+        assert.equal(
+          exchange.results.find((result) => result.id === 'allowed-read').output.text,
+          'work'
+        )
+        assert.equal(
+          exchange.results.find((result) => result.id === 'denied-read').output.error.code,
+          'SCOPE_MISMATCH'
+        )
+        yield* deliverDataPatch(request)
+      }
     })
   )
   const receipt = await f.session.execute({
@@ -1407,21 +1553,19 @@ test('maintenance has only fixed-snapshot reads and cannot discover or import sy
 
 test('last maintenance call directly delivers a partial patch with gaps and no recursive maintenance', async (t) => {
   let calls = 0
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* (request) {
     calls++
     if (calls === 1) {
-      yield execute(
-        request,
-        "import {output} from 'velaros';import {list,read} from 'velaros:context-materials';const page=await list({limit:1});if(page.items.length)output((await read({ref:page.items[0].ref,limit:1000})).text);else output(page);"
-      )
+      const input = dataMaterialOf(request).inputs[0]
+      yield dataCall('read', { ref: input.ref, offset: 0, limit: 1000 })
       yield finish
     } else {
-      assert.match(request.compiledPrompt, /最后交付轮/)
-      assert.equal(request.contextStatus.phase, 'finalizing')
-      yield* deliverPatch(request, { unresolved: ['Need more evidence'] })
+      assert.match(request.instructions, /最后交付轮/)
+      assert.match(JSON.stringify(request.history), /work/)
+      yield* deliverDataPatch(request, { unresolved: ['Need more evidence'] })
     }
   })
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       yield* done(request)
@@ -1430,7 +1574,7 @@ test('last maintenance call directly delivers a partial patch with gaps and no r
     {
       context: {
         sources: [],
-        maintenance: { execution: 'script', model: maintenance, profile: { modelCalls: 2 } },
+        maintenance: { execution: 'data', model: maintenance, profile: { modelCalls: 2 } },
       },
     }
   )
@@ -1449,7 +1593,7 @@ test('last maintenance call directly delivers a partial patch with gaps and no r
 test('a changed parent snapshot ends maintenance before another model call and recompiles the main frame', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* () {
     toolCalls++
     assert.equal(toolCalls, 1)
     await f.session.context.append({
@@ -1457,13 +1601,10 @@ test('a changed parent snapshot ends maintenance before another model call and r
       title: 'concurrent-result',
       body: 'A child completed while maintenance was reading.',
     })
-    yield execute(
-      request,
-      "import {list} from 'velaros:context-materials';import {output} from 'velaros';output(await list({limit:1}));"
-    )
+    yield dataCall('list', { limit: 1 })
     yield finish
   })
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       mainCalls++
@@ -1495,12 +1636,12 @@ test('unhelpful maintenance is bounded and oversize requests never reach the pro
     },
     async () => ({ tokens: 150000, precision: 'exact', basis: 'fixture' })
   )
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     main,
-    driver(async function* (request) {
+    dataDriver(async function* (request) {
       maintenance++
-      yield* deliverPatch(request)
+      yield* deliverDataPatch(request)
     })
   )
   const events = []
@@ -1596,10 +1737,10 @@ test('business child can request maintenance; the tool cost reaches both parent 
       yield* done(request)
     }
   })
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* (request) {
     toolCalls++
     yield { type: 'usage', inputTokens: 23, outputTokens: 17 }
-    yield* deliverPatch(request)
+    yield* deliverDataPatch(request)
   })
   const main = driver(async function* (request) {
     if (++rootCalls === 1) {
@@ -1610,9 +1751,13 @@ test('business child can request maintenance; the tool cost reaches both parent 
       yield finish
     } else yield* done(request)
   })
-  const f = await setupTool(t, main, maintenance, {
+  const f = await setupDataTool(t, main, maintenance, {
     modelTools: { concurrency: 1 },
-    agents: { concurrency: 1, maxChildren: 2, profiles: { worker: { model: child, modules: [] } } },
+    agents: {
+      concurrency: 1,
+      maxChildren: 2,
+      profiles: { worker: { model: child, node: true, modules: [] } },
+    },
   })
   await runTool(f)
   assert.equal(rootCalls, 2)
@@ -1648,15 +1793,15 @@ test('business child can request maintenance; the tool cost reaches both parent 
 test('organize persists semantic intent and automatically reports its request identity on the next frame', async (t) => {
   let frame
   let seenIntent
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       frame = JSON.parse(request.materials[0].text)
       yield* done(request)
     }),
-    driver(async function* (request) {
-      seenIntent = snapshotOf(request).intent
-      yield* deliverPatch(request, { unresolved: ['Verify login tests'] })
+    dataDriver(async function* (request) {
+      seenIntent = dataSnapshotOf(request).intent
+      yield* deliverDataPatch(request, { unresolved: ['Verify login tests'] })
     })
   )
   const first = await f.session.execute({
@@ -1785,13 +1930,13 @@ test('derived note display preserves the primary version and expires when the pr
 test('organize plus done delivers the actual outcome in another main request before completion', async (t) => {
   let calls = 0
   let tools = 0
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       if (++calls === 1) {
         yield {
           type: 'text',
-          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
+          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} done`,
         }
         yield finish
       } else {
@@ -1801,9 +1946,9 @@ test('organize plus done delivers the actual outcome in another main request bef
         yield* done(request)
       }
     }),
-    driver(async function* (request) {
+    dataDriver(async function* (request) {
       tools++
-      yield* deliverPatch(request)
+      yield* deliverDataPatch(request)
     })
   )
   await runTool(f)
@@ -1923,13 +2068,13 @@ test('automatic pressure and a fresh organize request do not inherit an already 
       basis: 'pressure boundary',
     })
   )
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     main,
-    driver(async function* (request) {
-      focuses.push(snapshotOf(request).intent.focus)
+    dataDriver(async function* (request) {
+      focuses.push(dataSnapshotOf(request).intent.focus)
       if (pressure) relieved = true
-      yield* deliverPatch(request)
+      yield* deliverDataPatch(request)
     })
   )
   await f.session.execute({
@@ -2018,20 +2163,20 @@ test('maintenance preflight checks the complete candidate without publishing par
 
 test('a maintenance patch error is corrected within the same leaf before publication', async (t) => {
   let calls = 0
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* (request) {
     calls++
     // 形状合法、状态不符：由补丁校验在同一支线里报出来
     if (calls === 1) {
-      yield* deliverPatch(request, {
+      yield* deliverDataPatch(request, {
         volume: { summary: 'nothing sealed', evidence: [], unresolved: [], negativeAttempts: [] },
       })
     } else {
       assert.equal(calls, 2)
       assert.match(JSON.stringify(request), /快照里还没有卷/)
-      yield* deliverPatch(request)
+      yield* deliverDataPatch(request)
     }
   })
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       yield* done(request)
@@ -2057,14 +2202,20 @@ test('a maintenance patch error is corrected within the same leaf before publica
 
 test('successful maintenance clears a recovered protocol error from its terminal outcome', async (t) => {
   let calls = 0
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(done),
-    driver(async function* (request) {
+    dataDriver(async function* (request) {
       if (++calls === 1) {
-        yield { type: 'text', text: 'I will organize the provided evidence.' }
+        yield dataCall('submit', {
+          ...patch(dataMaterialOf(request)),
+          unresolved: 'invalid-array-shape',
+        })
         yield finish
-      } else yield* deliverPatch(request)
+      } else {
+        assert.match(JSON.stringify(request.history), /MODEL_RESPONSE_SCHEMA/)
+        yield* deliverDataPatch(request)
+      }
     })
   )
   await f.session.execute({
@@ -2080,40 +2231,46 @@ test('successful maintenance clears a recovered protocol error from its terminal
   assert.equal(outcome.error, null)
 })
 
-test('read-only maintenance can deliver a validated patch while its own old preview is unavailable', async (t) => {
-  let calls = 0
-  const maintenance = driver(async function* (request) {
-    calls++
-    if (calls === 1) {
-      yield execute(
-        request,
-        "import {output} from 'velaros';output('large'.repeat(1000),{key:'old-preview',required:true,view:{mode:'reference'}});"
-      )
-      yield finish
-    } else {
-      assert.equal(calls, 2)
-      assert.equal(request.contextStatus.phase, 'work')
-      yield* deliverPatch(request, { unresolved: ['Old exploration preview was not displayed.'] })
-    }
-  })
-  const f = await setupTool(
-    t,
-    driver(async function* (request) {
-      yield* done(request)
-    }),
-    maintenance
-  )
-  await f.session.execute({
-    source:
-      "import {memory} from 'velaros:system';await memory.organize({focus:'preserve the task'});",
-  })
-  await runTool(f)
-  assert.equal(calls, 2)
-  const state = await f.storage.load('root')
-  const record = state.records.findLast((record) => record.title === 'context-maintenance:applied')
-  assert(record)
-  assert.match(await f.storage.get('root', record.objectId), /Old exploration preview/)
-})
+test(
+  'read-only maintenance can deliver a validated patch while its own old preview is unavailable',
+  readOnlyScript,
+  async (t) => {
+    let calls = 0
+    const maintenance = driver(async function* (request) {
+      calls++
+      if (calls === 1) {
+        yield execute(
+          request,
+          "import {output} from 'velaros';output('large'.repeat(1000),{key:'old-preview',required:true,view:{mode:'reference'}});"
+        )
+        yield finish
+      } else {
+        assert.equal(calls, 2)
+        assert.equal(request.contextStatus.phase, 'work')
+        yield* deliverPatch(request, { unresolved: ['Old exploration preview was not displayed.'] })
+      }
+    })
+    const f = await setupTool(
+      t,
+      driver(async function* (request) {
+        yield* done(request)
+      }),
+      maintenance
+    )
+    await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system';await memory.organize({focus:'preserve the task'});",
+    })
+    await runTool(f)
+    assert.equal(calls, 2)
+    const state = await f.storage.load('root')
+    const record = state.records.findLast(
+      (record) => record.title === 'context-maintenance:applied'
+    )
+    assert(record)
+    assert.match(await f.storage.get('root', record.objectId), /Old exploration preview/)
+  }
+)
 
 test('input summaries require original pages in the model facts, not a successful hidden read', async (t) => {
   const f = await fixture(t)
@@ -2306,13 +2463,12 @@ test('INV-34 maintenance receives parent goals directly and acknowledges their e
   let calls = 0
   const goal =
     'Inspect all batches; ask the host before each revision, then resume the same worker.'
-  const maintenance = driver(async function* (request) {
+  const maintenance = dataDriver(async function* (request) {
     calls++
-    const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
-    const input = frame.partitions.runtime.modelTool.inputs.find((item) => item.text === goal)
+    const input = dataMaterialOf(request).inputs.find((item) => item.text === goal)
     assert(input)
     assert(request.compiledPrompt.includes(goal))
-    yield* deliverPatch(request, {
+    yield* deliverDataPatch(request, {
       inputs: [
         {
           ref: input.ref,
@@ -2326,7 +2482,7 @@ test('INV-34 maintenance receives parent goals directly and acknowledges their e
       ],
     })
   })
-  const f = await setupTool(
+  const f = await setupDataTool(
     t,
     driver(async function* (request) {
       yield* done(request)
@@ -2344,43 +2500,47 @@ test('INV-34 maintenance receives parent goals directly and acknowledges their e
   assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
 })
 
-test('an accepted maintenance candidate tells the leaf to finish before parent publication', async (t) => {
-  let calls = 0
-  const maintenance = driver(async function* (request) {
-    calls++
-    if (calls === 1) {
-      const snapshot = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
-      yield execute(
-        request,
-        `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch(snapshot))}));`
-      )
-      yield finish
-    } else {
-      assert.equal(calls, 2)
-      assert.match(request.compiledPrompt, /当前候选补丁已通过校验并受理/)
-      assert.match(request.compiledPrompt, /applied 回执只在本支线完成之后产生/)
-      yield* done(request)
-    }
-  })
-  const f = await setupTool(
-    t,
-    driver(async function* (request) {
-      yield* done(request)
-    }),
-    maintenance
-  )
-  await f.session.execute({
-    source:
-      "import {memory} from 'velaros:system';await memory.organize({focus:'finish the candidate'});",
-  })
-  await runTool(f)
-  assert.equal(calls, 2)
-  assert.equal(
-    (await f.storage.load('root')).records.filter(
-      (item) => item.title === 'context-maintenance:applied'
-    ).length,
-    1
-  )
-})
+test(
+  'an accepted maintenance candidate tells the leaf to finish before parent publication',
+  readOnlyScript,
+  async (t) => {
+    let calls = 0
+    const maintenance = driver(async function* (request) {
+      calls++
+      if (calls === 1) {
+        const snapshot = JSON.parse(
+          JSON.parse(request.materials[0].text).partitions.task.goals[0].text
+        ).snapshot
+        yield execute(
+          request,
+          `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch(snapshot))}));`
+        )
+        yield finish
+      } else {
+        assert.equal(calls, 2)
+        assert.match(request.protocol, /当前候选补丁已通过校验并受理/)
+        assert.match(request.protocol, /applied 回执只在本支线完成之后产生/)
+        yield* done(request)
+      }
+    })
+    const f = await setupTool(
+      t,
+      driver(async function* (request) {
+        yield* done(request)
+      }),
+      maintenance
+    )
+    await f.session.execute({
+      source:
+        "import {memory} from 'velaros:system';await memory.organize({focus:'finish the candidate'});",
+    })
+    await runTool(f)
+    assert.equal(calls, 2)
+    assert.equal(
+      (await f.storage.load('root')).records.filter(
+        (item) => item.title === 'context-maintenance:applied'
+      ).length,
+      1
+    )
+  }
+)

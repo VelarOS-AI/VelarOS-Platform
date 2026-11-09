@@ -1,13 +1,5 @@
 import type { ContextRuntime } from '../impl/SessionContext.js'
 import type {
-  ContextCompletionBinding,
-  ContextCompletionResult,
-  ContextDeliveryRequirement,
-  ContextVerificationCheck,
-  ContextVerificationCost,
-  ContextVerificationFingerprint,
-} from '../types/context.js'
-import type {
   ContextMetadata,
   ContextObjectCollection,
   ContextObjectCollectionResult,
@@ -28,7 +20,6 @@ import type {
   ContextTime,
   ContextViewForm,
   ContextViewLimits,
-  ModelView,
 } from '../types/context.js'
 import type {
   StoreChanges,
@@ -52,21 +43,21 @@ export interface ContextStorage {
   readonly leaseOwner?: string
   /** 仅在同一宿主上能证明所有者已退出时返回 false；未知必须保留租约。 */
   leaseOwnerActive?(owner: string): Optional<boolean>
-  /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用。省略时由同存储实例的签发器防冲突。 */
-  allocateReferenceId?(sessionId: string): Promise<string>
+  /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用，不改变上下文 CAS 版本。 */
+  allocateReferenceId(sessionId: string): Promise<string>
   /** 同一持久命名空间内的共享对象与消息端口；省略时不发现 system.store，不能回退到另一份隐式存储。 */
   readonly stores?: StoreStorage
   /** 一致读取完整状态及有序记录；未建立时返回 null，返回值不与存储共享可变内存。 */
   load(sessionId: string): Promise<Nullable<ContextState>>
-  /** 可选小快照：只返回元数据，与 load 使用同一 version；不包含 records，返回值与数据库隔离。 */
-  loadMetadata?(sessionId: string): Promise<Nullable<ContextMetadata>>
-  /** 可选一致索引快照：元数据和多组记录选择在同一版本读取；空选择只读元数据，不存在返回 null。 */
-  selectSnapshot?(
+  /** 元数据快照：只返回元数据，与 load 使用同一 version；不包含 records，返回值与数据库隔离。 */
+  loadMetadata(sessionId: string): Promise<Nullable<ContextMetadata>>
+  /** 一致索引快照：元数据和多组记录选择在同一版本读取；空选择只读元数据，不存在返回 null。 */
+  selectSnapshot(
     sessionId: string,
     selections: readonly ContextRecordSelection[]
   ): Promise<Nullable<ContextRecordSnapshot>>
-  /** 可选增量 CAS：保留历史目录，原子替换元数据并追加新目录项，存储分配递增序号；与完整 CAS/appendRecord 共用版本。非空 objectId 必须存在，重复 ref 拒绝；空 objectId 仅表示无正文索引。 */
-  compareAndSwapMetadata?(
+  /** 增量 CAS：保留历史目录，原子替换元数据并追加新目录项，存储分配递增序号；与完整 CAS/appendRecord 共用版本。非空 objectId 必须存在，重复 ref 拒绝；空 objectId 仅表示无正文索引。 */
+  compareAndSwapMetadata(
     sessionId: string,
     expectedVersion: number,
     state: ContextMetadata,
@@ -74,16 +65,16 @@ export interface ContextStorage {
   ): Promise<boolean>
   /** 跨实例原子提交状态和记录，version 必须为 expectedVersion+1；未建会话版本为 0。冲突只返回 false，IO 故障抛错；缺失正文不得发布，失败不得部分提交。 */
   compareAndSwap(sessionId: string, expectedVersion: number, state: ContextState): Promise<boolean>
-  /** 可选原子追加：事务内验证正文与同会话来源，分配递增 sequence 并推进状态 version，保留其他元数据；重复 ref 拒绝，失败不发布。省略时使用完整 CAS。 */
-  appendRecord?(sessionId: string, record: Omit<ContextRecord, 'sequence'>): Promise<ContextRecord>
+  /** 原子追加：事务内验证正文与同会话来源，分配递增 sequence 并推进状态 version，保留其他元数据；重复 ref 拒绝，失败不发布。 */
+  appendRecord(sessionId: string, record: Omit<ContextRecord, 'sequence'>): Promise<ContextRecord>
   /** 在会话内先持久化不可变正文再返回不透明 id；上层不解析 id 或假设它是路径、哈希或数据库主键。 */
   put(sessionId: string, text: string): Promise<string>
   /** 读取所属会话的原始正文；跨会话或不存在时返回 null，IO 故障不得伪装成缺失。 */
   get(sessionId: string, objectId: string): Promise<Nullable<string>>
-  /** 可选正文存在性查询，不加载正文；与 get 使用相同会话边界，IO 故障不得伪装成不存在。 */
-  has?(sessionId: string, objectId: string): Promise<boolean>
-  /** 可选索引：按 sequence 升序、after 排他、title/refId 精确过滤；语义等同于 load，未提供时调用方读取完整状态。 */
-  records?(sessionId: string, query: ContextRecordQuery): Promise<ContextRecordPage>
+  /** 正文存在性查询，不加载正文；与 get 使用相同会话边界，IO 故障不得伪装成不存在。 */
+  has(sessionId: string, objectId: string): Promise<boolean>
+  /** 索引：按 sequence 升序、after 排他、title/refId 精确过滤；语义等同于 load。 */
+  records(sessionId: string, query: ContextRecordQuery): Promise<ContextRecordPage>
   /** 可选孤立正文回收：事务内核对版本与引用，保留写入宽限期；默认预演，不移除记录引用的正文或共享 store。 */
   collect?(
     sessionId: string,
@@ -161,56 +152,8 @@ export interface ContextBuildOptions {
   readonly maxChars: number
 }
 
-/** 领域验收器只声明其实际检查的结果。 */
-export interface ContextCompletionPort {
-  /** 验收前固定必需交付项；同 id 的当前核查证明必须覆盖列出的全部产物。 */
-  requirements?(
-    view: ModelView,
-    signal: AbortSignal
-  ): readonly ContextDeliveryRequirement[] | Promise<readonly ContextDeliveryRequirement[]>
-  /** 校验当前证据对应的结果；没有此端口时交付保持 unverified。 */
-  verify(
-    view: ModelView,
-    signal: AbortSignal,
-    checks?: ContextVerificationContext
-  ): Promise<Omit<ContextCompletionResult, 'completed'>>
-}
-
-/** 宿主声明的核查；scope 是精确判据/参数身份，probe 必须原子读取全部有效依赖。 */
-export interface ContextVerificationSpec {
-  /** 当前验收器中的稳定检查身份。 */
-  readonly id: string
-  /** 精确业务判据及参数范围，不能只用说明文本代替。 */
-  readonly scope: string
-  /** 提供判据的领域核查器身份。 */
-  readonly verifierId: string
-  /** 核查逻辑或依赖变化时递增的判据版本。 */
-  readonly verifierVersion: string
-  /** 原子读取授权代次、全部产物和可识别 ABA 的变化代次；覆盖未知时返回 unknown。 */
-  probe(signal: AbortSignal): Promise<ContextVerificationFingerprint>
-}
-
-/** 领域执行器的实际检查结果；complete 表示声明范围是否全部检查。 */
-export interface ContextVerificationExecution extends ContextVerificationCheck {
-  /** 本次真实执行是否检查了声明范围的全部要求。 */
-  readonly complete: boolean
-  /** 本次检查产生的真实收费身份与覆盖；零费用需明确报告空的完整清单。 */
-  readonly cost?: ContextVerificationCost
-}
-
-/** 当前任务的核查 helper；只复用通过且完整、前后可信快照一致的检查。 */
-export interface ContextVerificationContext {
-  /** 前后探测匹配时复用原完整通过证明，否则真实执行并持久记录尝试。 */
-  check(
-    spec: ContextVerificationSpec,
-    execute: (signal: AbortSignal) => Promise<ContextVerificationExecution>
-  ): Promise<ContextVerificationCheck>
-}
-
-/** 宿主准备同一存储上的收尾记录；只有领域验收通过后才调用，不产生外部效果。 */
+/** 宿主准备同一存储上的收尾记录，与任务完成一起原子发布，不产生外部效果。 */
 export interface ContextCompletionCommitPort {
-  /** 核查开始时的宿主对象身份，用于将失败报告也归到原对象。 */
-  readonly binding: ContextCompletionBinding
   /** 按一致快照核对宿主对象，正文先保存，记录与任务完成一起 CAS；竞争时可以再次调用。 */
   prepare(signal: AbortSignal): Promise<{
     readonly version: number

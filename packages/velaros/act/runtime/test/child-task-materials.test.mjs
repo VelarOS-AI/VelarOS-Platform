@@ -9,11 +9,16 @@ import { ContextLimits, createContextRuntime, createContextView } from '@velaros
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ChildTaskMaterials } from '../../../dist/act/runtime/impl/ChildTaskMaterials.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 import { modelText } from './support/model-turn.mjs'
+import { withProjectFixture } from './support/project-fixture.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
 const model = (stream) => ({
   id: 'parent-material-fixture',
@@ -170,9 +175,10 @@ test('attachments cannot smuggle another session into the exported input', async
 test('Node child reads original parent inputs and attachments from ordinary files and refreshes them on resume', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'velaros-parent-materials-'))
   await mkdir(join(root, 'workspace'))
+  // 本例核对原文导出与业务身份，实际 IO 使用已批准的标准宿主；它不证明 OS 隔离。
   const shell = createLocalShellHost({
     cwd: join(root, 'workspace'),
-    processConfinement: { mode: 'workspace-write', workspaceRoot: join(root, 'workspace') },
+    processConfinement: { mode: 'danger-full-access', workspaceRoot: join(root, 'workspace') },
   })
   const node = createNodeExecutionEnvironment({
     cwd: join(root, 'workspace'),
@@ -223,9 +229,7 @@ test('Node child reads original parent inputs and attachments from ordinary file
   const runtime = await createRuntime({
     node,
     storage,
-    project: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     environment: () => {
       if (mainCalls >= 4) throw Error('environment unavailable')
@@ -305,9 +309,10 @@ test('parent and worker reuse the authorized default project port and kernel', a
   const root = await mkdtemp(join(tmpdir(), 'runtime-shared-project-'))
   const workspace = join(root, 'workspace')
   await mkdir(workspace)
+  // 本例核对同一 Project 端口与内核的授权复用，不以进程 confinement 作为判据。
   const shell = createLocalShellHost({
     cwd: workspace,
-    processConfinement: { mode: 'workspace-write', workspaceRoot: workspace },
+    processConfinement: { mode: 'danger-full-access', workspaceRoot: workspace },
   })
   const node = createNodeExecutionEnvironment({
     cwd: workspace,
@@ -328,41 +333,44 @@ test('parent and worker reuse the authorized default project port and kernel', a
       }
     yield { type: 'finish', reason: 'stop' }
   })
-  const runtime = await createRuntime({
-    node,
-    workspace,
-    dataDir: join(root, 'data'),
-    search: false,
-    memory: false,
-    context: { maintenance: false },
-    project: {
-      resolveProject: async (requested, { currentProject, signal }) => {
-        signal.throwIfAborted()
-        assert.equal(requested, workspace)
-        assert.equal(currentProject.getRootPath(), workspace)
-        ports.push(currentProject)
-        kernels.push(await currentProject.kernel())
-        return currentProject
+  const runtime = await createRuntime(
+    await withProjectFixture(
+      {
+        node,
+        storage: await createTestStorage(join(root, 'data')),
+        context: { maintenance: false },
+        agents: {
+          concurrency: 2,
+          maxChildren: 2,
+          profiles: { worker: { model: child, modules: ['velaros:project'], node: true } },
+        },
+        model: model(async function* () {
+          if (++parentCalls === 1)
+            yield call(
+              `import {commit,inspect,undo} from 'velaros:project'; import {start,wait} from 'velaros:agents'; const projectRoot=${JSON.stringify(workspace)}; const change=await commit({changes:[{path:'shared.txt',before:null,after:'shared'}]}); await Promise.all([inspect({projectRoot,changeRef:change.changeRef}),inspect({projectRoot,changeRef:change.changeRef})]); const child=await start({task:'Read shared.txt through the explicit default root',profile:'worker'}); console.log(await wait({id:child.id})); await undo({projectRoot,changeRef:change.changeRef});`
+            )
+          else
+            yield {
+              type: 'tool-call',
+              value: { id: 'parent-done', name: 'done', input: { message: 'complete' } },
+            }
+          yield { type: 'finish', reason: 'stop' }
+        }),
       },
-    },
-    agents: {
-      concurrency: 2,
-      maxChildren: 2,
-      profiles: { worker: { model: child, modules: ['velaros:project'], node: true } },
-    },
-    model: model(async function* () {
-      if (++parentCalls === 1)
-        yield call(
-          `import {commit,inspect,undo} from 'velaros:project'; import {start,wait} from 'velaros:agents'; const projectRoot=${JSON.stringify(workspace)}; const change=await commit({changes:[{path:'shared.txt',before:null,after:'shared'}]}); await Promise.all([inspect({projectRoot,changeRef:change.changeRef}),inspect({projectRoot,changeRef:change.changeRef})]); const child=await start({task:'Read shared.txt through the explicit default root',profile:'worker'}); console.log(await wait({id:child.id})); await undo({projectRoot,changeRef:change.changeRef});`
-        )
-      else
-        yield {
-          type: 'tool-call',
-          value: { id: 'parent-done', name: 'done', input: { message: 'complete' } },
-        }
-      yield { type: 'finish', reason: 'stop' }
-    }),
-  })
+      {
+        root: workspace,
+        resolveProject: async (requested, { currentProject, signal }) => {
+          signal.throwIfAborted()
+          assert.equal(requested, workspace)
+          assert.equal(currentProject.getRootPath(), workspace)
+          ports.push(currentProject)
+          kernels.push(await currentProject.kernel())
+          return currentProject
+        },
+      }
+    ),
+    { cwd: workspace }
+  )
   t.after(async () => {
     await runtime.close()
     await shell.dispose()

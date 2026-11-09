@@ -3,16 +3,14 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { createProjectContextSource, createProjectKernel } from '../../../dist/project/index.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const object = (properties) => ({
   type: 'object',
@@ -105,7 +103,6 @@ async function fixture(t, extra = {}) {
   const path = join(root, 'context.sqlite')
   const options = {
     storage: localContextStorage({ path }),
-    runner: nodeSubprocessCodeRunner,
     modules: [module],
     context: { sources: [source] },
     ...extra,
@@ -176,79 +173,97 @@ test('A13: a noncooperative model estimator cannot hold the session beyond its d
   assert.equal((await s.view.inspect()).lease, null)
 })
 
-test('v1 to v2: stable observation refreshes after a real write and SQLite restart', async (t) => {
-  const frames = []
-  const f = await fixture(t, {
-    model: driver(async function* (request) {
-      frames.push(runtimeFrame(request))
-      yield* done(request)
-    }),
-  })
-  const session = await taskSession(f)
-  const observer = await session.observe({ source: observeCode })
-  const result = await session.execute({
-    source: `import {read,write} from 'test:project';const old=await read();await write({revision:old.revision,text:'version two\\n'});`,
-  })
-  ok(result)
-  for await (const event of session.submit('Verify v2')) {
-    assert.equal(typeof event.type, 'string')
-  }
-  assert.equal(f.writes, 1)
-  assert.match(frames[0].observation.text, /version two/)
-  assert.equal(frames[0].observation.sourceRef, observer.sourceRef)
-  await f.runtime.close()
-  const restarted = await createRuntime({
-    ...f.options,
-    storage: localContextStorage({ path: f.path }),
-  })
-  try {
-    const restored = await restarted.openSession('s')
-    for await (const event of restored.submit('Check again')) {
+test(
+  'v1 to v2: stable observation refreshes after a real write and SQLite restart',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Requires the native read-only Node confinement backend; refusal is covered by runtime observation tests'
+        : false,
+  },
+  async (t) => {
+    const frames = []
+    const f = await fixture(t, {
+      model: driver(async function* (request) {
+        frames.push(runtimeFrame(request))
+        yield* done(request)
+      }),
+    })
+    const session = await taskSession(f)
+    const observer = await session.observe({ source: observeCode })
+    const result = await session.execute({
+      source: `import {read,write} from 'test:project';const old=await read();await write({revision:old.revision,text:'version two\\n'});`,
+    })
+    ok(result)
+    for await (const event of session.submit('Verify v2')) {
       assert.equal(typeof event.type, 'string')
     }
-    assert.match(frames[1].observation.text, /version two/)
     assert.equal(f.writes, 1)
-  } finally {
-    await restarted.close()
-  }
-})
-
-test('Phase 2: main model receives the compiled v2 view with independent verification state', async (t) => {
-  let calls = 0
-  let lastRequest
-  const model = driver(async function* (request) {
-    calls++
-    lastRequest = request
-    assert.equal(typeof modelText(request), 'string')
-    if (calls === 1) {
-      yield turn(request, {
-        execute: {
-          source: `import {read,write} from 'test:project';const old=await read();await write({revision:old.revision,text:'version two\\n'});`,
-        },
-      })
-      yield { type: 'usage', inputTokens: 100, outputTokens: 50 }
-      yield { type: 'finish', reason: 'stop' }
-      return
+    assert.match(frames[0].observation.text, /version two/)
+    assert.equal(frames[0].observation.sourceRef, observer.sourceRef)
+    await f.runtime.close()
+    const restarted = await createRuntime({
+      ...f.options,
+      storage: localContextStorage({ path: f.path }),
+    })
+    try {
+      const restored = await restarted.openSession('s')
+      for await (const event of restored.submit('Check again')) {
+        assert.equal(typeof event.type, 'string')
+      }
+      assert.match(frames[1].observation.text, /version two/)
+      assert.equal(f.writes, 1)
+    } finally {
+      await restarted.close()
     }
-    const view = runtimeFrame(request)
-    assert.match(view.observation.text, /version two/)
-    yield* done(request, 'Changed; no independent verifier configured.')
-  })
-  const f = await fixture(t, { model, limits })
-  const session = await f.runtime.openSession('s')
-  await session.observe({ source: observeCode })
-  const events = []
-  for await (const event of session.submit('Update and inspect')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.equal(events.find((x) => x.type === 'verification').verified, false)
-  assert.equal(f.writes, 1)
-  assert.equal(calls, 2)
-  const usage = (await session.view.inspect()).usage
-  assert.equal(usage.mainCalls, 2)
-  assert.equal(usage.contextCalls, 0)
-  assert.equal(usage.unmeasuredCalls, 1)
-  assert(lastRequest.compiledPrompt.includes('runtime-view'))
-})
+  }
+)
+
+test(
+  'Phase 2: main model receives the compiled v2 view with independent verification state',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Requires the native read-only Node confinement backend; refusal is covered by runtime observation tests'
+        : false,
+  },
+  async (t) => {
+    let calls = 0
+    let lastRequest
+    const model = driver(async function* (request) {
+      calls++
+      lastRequest = request
+      assert.equal(typeof modelText(request), 'string')
+      if (calls === 1) {
+        yield turn(request, {
+          execute: {
+            source: `import {read,write} from 'test:project';const old=await read();await write({revision:old.revision,text:'version two\\n'});`,
+          },
+        })
+        yield { type: 'usage', inputTokens: 100, outputTokens: 50 }
+        yield { type: 'finish', reason: 'stop' }
+        return
+      }
+      const view = runtimeFrame(request)
+      assert.match(view.observation.text, /version two/)
+      yield* done(request, 'Changed; no independent verifier configured.')
+    })
+    const f = await fixture(t, { model, limits })
+    const session = await f.runtime.openSession('s')
+    await session.observe({ source: observeCode })
+    const events = []
+    for await (const event of session.submit('Update and inspect')) events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert.equal(events.find((x) => x.type === 'verification').verified, false)
+    assert.equal(f.writes, 1)
+    assert.equal(calls, 2)
+    const usage = (await session.view.inspect()).usage
+    assert.equal(usage.mainCalls, 2)
+    assert.equal(usage.contextCalls, 0)
+    assert.equal(usage.unmeasuredCalls, 1)
+    assert(lastRequest.compiledPrompt.includes('runtime-view'))
+  }
+)
 
 test('A06: changed decision evidence does not block a write made with the fresh revision; a stale revision is still refused', async (t) => {
   const f = await fixture(t)
@@ -377,7 +392,7 @@ test('A15: actual process death after a world write recovers from the prepared j
   await assert.rejects(
     promisify(execFile)(
       process.execPath,
-      [new URL('./crash-dispatch.fixture.mjs', import.meta.url).pathname, f.path, target],
+      [fileURLToPath(new URL('./crash-dispatch.fixture.mjs', import.meta.url)), f.path, target],
       { timeout: 10000 }
     ),
     (error) => error.code === 91

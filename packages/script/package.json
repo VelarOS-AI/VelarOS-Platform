@@ -1,8 +1,8 @@
 {
   "name": "@velaros-ai/script",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "Native Node.js execution with core command, search, file discovery and diff libraries, on-demand capabilities and host-owned process permissions.",
   "license": "Apache-2.0",
@@ -42,9 +42,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts test/contract-compiler.test.ts",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts test/contract-compiler.test.ts test/operation-docs.test.ts test/project-commit-client.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/script",
-    "test:built": "bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts test/contract-compiler.test.ts"
+    "test:built": "bun test spec/acceptance.test.ts test/script.test.ts test/output.test.ts test/subprocess.test.ts test/module-semantics.test.ts test/diagnostics.test.ts test/contract-compiler.test.ts test/operation-docs.test.ts test/project-commit-client.test.ts"
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",

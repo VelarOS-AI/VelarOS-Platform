@@ -186,6 +186,8 @@ export interface CdpExternalBrowserChildProcess {
   kill(signal?: NodeJS.Signals | number): boolean
   /** 进程退出时通知一次（删临时配置目录要等浏览器退干净）；给不了就当场删。 */
   once?(event: 'exit', listener: () => void): unknown
+  /** Node 启动失败经 error 事件报告；不能让缺少可执行文件终止宿主进程。 */
+  once?(event: 'error', listener: (error: Error) => void): unknown
 }
 
 export type CdpExternalBrowserSpawn = (
@@ -263,6 +265,7 @@ export interface CdpBrowserPageDriverTransport {
 export interface CdpRuntimeEvaluateResponse {
   result?: {
     type?: string
+    objectId?: string
     value?: unknown
     unserializableValue?: string
     description?: string
@@ -315,6 +318,8 @@ export interface CdpFetchResourcePayload {
   mimeType?: unknown
   contentLength?: unknown
   data?: unknown
+  /** 页内读取实际累计超过文件上限时返回；不把上限错误伪装成 Content-Length。 */
+  limitExceededBytes?: unknown
 }
 
 export interface CdpPageFrame {

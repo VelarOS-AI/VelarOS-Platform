@@ -99,14 +99,12 @@ test('actual AI SDK sends sealed responseFormat, returns a complete object and h
   expect(compiled.okToSend).toBe(true)
   const events = await collect(model, compiled.request)
   const sent = seen[0]
-  expect(compiled.providerRequest.messages).toEqual([
-    { role: 'user', content: compiled.request.compiledPrompt },
-  ])
+  expect(compiled.requestAudit.messageCount).toBe(1)
   expect(sent.prompt.find((x: any) => x.role === 'user')?.content).toEqual([
     { type: 'text', text: compiled.request.compiledPrompt },
   ])
   expect(sent.responseFormat).toEqual(base.response)
-  expect(compiled.providerRequest.responseFormat).toEqual(sent.responseFormat)
+  expect(compiled.request.response).toEqual(sent.responseFormat)
   expect(sent.tools).toBeUndefined()
   expect(sent.toolChoice).toBeUndefined()
   expect(sent.providerOptions.openai.strictJsonSchema).toBe(false)
@@ -146,7 +144,11 @@ test('shared compiler and actual SDK preserve image bytes beside text and includ
   expect(
     typeof part.data === 'string' ? part.data : Buffer.from(part.data).toString('base64')
   ).toBe(data)
-  expect(JSON.stringify(compiled.providerRequest.messages)).toContain(data)
+  expect(compiled.request.images?.[0]?.data).toBe(data)
+  expect(JSON.stringify(compiled.requestAudit)).not.toContain(data)
+  expect(compiled.requestAudit.requestFingerprint.messageHash).not.toBe(
+    plain.requestAudit.requestFingerprint.messageHash
+  )
   await expect(
     compiler.compileModelTurn(
       {
@@ -213,7 +215,8 @@ test('main text mode sends no tools or object schema and forwards the actual str
   expect(
     typeof image.data === 'string' ? image.data : Buffer.from(image.data).toString('base64')
   ).toBe(pixel)
-  expect(compiled.providerRequest.responseFormat).toEqual(seen[0].responseFormat)
+  expect(compiled.requestAudit.toolCount).toBe(0)
+  expect(compiled.request.response.type).toBe('text')
 })
 
 for (const reason of ['length', 'content-filter', 'other', 'error'])

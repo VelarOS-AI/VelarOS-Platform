@@ -16,7 +16,12 @@ import { AppError } from '@velaros-ai/core/error'
 import { ModelImageLimits } from '@velaros-ai/kernel'
 
 import { VelarImagesModule } from '../contract/surface'
-import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../index'
+import type {
+  ImageAttachment,
+  ImageOperationContext,
+  ImageResizeRequest,
+  ImageSpacePort,
+} from '../index'
 import { ImageLimits, imageOperations } from '../index'
 import { createLocalImagePort } from '../local'
 
@@ -110,6 +115,14 @@ describe('原样交出，超了才压、要了才裁', () => {
     await writeFile(join(root, 'wide.png'), wide)
     await writeFile(join(root, 'banner.gif'), banner)
     const space = imageSpace({ root, resize: pngResizer() })
+    const statefulPort = {
+      ...space.port,
+      renderer: space.port.resizeImage!,
+      resizeImage(request: ImageResizeRequest) {
+        return this.renderer(request)
+      },
+    }
+    space.context.images = statefulPort
     const result = await imageOperations.view(
       { files: [{ path: 'wide.png' }, { path: 'banner.gif' }] },
       space.context
@@ -666,6 +679,28 @@ describe('入参与格式', () => {
     expect(failure).toEqual({ code: 'ABORTED', message: '用户中途停了' })
     expect(space.located).toEqual(['a.png'])
     expect(space.attached.every((image) => image.label.includes('a.png'))).toBe(true)
+
+    // 最后一张取消并失败时，前面的成功不能把整批取消变成部分成功。
+    const last = new AbortController()
+    const reason = new AppError('ABORTED', '用户在最后一张停了')
+    const lastSpace = imageSpace({ root, abortSignal: last.signal })
+    const lastLocate = lastSpace.port.locate
+    lastSpace.port.locate = async (path) => {
+      const location = await lastLocate(path)
+      if (path === 'c.png') {
+        last.abort(reason)
+        throw reason
+      }
+      return location
+    }
+    await expect(
+      imageOperations.view(
+        { files: [{ path: 'a.png' }, { path: 'b.png' }, { path: 'c.png' }] },
+        lastSpace.context
+      )
+    ).rejects.toBe(reason)
+    expect(lastSpace.located).toEqual(['a.png', 'b.png', 'c.png'])
+    expect(lastSpace.attached).toHaveLength(2)
   })
 })
 

@@ -1,167 +1,334 @@
-// 在独占目录打包并干净安装整体 Platform，禁止借用 workspace 内部包。
+// 一个真实消费者依次核验基础独立安装与显式能力扩展；归档每种只生成一次。
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+
 import { safePackPackage, runGuardedCommand } from './safe-package-pack.mjs'
-import { platformModules } from './unified-platform-package.mjs'
+import { platformDistributions } from './platform-distributions.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
-// 不继承 agent 的 Node loader，验证真实消费者解析。
 delete process.env.NODE_OPTIONS
 delete process.env.NODE_PATH
-const destination = await mkdtemp(path.join(tmpdir(), 'velaros-unified-check-'))
-const consumer = path.join(destination, 'consumer')
-await mkdir(consumer)
-console.log(`Unified verification directory: ${destination}`)
-await safePackPackage({
-  packageDirectory: path.join(root, 'packages/velaros'),
-  destination,
-  timeoutMs: 300_000,
-})
-const archives = (await readdir(destination)).filter((name) => name.endsWith('.tgz'))
-assert.equal(archives.length, 1)
-const archive = path.join(destination, archives[0])
-await writeFile(
-  path.join(consumer, 'package.json'),
-  JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies: { '@velaros-ai/velaros': archive, react: '19.2.4', '@types/react': '19.2.14' },
-  })
+const arguments_ = process.argv.slice(2)
+const resume = arguments_[0] === '--resume'
+if (
+  arguments_.length &&
+  (!resume ||
+    ![4, 8].includes(arguments_.length) ||
+    arguments_[2] !== '--base-sha256' ||
+    !/^[a-f0-9]{64}$/u.test(arguments_[3]) ||
+    (arguments_.length === 8 &&
+      (arguments_[4] !== '--capabilities-archive' ||
+        arguments_[6] !== '--capabilities-sha256' ||
+        !/^[a-f0-9]{64}$/u.test(arguments_[7]))))
 )
-await runGuardedCommand({
-  command: 'bun',
-  args: ['install', '--ignore-scripts'],
-  cwd: consumer,
-  timeoutMs: 300_000,
-  operation: 'Clean unified Platform install',
-})
-const installed = path.join(consumer, 'node_modules/@velaros-ai/velaros')
-const manifest = JSON.parse(await readFile(path.join(installed, 'package.json'), 'utf8'))
-for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'])
-  assert.ok(
-    !Object.keys(manifest[field] ?? {}).some((name) => name.startsWith('@velaros-ai/')),
-    field
+  throw new Error(
+    'Usage: check-unified-platform.mjs [--resume <verification-directory> --base-sha256 <verified-hash> [--capabilities-archive <archive> --capabilities-sha256 <verified-hash>]]'
   )
-assert.deepEqual((await readdir(path.join(consumer, 'node_modules/@velaros-ai'))).sort(), [
-  'velaros',
-])
-for (const name of platformModules) {
-  const original = JSON.parse(
-    await readFile(path.join(root, 'packages', name, 'package.json'), 'utf8')
+const destination = resume
+  ? await realpath(arguments_[1])
+  : await mkdtemp(path.join(tmpdir(), 'velaros-distribution-check-'))
+if (resume) {
+  const temporaryRoot = await realpath(tmpdir())
+  const relative = path.relative(temporaryRoot, destination)
+  if (
+    !relative ||
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative) ||
+    !path.basename(destination).startsWith('velaros-distribution-check-')
   )
-  for (const key of Object.keys(original.exports))
-    assert.ok(manifest.exports[`./${name}${key === '.' ? '' : key.slice(1)}`])
+    throw new Error(
+      'Resume requires a dedicated Platform verification directory under the system temporary directory'
+    )
 }
-// 检查所有导出目标与声明，不允许旧内部包解析被宿主环境掩盖。
-async function inspectTree(directory) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue
-    const file = path.join(directory, entry.name)
-    if (entry.isDirectory()) await inspectTree(file)
-    else if (/\.[cm]?[jt]s$/u.test(entry.name)) {
-      const text = await readFile(file, 'utf8')
-      assert.ok(
-        !/@velaros-ai\/(?:core|kernel|model|agent|context|script)(?=[/"'`])/u.test(text),
-        file
+const consumer = path.join(destination, 'consumer')
+if (!resume) await mkdir(consumer)
+else if ((await realpath(consumer)) !== consumer)
+  throw new Error('Resume consumer must not be a symbolic link')
+console.log(`Distribution verification directory: ${destination}`)
+const source = path.join(root, 'packages/velaros')
+const sourceManifest = JSON.parse(await readFile(path.join(source, 'package.json'), 'utf8'))
+const rootManifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+const sourceSha = (
+  await runGuardedCommand({
+    command: 'git',
+    args: ['rev-parse', 'HEAD'],
+    cwd: root,
+    operation: 'Read validation source identity',
+  })
+).stdout.trim()
+const sourceStatus = (
+  await runGuardedCommand({
+    command: 'git',
+    args: ['status', '--porcelain', '--untracked-files=all'],
+    cwd: root,
+    operation: 'Read validation working-tree state',
+  })
+).stdout.trim()
+const dependencies = { '@types/node': rootManifest.devDependencies['@types/node'] }
+const previous = resume
+  ? JSON.parse(await readFile(path.join(destination, 'receipt.json'), 'utf8'))
+  : undefined
+if (
+  resume &&
+  (previous.sourceSha !== sourceSha ||
+    previous.platform !== process.platform ||
+    previous.node !== process.version ||
+    previous.consumer !== consumer ||
+    !Array.isArray(previous.evidence))
+)
+  throw new Error(
+    'Resume receipt does not match the current source, host, Node version or consumer'
+  )
+const evidence = previous?.evidence ?? []
+const saveReceipt = () =>
+  writeFile(
+    path.join(destination, 'receipt.json'),
+    `${JSON.stringify({ sourceSha, sourceStatus, resumedBase: previous ? { sourceSha: previous.sourceSha, sourceStatus: previous.sourceStatus, sha256: arguments_[3] } : undefined, platform: process.platform, node: process.version, modelVerification: 'deterministic-driver; no provider API request', consumer, evidence }, null, 2)}\n`
+  )
+
+async function directorySize(directory) {
+  let bytes = 0
+  for (const entry of await readdir(directory)) {
+    const file = path.join(directory, entry)
+    const details = await lstat(file)
+    if (details.isDirectory()) bytes += await directorySize(file)
+    else if (details.isFile()) bytes += details.size
+  }
+  return bytes
+}
+
+for (const [distribution, configuration] of Object.entries(platformDistributions)) {
+  if (resume && distribution === 'velaros') {
+    const verified = evidence.findLast(
+      (record) => record.distribution === 'velaros' && record.stage === 'complete'
+    )
+    if (!verified || !verified.strictDeclarations || verified.sha256 !== arguments_[3])
+      throw new Error(
+        'Resume requires the separately supplied hash of a completed base verification'
+      )
+    const expectedPath = path.join(destination, 'velaros.tgz')
+    if (verified.archive !== expectedPath || !(await lstat(expectedPath)).isFile())
+      throw new Error('Verified base archive identity is outside this verification directory')
+    const hash = createHash('sha256')
+      .update(await readFile(expectedPath))
+      .digest('hex')
+    if (hash !== arguments_[3])
+      throw new Error('Verified base archive bytes changed after the completed verification')
+    const packed = JSON.parse(
+      (
+        await runGuardedCommand({
+          command: 'tar',
+          args: ['-xOf', expectedPath, 'package/package.json'],
+          cwd: destination,
+          operation: 'Confirm the resumed base archive identity',
+        })
+      ).stdout
+    )
+    if (packed.name !== configuration.name || packed.version !== sourceManifest.version)
+      throw new Error(
+        'Verified base archive package identity does not match the current source version'
+      )
+    dependencies[configuration.name] = `file:${expectedPath.split(path.sep).join('/')}`
+    console.log(`Reused completed base verification: ${hash}`)
+    continue
+  }
+  let archive
+  let record
+  if (resume && distribution === 'capabilities' && arguments_.length === 8) {
+    archive = await realpath(arguments_[5])
+    if (path.dirname(archive) !== destination || !(await lstat(archive)).isFile())
+      throw new Error(
+        'Reused capability archive must be a regular file in this verification directory'
+      )
+    const hash = createHash('sha256')
+      .update(await readFile(archive))
+      .digest('hex')
+    record = evidence.findLast(
+      (entry) =>
+        entry.distribution === distribution &&
+        entry.archive === archive &&
+        entry.sha256 === arguments_[7]
+    )
+    if (!record || hash !== arguments_[7])
+      throw new Error(
+        'Reused capability archive does not match the separately supplied hash and receipt'
+      )
+    const packed = JSON.parse(
+      (
+        await runGuardedCommand({
+          command: 'tar',
+          args: ['-xOf', archive, 'package/package.json'],
+          cwd: destination,
+          operation: 'Confirm the reused capability archive identity',
+        })
+      ).stdout
+    )
+    if (
+      packed.name !== configuration.name ||
+      packed.version !== sourceManifest.version ||
+      packed.dependencies?.['@velaros-ai/velaros'] ||
+      packed.peerDependencies?.['@velaros-ai/velaros'] !== sourceManifest.version ||
+      packed.peerDependenciesMeta?.['@velaros-ai/velaros']?.optional
+    )
+      throw new Error(
+        'Reused capability archive must require the exact base version as a nonoptional peer'
+      )
+    console.log(`Reused capability archive: ${hash}`)
+  } else {
+    archive = path.join(destination, `${distribution}${resume ? `-${Date.now()}` : ''}.tgz`)
+    await safePackPackage({
+      packageDirectory: source,
+      filename: archive,
+      distribution,
+      timeoutMs: 300_000,
+    })
+    const bytes = await readFile(archive)
+    record = {
+      distribution,
+      archive,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      compressedBytes: bytes.length,
+      stage: 'packed',
+    }
+    evidence.push(record)
+  }
+  await saveReceipt()
+  dependencies[configuration.name] = `file:${archive.split(path.sep).join('/')}`
+  const overrides = { '@velaros-ai/velaros': dependencies['@velaros-ai/velaros'] }
+  await writeFile(
+    path.join(consumer, 'package.json'),
+    `${JSON.stringify({ private: true, type: 'module', dependencies, overrides }, null, 2)}\n`
+  )
+  await runGuardedCommand({
+    command: 'bun',
+    args: ['install', '--ignore-scripts'],
+    cwd: consumer,
+    timeoutMs: 180_000,
+    operation: `Install real ${distribution} archive`,
+  })
+  const installed = path.join(consumer, 'node_modules', configuration.name)
+  const manifest = JSON.parse(await readFile(path.join(installed, 'package.json'), 'utf8'))
+  assert.equal(manifest.version, sourceManifest.version)
+  assert.equal(manifest.name, configuration.name)
+  Object.assign(record, {
+    stage: 'installed',
+    installedPackageBytes: await directorySize(installed),
+    installedClosureBytes: await directorySize(path.join(consumer, 'node_modules')),
+    dependencies: manifest.dependencies,
+    peerDependencies: manifest.peerDependencies,
+    installationSourceOverrides: overrides,
+  })
+  await saveReceipt()
+  assert(!manifest.optionalDependencies || Object.keys(manifest.optionalDependencies).length === 0)
+  const installedFirstParty = (
+    await readdir(path.join(consumer, 'node_modules/@velaros-ai'))
+  ).sort()
+  assert.deepEqual(
+    installedFirstParty,
+    distribution === 'velaros' ? ['velaros'] : ['capabilities', 'velaros']
+  )
+  if (distribution === 'velaros') {
+    for (const name of [
+      '@napi-rs/canvas',
+      'docx',
+      'exceljs',
+      'pdfjs-dist',
+      '@playwright/test',
+      '@ast-grep/napi',
+      'ts-morph',
+      'electron',
+      'react',
+    ]) {
+      await assert.rejects(
+        lstat(path.join(consumer, 'node_modules', name)),
+        { code: 'ENOENT' },
+        name
       )
     }
-  }
-}
-await inspectTree(installed)
-async function assertTargets(target) {
-  if (typeof target === 'string') {
-    if (!target.includes('*')) await readFile(path.join(installed, target))
-  } else if (target) for (const value of Object.values(target)) await assertTargets(value)
-}
-for (const target of Object.values(manifest.exports)) await assertTargets(target)
-for (const target of Object.values(manifest.bin ?? {})) await readFile(path.join(installed, target))
-
-const probe = `import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
-import {readFile} from 'node:fs/promises';
-const require=createRequire(import.meta.url);
-const manifest=JSON.parse(await readFile(require.resolve('@velaros-ai/velaros/package.json'),'utf8'));
-let count=0;
-for(const [key,target] of Object.entries(manifest.exports)) {
- if(key.includes('*') || typeof target==='string' || key==='./browser/electron') continue;
- const spec='@velaros-ai/velaros'+(key==='.'?'':key.slice(1));
- await import(spec); count++;
-}
-const script=await import('@velaros-ai/velaros/script');
-const defaults=script.nodeRuntimePackages.defaults();assert.ok(defaults.length>10);
-assert.ok(script.nodeRuntimePackages.references(defaults).every(x=>!x.error));
-const skill=require.resolve('@velaros-ai/velaros/skill-jsts/package.json');
-assert.ok((await readFile(skill.replace('package.json','SKILL.md'),'utf8')).length>100);
-console.log(JSON.stringify({importedEntries:count,defaultPackages:defaults.length,skill}));`
-await writeFile(path.join(consumer, 'probe.mjs'), probe)
-const runtime = await runGuardedCommand({
-  command: process.execPath,
-  args: ['probe.mjs'],
-  cwd: consumer,
-  timeoutMs: 120_000,
-  operation: 'Unified Node entry and resources probe',
-})
-console.log(runtime.stdout)
-const entries = Object.entries(manifest.exports).filter(
-  ([key, target]) => !key.includes('*') && target?.types
-)
-await writeFile(
-  path.join(consumer, 'types.mts'),
-  entries
-    .map(
-      ([key], i) =>
-        `import * as e${i} from '@velaros-ai/velaros${key === '.' ? '' : key.slice(1)}'; export type E${i}=typeof e${i};`
+    for (const unit of platformDistributions.capabilities.units)
+      await assert.rejects(lstat(path.join(installed, 'dist', unit)), { code: 'ENOENT' }, unit)
+    for (const resource of platformDistributions.capabilities.resources)
+      await assert.rejects(lstat(path.join(installed, resource)), { code: 'ENOENT' }, resource)
+    assert(
+      !Object.keys(manifest.exports).some(
+        (entry) => entry === './project' || entry.startsWith('./skill-jsts')
+      )
     )
-    .join('\n')
-)
-await runGuardedCommand({
-  command: process.execPath,
-  args: [
-    path.join(consumer, 'node_modules/typescript/bin/tsc'),
-    '--noEmit',
-    '--skipLibCheck',
-    '--module',
-    'NodeNext',
-    '--moduleResolution',
-    'NodeNext',
-    '--target',
-    'ES2022',
-    'types.mts',
-  ],
-  cwd: consumer,
-  timeoutMs: 120_000,
-  operation: 'Unified public declaration consumer',
-})
-await writeFile(
-  path.join(consumer, 'browser.ts'),
-  "export * from '@velaros-ai/velaros/agent'; export * from '@velaros-ai/velaros/renderer'; export * from '@velaros-ai/velaros/model/contracts';"
-)
-await runGuardedCommand({
-  command: 'bun',
-  args: ['build', './browser.ts', '--target=browser', '--outdir=browser-output'],
-  cwd: consumer,
-  timeoutMs: 120_000,
-  operation: 'Unified browser surface bundle',
-})
-const sha256 = createHash('sha256')
-  .update(await readFile(archive))
-  .digest('hex')
-await writeFile(
-  path.join(destination, 'receipt.json'),
-  JSON.stringify(
-    {
-      archive,
-      sha256,
-      consumer,
-      runtime: runtime.stdout,
-      declarationEntries: entries.length,
-      browser: true,
-    },
-    null,
-    2
+  } else {
+    assert.equal(manifest.dependencies['@velaros-ai/velaros'], undefined)
+    assert.equal(manifest.peerDependencies['@velaros-ai/velaros'], sourceManifest.version)
+    assert.notEqual(manifest.peerDependenciesMeta?.['@velaros-ai/velaros']?.optional, true)
+    for (const module of ['core', 'kernel', 'model', 'agent', 'context', 'script'])
+      await assert.rejects(
+        lstat(path.join(installed, 'modules', module)),
+        { code: 'ENOENT' },
+        module
+      )
+  }
+  const runtimeFile =
+    distribution === 'velaros' ? 'foundation-runtime.mjs' : 'capability-runtime.mjs'
+  await copyFile(
+    path.join(import.meta.dirname, 'fixtures/host-contract-consumer', runtimeFile),
+    path.join(consumer, runtimeFile)
   )
-)
-console.log(`PASS unified Platform: ${archive}\nSHA256 ${sha256}`)
+  const runtime = await runGuardedCommand({
+    command: process.execPath,
+    args: [runtimeFile],
+    cwd: consumer,
+    timeoutMs: 90_000,
+    operation: `Independent ${distribution} JavaScript consumer`,
+  })
+  console.log(runtime.stdout)
+  Object.assign(record, { stage: 'javascript-validated', runtime: runtime.stdout })
+  await saveReceipt()
+  const types =
+    distribution === 'velaros'
+      ? Object.entries(manifest.exports)
+          .filter(([entry, target]) => !entry.includes('*') && target?.types)
+          .map(
+            ([entry], index) =>
+              `import * as entry${index} from '${configuration.name}${entry === '.' ? '' : entry.slice(1)}'; export type Entry${index}=typeof entry${index};`
+          )
+          .join('\n')
+      : "import {createProjectKernel,createProjectCapabilityModule,type ProjectSpacePort} from '@velaros-ai/capabilities/project';import {createNodeRuntime,type NodeRuntimeOptions} from '@velaros-ai/velaros/node';export type Consumer={project:ProjectSpacePort;options:NodeRuntimeOptions};void [createProjectKernel,createProjectCapabilityModule,createNodeRuntime];"
+  const typeFile = `${distribution}.mts`
+  await writeFile(path.join(consumer, typeFile), types)
+  await runGuardedCommand({
+    command: process.execPath,
+    args: [
+      path.join(consumer, 'node_modules/typescript/bin/tsc'),
+      '--noEmit',
+      '--strict',
+      '--skipLibCheck',
+      'false',
+      '--module',
+      'NodeNext',
+      '--moduleResolution',
+      'NodeNext',
+      '--target',
+      'ES2022',
+      '--types',
+      'node',
+      typeFile,
+    ],
+    cwd: consumer,
+    timeoutMs: 90_000,
+    operation: `Independent strict ${distribution} declaration consumer`,
+  })
+  Object.assign(record, { stage: 'complete', strictDeclarations: true })
+  await saveReceipt()
+}
+console.log(`PASS independent Platform distributions: ${destination}`)

@@ -23,7 +23,7 @@ async function writeSnapshot(
   await writeFile(
     statePath,
     JSON.stringify({
-      formatVersion: 1,
+      formatVersion: 3,
       revision: 1,
       root,
       transactions: [
@@ -93,7 +93,7 @@ describe('FileProjectTransactionStateStore lifecycle validation', () => {
       for (const fixture of valid) {
         const statePath = await writeSnapshot(directory, root, fixture.name, fixture)
         const snapshot = new FileProjectTransactionStateStore({ path: statePath, root }).snapshot()
-        expect(snapshot.formatVersion).toBe(1)
+        expect(snapshot.formatVersion).toBe(3)
         expect(snapshot.transactions[0]?.status).toBe(fixture.status)
         expect(snapshot.transactions[0]?.appliedAt).toBe(fixture.appliedAt)
       }

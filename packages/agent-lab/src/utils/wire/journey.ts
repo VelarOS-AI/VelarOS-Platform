@@ -63,6 +63,7 @@ import {
   jsonValueSchema,
   nonEmptyTextSchema,
   nullableLimitSchema,
+  runIdSchema,
 } from './primitives.js'
 
 const observationCoverageSchema = z.enum(ObservationCoverages)
@@ -389,7 +390,7 @@ const driverCapabilitiesSchema = z.strictObject({
 
 const runManifestSchema = z.strictObject({
   schema: z.literal(RunArchiveSchemaId),
-  runId: identifierSchema,
+  runId: runIdSchema,
   jobId: identifierSchema,
   suiteId: identifierSchema,
   trial: trialSchema,

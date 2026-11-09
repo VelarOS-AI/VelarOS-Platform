@@ -1,6 +1,6 @@
 // 用途：验证原生评测的身份、未结算状态、分层去重、冻结产物与真实进程收尾。
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -15,7 +15,13 @@ import {
   snapshotFiles,
   verifyFrozen,
 } from './controller.mjs'
-import { privateJson, waitForSettlement } from './client.mjs'
+import {
+  configureModel,
+  prepareUnattendedPermissions,
+  privateJson,
+  restoreModel,
+  waitForSettlement,
+} from './client.mjs'
 import { runCodex } from './codex.mjs'
 
 const identity = {
@@ -35,6 +41,152 @@ const row = {
   estimatedUsd: null,
   usage: null,
 }
+
+async function settingsFixture(t, permissionConfirmationMode = 'standard-open') {
+  const directory = await mkdtemp(join(tmpdir(), 'native-settings-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const settingsFile = join(directory, 'settings.json')
+  const system = {
+    providerRuntimeConfigs: [
+      { provider: 'openai', apiKey: 'original-key', baseURL: 'https://original.invalid' },
+      { provider: 'other', enabled: false },
+    ],
+    advancedRuntime: { permissionConfirmationMode, toolProtocol: 'text' },
+  }
+  const commands = []
+  const save = () => writeFile(settingsFile, JSON.stringify({ system }))
+  await save()
+  const hook = async (command) => {
+    commands.push(structuredClone(command))
+    assert.equal(command.kind, 'config_op')
+    assert.equal(command.key, 'system')
+    if (command.op === 'patch') {
+      if (command.patch.providerRuntimeConfigs)
+        system.providerRuntimeConfigs = command.patch.providerRuntimeConfigs
+      if (command.patch.advancedRuntime)
+        Object.assign(system.advancedRuntime, command.patch.advancedRuntime)
+      await save()
+    }
+    return { config: structuredClone(system) }
+  }
+  return { commands, hook, save, settingsFile, system }
+}
+
+test('model configuration changes only the provider settings it owns', async (t) => {
+  const fixture = await settingsFixture(t)
+  const advanced = structuredClone(fixture.system.advancedRuntime)
+  await configureModel(fixture.hook, fixture.settingsFile, {
+    baseURL: 'http://127.0.0.1:1/v1',
+    apiKey: 'attempt-key',
+    model: 'fixture-model',
+  })
+  assert.deepEqual(fixture.system.advancedRuntime, advanced)
+  assert.deepEqual(Object.keys(fixture.commands[0].patch), ['providerRuntimeConfigs'])
+  assert.equal(fixture.system.providerRuntimeConfigs[1].apiKey, 'attempt-key')
+  assert.equal(fixture.system.providerRuntimeConfigs[0].provider, 'other')
+})
+
+test('temporary permissions restore only their field and preserve concurrent user settings', async (t) => {
+  const fixture = await settingsFixture(t)
+  const permissions = await prepareUnattendedPermissions(fixture.hook)
+  await permissions.enable()
+  assert.equal(fixture.system.advancedRuntime.permissionConfirmationMode, 'never-ask')
+  fixture.system.advancedRuntime.toolProtocol = 'tools'
+  fixture.system.advancedRuntime.systemNotificationsEnabled = true
+  assert.equal(await permissions.restore(), 'restored')
+  assert.deepEqual(fixture.system.advancedRuntime, {
+    permissionConfirmationMode: 'standard-open',
+    toolProtocol: 'tools',
+    systemNotificationsEnabled: true,
+  })
+  assert(
+    fixture.commands
+      .filter((command) => command.op === 'patch')
+      .every(
+        (command) =>
+          Object.keys(command.patch).length === 1 &&
+          Object.keys(command.patch.advancedRuntime).join() === 'permissionConfirmationMode'
+      )
+  )
+  assert.equal(await permissions.restore(), 'unchanged')
+
+  const changed = await prepareUnattendedPermissions(fixture.hook)
+  await changed.enable()
+  fixture.system.advancedRuntime.permissionConfirmationMode = 'standard-open'
+  const patches = fixture.commands.filter((command) => command.op === 'patch').length
+  assert.equal(await changed.restore(), 'user_configuration_preserved')
+  assert.equal(fixture.commands.filter((command) => command.op === 'patch').length, patches)
+})
+
+test('an existing unattended mode or an unused permission scope is left untouched', async (t) => {
+  for (const mode of ['never-ask', 'standard-open']) {
+    const fixture = await settingsFixture(t, mode)
+    const permissions = await prepareUnattendedPermissions(fixture.hook)
+    if (mode === 'never-ask') await permissions.enable()
+    assert.equal(await permissions.restore(), 'unchanged')
+    assert.equal(fixture.commands.filter((command) => command.op === 'patch').length, 0)
+  }
+})
+
+test('permission ownership survives a lost write receipt and a failed restore can retry', async (t) => {
+  const fixture = await settingsFixture(t)
+  const failure = new Error('write receipt lost')
+  let rejectWrite = true
+  let rejectRestore = false
+  const hook = async (command) => {
+    if (command.op === 'patch' && rejectRestore) {
+      rejectRestore = false
+      throw failure
+    }
+    const result = await fixture.hook(command)
+    if (command.op === 'patch' && rejectWrite) {
+      rejectWrite = false
+      throw failure
+    }
+    return result
+  }
+  const permissions = await prepareUnattendedPermissions(hook)
+  await assert.rejects(permissions.enable(), (error) => error === failure)
+  assert.equal(fixture.system.advancedRuntime.permissionConfirmationMode, 'never-ask')
+  assert.equal(await permissions.restore(), 'restored')
+
+  const next = await prepareUnattendedPermissions(hook)
+  await next.enable()
+  rejectRestore = true
+  await assert.rejects(next.restore(), (error) => error === failure)
+  assert.equal(fixture.system.advancedRuntime.permissionConfirmationMode, 'never-ask')
+  assert.equal(await next.restore(), 'restored')
+})
+
+test('provider restoration preserves user changes and newly added providers', async (t) => {
+  const fixture = await settingsFixture(t)
+  const original = structuredClone(fixture.system.providerRuntimeConfigs)
+  await configureModel(fixture.hook, fixture.settingsFile, {
+    baseURL: 'http://127.0.0.1:1/v1',
+    apiKey: 'attempt-key',
+    model: 'fixture-model',
+  })
+  fixture.system.providerRuntimeConfigs[0].enabled = true
+  fixture.system.providerRuntimeConfigs.push({ provider: 'added-by-user' })
+  await fixture.save()
+  assert.equal(
+    await restoreModel(fixture.hook, fixture.settingsFile, original, 'attempt-key'),
+    'restored'
+  )
+  assert.deepEqual(fixture.system.providerRuntimeConfigs, [
+    { provider: 'other', enabled: true },
+    { provider: 'added-by-user' },
+    original[0],
+  ])
+  fixture.system.providerRuntimeConfigs.at(-1).apiKey = 'user-key'
+  await fixture.save()
+  const patches = fixture.commands.length
+  assert.equal(
+    await restoreModel(fixture.hook, fixture.settingsFile, original, 'attempt-key'),
+    'user_configuration_preserved'
+  )
+  assert.equal(fixture.commands.length, patches)
+})
 
 test('generation comparison requires both participants and every actual outbound request to match', () => {
   const policy = {
@@ -298,6 +450,8 @@ test('atomic evidence writes cannot expose a partial JSON and frozen changes fai
     )
   )
   assert.equal(JSON.parse(await readFile(path, 'utf8')).body.length, 10000)
+  assert.deepEqual(await readdir(directory), ['state.json'])
+  if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600)
   const frozen = await snapshotFiles([path])
   await verifyFrozen(frozen)
   await privateJson(path, { changed: true })
@@ -324,19 +478,13 @@ test('frozen directory inventories detect added runtime files and are independen
   await assert.rejects(verifyFrozen(frozen), { code: 'ENOENT' })
 })
 
-test('native Codex runner preserves failed turns and distinguishes deadline from cancellation', async (t) => {
+async function nativeCodexFixture(t, source) {
   const directory = await mkdtemp(join(tmpdir(), 'native-cli-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
-  const executable = join(directory, 'fake-codex')
-  await writeFile(
-    executable,
-    '#!/bin/sh\ncat >/dev/null\nprintf \'{"type":"thread.started","thread_id":"native-fixture"}\\n{"type":"turn.started"}\\n{"type":"turn.failed"}\\n\'\nexit 1\n',
-    { mode: 0o700 }
-  )
-  const failed = join(directory, 'failed')
-  await mkdir(failed)
-  const common = {
-    executable,
+  // Node consumes the real runner's first argv (exec) as this script; no shell or runner seam.
+  await writeFile(join(directory, 'exec'), source)
+  return {
+    executable: process.execPath,
     workspace: directory,
     baseURL: 'http://127.0.0.1:1/v1',
     apiKey: 'private-fixture',
@@ -344,6 +492,26 @@ test('native Codex runner preserves failed turns and distinguishes deadline from
     prompt: 'input',
     timeoutMs: 3000,
   }
+}
+
+test('native Codex runner preserves actual CLI input, failed turns and exit code', async (t) => {
+  const common = await nativeCodexFixture(
+    t,
+    `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => input += chunk);
+process.stdin.on('end', () => {
+  fs.writeFileSync('invocation.json', JSON.stringify({ args: process.argv.slice(2), input, apiKey: process.env.CODEX_API_KEY }));
+  fs.writeFileSync(1, '{"type":"thread.started","thread_id":"native-fixture"}\\n{"type":"turn.started"}\\n{"type":"turn.failed"}\\n');
+  process.exitCode = 1;
+});
+`
+  )
+  const directory = common.workspace
+  const failed = join(directory, 'failed')
+  await mkdir(failed)
   let invokedArgs
   const result = await runCodex({
     ...common,
@@ -354,39 +522,50 @@ test('native Codex runner preserves failed turns and distinguishes deadline from
       invokedArgs = args
     },
   })
+  const invocation = JSON.parse(await readFile(join(directory, 'invocation.json'), 'utf8'))
+  assert.deepEqual(invocation.args, invokedArgs.slice(1))
+  assert.equal(invocation.input, common.prompt)
+  assert.equal(invocation.apiKey, common.apiKey)
   assert(invokedArgs.includes('model_context_window=1050000'))
   assert(invokedArgs.includes('model_auto_compact_token_limit=200000'))
   await assert.rejects(
     runCodex({ ...common, directory: join(directory, 'not-created'), inputWindowTokens: 1050000 }),
     /Invalid native Codex input window/
   )
+  assert.equal(result.code, 1)
   assert.equal(result.terminalComplete, false)
+  assert.equal(result.timedOut, false)
+  assert.equal(result.cancelled, false)
   assert.equal(result.threadId, 'native-fixture')
   assert.equal((await readFile(join(failed, 'codex.jsonl'), 'utf8')).includes('turn.failed'), true)
-  await writeFile(executable, '#!/bin/sh\ncat >/dev/null\nsleep 30\n', { mode: 0o700 })
-  const timeout = join(directory, 'timeout')
-  await mkdir(timeout)
-  let pid
-  const stopped = await runCodex({
-    ...common,
-    directory: timeout,
-    timeoutMs: 50,
-    onSpawn: (value) => {
-      pid = value.pid
-    },
-  })
-  assert.equal(stopped.timedOut, true)
-  assert.equal(stopped.cancelled, false)
-  assert.throws(() => process.kill(-pid, 0), { code: 'ESRCH' })
-  const cancel = join(directory, 'cancel')
-  await mkdir(cancel)
-  const signal = new AbortController()
-  const cancelled = await runCodex({
-    ...common,
-    directory: cancel,
-    signal: signal.signal,
-    onSpawn: () => signal.abort(),
-  })
-  assert.equal(cancelled.cancelled, true)
-  assert.equal(cancelled.timedOut, false)
 })
+
+for (const mode of ['deadline', 'cancellation'])
+  test(
+    `native Codex ${mode} reaps its POSIX process group`,
+    { skip: process.platform === 'win32' ? 'Mac evaluation uses POSIX process groups' : false },
+    async (t) => {
+      const common = await nativeCodexFixture(
+        t,
+        'process.stdin.resume(); setInterval(() => {}, 1000);'
+      )
+      const directory = join(common.workspace, mode)
+      await mkdir(directory)
+      const signal = new AbortController()
+      let pid
+      const result = await runCodex({
+        ...common,
+        directory,
+        timeoutMs: mode === 'deadline' ? 50 : 3000,
+        signal: signal.signal,
+        onSpawn: (value) => {
+          pid = value.pid
+          if (mode === 'cancellation') signal.abort()
+        },
+      })
+      assert.equal(result.timedOut, mode === 'deadline')
+      assert.equal(result.cancelled, mode === 'cancellation')
+      assert.equal(result.terminalComplete, false)
+      assert.throws(() => process.kill(-pid, 0), { code: 'ESRCH' })
+    }
+  )

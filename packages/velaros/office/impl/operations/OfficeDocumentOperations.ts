@@ -8,6 +8,9 @@ import { Document, Packer } from 'docx'
 import ExcelJS from 'exceljs'
 
 import { isEmpty, isPresent, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { createKeyedSerialQueue } from '@velaros-ai/core/utils/KeyedSerialQueue'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
@@ -20,7 +23,7 @@ import type {
 } from '../../types/office.js'
 import type { PptxBackground } from '../../types/pptx.js'
 import { officeError } from '../../utils/errors.js'
-import { writeOfficeFile } from '../../utils/paths.js'
+import { normalizeExtensionPath, writeOfficeFile } from '../../utils/paths.js'
 import { normalizePresentationSlides } from '../../utils/presentation/content.js'
 import { addSlideElements } from '../../utils/presentation/elements.js'
 import { buildPresentationTheme } from '../../utils/presentation/templates.js'
@@ -60,6 +63,8 @@ export interface OfficeDocumentOperationsApi {
 }
 
 export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
+  /** 同一真实目标的创建/追加整体排队，最后一项完成后由 Core 回收队列键。 */
+  private readonly wordWrites = createKeyedSerialQueue()
   /** 内容归一化之后什么都没有时给模型的说明，按操作索引。 */
   private static readonly EmptyContentMessages = {
     createWord: 'createWord 没有可写的内容：blocks 是空的，或 content 解析不出任何段落。',
@@ -94,27 +99,61 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
       )
     ctx.abortSignal.throwIfAborted()
 
-    const output = await this.workspace.prepareWordOutput(ctx, input)
-    if (output.append) {
-      // append 模式先生成临时 fragment docx，再把 XML body 合并进原文档。
-      const fragmentDocument = new Document({
-        title: input.title,
-        creator: input.author ?? '',
-        numbering: buildWordNumbering(),
-        sections: [{ children: buildWordChildren({ blocks }) }],
+    const path = await normalizeExtensionPath(
+      this.workspace.rootPath(ctx),
+      this.workspace.userPath(ctx, input.outputPath),
+      '.docx'
+    )
+    const target = await resolveRealPath(path)
+    const targetKey = process.platform === 'win32' ? target.toLowerCase() : target
+    ctx.abortSignal.throwIfAborted()
+    return new Promise<OfficeWritten>((resolve, reject) => {
+      // 只取消尚未获准执行的等待方。任务开始后移除监听，真实写入与资源身份仍由队列持有到收尾。
+      const abortWaiting = () => reject(ctx.abortSignal.reason)
+      ctx.abortSignal.addEventListener('abort', abortWaiting, { once: true })
+      const writing = this.wordWrites.run(targetKey, async () => {
+        ctx.abortSignal.removeEventListener('abort', abortWaiting)
+        ctx.abortSignal.throwIfAborted()
+        const output = await this.workspace.prepareWordOutput(ctx, input)
+        const outputKey = process.platform === 'win32' ? output.target.toLowerCase() : output.target
+        if (outputKey !== targetKey)
+          throw AppError.withFields(
+            'CONFLICT',
+            '排队期间 Word 输出路径的真实目标已改变，请重新调用。',
+            { context: { executionOutcome: 'not-applied' } }
+          )
+        if (output.append) {
+          // append 模式先生成临时 fragment docx，再把 XML body 合并进原文档。
+          const fragmentDocument = new Document({
+            title: input.title,
+            creator: input.author ?? '',
+            numbering: buildWordNumbering(),
+            sections: [{ children: buildWordChildren({ blocks }) }],
+          })
+          return appendWordDocumentBuffer(
+            output,
+            await Packer.toBuffer(fragmentDocument),
+            ctx.abortSignal
+          )
+        }
+        // 新建模式直接构建完整 document；抬头已经写了 title，正文开头同名的一级标题不再写一遍。
+        const document = buildWordDocument({
+          ...input,
+          blocks: withoutRepeatedTitle(blocks, input.title),
+        })
+        return writeOfficeFile(output, await Packer.toBuffer(document), ctx.abortSignal)
       })
-      return appendWordDocumentBuffer(
-        output,
-        await Packer.toBuffer(fragmentDocument),
-        ctx.abortSignal
+      void writing.then(
+        (written) => {
+          ctx.abortSignal.removeEventListener('abort', abortWaiting)
+          resolve(written)
+        },
+        (error) => {
+          ctx.abortSignal.removeEventListener('abort', abortWaiting)
+          reject(error)
+        }
       )
-    }
-    // 新建模式直接构建完整 document；抬头已经写了 title，正文开头同名的一级标题不再写一遍。
-    const document = buildWordDocument({
-      ...input,
-      blocks: withoutRepeatedTitle(blocks, input.title),
     })
-    return writeOfficeFile(output, await Packer.toBuffer(document), ctx.abortSignal)
   }
 
   public async createPresentation(
@@ -195,7 +234,12 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
         sheet.columns = sheetInput.columns.map((col) =>
           isString(col)
             ? { header: col }
-            : { header: col.header, key: col.key, width: col.width, style: col.style as object }
+            : {
+                header: col.header,
+                key: col.key,
+                width: col.width,
+                style: buildExcelCellStyle(col.style),
+              }
         )
       }
 

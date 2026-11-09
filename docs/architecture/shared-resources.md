@@ -30,17 +30,18 @@ path policy.
 ## Ownership rules
 
 - The shared store contains only reproducible installation artifacts and their integrity receipt.
-- Product configuration, enablement, project indexes, caches, credentials, and logs remain inside
-  each product's own data root.
+- Product-specific configuration, enablement, project indexes, caches, and logs remain inside
+  each product's own data root. Products using the shared account contract resolve its separate
+  `shared/account/v1` directory through `accountRoot`; account sessions are not installation artifacts.
 - A resource ID has one canonical installed copy for the current OS user. Products are consumers,
   not owners of private copies.
-- Resolvers prefer the shared store. Product-local legacy roots may remain read-only compatibility
-  inputs during migration, and source-tree `node_modules` are development fallbacks only.
+- Installed resources resolve from the canonical shared store. Do not probe product-local legacy
+  roots or source-tree `node_modules`; development and tests must explicitly inject their resource location.
 - Installation must verify the published artifact checksum before atomically replacing a resource
   directory. The receipt records schema version, resource ID, version, platform, architecture,
   artifact name, checksum, and installation time.
 
 This boundary lets Desktop and Workbench independently enable or disable CodeGraph while executing
 the same installed binary. Removing one product must not remove a resource still used by another
-product; shared-resource garbage collection therefore belongs to a future organization-level
-manager, not to an individual product uninstaller.
+product. An individual product uninstaller must not collect shared resources without ownership and
+reference evidence from their consumers.

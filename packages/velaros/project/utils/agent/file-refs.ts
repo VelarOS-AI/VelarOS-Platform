@@ -93,7 +93,7 @@ function put(ctx: ProjectOperationContext, value: RefRecord, prefix: string): st
 function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly string[]): RefRecord {
   const prefix = prefixes.find((candidate) => ref.startsWith(candidate))
   const identity = prefix ? ref.slice(prefix.length) : ''
-  if (!prefix || !/^(?:[a-f0-9]{8}|[a-f0-9]{64})$/.test(identity)) {
+  if (!prefix || !/^[a-f0-9]{8}$/.test(identity)) {
     throw new ProjectError(
       'INVALID_INPUT',
       `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 8 位十六进制），不能手写或改写。`,
@@ -102,8 +102,8 @@ function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly strin
     )
   }
   const session = sessionOf(ctx)
-  // 旧回执按完整身份精确解析；短引用只按已签发映射解析，不做模糊前缀匹配。
-  const hash = identity.length === 8 ? session.aliases.get(identity) : identity
+  // 引用只按已签发映射解析，不做哈希推导或模糊前缀匹配。
+  const hash = session.aliases.get(identity)
   const entry = hash ? session.records.get(hash) : undefined
   if (hash && session.consumed.has(hash))
     throw new ProjectError('INVALID_INPUT', '这个计划已提交，不能重复应用。', { ref })
@@ -281,7 +281,7 @@ export function consumeReceipt(ctx: ProjectOperationContext, kind: string, ref: 
   // 调用方在写盘前已通过 readReceipt 核对根和会话。提交后即使正文因预算淘汰，仍能消费原身份，避免把已提交的结果报成失败。
   const identity = ref.slice(kind.length + 1)
   const session = sessionOf(ctx)
-  const hash = identity.length === 8 ? session.aliases.get(identity) : identity
+  const hash = session.aliases.get(identity)
   if (!hash) throw new ProjectError('INVALID_INPUT', '要消费的计划身份不属于本会话。', { ref })
   session.consumed.add(hash)
 }

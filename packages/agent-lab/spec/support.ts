@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict'
+
 import type {
   DriverCapabilities,
   JourneySpec,
@@ -7,6 +9,56 @@ import type {
 } from '../src/index.js'
 import { ObservationFaces, UnlimitedBudget } from '../src/index.js'
 import { createUnobservedObservation } from '../src/utils/measure/normalize.js'
+
+/** 只检查生成后的真实标签、属性与 CSS；转义正文里的 URL 和代码词汇不是资源。 */
+export function assertSelfContainedReport(html: string): void {
+  const violations: string[] = []
+  let stylesheet = ''
+  const cssResources = /@import\b|url\s*\(|@font-face\b/i
+  new HTMLRewriter()
+    .on('*', {
+      element(element) {
+        if (['script', 'link', 'iframe', 'object', 'embed', 'base'].includes(element.tagName))
+          violations.push(`tag:${element.tagName}`)
+        if (
+          element.tagName === 'meta' &&
+          element.getAttribute('http-equiv')?.toLowerCase() === 'refresh'
+        )
+          violations.push('meta-refresh')
+        for (const [name, value] of element.attributes) {
+          if (
+            name.startsWith('on') ||
+            [
+              'src',
+              'srcset',
+              'srcdoc',
+              'poster',
+              'data',
+              'action',
+              'formaction',
+              'background',
+              'ping',
+              'manifest',
+              'codebase',
+              'archive',
+            ].includes(name)
+          )
+            violations.push(`attribute:${name}`)
+          if (['href', 'xlink:href'].includes(name) && !value.startsWith('#'))
+            violations.push(`attribute:${name}`)
+          if (name === 'style' && cssResources.test(value)) violations.push('style-attribute')
+        }
+      },
+    })
+    .on('style', {
+      text(chunk) {
+        stylesheet += chunk.text
+      },
+    })
+    .transform(html)
+  if (cssResources.test(stylesheet)) violations.push('stylesheet')
+  assert.deepEqual(violations, [], '报告包含可执行内容或资源引用')
+}
 
 export function journey(id = 'journey-a', legs = 1): JourneySpec {
   return {

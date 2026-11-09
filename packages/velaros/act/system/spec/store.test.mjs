@@ -11,9 +11,7 @@ import {
 } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { storeModule } from '../../../dist/act/system/impl/StoreModule.js'
 import { StoreSession } from '../../../dist/act/system/impl/StoreSession.js'
 import {
@@ -23,8 +21,13 @@ import {
   runtimeFrame,
   turn,
 } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 const prelude =
   "import {output} from 'velaros';import {store,modules} from 'velaros:system';const currentStore=(await store.list({})).items[0]?.id;"
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
+const observationWriteRejection = platformHasDefaultConfinement
+  ? /OPERATION_MODE_DENIED/
+  : /SHELL_CONFINEMENT_UNAVAILABLE/
 const model = (stream) => ({
   id: 'state-test',
   limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -51,7 +54,6 @@ async function fixture(t, options = {}) {
     ).id
     runtime = await createRuntime({
       storage,
-      runner: nodeSubprocessCodeRunner,
       modules: [],
       context: { maintenance: false },
       model: model(async function* (request) {
@@ -222,7 +224,7 @@ test('INV-13 observe 只能读取；写入、订阅与冲突在效果产生前�
   })
   await submit(f.session)
   assert.equal(await f.storage.stores.get(f.storeId, 'bad'), null)
-  assert.match(frames(f.requests)[0].observation.text, /OPERATION_MODE_DENIED/)
+  assert.match(frames(f.requests)[0].observation.text, observationWriteRejection)
   await f.session.observe({
     source: `${prelude}output(await store.get({store:currentStore,key:'ok'}));`,
   })
@@ -377,7 +379,7 @@ test('INV-15 子 Agent 继承父空间与读写范围，但不能再派发子任
       // 不给 profile、不声明写入与空间：子任务直接继承
       yield turn(request, {
         execute: {
-          source: `${prelude}import {start,wait} from 'velaros:agents';const job=await start({task:'inspect'});await wait({id:job.id});`,
+          source: `${prelude}import {start,wait} from 'velaros:agents';const job=await start({task:'inspect'});const settled=await wait({id:job.id});if(settled.status!=='completed')throw Error(JSON.stringify(settled));`,
         },
       })
       yield { type: 'finish', reason: 'stop' }
@@ -385,7 +387,11 @@ test('INV-15 子 Agent 继承父空间与读写范围，但不能再派发子任
   })
   const f = await fixture(t, {
     model: root,
-    agents: { profiles: { worker: { model: child, modules: [] } }, concurrency: 1, maxChildren: 2 },
+    agents: {
+      profiles: { worker: { model: child, modules: [], node: true } },
+      concurrency: 1,
+      maxChildren: 2,
+    },
   })
   await execute(
     f.session,
@@ -631,67 +637,75 @@ test(
   }
 )
 
-test('INV-15 搜索模型的发现与声明保持叶子能力，不注入共享状态', async (t) => {
-  let mainCalls = 0
-  let searchCalls = 0
-  const search = model(async function* (request) {
-    searchCalls++
-    assert.equal(runtimeFrame(request).stores, undefined)
-    assert(!request.instructions.includes('store.set'))
-    if (searchCalls === 1) {
-      yield turn(request, {
-        execute: {
-          source:
-            "import {output} from 'velaros';import {modules} from 'velaros:system';output(await modules.list({space:'system'}));",
-        },
-      })
-      yield { type: 'finish', reason: 'stop' }
-    } else {
-      assert(!modelText(request).includes('system-store'))
-      yield {
-        type: 'text',
-        text: `${turn(request, { execute: { source: "import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});" } }).text}\n${marker(request)} done`,
+test(
+  'INV-15 搜索模型的发现与声明保持叶子能力，不注入共享状态',
+  {
+    skip: platformHasDefaultConfinement
+      ? false
+      : 'Search discovery/report execution requires a read-only Node backend; unavailable observations are rejected without effects in INV-13/16/18.',
+  },
+  async (t) => {
+    let mainCalls = 0
+    let searchCalls = 0
+    const search = model(async function* (request) {
+      searchCalls++
+      assert.equal(runtimeFrame(request).stores, undefined)
+      assert(!request.instructions.includes('store.set'))
+      if (searchCalls === 1) {
+        yield turn(request, {
+          execute: {
+            source:
+              "import {output} from 'velaros';import {modules} from 'velaros:system';output(await modules.list({space:'system'}));",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else {
+        assert(!modelText(request).includes('system-store'))
+        yield {
+          type: 'text',
+          text: `${turn(request, { execute: { source: "import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});" } }).text}\n${marker(request)} done`,
+        }
+        yield { type: 'finish', reason: 'stop' }
       }
-      yield { type: 'finish', reason: 'stop' }
-    }
-  })
-  const root = model(async function* (request) {
-    if (mainCalls++ === 0) {
-      yield turn(request, {
-        execute: {
-          source: "import {search} from 'velaros:search';await search({query:'inspect'});",
-        },
-      })
-      yield { type: 'finish', reason: 'stop' }
-    } else yield* done(request)
-  })
-  const f = await fixture(t, {
-    model: root,
-    search: {
-      model: search,
-      defaultProfile: 'standard',
-      profiles: {
-        standard: {
-          modelCalls: 8,
-          modelTokens: 200000,
-          finalizationTokens: 16000,
-          timeoutMs: 30000,
-          callTimeoutMs: 3000,
-          finalizationMs: 4000,
-          outputTokens: 1024,
-          projectionChars: 32000,
-          sourceQueries: 16,
-          candidates: 64,
-          reads: 16,
-          readBytes: 128000,
+    })
+    const root = model(async function* (request) {
+      if (mainCalls++ === 0) {
+        yield turn(request, {
+          execute: {
+            source: "import {search} from 'velaros:search';await search({query:'inspect'});",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    })
+    const f = await fixture(t, {
+      model: root,
+      search: {
+        model: search,
+        defaultProfile: 'standard',
+        profiles: {
+          standard: {
+            modelCalls: 8,
+            modelTokens: 200000,
+            finalizationTokens: 16000,
+            timeoutMs: 30000,
+            callTimeoutMs: 3000,
+            finalizationMs: 4000,
+            outputTokens: 1024,
+            projectionChars: 32000,
+            sourceQueries: 16,
+            candidates: 64,
+            reads: 16,
+            readBytes: 128000,
+          },
         },
       },
-    },
-  })
-  const events = await submit(f.session)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.equal(searchCalls, 2)
-})
+    })
+    const events = await submit(f.session)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+    assert.equal(searchCalls, 2)
+  }
+)
 
 test('INV-16 模型创建多个同名空间，相同键互不影响；observe 按空间取正文', async (t) => {
   const f = await fixture(t)
@@ -721,7 +735,7 @@ test('INV-16 observe 不能创建空间；归档立即阻止新读取且目录�
     source: `${prelude}try{await store.create({name:'bad'})}catch(error){output(error.code)}`,
   })
   await submit(f.session)
-  assert.match(frames(f.requests)[0].observation.text, /OPERATION_MODE_DENIED/)
+  assert.match(frames(f.requests)[0].observation.text, observationWriteRejection)
   assert.equal((await f.storage.stores.directory('session:main', 'main', [])).items.length, 1)
   await f.storage.stores.archive('session:main', f.storeId)
   assert.equal(
@@ -805,7 +819,6 @@ test('INV-16 新会话目录为空，并发打开复用会话，创建后的对�
   let storage = localContextStorage({ path })
   let runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     context: { maintenance: false },
   })
@@ -828,7 +841,6 @@ test('INV-16 新会话目录为空，并发打开复用会话，创建后的对�
   storage = localContextStorage({ path })
   runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     context: { maintenance: false },
   })
@@ -1266,7 +1278,7 @@ test('INV-18 发布只执行一次，持续 observe 中不会产生消息；新�
   const result = await submit(f.session)
   assert.equal(result.at(-1).status, 'completed')
   assert.equal(call, 2)
-  assert.match(modelText(requests[0]), /OPERATION_MODE_DENIED/)
+  assert.match(modelText(requests[0]), observationWriteRejection)
   assert.deepEqual(
     (await execute(f.session, 'output(await store.events({store:currentStore}));')).events.map(
       (item) => item.topic
@@ -1274,7 +1286,7 @@ test('INV-18 发布只执行一次，持续 observe 中不会产生消息；新�
     ['event']
   )
 })
-test('INV-18 共享材料按键授权、正文可分页，伪造跨键或源会话引用不能读出原文', async (t) => {
+test('INV-18 共享材料按键和任务原文授权，重置拒绝零追加且目标与重附加保留', async (t) => {
   const f = await fixture(t, {
     stores: (s) => ({
       scope: 'project',
@@ -1321,6 +1333,50 @@ test('INV-18 共享材料按键授权、正文可分页，伪造跨键或源会�
     ),
     'STORE_DENIED'
   )
+
+  const goal = await f.session.updateGoal({
+    baseRevision: 0,
+    objective: '跨任务保留当前共享调查目标',
+    status: 'paused',
+  })
+  const goalRef = (await f.storage.load('main')).records.findLast(
+    (record) => record.title === 'session:goal'
+  ).ref
+  await submit(f.session, { text: '开始独立任务，不继承先前材料', task: 'new' })
+  const appendRecord = f.storage.appendRecord.bind(f.storage)
+  let materialAppends = 0
+  const append = t.mock.method(f.storage, 'appendRecord', (sessionId, record) => {
+    if (sessionId.startsWith('store-material:')) materialAppends += 1
+    return appendRecord(sessionId, record)
+  })
+  try {
+    assert.equal(
+      await execute(
+        f.session,
+        `try{await store.share({store:currentStore,key:'public/reset',baseRevision:0,ref:${JSON.stringify(ref)}})}catch(error){output(error.code)}`
+      ),
+      'STORE_DENIED'
+    )
+    assert.equal(materialAppends, 0)
+    assert.equal(await f.storage.stores.get(id, 'public/reset'), null)
+  } finally {
+    append.mock.restore()
+  }
+  const sharedGoal = await execute(
+    f.session,
+    `await store.share({store:currentStore,key:'public/goal',baseRevision:0,ref:${JSON.stringify(goalRef)}});output(await store.read({store:currentStore,key:'public/goal'}));`
+  )
+  assert.deepEqual(JSON.parse(sharedGoal.text), goal)
+  await submit(f.session, {
+    text: '明确重新附上先前材料',
+    task: 'new',
+    files: [{ ref, name: 'reattached.txt', mediaType: 'text/plain' }],
+  })
+  const reattached = await execute(
+    f.session,
+    `await store.share({store:currentStore,key:'public/reattached',baseRevision:0,ref:${JSON.stringify(ref)}});output(await store.read({store:currentStore,key:'public/reattached'}));`
+  )
+  assert.equal(reattached.text, 'literal code ` ${x}\nshared evidence')
   await f.restart()
   assert.match(
     (

@@ -72,7 +72,7 @@ export function scoreCriteria(leg: LegSpec, criteria: readonly CriterionResult[]
   }
   return {
     score: weight > 0 ? weightedCredit / weight : null,
-    passed: hasVoidGate ? null : !gateFailed,
+    passed: weight === 0 || hasVoidGate ? null : !gateFailed,
   }
 }
 

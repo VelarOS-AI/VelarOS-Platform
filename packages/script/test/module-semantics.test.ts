@@ -247,6 +247,83 @@ test('INV-40 动态字面量依赖按 AST 收集，保留首次出现顺序', ()
   ).toEqual(['./a.js', 'velaros:proof', './b.js'])
 })
 
+test('INV-40 Node 显式预检核对当前能力及可达附属模块，原生依赖留给 Node', async () => {
+  let effects = 0
+  const unexpectedDispatch = async (): Promise<never> => {
+    effects++
+    throw new Error('预检不得派发调用')
+  }
+  const runtime = createOperationRuntime({
+    modules: [
+      {
+        binding: {
+          moduleId: 'velaros:proof',
+          instanceId: 'proof',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'native preflight proof',
+        operations: {
+          read: {
+            summary: 'read',
+            input: { type: 'null' },
+            output: { type: 'number' },
+            effects: 'none',
+            run: unexpectedDispatch,
+          },
+        },
+      },
+    ],
+    journal: {
+      claim: unexpectedDispatch,
+      prepare: unexpectedDispatch,
+      settle: unexpectedDispatch,
+      read: unexpectedDispatch,
+    },
+  })
+  const check = (source: string, modules = {}, allowedModules = ['velaros:proof']) =>
+    createKernelScriptSession({
+      runtime,
+      runner: nodeSubprocessCodeRunner,
+      sessionId: 'preflight',
+      executionId: 'preflight',
+      allowedModules,
+    }).check({ source, modules })
+  try {
+    expect(
+      check(
+        "import {readFile} from 'node:fs/promises';import {execa} from 'execa';import {diffLines} from 'velaros:npm/diff';import '#local';import './workspace.mjs';import '../shared.js';import 'file:///external.mjs';import 'data:text/javascript,export default 1';import {step} from './lib/step.js';export default step;",
+        {
+          'lib/step.js': "export {read as step} from 'velaros:proof';",
+          'unused.js': 'export default (',
+        }
+      )
+    ).toEqual({ ok: true })
+    for (const source of [
+      "import {missing} from 'velaros:proof';export default missing;",
+      "import {read} from 'test:ungranted';export default read;",
+      "if(false) await import('velaros:ungranted');",
+    ])
+      expect(check(source).ok).toBe(false)
+    expect(check("import {read} from 'velaros:proof';export default read;", {}, []).ok).toBe(false)
+    for (const source of [
+      "export {missing as step} from 'velaros:proof';",
+      "export {read as step} from 'velaros:ungranted';",
+      'export const step = (',
+    ]) {
+      const result = check("import {step} from './lib/step.js';export default step;", {
+        'lib/step.js': source,
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('可达模块必须通过当前合同检查')
+      expect(result.diagnostics.some((diagnostic) => diagnostic.file === 'lib/step.js')).toBe(true)
+    }
+    expect(effects).toBe(0)
+  } finally {
+    await runtime.dispose()
+  }
+})
+
 it('INV-40 动态字面量能力进入统一绑定，计算模块名不扩大授权', async () => {
   let calls = 0
   const records = new Map<string, InvocationRecord>()

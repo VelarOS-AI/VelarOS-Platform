@@ -1,8 +1,4 @@
-import type {
-  ContextCompletionResult,
-  ContextProjection,
-  ContextVerificationReport,
-} from '@velaros-ai/context'
+import type { ContextCompletionResult, ContextProjection, ContextRef } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
@@ -118,6 +114,8 @@ export type ActRunEvent =
   | {
       readonly type: 'usage'
       readonly runId: string
+      /** 与持久模型请求账一致的单次身份。 */
+      readonly requestId: string
       /** 这一次请求的输入 token，含读自与写进前缀缓存的部分。 */
       readonly inputTokens: number
       readonly outputTokens: number
@@ -127,18 +125,13 @@ export type ActRunEvent =
       readonly cacheWriteTokens?: number
     }
   | {
-      readonly type: 'verification'
+      readonly type: 'completion'
       readonly runId: string
       readonly completed: boolean
-      readonly verified: boolean
       readonly reason: string
       readonly recovery?: ContextCompletionResult['recovery']
-      /** 领域实际核查的范围与依据；成功、失败和未知项均按真实检查记录。 */
-      readonly report?: ContextVerificationReport
     }
   | { readonly type: 'error'; readonly runId: string; readonly message: string }
-  /** 任务到了每小时的模型用量上限：等 retryAfterMs 后自动继续。 */
-  | { readonly type: 'throttled'; readonly runId: string; readonly retryAfterMs: number }
   /** 主线到达回合或墙钟上限：已封段并延长截止时间，运行继续。 */
   | { readonly type: 'renewed'; readonly runId: string; readonly cause: 'turns' | 'clock' }
   /** 本次运行连续多步没有进展，已暂停；任务保留，用户的下一条输入继续同一个任务。 */
@@ -219,6 +212,8 @@ export interface ActEvent {
 
 /** 一帧编译好的请求，连同它的投影与段状态。 */
 export type ActComposedFrame = {
+  /** 真正发布的帧审计；宿主未持久化帧时缺席，不能用试算结果代替。 */
+  readonly frameRef?: ContextRef
   readonly projection: ContextProjection
   readonly segment?: ActFrameSegment
   /** 本次运行里连续没有进展的步数。 */
@@ -233,6 +228,8 @@ export type ActComposedFrame = {
   readonly positions: readonly number[]
   /** 出线历史是否保留了此前的帧；增长只在同一布局之间比较。 */
   readonly retained: boolean
+  /** 本周期允许接纳后保留实际出线，供后续帧核对。 */
+  readonly retainFrames: boolean
   /** 本地历史帧计量供请求审计；重建前的超额值另存，账单仍取真实 usage。 */
   readonly retention: {
     readonly limitTokens: number

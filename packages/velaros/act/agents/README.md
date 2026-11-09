@@ -5,22 +5,26 @@
 ## 用法
 
 ```ts
-import { createRuntime, type VelarosAgentsOptions } from '@velaros-ai/velaros'
+import type { VelarosAgentsOptions } from '@velaros-ai/velaros'
+import { createNodeRuntime, type NodeRuntimeOptions } from '@velaros-ai/velaros/node'
+import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { WidgetView } from '@velaros-ai/velaros/act/agents'
 import type { ModelDriver } from '@velaros-ai/model'
 
-// 宿主给：主模型与便宜些的模型、项目目录与状态目录（绝对路径），以及怎么问用户
+// 宿主给：主模型与子任务模型、执行目录、目录之外的状态目录，以及已授权的项目模块和执行身份
 declare const model: ModelDriver
 declare const cheapModel: ModelDriver
 declare const projectRoot: string
 declare const stateDir: string
+declare const binding: NodeRuntimeOptions['binding']
+declare const projectModules: readonly OperationModuleDefinition[]
 declare function askUser(kind: string, message: string, detail: unknown): Promise<unknown>
 declare function showInConversation(widget: WidgetView, sessionId: string): void
 
 // 配置名由宿主定：模型用 profiles() 看到说明、模块与预算；start 不给 profile 就用第一个
 const agents: VelarosAgentsOptions = {
   profiles: {
-    reviewer: { description: '只读审查代码，交回问题清单', model: cheapModel, modules: ['velaros:project'], budget: { modelCalls: 64 } },
+    reviewer: { description: '审查代码，交回问题清单', model: cheapModel, modules: ['velaros:project'], budget: { modelCalls: 64 } },
     implementer: { description: '按批准的计划改代码', model, modules: ['velaros:project'] },
   },
   concurrency: 2,
@@ -28,18 +32,29 @@ const agents: VelarosAgentsOptions = {
 }
 // 模型用 velaros:widget 的 show 交来的小部件由宿主显示在对应会话里
 const widgets = { show: showInConversation }
-const runtime = await createRuntime({ workspace: projectRoot, dataDir: stateDir, model, agents, widgets })
-const session = await runtime.openSession('main')
-for await (const event of session.submit('先审查登录模块，再按审查结论修复')) {
-  // 主线的 ask、confirm 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
-  // ask 带选项或表单时 detail 是 { options, multiple, allowText, fields }，回答给 { choices } 或 { values }
-  if (event.type === 'interaction')
-    await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.kind, event.request.message, event.request.detail) })
-}
+const runtime = await createNodeRuntime({
+  cwd: projectRoot,
+  stateDirectory: stateDir,
+  binding,
+  localHost: { processConfinement: { mode: 'workspace-write', workspaceRoot: projectRoot } },
+  modules: projectModules,
+  model, agents, widgets,
+})
+try {
+  const session = await runtime.openSession('main')
+  for await (const event of session.submit('先审查登录模块，再按审查结论修复')) {
+    // 主线的 ask、confirm 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
+    // ask 带选项或表单时 detail 是 { options, multiple, allowText, fields }，回答给 { choices } 或 { values }
+    if (event.type === 'interaction')
+      await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.kind, event.request.message, event.request.detail) })
+  }
 
-// 子任务是主会话的支线：追踪的 branches 里 kind 为 agent，按 sessionId 读各自的请求与回执
-const page = await runtime.trace('main')
-console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branch) => branch.status))
+  // 子任务是主会话的支线：追踪的 branches 里 kind 为 agent，按 sessionId 读各自的请求与回执
+  const page = await runtime.trace('main')
+  console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branch) => branch.status))
+} finally {
+  await runtime.close()
+}
 ```
 
 ## 入口
@@ -50,7 +65,7 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 
 ## 约定
 
-- 不给 `agents` 时，工作区预设在有模型时开一个 `worker` 配置，能用全部已挂的业务能力（开了搜索还有 `velaros:search`）；`agents: true` 缺模型抛 `VALIDATION`，`agents: false` 关掉。
+- 提供 `agents` 才挂载子任务；profile 名称、模型、模块白名单与预算由宿主显式指定。省略时不挂载，不接受布尔开关。需要 Node 操作系统范围的 profile 须显式设置 `node: true`，并由父运行时提供 Node 执行口。
 - 只有主线能派子任务，子任务里没有 `velaros:agents`；`velaros:interaction` 主线与子任务都有，搜索与整理支线没有。
 - `start` 只要 `task`，立刻交回 job，子任务在后台开会话；不给 `profile` 用宿主给的第一个配置。配置的 `modules` 是子任务能用的模块，超出父任务实际有的能力时子任务直接失败，原因在 job 的 `error` 里；续跑时重新核对。
 - Node 子任务的派发正文自动附带父任务输入摘录，总计最多 8192 字符，按原输入顺序展示并为各次补充分配空间；原文未完时标明缺口和文件路径。`task` 指定负责的分工，父输入用于核对相关要求。环境中的 `parentTask` 文件索引列出完整原文和附件，来源与 SHA-256 来自权威归档；可以用 Shell 或 `node:fs` 补读。输入目录本身过大时保留文件入口；每次 `resume` 更新摘录和文件快照，子运行结束后清理文件。

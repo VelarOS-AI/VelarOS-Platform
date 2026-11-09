@@ -12,8 +12,13 @@
 | INV-12 | 约束证据如实上报：审批事实与约束事实分开记录（用户确认过的危险命令不改写约束事实），未受约束就写 `enforcement: none`，不冒充隔离；受约束时报真实的后端与覆盖面（macOS 的 sandbox-exec 只拦得住文件写，报 `partial`） | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 本机宿主的输出超过上限时回执只留**末尾**且末尾真实，`truncated` 为真：失败现场在尾部，砍头不砍尾；转后台的命令回执里带 `taskId`，按它查得到那条任务 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 管道分块不会打碎 UTF-8 字符，子进程退出码原样透传，shell 描述符里不带 `env` | 测试 | `spec/acceptance.test.ts` |
-| INV-15 | 超时或取消后进程管理最终收敛：终止信号无人响应、close 永不到达时也在期限内结束，并如实标记清理未完成 | 测试 | `spec/acceptance.test.ts` |
+| INV-15 | 超时或取消后有界回执在期限内交付：终止信号无人响应、close 尚未到达时如实标记清理未完成，保留输出管道与真实 owner；迟到 close 只更新当前资源事实，不改写原 unknown 回执 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 命令只在挑定的那个 shell 里跑：`shell` 给的种类本机没有就在起进程之前拒绝（`VALIDATION`），报错点名可用的有哪些、哪个是默认，绝不换默认 shell 照跑；不给 `shell` 才用默认的那个 | 测试 | `spec/acceptance.test.ts` |
 
 | INV-17 | 宿主共享的登录环境支持合并并发读取、按代次刷新、返回独立副本；旧刷新不覆盖新快照。注入同一环境的本机宿主在原生命令与环境体检中使用该快照，工作区释放不关闭借用的环境；环境 owner 释放时中止读取并等待收尾 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 宿主前台命令按 UTF-8 写入标准输入并发送 EOF（包括空串）；输入端提前关闭不产生未处理异常，超时继续按受管进程收尾。后台与一次性 stdin 同传时在启动前拒绝。原生命令 env 的 undefined 删除该键，覆盖仅影响本次命令，不修改借用环境快照 | 测试 | `spec/acceptance.test.ts` |
+| INV-19 | 后台任务的 exited 只来自真实完整收尾；根进程退出但管道未关闭、或 cleanupIncomplete 均为 unknown，未解决记录不作为已结束历史淘汰。Windows 管道中断核对受管身份后强制终止进程树并等待收尾；PTY 握手确认有效 PID 后才发布任务，停止保留会话与受管 PID 核验并调用终端 kill 释放资源；PTY 中断保留 Ctrl+C，POSIX 管道保留 SIGINT | 测试 | `spec/acceptance.test.ts` |
+| INV-20 | 后台任务登记与有界收尾的观察在记录写入后、历史裁剪前交付独立副本；迟到的真实 close 补交当前 exited，原有界 unknown 回执不改写。快完成不会漏终态，观察方修改副本、同步抛错或异步失败/等待不改变 owner 事实、不阻断真实释放。dispose 拒绝新命令、取消准备并等待自有前后台进程真实收尾，保留并报告未确认任务，失败后可查询和重试 | 测试 | `spec/acceptance.test.ts` |
+| INV-21 | waitForClose 仅用于前台，background 同传在启动前拒绝；本次调用无论兑现还是拒绝，必须没有启动进程或同一受管 owner 已真实 close。超期或取消不提前兑现、不改写原有界 unknown；dispose 仍有界报告清理未完成并保留重试，严格调用继续等待真实排空后才允许回收本次临时资源 | 测试 | `test/local/foreground-drain.test.ts` |
+
+Windows 真实父子进程与继承管道的中断回归，以及 PTY、POSIX 的既有行为，另由 [`test/local/interactive-console.test.ts`](../test/local/interactive-console.test.ts) 覆盖。

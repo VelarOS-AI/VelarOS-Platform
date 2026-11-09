@@ -115,6 +115,7 @@ test('inter-program commentary never becomes a reply or changes blob and observe
     false
   )
   assert.equal(result.submission.observe.source, source)
+  assert.equal(result.submission.observe.blobs.payload, raw)
   assert.equal(result.submission.executions[0].program.blobs.payload, raw)
 })
 
@@ -257,6 +258,23 @@ test('configuration, reference edits, full bundles and immutable host parameters
       .program,
     { ...program, retainTurns: 'segment' }
   )
+})
+
+test('history headers survive incremental text without creating or replacing a source program', () => {
+  const history = {
+    kind: 'read',
+    snapshotId: 'snapshot',
+    pointer: '/result/摘要',
+    offset: 2,
+    limit: 1024,
+  }
+  const wire = block(`observe(${JSON.stringify({ history })})`)
+  const decoder = new ScriptTurnDecoder(marker)
+  for (const character of wire) decoder.push(character)
+  assert.deepEqual(decoder.finish().submission, { observe: { history }, executions: [] })
+  const mixed = decode(block('execute', source) + wire).submission
+  assert.deepEqual(mixed.observe, { history })
+  assert.equal(mixed.executions[0].program.source, source)
 })
 
 for (const [name, input] of [

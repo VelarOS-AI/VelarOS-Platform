@@ -156,17 +156,7 @@ export const VerifierIsolations = Object.freeze(['separate', 'shared', 'none'] a
 /** 轮询驱动遇到审批时按哪条策略走：批准、拒绝、原地等人。 */
 export const ConfirmationPolicies = Object.freeze(['approve', 'reject', 'wait'] as const)
 
-// ── 归档视图与报告 ──────────────────────────────────────────────
-
-/** 历史归档的形状：v3 是当前格式，其余三种只读，读不出内容时记 `missing` 或 `invalid`。 */
-export const ArchiveShapes = Object.freeze([
-  'v3',
-  'v2-manifest',
-  'v1-flat',
-  'v0-array',
-  'missing',
-  'invalid',
-] as const)
+// ── 报告 ────────────────────────────────────────────────────────
 
 /** 报告里一条判词的分量。 */
 export const VerdictLevels = Object.freeze([
@@ -512,9 +502,6 @@ export type VerifierIsolation = (typeof VerifierIsolations)[number]
 
 /** 审批策略的取值。 */
 export type ConfirmationPolicy = (typeof ConfirmationPolicies)[number]
-
-/** 归档形状的取值。 */
-export type ArchiveShape = (typeof ArchiveShapes)[number]
 
 /** 报告判词分量的取值。 */
 export type VerdictLevel = (typeof VerdictLevels)[number]

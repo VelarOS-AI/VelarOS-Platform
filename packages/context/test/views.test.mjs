@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { ContextVerificationLimits, TaskCapsuleLimits } from '../dist/contract/constants.js'
-import { createContextRuntime, createContextView } from '../dist/index.js'
+import { AppError } from '@velaros-ai/core/error'
+
+import { TaskCapsuleLimits } from '../dist/contract/constants.js'
+import { createContextRuntime, createContextView, createEvidenceAccess } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 import { checkTaskCapsule } from '../dist/utils/view-input.js'
 
@@ -68,6 +70,12 @@ async function observe(f, intent = f.direct) {
 test('INV-3 A04: edits materialize the latest revision and preserve protected goals', async (t) => {
   const f = await fixture(t)
   const first = await observe(f)
+  assert.equal((await f.view.inspect()).view.id, first.id)
+  assert.equal((await f.context.read(first.evidence[0].recovery)).text, 'version one')
+  assert.equal(first.metrics.sourceReads, 1)
+  assert.equal(first.metrics.sourceBytes, Buffer.byteLength('version one'))
+  assert.deepEqual((await f.storage.records('s', { title: 'context:plan' })).items, [])
+  assert.deepEqual((await f.storage.records('s', { title: 'context:model-view' })).items, [])
   f.data.text = 'version two'
   f.data.revision = 'v2'
   assert.equal(await f.view.validate(first), false)
@@ -75,7 +83,7 @@ test('INV-3 A04: edits materialize the latest revision and preserve protected go
   assert.equal(next.evidence[0].body, 'version two')
   assert.equal(next.readSet[0].revision, 'v2')
   assert.equal(next.goals[0].text, 'Keep the user constraint exactly.')
-  assert.equal((await f.view.complete()).verified, false)
+  assert.equal((await f.view.complete()).completed, true)
   assert.equal((await f.view.inspect()).status, 'completed')
 })
 
@@ -220,50 +228,20 @@ test('A03/A18/A21: huge artifacts stay persisted and task references cannot cros
 
 test('shared model budget: two roles consume one durable model budget, missing usage stays unknown', async (t) => {
   const f = await fixture(t, { modelCalls: 2, modelTokens: 100 })
-  await f.view.reserveModel('main', 60)
-  await f.view.recordUsage(10, 5)
-  await f.view.reserveModel('context', 40)
-  await assert.rejects(f.view.reserveModel('main', 1), { code: 'MODEL_BUDGET' })
+  const taskId = (await f.view.inspect()).id
+  const first = { taskId, requestId: 'first' }
+  await f.view.reserveModel('main', 60, first)
+  await f.view.dispatchModel(first)
+  await f.view.recordUsage(10, 5, first)
+  await f.view.reserveModel('context', 40, { taskId, requestId: 'second' })
+  await assert.rejects(f.view.reserveModel('main', 1, { taskId, requestId: 'third' }), {
+    code: 'MODEL_BUDGET',
+  })
   const usage = (await createContextView(f.options).inspect()).usage
   assert.equal(usage.mainCalls, 1)
   assert.equal(usage.contextCalls, 1)
   assert.equal(usage.unmeasuredCalls, 1)
   assert.equal(usage.inputTokens, 10)
-})
-
-test('INV-14 hourly model budget rolls by the hour, says when to retry and refuses a request larger than an hour', async (t) => {
-  const f = await fixture(t, { modelTokensPerHour: 100 })
-  t.mock.timers.enable({ apis: ['Date'], now: 0 })
-  // 运行中心跳会续租；这里按五分钟一步拨表并续租
-  const advance = async (ms) => {
-    for (let left = ms; left > 0; left -= 300_000) {
-      t.mock.timers.tick(Math.min(300_000, left))
-      await f.view.renew()
-    }
-  }
-  await f.view.reserveModel('main', 60)
-  await f.view.reserveModel('main', 30)
-  // 当前一小时已经不够：等到下一小时
-  await assert.rejects(
-    f.view.reserveModel('main', 20),
-    (error) => error.code === 'MODEL_RATE' && error.retryAfterMs === 3_600_000
-  )
-  // 单次就超过每小时上限，等多久都不行
-  await assert.rejects(f.view.reserveModel('main', 101), { code: 'MODEL_BUDGET' })
-  // 下一小时刚开始，上一小时的 90 还全额算着，要等它淡出到够用
-  await advance(3_600_000)
-  await assert.rejects(
-    f.view.reserveModel('main', 20),
-    (error) =>
-      error.code === 'MODEL_RATE' && error.retryAfterMs > 0 && error.retryAfterMs < 3_600_000
-  )
-  await advance(1_800_000)
-  await f.view.reserveModel('main', 50)
-  await f.view.releaseModel('main', 50)
-  await f.view.reserveModel('main', 50)
-  const usage = (await createContextView(f.options).inspect()).usage
-  assert.equal(usage.hourly.tokens, 50)
-  assert.equal(usage.hourly.previous, 90)
 })
 
 test('A16/A17: competing leases, stale build publication and cancellation fail closed', async (t) => {
@@ -293,9 +271,11 @@ test('INV-4: the unchanged owner renews after suspended time without changing ta
 test('INV-4: delayed usage and execution continuations renew the same owner before continuing', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 0 })
   const f = await fixture(t)
-  await f.view.reserveModel('main', 120)
+  const request = { taskId: (await f.view.inspect()).id, requestId: 'delayed' }
+  await f.view.reserveModel('main', 120, request)
+  await f.view.dispatchModel(request)
   t.mock.timers.tick(f.view.limits.leaseMs + 1)
-  await f.view.recordUsage(50, 10)
+  await f.view.recordUsage(50, 10, request)
   await f.view.startStep('continued')
   const before = await f.view.inspect()
   t.mock.timers.tick(f.view.limits.leaseMs + 1)
@@ -408,272 +388,52 @@ test('INV-4: aborted renewal and terminal or revoked ownership do not restart a 
   await assert.rejects(f.view.renew(), { code: 'LEASE_LOST' })
   assert.equal((await f.view.inspect()).status, 'completed')
 })
-
-test('A12: required goals never silently truncate, acceptance is explicit', async (t) => {
+test('A12: required goals remain complete before task completion', async (t) => {
   const f = await fixture(t)
   await assert.rejects(f.view.build({ maxChars: 4 }), { code: 'CONTEXT_BUDGET' })
   await f.view.build({ maxChars: 12000 })
-  assert.equal(
-    (await f.view.complete({ verify: async () => ({ verified: false, reason: 'test failing' }) }))
-      .completed,
-    false
-  )
-  assert.equal(
-    (await f.view.complete({ verify: async () => ({ verified: true, reason: 'test passed' }) }))
-      .verified,
-    true
-  )
+  assert.equal((await f.view.complete()).completed, true)
 })
 
-test('INV-6 A19: source changes invalidate derived artifacts instead of promoting a model summary', async (t) => {
+test('INV-6 A19: derived artifacts reject stale dependencies; historical views still require current authorization', async (t) => {
   const f = await fixture(t)
   const first = await observe(f)
   await f.view.startStep('summarize')
   const artifact = await f.view.putArtifact('Summary of version one', [first.evidence[0].recovery])
-  await f.view.request({ kind: 'direct', target: { kind: 'artifact', ref: artifact } })
+  await f.view.request({
+    kind: 'direct',
+    target: { kind: 'artifact', ref: artifact },
+    time: { kind: 'historical' },
+  })
   await f.view.settle([])
+  const historical = await f.view.build({ maxChars: 12000 })
+  assert.equal(historical.evidence[0].freshness, 'historical')
   f.data.revision = 'v2'
   f.data.text = 'version two'
+  assert.equal(await f.view.validate(historical), true)
+  f.data.allowed = false
+  assert.equal(await f.view.validate(historical), false)
+  assert.deepEqual(await f.view.complete(), {
+    completed: false,
+    reason: 'STALE_VIEW',
+    recovery: 'refresh',
+  })
+
+  f.data.allowed = true
+  await f.view.startStep('check-current')
+  await f.view.request({ kind: 'direct', target: { kind: 'artifact', ref: artifact } })
+  await f.view.settle([])
   const view = await f.view.build({ maxChars: 12000 })
   assert.equal(view.evidence.length, 0)
   assert.equal(view.gaps[0].code, 'STALE_DEPENDENCY')
 })
-
-test('A23: a verifier result is rejected if the source changes while verification runs', async (t) => {
+test('A23: a changed source prevents task completion', async (t) => {
   const f = await fixture(t)
   await observe(f)
-  const result = await f.view.complete({
-    verify: async () => {
-      f.data.revision = 'new'
-      return { verified: true, reason: 'old test passed' }
-    },
-  })
+  f.data.revision = 'new'
+  const result = await f.view.complete()
   assert.equal(result.completed, false)
   assert.equal(result.reason, 'STALE_VIEW')
-})
-
-test('INV-15 domain reports preserve failed and unknown checks, original bindings and immutable evidence', async (t) => {
-  const f = await fixture(t)
-  await observe(f)
-  const evidence = await f.context.append({
-    kind: 'tool',
-    body: 'test: failed; remote confirmation unavailable',
-  })
-  const report = {
-    scope: '指定文件的检查与远端确认',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      {
-        label: '文件测试',
-        status: 'failed',
-        evidenceRefs: [evidence.ref],
-        artifact: { identity: 'a.ts', revision: 'v1', contentHash: hash(f.data.text) },
-      },
-      { label: '远端确认', status: 'unknown' },
-    ],
-  }
-  let prepared = 0
-  const commit = {
-    binding: { kind: 'goal', id: 'old-goal', revision: 2 },
-    prepare: async () => {
-      prepared++
-      throw Error('must not finalize a failed check')
-    },
-  }
-  const failed = await f.view.complete(
-    { verify: async () => ({ verified: false, reason: '检查失败', report }) },
-    undefined,
-    commit
-  )
-  assert.equal(failed.completed, false)
-  assert.equal(prepared, 0)
-  const firstRef = (await f.view.inspect()).completionRef
-  const archived = JSON.parse((await f.context.read(firstRef)).text)
-  assert.deepEqual(archived.binding, commit.binding)
-  assert.equal(archived.taskId, (await f.view.inspect()).id)
-  assert.deepEqual(archived.result.report, report)
-  assert.deepEqual(await f.view.readCompletion(), archived)
-  report.checks[0].label = 'later mutable explanation'
-  assert.equal(
-    JSON.parse((await f.context.read(firstRef)).text).result.report.checks[0].label,
-    '文件测试'
-  )
-  const passed = {
-    scope: '指定文件的测试',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      {
-        label: '文件测试',
-        status: 'passed',
-        evidenceRefs: [evidence.ref],
-        artifact: { identity: 'a.ts', revision: 'v2' },
-      },
-    ],
-  }
-  const success = await f.view.complete({
-    verify: async () => ({ verified: true, reason: '测试通过', report: passed }),
-  })
-  assert.equal(success.completed, true)
-  const current = await f.view.inspect()
-  assert.equal(current.verification, 'verified')
-  assert.notEqual(current.completionRef.id, firstRef.id)
-  assert.equal(JSON.parse((await f.context.read(firstRef)).text).result.completed, false)
-  assert.deepEqual(
-    JSON.parse((await f.context.read(current.completionRef)).text).result.report,
-    passed
-  )
-  assert.deepEqual(await f.view.readCompletion(firstRef), archived)
-})
-
-test('INV-15 neutral completion records and report publish with the task in one CAS, retrying unrelated changes without repeating verification', async (t) => {
-  for (const fallback of [false, true]) {
-    const f = await fixture(t)
-    if (fallback)
-      f.options.storage = new Proxy(f.storage, {
-        get(target, key) {
-          if (['loadMetadata', 'compareAndSwapMetadata', 'selectSnapshot'].includes(key))
-            return undefined
-          const value = target[key]
-          return typeof value === 'function' ? value.bind(target) : value
-        },
-      })
-    await observe(f)
-    const original = f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'].bind(
-      f.storage
-    )
-    let raced = false
-    f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'] = async (...args) => {
-      if (!raced && args[2].task?.status === 'completed') {
-        raced = true
-        await f.context.append({ kind: 'tool', title: 'unrelated', body: 'new event' })
-      }
-      return original(...args)
-    }
-    let preparations = 0
-    let checks = 0
-    const commit = {
-      binding: { kind: 'resource', id: 'completion-target', revision: 1 },
-      prepare: async () => {
-        preparations++
-        const state = await f.storage.load('s')
-        const body = 'finalized target'
-        return {
-          version: state.version,
-          records: [
-            {
-              ref: { sessionId: 's', id: crypto.randomUUID() },
-              kind: 'audit',
-              title: 'domain:complete',
-              objectId: await f.storage.put('s', body),
-              chars: body.length,
-              sources: [],
-              createdAt: new Date().toISOString(),
-            },
-          ],
-        }
-      },
-    }
-    const result = await f.view.complete(
-      {
-        verify: async () => {
-          checks++
-          return {
-            verified: true,
-            reason: 'confirmed',
-            report: {
-              scope: 'specified output',
-              checkedAt: new Date().toISOString(),
-              checks: [{ label: 'output exists', status: 'passed' }],
-            },
-          }
-        },
-      },
-      undefined,
-      commit
-    )
-    assert.equal(result.completed, true)
-    assert.equal(checks, 1)
-    assert.equal(preparations, 2)
-    const state = await f.storage.load('s')
-    assert.equal(state.task.status, 'completed')
-    assert.equal(state.records.filter((record) => record.title === 'domain:complete').length, 1)
-    assert.equal(
-      state.records.filter((record) => record.title.startsWith('task:completion:')).length,
-      1
-    )
-  }
-})
-
-test('INV-15 cancelled finalization and invalid or foreign report evidence cannot publish completion', async (t) => {
-  const f = await fixture(t)
-  await observe(f)
-  const report = {
-    scope: 'test',
-    checkedAt: new Date().toISOString(),
-    checks: [{ label: 'test', status: 'passed' }],
-  }
-  for (const invalid of [
-    {
-      ...report,
-      checks: Array.from({ length: ContextVerificationLimits.checks + 1 }, () => report.checks[0]),
-    },
-    { ...report, scope: 'x'.repeat(ContextVerificationLimits.scopeChars + 1) },
-    {
-      ...report,
-      checks: Array.from({ length: ContextVerificationLimits.checks }, () => ({
-        label: 'x'.repeat(ContextVerificationLimits.labelChars),
-        status: 'passed',
-        artifacts: Array.from({ length: ContextVerificationLimits.artifacts }, (_, i) => ({
-          identity: `file:${i}:${'x'.repeat(ContextVerificationLimits.scopeChars - 16)}`,
-          contentHash: 'x'.repeat(ContextVerificationLimits.scopeChars),
-          revision: 'x'.repeat(ContextVerificationLimits.scopeChars),
-        })),
-      })),
-    },
-  ])
-    await assert.rejects(
-      f.view.complete({
-        verify: async () => ({ verified: true, reason: 'claimed', report: invalid }),
-      }),
-      { code: 'VALIDATION' }
-    )
-  await assert.rejects(
-    f.view.complete({
-      verify: async () => ({
-        verified: true,
-        reason: 'claimed',
-        report: {
-          ...report,
-          checks: [
-            { ...report.checks[0], evidenceRefs: [{ sessionId: 'other', id: f.user.ref.id }] },
-          ],
-        },
-      }),
-    }),
-    { code: 'SCOPE_MISMATCH' }
-  )
-  const controller = new AbortController()
-  await assert.rejects(
-    f.view.complete(
-      { verify: async () => ({ verified: true, reason: 'claimed', report }) },
-      controller.signal,
-      {
-        binding: { kind: 'target', id: 'one', revision: 1 },
-        prepare: async () => {
-          controller.abort()
-          return { version: (await f.storage.load('s')).version, records: [] }
-        },
-      }
-    ),
-    { name: 'AbortError' }
-  )
-  const state = await f.storage.load('s')
-  assert.notEqual(state.task.status, 'completed')
-  assert.equal(state.task.completionRef, undefined)
-  assert.equal(
-    state.records.some((record) => record.title.startsWith('task:completion:')),
-    false
-  )
 })
 
 test('A26: observed-only sources disclose weak freshness and never assert a snapshot', async (t) => {
@@ -689,7 +449,7 @@ test('A26: observed-only sources disclose weak freshness and never assert a snap
   assert.equal(view.readSet[0].revision, null)
 })
 
-test('A11: denied candidate previews never reach the view or plan audit', async (t) => {
+test('A11: denied previews stay private while source and cancellation failures remain observable', async (t) => {
   const f = await fixture(t)
   f.source.search = async () => [
     { target: f.direct.target, preview: 'FORBIDDEN_SECRET', forms: ['full'] },
@@ -701,6 +461,51 @@ test('A11: denied candidate previews never reach the view or plan audit', async 
   const view = await f.view.build({ maxChars: 12000 })
   assert(!JSON.stringify(view).includes('FORBIDDEN_SECRET'))
   assert.equal((await f.context.search({ query: 'FORBIDDEN_SECRET' })).items.length, 0)
+
+  const access = createEvidenceAccess([f.source])
+  const scope = { sessionId: 's', revision: (await f.view.inspect()).revision }
+  const signal = new AbortController().signal
+  assert.deepEqual(await access.search(scope, 'project', 'find', 1, signal), [])
+  const failure = new AppError('UNAVAILABLE', 'Authorization backend is unavailable')
+  f.source.authorize = async () => {
+    throw failure
+  }
+  await assert.rejects(
+    access.search(scope, 'project', 'find', 1, signal),
+    (error) => error === failure
+  )
+
+  const previewFailure = new AppError('DENIED', 'Preview processing failed after authorization')
+  f.source.authorize = async () => true
+  f.source.search = async () => [
+    {
+      target: f.direct.target,
+      forms: ['full'],
+      get preview() {
+        throw previewFailure
+      },
+    },
+  ]
+  await assert.rejects(
+    access.search(scope, 'project', 'find', 1, signal),
+    (error) => error === previewFailure
+  )
+
+  let enterAuthorization
+  const entered = new Promise((resolve) => {
+    enterAuthorization = resolve
+  })
+  f.source.search = async () => [{ target: f.direct.target, preview: 'preview', forms: ['full'] }]
+  f.source.authorize = () => {
+    enterAuthorization()
+    return new Promise(() => {})
+  }
+  const controller = new AbortController()
+  const pending = access.search(scope, 'project', 'find', 1, controller.signal)
+  await entered
+  const cancellation = new AppError('CANCELLED', 'Stop authorizing the source')
+  controller.abort(cancellation)
+  await assert.rejects(pending, (error) => error === cancellation)
 })
 
 test('A13/A16/A17: hung and late source results cannot publish after cancellation or task revision change', async (t) => {
@@ -732,6 +537,14 @@ test('A13/A16/A17: hung and late source results cannot publish after cancellatio
   await g.view.request(g.direct)
   await g.view.settle([])
   await assert.rejects(g.view.build({ maxChars: 12000 }), { code: 'STALE_VIEW' })
+  const task = await g.view.inspect()
+  assert.equal(task.view, null)
+  assert.equal(task.metrics, undefined)
+  assert.equal(task.status, 'executing')
+  assert.deepEqual((await g.storage.records('s', { title: 'context:model-view' })).items, [])
+  const evidence = (await g.storage.records('s', { title: 'context:evidence' })).items
+  assert.equal(evidence.length, 1)
+  assert.equal((await g.context.read(evidence[0].ref)).text, 'version one')
 })
 
 test('journal namespaces cannot be opened as ordinary sessions', async (t) => {
@@ -790,7 +603,7 @@ test('semantic candidates respect requested forms and recheck scope before publi
   assert(revoked.gaps.some((gap) => gap.code === 'DENIED'))
 })
 
-test('weak sources cannot claim snapshot consistency and a hung verifier remains cancellable', async (t) => {
+test('weak sources cannot claim snapshots and pending completion remains cancellable', async (t) => {
   const f = await fixture(t)
   const read = f.source.read
   f.source.read = async (...args) => {
@@ -805,7 +618,7 @@ test('weak sources cannot claim snapshot consistency and a hung verifier remains
   const signal = AbortSignal.timeout(20)
   const hold = setTimeout(() => {}, 200)
   try {
-    await assert.rejects(g.view.complete({ verify: () => new Promise(() => {}) }, signal), {
+    await assert.rejects(g.view.complete(signal, { prepare: () => new Promise(() => {}) }), {
       name: 'TimeoutError',
     })
   } finally {

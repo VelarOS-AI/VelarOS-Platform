@@ -109,7 +109,8 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
   private readonly networkRequests = new Map<string, CdpNetworkRequestRecord>()
   private readonly pendingNetworkRequestIds = new Set<string>()
-  private readonly networkIdleStateListeners = new Set<() => void>()
+  private readonly networkIdleStateListeners = new Set<(reset?: boolean) => void>()
+  private closed = false
   private networkOffline = false
   private extraHTTPHeaders: Record<string, string> = {}
   private blockedURLPatterns: string[] = []
@@ -277,6 +278,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
   }
 
   public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean> {
+    if (this.closed) return false
     const idleMs = Math.min(60_000, clampPositiveInteger(options.idleMs, 500))
     const timeoutMs = Math.min(60_000, clampPositiveInteger(options.timeoutMs, 5000))
 
@@ -304,7 +306,11 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
         this.networkIdleStateListeners.delete(check)
         resolve(idle)
       }
-      const check = (): void => {
+      const check = (reset = false): void => {
+        if (reset) {
+          finish(false)
+          return
+        }
         if (this.pendingNetworkRequestIds.size > 0) {
           cancelIdleTimer()
           return
@@ -331,6 +337,8 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
   /** 会话重置/销毁时清空记录表与待结请求。 */
   public reset(): void {
+    this.closed = true
+    for (const listener of [...this.networkIdleStateListeners]) listener(true)
     this.networkRequests.clear()
     this.pendingNetworkRequestIds.clear()
   }
@@ -491,7 +499,8 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
     if (this.networkRequests.size > BrowserTuning.cdp.networkRequestRecords) {
       const oldestRequestId = this.networkRequests.keys().next().value
-      this.clearNetworkRequest(oldestRequestId)
+      // 明细过期不代表请求已经结束；在飞身份只由实际完成/失败或 reset 收束。
+      if (oldestRequestId !== undefined) this.networkRequests.delete(oldestRequestId)
     }
   }
 
@@ -612,13 +621,6 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       }
       request.finishedTimestamp = normalizeNullableNumber(event.timestamp)
     }
-  }
-
-  private clearNetworkRequest(requestId: unknown): void {
-    if (!isNonBlankString(requestId)) return
-
-    this.settlePendingNetworkRequest(requestId)
-    this.networkRequests.delete(requestId)
   }
 
   private trackPendingNetworkRequest(requestId: string): void {

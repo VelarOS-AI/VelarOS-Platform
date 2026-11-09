@@ -16,9 +16,11 @@ class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
 
   /** 创建 Google AI SDK LanguageModel 工厂。 */
   public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+    const apiKey = this.requireApiKey(config)
+    const baseURL = this.resolveBaseURL(config)
     const google = createGoogleGenerativeAI({
-      apiKey: this.requireApiKey(config),
-      baseURL: this.resolveBaseURL(config),
+      apiKey,
+      baseURL,
     })
 
     return (modelId) =>
@@ -28,7 +30,8 @@ class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
           config.provider,
           modelId,
           config.reasoningLevel,
-          this.reasoningFallback
+          this.reasoningFallback,
+          { apiKey, baseURL }
         )
       )
   }

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import { createContextRuntime } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 
@@ -189,8 +191,11 @@ test('Kernel 调用意图先落盘，失败保留已提交效果，跨重启不�
         assert.equal(writes, 4)
       } finally {
         await assert.rejects(broken.dispose(), (error) => {
-          assert.ok(error instanceof AggregateError)
+          assert.ok(error instanceof AppError)
+          assert.equal(error.code, 'UNAVAILABLE')
           assert.deepEqual(error.errors, [settlementFailure])
+          assert.equal(error.errors[0], settlementFailure)
+          assert.equal(error.cause, undefined)
           return true
         })
       }

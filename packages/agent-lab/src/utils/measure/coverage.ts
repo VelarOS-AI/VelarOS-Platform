@@ -92,10 +92,19 @@ export function summarizeRealTaskCoverage(
     })
 }
 
-/**
- * 把一份不可变归档折成真实任务覆盖认的那一种结局。
- * 宿主不许自己重新解释验证器失败或丢弃，否则两边的分母就对不上了。
- */
+/** 实际结果必须完整且唯一覆盖声明的段身份；前缀、重复和未知身份不代表完整旅程。 */
+export function hasCompleteLegCoverage(archive: RunArchive): boolean {
+  const expected = new Set(archive.journey.legs.map((leg) => leg.id))
+  const actual = new Set(archive.legs.map((leg) => leg.legId))
+  return (
+    archive.legs.length > 0 &&
+    archive.legs.length === expected.size &&
+    actual.size === archive.legs.length &&
+    [...actual].every((id) => expected.has(id))
+  )
+}
+
+/** 将真实门结论和完整旅程身份折成覆盖结局；分数与非门诊断不代替门结论。 */
 export function classifyRunArchiveOutcome(archive: RunArchive): RunArchiveOutcome {
   if (archive.drops.length > 0)
     return {
@@ -103,19 +112,22 @@ export function classifyRunArchiveOutcome(archive: RunArchive): RunArchiveOutcom
       detail: archive.drops.map((drop) => `${drop.cause}: ${drop.detail}`).join('; '),
     }
 
-  const failedCriteria = archive.legs.flatMap((leg) =>
-    leg.criteria.flatMap((criterion) =>
-      criterion.outcome.kind === 'fail'
+  const failedCriteria = archive.legs.flatMap((leg) => {
+    const definition = archive.journey.legs.find((item) => item.id === leg.legId)
+    return leg.criteria.flatMap((criterion) =>
+      criterion.outcome.kind === 'fail' &&
+      definition?.criteria.some((item) => item.id === criterion.criterionId && item.gate)
         ? [`${criterion.criterionId}: ${criterion.outcome.reason}`]
         : []
     )
-  )
+  })
   if (failedCriteria.length > 0 || archive.legs.some((leg) => leg.passed === false))
     return { outcome: 'fail', detail: failedCriteria.join('; ') || archive.manifest.exitReason }
 
-  if (archive.legs.length > 0 && archive.legs.every((leg) => leg.passed === true))
+  if (!hasCompleteLegCoverage(archive))
+    return { outcome: 'void', detail: '实际结果没有完整且唯一覆盖声明的旅程段' }
+  if (archive.legs.every((leg) => leg.passed === true))
     return { outcome: 'pass', detail: '执行门与外部真相门全部通过' }
-
   return { outcome: 'void', detail: archive.manifest.exitReason }
 }
 

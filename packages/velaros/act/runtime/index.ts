@@ -5,20 +5,21 @@ export { modulesModule } from '../system/index.js'
 export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
 export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
-export { DefaultScriptProtocolTransport, TaskMaterialLimits } from './contract/constants.js'
+export {
+  DefaultScriptProtocolTransport,
+  ObservationLimits,
+  TaskMaterialLimits,
+} from './contract/constants.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
-export type { NodeExecutionEnvironmentApi } from './contract/provides.js'
-export type { CompletionEvidenceApi } from './contract/provides.js'
 export type { MemoryConsolidationApi } from './contract/provides.js'
+export type { SessionControlLease } from './contract/provides.js'
 export type {
   ObservationReuseOptions,
   ObservationReusePort,
   ProgramCatalogValidator,
-  RuntimeModelConfiguration,
   SnapshotObservationProvider,
   VelarosContextOptions,
-  VelarosProjectOptions,
   VelarosRuntimeOptions,
 } from './contract/requires.js'
 export type { CapabilityModuleOptions } from './contract/requires.js'
@@ -30,55 +31,25 @@ export type {
 export type { AgentProfile, VelarosAgentsOptions } from './contract/requires.js'
 export type { McpModuleOptions } from './contract/requires.js'
 export type { CapabilityContext } from './contract/requires.js'
-export type { ProjectCapabilityModuleOptions } from './contract/requires.js'
-export type { ProjectImagesModuleOptions } from './contract/requires.js'
 export type { ContextMaintenanceOptions } from './contract/requires.js'
-export type {
-  CompletionArtifactSnapshot,
-  CompletionArtifactSource,
-  CompletionEvidenceDependencies,
-  CompletionEvidenceOperationContext,
-  CompletionReviewOptions,
-  CompletionValidationDependencies,
-  CompletionValidationHost,
-  CompletionValidationOperationContext,
-  CompletionValidationRequest,
-} from './contract/requires.js'
 export type { EventDeliveryOptions } from './contract/requires.js'
-export type { NodeExecutionEnvironmentOptions, RuntimeNodeOptions } from './contract/requires.js'
-export type { NodeExecutionOutput } from './contract/requires.js'
-export type { NodeCompletionValidationOptions } from './contract/requires.js'
 export type { MemoryConsolidationOptions } from './contract/requires.js'
+export type {
+  RuntimeNodeOptions,
+  RuntimeResource,
+  RuntimeSessionBinding,
+} from './contract/requires.js'
+export type { SessionControlOptions } from './contract/requires.js'
 export { createCapabilityModule } from './impl/CapabilityModules.js'
-export type { CompletionValidationApi } from './impl/CompletionValidation.js'
 export type { VelarosRuntime } from './impl/ComposedRuntime.js'
 export { createRuntime } from './impl/ComposedRuntime.js'
 export { createEventDelivery } from './impl/EventDelivery.js'
 export type { McpClientConnectionApi } from './impl/McpClientConnection.js'
 export { createMcpClientConnection } from './impl/McpClientConnection.js'
 export { createMemoryConsolidation } from './impl/MemoryConsolidation.js'
-export type { NodeCompletionValidationHostApi } from './impl/NodeCompletionValidationHost.js'
-export { createNodeCompletionValidationHost } from './impl/NodeCompletionValidationHost.js'
-export { createNodeExecutionEnvironment } from './impl/NodeExecutionEnvironment.js'
 export type { VelarosSession } from './impl/RuntimeSession.js'
-export { createProjectCapabilityModule } from './impl/StandardModules.js'
-export { createProjectCodeModule, createProjectImagesModule } from './impl/StandardModules.js'
+export { openSessionControl } from './impl/SessionControl.js'
 export { createMcpModule } from './impl/StandardModules.js'
-export type {
-  CompletionEvidenceBatch,
-  CompletionEvidenceDescriptor,
-  CompletionEvidenceFragment,
-  CompletionEvidenceInput,
-  CompletionEvidencePage,
-  CompletionEvidenceQuery,
-  CompletionExecutionEntry,
-} from './types/completion-evidence.js'
-export type {
-  CompletionValidationArtifact,
-  CompletionValidationInput,
-  CompletionValidationOutcome,
-  CompletionValidationReceipt,
-} from './types/completion-validation.js'
 export type {
   InstructionAudience,
   RuntimeInstructionBlock,
@@ -102,6 +73,10 @@ export type {
   ModelToolModelProfile,
   ModelToolPolicy,
 } from './types/model-tools.js'
+export type {
+  ObservationHistoryRequest,
+  ObservationHistorySelectionReceipt,
+} from './types/observation.js'
 export type { ScriptRetention } from './types/results.js'
 export type {
   ObservationRegistration,
@@ -140,8 +115,6 @@ export type {
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
-  ActVerificationAttemptSummary,
-  ActVerificationCostSummary,
 } from './types/trace.js'
 export type { RuntimeMetric } from './types/trace.js'
 export type { OperationRuntimeCloseOptions, PendingInvocation } from '@velaros-ai/kernel'

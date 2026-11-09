@@ -97,11 +97,7 @@ class ActRunService implements ActRunServiceApi {
             turnSignal.throwIfAborted()
             if (!restored) {
               const state = await this.options.storage.load(this.options.sessionId)
-              const applied = new Set(
-                (state?.records ?? [])
-                  .filter((r) => r.title?.startsWith('act:input-applied:'))
-                  .map((r) => r.title.slice('act:input-applied:'.length))
-              )
+              const applied = new Set<string>()
               const events: ActRunEvent[] = []
               for (const record of state?.records ?? [])
                 if (record.title === 'act:event') {
@@ -274,12 +270,28 @@ class ActRunService implements ActRunServiceApi {
     signal: AbortSignal,
     detail?: unknown
   ): Promise<unknown> {
-    if (!this.active || !this.controller || this.controller.signal.aborted)
+    const controller = this.controller
+    const runId = this.runId
+    if (!this.active || !controller || controller.signal.aborted)
       throw new AppError('UNAVAILABLE', '交互需要活动运行')
-    signal.throwIfAborted()
+    const requestSignal = AbortSignal.any([signal, controller.signal])
+    requestSignal.throwIfAborted()
+    const ref = await boundedModelOperation(
+      createContextReference(this.options.storage, this.options.sessionId),
+      requestSignal
+    )
+    requestSignal.throwIfAborted()
+    if (
+      this.closed ||
+      !this.active ||
+      this.controller !== controller ||
+      this.runId !== runId ||
+      ['completed', 'cancelled', 'failed', 'context_blocked'].includes(this.status)
+    )
+      throw new AppError('UNAVAILABLE', '交互所属运行已经结束')
     const request: ActInteraction = {
-      id: (await createContextReference(this.options.storage, this.options.sessionId)).id,
-      runId: this.runId,
+      id: ref.id,
+      runId,
       kind,
       message,
       detail,
@@ -291,12 +303,12 @@ class ActRunService implements ActRunServiceApi {
       reject = no
     })
     this.pending.set(request.id, { request, resolve, reject })
-    const waiting = boundedModelOperation(value, AbortSignal.any([signal, this.controller.signal]))
+    const waiting = boundedModelOperation(value, requestSignal)
     void waiting.catch(() => {
       Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支')
     })
     try {
-      await this.emit({ type: 'interaction', runId: this.runId, request })
+      await this.emit({ type: 'interaction', runId, request })
       return await waiting
     } finally {
       this.pending.delete(request.id)
@@ -331,8 +343,7 @@ class ActRunService implements ActRunServiceApi {
     ) as ActRunSnapshot
     if (['thinking', 'executing'].includes(value.status) || !isEmpty(value.pending))
       return { ...value, status: 'interrupted', pending: [] }
-    // 旧版本记下的 needs_reconcile 已经没有这一态：那一轮没做完就停了
-    return (value.status as string) === 'needs_reconcile' ? { ...value, status: 'failed' } : value
+    return value
   }
   public async events(after = 0, limit = AgentTuning.eventPage): Promise<readonly ActEvent[]> {
     if (

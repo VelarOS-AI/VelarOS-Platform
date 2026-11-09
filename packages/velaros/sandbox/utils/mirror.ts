@@ -27,7 +27,17 @@ import { dirname, join, posix, resolve } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
 
-import { isEmpty, isFalse, isNull, isPresent, isUndefined, readErrnoCode } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isFalse,
+  isNull,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+  readErrnoCode,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { createPlatform, currentPlatform } from '@velaros-ai/core/platform'
@@ -45,6 +55,7 @@ import type {
   SandboxApplyResult,
   SandboxDiff,
   SandboxIgnoredMode,
+  SandboxRecord,
   SandboxTextDiff,
 } from '../types/rehearsal-sandbox.js'
 
@@ -98,7 +109,10 @@ export async function assertInsideSandboxBase(path: string, base: string): Promi
 export async function sandboxDirectoryOf(base: string, sandboxId: string): Promise<string> {
   if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
   const directory = join(base, sandboxId)
-  const stats = await lstat(directory).catch(() => null)
+  const stats = await lstat(directory).catch((error: unknown) => {
+    if (readErrnoCode(error) === 'ENOENT') return null
+    throw error
+  })
   if (stats?.isSymbolicLink())
     throw new AppError('PERMISSION', `拒绝操作 ${directory}：它是符号链接，不是沙箱目录`)
   const real = await assertInsideSandboxBase(directory, base)
@@ -107,9 +121,15 @@ export async function sandboxDirectoryOf(base: string, sandboxId: string): Promi
   return real
 }
 
-/** 读一个沙箱目录下的清单；读不到、不是合法 JSON 或形状不对都报 NOT_FOUND。镜像根永远按当前目录算，清单里的绝对路径只作记录。 */
-export async function readSandboxManifest(directory: string): Promise<SandboxManifest> {
-  const raw = await readFile(join(directory, 'manifest.json'), 'utf8').catch(() => null)
+/** 读当前格式清单并核固定镜像根；已有 owner 时还须核 id/source/root，不能把盘上改写当成新的授权身份。缺席或坏格式报 NOT_FOUND，权限与 IO 错误保留。 */
+export async function readSandboxManifest(
+  directory: string,
+  expected?: SandboxRecord
+): Promise<SandboxManifest> {
+  const raw = await readFile(join(directory, 'manifest.json'), 'utf8').catch((error: unknown) => {
+    if (readErrnoCode(error) === 'ENOENT') return null
+    throw error
+  })
   if (isNull(raw))
     throw new AppError('NOT_FOUND', `${directory} 下没有沙箱清单：这个沙箱已经丢弃，或者从来没建过`)
   let parsed: unknown = null
@@ -118,17 +138,83 @@ export async function readSandboxManifest(directory: string): Promise<SandboxMan
   } catch {
     // arch-guard:silent-catch-ok 写了一半的清单按读不出来处理，下面统一报 NOT_FOUND。
   }
-  const manifest = parsed as Nullable<SandboxManifest>
   if (
-    !manifest ||
-    manifest.version !== 1 ||
-    !manifest.record ||
-    !manifest.files ||
-    !manifest.mirror
+    !isPlainObject(parsed) ||
+    parsed.version !== 2 ||
+    !isPlainObject(parsed.record) ||
+    parsed.record.id !== path.basename(directory) ||
+    !isString(parsed.record.source) ||
+    !path.isAbsolute(parsed.record.source) ||
+    !isString(parsed.record.root) ||
+    !path.isAbsolute(parsed.record.root) ||
+    !Number.isFinite(parsed.record.createdAt) ||
+    typeof parsed.record.network !== 'boolean' ||
+    typeof parsed.record.git !== 'boolean' ||
+    !isString(parsed.record.ignored) ||
+    !['link', 'copy', 'skip'].includes(parsed.record.ignored) ||
+    !Number.isSafeInteger(parsed.record.fileCount) ||
+    Number(parsed.record.fileCount) < 0 ||
+    !Number.isSafeInteger(parsed.record.bytes) ||
+    Number(parsed.record.bytes) < 0 ||
+    !isArray(parsed.record.linkedDirectories) ||
+    !parsed.record.linkedDirectories.every(manifestPath) ||
+    (parsed.record.detachedGitLinks !== undefined &&
+      (!isArray(parsed.record.detachedGitLinks) ||
+        !parsed.record.detachedGitLinks.every(manifestPath))) ||
+    !stampTable(parsed.files) ||
+    !stampTable(parsed.mirror)
   )
     throw new AppError('NOT_FOUND', `${directory} 下的沙箱清单读不出来`)
-  manifest.record.root = join(directory, 'tree')
-  return manifest
+  const manifest = parsed as unknown as SandboxManifest
+  if (manifest.record.root !== join(directory, 'tree'))
+    throw new AppError('PERMISSION', '沙箱清单的镜像根不属于当前受控目录。')
+  if (
+    expected &&
+    (manifest.record.id !== expected.id ||
+      manifest.record.source !== expected.source ||
+      manifest.record.root !== expected.root)
+  )
+    throw new AppError('PERMISSION', '沙箱清单的源目录或镜像身份与当前句柄不一致，拒绝读写。')
+  return {
+    ...manifest,
+    record: { ...manifest.record, root: join(directory, 'tree') },
+    files: Object.assign(Object.create(null), manifest.files),
+    mirror: Object.assign(Object.create(null), manifest.mirror),
+  }
+}
+
+/** 清单只接受当前生产者的根内 posix 相对路径，不能借旧路径字段越界读取。 */
+function manifestPath(value: unknown): value is string {
+  return (
+    isString(value) &&
+    value.length > 0 &&
+    !value.includes('\\') &&
+    !path.isAbsolute(value) &&
+    !path.posix.isAbsolute(value) &&
+    value.split('/').every((part) => part !== '' && part !== '.' && part !== '..')
+  )
+}
+
+/** 普通文件必须带完整内容版本；链接仅保存链接文字，拒绝旧的仅元数据清单。 */
+function stampTable(value: unknown): boolean {
+  if (!isPlainObject(value)) return false
+  return Object.entries(value).every(([entryPath, stamp]) => {
+    if (
+      !manifestPath(entryPath) ||
+      !isPlainObject(stamp) ||
+      !Number.isSafeInteger(stamp.size) ||
+      Number(stamp.size) < 0 ||
+      !Number.isFinite(stamp.mtimeMs) ||
+      !Number.isInteger(stamp.mode) ||
+      Number(stamp.mode) < 0 ||
+      Number(stamp.mode) > 0o777
+    )
+      return false
+    if (isString(stamp.link)) return stamp.contentVersion === undefined
+    if (stamp.link !== undefined || !isString(stamp.contentVersion)) return false
+    const match = /^\["file",\d+,"([a-f0-9]{64})"\]$/u.exec(stamp.contentVersion)
+    return !!match && stamp.contentVersion === JSON.stringify(['file', stamp.mode, match[1]])
+  })
 }
 
 /** 从 lstat 结果取一个条目的印记；符号链接记它指向哪。 */
@@ -143,25 +229,35 @@ export function stampOfEntry(stats: Stats, link?: string): SandboxFileStamp {
 }
 
 /** 普通文件补充流式内容版本，避免时间戳精度碰撞漏掉等长改写。 */
-async function contentStamp(path: string, stats: Stats, link?: string): Promise<SandboxFileStamp> {
+export async function contentStamp(
+  path: string,
+  stats: Stats,
+  link?: string,
+  signal?: AbortSignal
+): Promise<SandboxFileStamp> {
+  signal?.throwIfAborted()
   const stamp = stampOfEntry(stats, link)
   if (stats.isFile()) {
-    const version = await sandboxEntryVersion(path)
-    if (!isNull(version)) stamp.contentVersion = version
+    const version = await sandboxEntryVersion(path, signal)
+    if (isNull(version)) throw new AppError('NOT_FOUND', `镜像期间文件已消失：${path}`)
+    if (!version.startsWith(`["file",${stamp.mode},`))
+      throw new AppError('CONFLICT', `镜像期间文件类型或权限改变：${path}`)
+    stamp.contentVersion = version
   }
   return stamp
 }
 
-/** 两个印记是否相同：元数据及可用的内容版本都一样。 */
+/** 两个当前格式印记是否相同；普通文件的内容版本不可缺省。 */
 export function sameStamp(a: SandboxFileStamp, b: SandboxFileStamp): boolean {
   return (
     a.size === b.size &&
     a.mtimeMs === b.mtimeMs &&
     a.mode === b.mode &&
     a.link === b.link &&
-    (isUndefined(a.contentVersion) ||
-      isUndefined(b.contentVersion) ||
-      a.contentVersion === b.contentVersion)
+    (isString(a.link) ||
+      (isString(a.contentVersion) &&
+        isString(b.contentVersion) &&
+        a.contentVersion === b.contentVersion))
   )
 }
 
@@ -176,7 +272,12 @@ function isGitConfigPath(relativePath: string): boolean {
 
 /** 一个 `.git` 链接文件（内容是 `gitdir: <路径>`，git worktree 与子模块用它）指向的仓库目录是否落在 root 之外；不是链接文件返回 false。 */
 async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boolean> {
-  const head = await textFileIo.readHead(linkFile, SandboxTuning.gitLinkBytes).catch(() => null)
+  const head = await textFileIo
+    .readHead(linkFile, SandboxTuning.gitLinkBytes)
+    .catch((error: unknown) => {
+      if (readErrnoCode(error) === 'ENOENT') return null
+      throw error
+    })
   const target = head
     ? /^gitdir:[ \t]*(.+?)[ \t]*\r?$/mu.exec(head.toString('utf8'))?.[1]
     : undefined
@@ -197,6 +298,7 @@ export async function mirrorTree(
     ignored: SandboxIgnoredMode
     shouldSkip: (absolutePath: string, isDirectory: boolean) => Promise<boolean>
     limits: { files: number; bytes: number }
+    signal?: AbortSignal
   }
 ): Promise<{
   files: SandboxStampTable
@@ -206,13 +308,28 @@ export async function mirrorTree(
   gitConfigs: string[]
   detachedGitLinks: string[]
 }> {
-  const files: SandboxStampTable = {}
-  const mirror: SandboxStampTable = {}
+  const files: SandboxStampTable = Object.create(null)
+  const mirror: SandboxStampTable = Object.create(null)
   const linkedDirectories: string[] = []
   const gitConfigs: string[] = []
   const detachedGitLinks: string[] = []
   let bytes = 0
   let count = 0
+  const signal = options.signal
+  const countEntry = (size: number): void => {
+    count += 1
+    bytes += size
+    if (count > options.limits.files)
+      throw new AppError(
+        'VALIDATION',
+        `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录或忽略构建产物`
+      )
+    if (bytes > options.limits.bytes)
+      throw new AppError(
+        'VALIDATION',
+        `源目录超过 ${options.limits.bytes} 字节；换一个小一点的目录或忽略构建产物`
+      )
+  }
   // 待遍历的目录；insideCopiedIgnored 为真表示它在 ignored=copy 整个复制过来的忽略目录里，里面的东西不再按 gitignore 跳过。
   const pending: Array<{ relative: string; insideCopiedIgnored: boolean }> = [
     { relative: '', insideCopiedIgnored: false },
@@ -220,10 +337,12 @@ export async function mirrorTree(
   // 源目录里主人不可写的目录：先建成可写的好往里拷，全部拷完再改回原来的权限位。
   const lockedDirectories: Array<{ path: string; mode: number }> = []
   while (!isEmpty(pending)) {
+    signal?.throwIfAborted()
     const { relative, insideCopiedIgnored } = pending.pop()!
     const entries = await readdir(join(source, relative), { withFileTypes: true })
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))
     for (const entry of entries) {
+      signal?.throwIfAborted()
       const relativePath = relative ? posix.join(relative, entry.name) : entry.name
       const sourcePath = join(source, relativePath)
       const mirrorPath = join(root, relativePath)
@@ -232,17 +351,18 @@ export async function mirrorTree(
         !insideCopiedIgnored && (await options.shouldSkip(sourcePath, entry.isDirectory()))
       if (entry.isSymbolicLink()) {
         if (ignored) continue
+        countEntry(0)
         const target = await readlink(sourcePath)
         await symlink(target, mirrorPath)
         files[relativePath] = stampOfEntry(stats, target)
         mirror[relativePath] = stampOfEntry(await lstat(mirrorPath), target)
-        count += 1
         continue
       }
       if (entry.isDirectory()) {
         if (ignored) {
           if (options.ignored === 'skip') continue
           if (options.ignored === 'link') {
+            countEntry(0)
             await symlink(sourcePath, mirrorPath, 'dir')
             mirror[relativePath] = stampOfEntry(await lstat(mirrorPath), sourcePath)
             linkedDirectories.push(relativePath)
@@ -263,26 +383,25 @@ export async function mirrorTree(
         detachedGitLinks.push(relativePath)
         continue
       }
-      count += 1
-      bytes += stats.size
-      if (count > options.limits.files)
-        throw new AppError(
-          'VALIDATION',
-          `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录、加 .gitignore 让构建产物不进镜像，或者 ignored 别用 copy`
-        )
-      if (bytes > options.limits.bytes)
-        throw new AppError(
-          'VALIDATION',
-          `源目录超过 ${options.limits.bytes} 字节；换一个小一点的目录、加 .gitignore 让构建产物不进镜像，或者 ignored 别用 copy`
-        )
+      countEntry(stats.size)
+      signal?.throwIfAborted()
       await copyFile(sourcePath, mirrorPath, constants.COPYFILE_FICLONE)
       await chmod(mirrorPath, stats.mode & 0o777)
-      files[relativePath] = await contentStamp(sourcePath, stats)
-      mirror[relativePath] = await contentStamp(mirrorPath, await lstat(mirrorPath))
+      files[relativePath] = await contentStamp(sourcePath, stats, undefined, signal)
+      mirror[relativePath] = await contentStamp(
+        mirrorPath,
+        await lstat(mirrorPath),
+        undefined,
+        signal
+      )
       if (isGitConfigPath(relativePath)) gitConfigs.push(relativePath)
     }
   }
-  for (const { path, mode } of lockedDirectories.reverse()) await chmod(path, mode)
+  for (const { path, mode } of lockedDirectories.reverse()) {
+    signal?.throwIfAborted()
+    await chmod(path, mode)
+  }
+  signal?.throwIfAborted()
   return { files, mirror, bytes, linkedDirectories, gitConfigs, detachedGitLinks }
 }
 
@@ -309,13 +428,15 @@ export async function removeSandboxDirectory(directory: string): Promise<void> {
 }
 
 /** 遍历一棵树得到每个文件与符号链接的印记，不跟随符号链接（链接过去的忽略目录因此不会被翻）。 */
-export async function scanTree(root: string): Promise<SandboxStampTable> {
-  const files: SandboxStampTable = {}
+export async function scanTree(root: string, signal?: AbortSignal): Promise<SandboxStampTable> {
+  const files: SandboxStampTable = Object.create(null)
   const pending: string[] = ['']
   while (!isEmpty(pending)) {
+    signal?.throwIfAborted()
     const relative = pending.pop()!
     const entries = await readdir(join(root, relative), { withFileTypes: true })
     for (const entry of entries) {
+      signal?.throwIfAborted()
       const relativePath = relative ? posix.join(relative, entry.name) : entry.name
       const absolutePath = join(root, relativePath)
       const stats = await lstat(absolutePath)
@@ -324,7 +445,7 @@ export async function scanTree(root: string): Promise<SandboxStampTable> {
       } else if (entry.isDirectory()) {
         pending.push(relativePath)
       } else if (entry.isFile()) {
-        files[relativePath] = await contentStamp(absolutePath, stats)
+        files[relativePath] = await contentStamp(absolutePath, stats, undefined, signal)
       }
     }
   }
@@ -345,12 +466,17 @@ const RemoteSectionHeader = /^\s*\[\s*remote(?:\s+"(?:[^"\\]|\\.)*"|\.[^\]\s]+)\
  */
 export async function disableGitPush(
   root: string,
-  configPaths: readonly string[]
+  configPaths: readonly string[],
+  signal?: AbortSignal
 ): Promise<string[]> {
   const changed: string[] = []
   for (const relativePath of configPaths) {
+    signal?.throwIfAborted()
     const path = join(root, relativePath)
-    const config = await readFile(path, 'utf8').catch(() => null)
+    const config = await readFile(path, { encoding: 'utf8', signal }).catch((error: unknown) => {
+      if (readErrnoCode(error) === 'ENOENT') return null
+      throw error
+    })
     if (isNull(config)) continue
     const rewritten = config
       .split(/(?<=\n)/u)
@@ -361,18 +487,34 @@ export async function disableGitPush(
       })
       .join('')
     if (rewritten === config) continue
-    await writeFile(path, rewritten)
+    signal?.throwIfAborted()
+    await writeFile(path, rewritten, { signal })
     changed.push(relativePath)
   }
   return changed
 }
 
 /** 读一个文件当文本（按认出的编码严格解码，不超过上限）；二进制、认不出编码或太长就返回 null。 */
-async function readTextForDiff(path: string, maxChars: number): Promise<Nullable<string>> {
-  const stats = await lstat(path).catch(() => null)
+async function readTextForDiff(
+  path: string,
+  maxChars: number,
+  signal?: AbortSignal
+): Promise<Nullable<string>> {
+  signal?.throwIfAborted()
+  const stats = await lstatIfPresent(path)
   if (!stats?.isFile() || stats.size > maxChars * 4) return null
-  const text = textCodec.decode(await readFile(path))?.content
+  const text = textCodec.decode(await readFile(path, { signal }))?.content
   return isUndefined(text) || text.length > maxChars ? null : text
+}
+
+/** 只有 ENOENT 是缺席；权限与 IO 故障不得被解释成文件消失或空结果。 */
+async function lstatIfPresent(path: string): Promise<Nullable<Stats>> {
+  try {
+    return await lstat(path)
+  } catch (error) {
+    if (readErrnoCode(error) === 'ENOENT') return null
+    throw error
+  }
 }
 
 /** 渲染一个文本文件的统一差量并按字符预算截断。 */
@@ -398,9 +540,11 @@ export function renderTextDiff(
 export async function diffMirror(
   manifest: SandboxManifest,
   current: SandboxStampTable,
-  options: { paths?: readonly string[]; textDiffs?: boolean }
+  options: { paths?: readonly string[]; textDiffs?: boolean; signal?: AbortSignal }
 ): Promise<Omit<SandboxDiff, 'sandboxId' | 'source'>> {
   const { root, source } = manifest.record
+  const signal = options.signal
+  signal?.throwIfAborted()
   const created: string[] = []
   const modified: string[] = []
   const deleted: string[] = []
@@ -411,6 +555,7 @@ export async function diffMirror(
     return true
   }
   for (const path of Object.keys(current).sort()) {
+    signal?.throwIfAborted()
     const before = manifest.mirror[path]
     if (!before) {
       if (!noteGit(path)) created.push(path)
@@ -425,32 +570,49 @@ export async function diffMirror(
       !isPresent(after.link)
     ) {
       // 大小和权限位没变、只是时间变了：和源目录里没动过的那份比内容，内容一样不算改。只改了权限位的算修改。
-      const sourceStats = await lstat(join(source, path)).catch(() => null)
+      const sourceStats = await lstatIfPresent(join(source, path))
       const sourceBefore = manifest.files[path]
       if (
         sourceStats?.isFile() &&
         sourceBefore &&
-        sameStamp(await contentStamp(join(source, path), sourceStats), sourceBefore)
+        sameStamp(
+          await contentStamp(join(source, path), sourceStats, undefined, signal),
+          sourceBefore
+        )
       ) {
-        const [mirrorBuffer, sourceBuffer] = await Promise.all([
-          readFile(join(root, path)),
-          readFile(join(source, path)),
+        const results = await Promise.allSettled([
+          readFile(join(root, path), { signal }),
+          readFile(join(source, path), { signal }),
         ])
-        if (mirrorBuffer.equals(sourceBuffer)) continue
+        const buffers = results.map((result) => {
+          if (result.status === 'rejected') throw result.reason
+          return result.value
+        })
+        const [mirrorBuffer, sourceBuffer] = buffers
+        if (mirrorBuffer!.equals(sourceBuffer!)) continue
       }
     }
     if (!noteGit(path)) modified.push(path)
   }
   for (const path of Object.keys(manifest.mirror).sort()) {
+    signal?.throwIfAborted()
     if (path in current) continue
     if (!noteGit(path)) deleted.push(path)
   }
-  const versions = await Promise.all(
-    [...created, ...modified].map(async (path) => [
-      path,
-      await sandboxEntryVersion(join(root, path)),
-    ])
-  )
+  const versions: Array<readonly [string, Nullable<string>]> = []
+  const changed = [...created, ...modified]
+  for (let start = 0; start < changed.length; start += 16) {
+    signal?.throwIfAborted()
+    const results = await Promise.allSettled(
+      changed
+        .slice(start, start + 16)
+        .map(async (path) => [path, await sandboxEntryVersion(join(root, path), signal)] as const)
+    )
+    for (const result of results) {
+      if (result.status === 'rejected') throw result.reason
+      versions.push(result.value)
+    }
+  }
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
@@ -471,12 +633,17 @@ export async function diffMirror(
     ? []
     : [...modified, ...created].filter((path) => isNull(wanted) || wanted.has(path))
   for (const path of candidates) {
+    signal?.throwIfAborted()
     if (budget <= 0) {
       omittedDiffs += 1
       overBudget += 1
       continue
     }
-    const after = await readTextForDiff(join(root, path), RehearsalSandboxLimits.diffFileChars)
+    const after = await readTextForDiff(
+      join(root, path),
+      RehearsalSandboxLimits.diffFileChars,
+      signal
+    )
     if (isNull(after)) {
       omittedDiffs += 1
       continue
@@ -484,19 +651,23 @@ export async function diffMirror(
     let before = ''
     if (path in manifest.mirror) {
       // 修改前的内容只能从源目录里没动过的那份拿；源目录也变了就没有基线。
-      const sourceStats = await lstat(join(source, path)).catch(() => null)
+      const sourceStats = await lstatIfPresent(join(source, path))
       const sourceBefore = manifest.files[path]
       if (
         !sourceStats?.isFile() ||
         !sourceBefore ||
-        !sameStamp(await contentStamp(join(source, path), sourceStats), sourceBefore)
+        !sameStamp(
+          await contentStamp(join(source, path), sourceStats, undefined, signal),
+          sourceBefore
+        )
       ) {
         omittedDiffs += 1
         continue
       }
       const baseline = await readTextForDiff(
         join(source, path),
-        RehearsalSandboxLimits.diffFileChars
+        RehearsalSandboxLimits.diffFileChars,
+        signal
       )
       if (isNull(baseline)) {
         omittedDiffs += 1
@@ -527,6 +698,7 @@ export async function diffMirror(
       overBudget > 0 ? `其中 ${overBudget} 个是这次差量装不下了，用 paths 分几次看；` : ''
     result.note = `${omittedDiffs} 个文件没附差量（二进制、比单文件上限还大，或源目录里那份也变了没有基线）；${budgetNote}要看内容就在镜像里 run 一条 cat。`
   }
+  signal?.throwIfAborted()
   return result
 }
 
@@ -559,9 +731,11 @@ async function conflictOf(
   source: string,
   manifest: SandboxManifest,
   path: string,
-  kind: 'created' | 'modified' | 'deleted'
+  kind: 'created' | 'modified' | 'deleted',
+  signal?: AbortSignal
 ): Promise<Nullable<SandboxConflict>> {
-  const stats = await lstat(join(source, path)).catch(() => null)
+  signal?.throwIfAborted()
+  const stats = await lstatIfPresent(join(source, path))
   if (kind === 'created')
     return stats
       ? { path, reason: 'appeared', message: '源目录里这个路径现在有文件，建沙箱时没有' }
@@ -569,7 +743,7 @@ async function conflictOf(
   const before = manifest.files[path]
   if (!stats) return { path, reason: 'missing', message: '源文件在建沙箱之后被删了' }
   const link = stats.isSymbolicLink() ? await readlink(join(source, path)) : undefined
-  if (!before || !sameStamp(await contentStamp(join(source, path), stats, link), before))
+  if (!before || !sameStamp(await contentStamp(join(source, path), stats, link, signal), before))
     return { path, reason: 'changed', message: '源文件在建沙箱之后被改过；看过再决定要不要落回' }
   return null
 }
@@ -577,12 +751,14 @@ async function conflictOf(
 /** 源目录里一条相对路径的各级上级中，第一个已经存在却不是真目录的（符号链接或文件）；都是目录或还不存在时返回 null。 */
 async function blockingAncestor(
   source: string,
-  path: string
+  path: string,
+  signal?: AbortSignal
 ): Promise<Nullable<{ path: string; link: boolean }>> {
   const segments = path.split('/')
   for (let depth = 1; depth < segments.length; depth += 1) {
+    signal?.throwIfAborted()
     const ancestor = segments.slice(0, depth).join('/')
-    const stats = await lstat(join(source, ancestor)).catch(() => null)
+    const stats = await lstatIfPresent(join(source, ancestor))
     if (!stats) return null
     if (stats.isSymbolicLink()) return { path: ancestor, link: true }
     if (!stats.isDirectory()) return { path: ancestor, link: false }
@@ -591,7 +767,8 @@ async function blockingAncestor(
 }
 
 /** 条目内容与权限的快照；流式散列普通文件，链接只记录链接文字，不跟随到镜像或源根之外。 */
-async function sandboxEntryVersion(path: string): Promise<Nullable<string>> {
+async function sandboxEntryVersion(path: string, signal?: AbortSignal): Promise<Nullable<string>> {
+  signal?.throwIfAborted()
   let stats: Stats
   try {
     stats = await lstat(path)
@@ -602,18 +779,24 @@ async function sandboxEntryVersion(path: string): Promise<Nullable<string>> {
   if (stats.isSymbolicLink()) return JSON.stringify(['link', await readlink(path)])
   if (!stats.isFile()) return JSON.stringify(['other', stats.mode])
   const digest = createHash('sha256')
-  for await (const chunk of createReadStream(path)) digest.update(chunk)
+  for await (const chunk of createReadStream(path, { signal })) {
+    signal?.throwIfAborted()
+    digest.update(chunk)
+  }
+  signal?.throwIfAborted()
   return JSON.stringify(['file', stats.mode & 0o777, digest.digest('hex')])
 }
 
 /** 把镜像里的一个文件或符号链接复制到暂存路径：文件按写时复制并保留权限位，符号链接照原样再建一个。 */
-async function stageEntry(from: string, to: string): Promise<void> {
+async function stageEntry(from: string, to: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
   const stats = await lstat(from)
   if (stats.isSymbolicLink()) {
     await symlink(await readlink(from), to)
     return
   }
   await copyFile(from, to, constants.COPYFILE_FICLONE)
+  signal?.throwIfAborted()
   await chmod(to, stats.mode & 0o777)
 }
 
@@ -658,7 +841,7 @@ async function removeEmptiedDirectories(
   for (const directory of [...directories].sort(
     (a, b) => b.split('/').length - a.split('/').length
   )) {
-    if (await lstat(join(root, directory)).catch(() => null)) continue
+    if (await lstatIfPresent(join(root, directory))) continue
     await rmdir(join(source, directory)).catch(() => null)
   }
 }
@@ -674,7 +857,7 @@ export function sandboxApplyFailure(error: unknown, applied: readonly string[]):
   const listed = applied.slice(0, SandboxTuning.listedPaths).join('、')
   return new AppError(
     failure.code,
-    `已经落回了 ${applied.length} 个路径（${listed}），后面的没落：${failure.message}`,
+    `已经落回了 ${applied.length} 个路径（${listed}），操作未完成：${failure.message}`,
     error,
     { executionOutcome: 'failed', applied: [...applied] }
   )
@@ -698,6 +881,7 @@ export async function applyMirrorChanges(
 ): Promise<Omit<SandboxApplyResult, 'sandboxId'>> {
   const applied: string[] = []
   let stage: Nullable<string> = null
+  let failure: Optional<AppError>
   const { root, source } = manifest.record
   try {
     signal?.throwIfAborted()
@@ -714,7 +898,7 @@ export async function applyMirrorChanges(
     const conflicts: SandboxConflict[] = []
     // 上级路径：源目录里已经存在的每一级都必须是真目录。是这次要删的文件或链接（镜像把它换成了目录）就先删；否则落回会穿过它写到别处，算冲突。
     for (const path of [...created, ...modified]) {
-      const blocker = await blockingAncestor(source, path)
+      const blocker = await blockingAncestor(source, path, signal)
       if (!blocker) continue
       if (deletedSet.has(blocker.path)) removeFirst.add(blocker.path)
       else
@@ -740,9 +924,10 @@ export async function applyMirrorChanges(
       ['deleted', deleted],
     ] as const) {
       for (const path of list) {
+        signal?.throwIfAborted()
         // 上级要先删掉的新增路径，落回时是一个全新的目录，不看源目录里经过那个链接或文件能找到什么。
         if (kind === 'created' && underRemoved(path)) continue
-        const conflict = await conflictOf(source, manifest, path, kind)
+        const conflict = await conflictOf(source, manifest, path, kind, signal)
         if (conflict) conflicts.push(conflict)
       }
     }
@@ -755,30 +940,31 @@ export async function applyMirrorChanges(
     ])
     const sourceVersions = new Map<string, Nullable<string>>()
     for (const path of kinds.keys()) {
-      const blocker = await blockingAncestor(source, path)
+      const blocker = await blockingAncestor(source, path, signal)
       if (blocker && !removeFirst.has(blocker.path))
         throw sandboxApplyConflict([
           { path, reason: 'link', message: '源路径的上级在核对期间改变了' },
         ])
       sourceVersions.set(
         path,
-        underRemoved(path) ? null : await sandboxEntryVersion(join(source, path))
+        underRemoved(path) ? null : await sandboxEntryVersion(join(source, path), signal)
       )
     }
     const mirrorVersions = new Map<string, Nullable<string>>()
     for (const path of [...created, ...modified])
-      mirrorVersions.set(path, await sandboxEntryVersion(join(root, path)))
+      mirrorVersions.set(path, await sandboxEntryVersion(join(root, path), signal))
     // 最后一遍全量核对发生在暂存完成之后；随后每项真正 rename/unlink 前再核对本项。
     const verifySource = async (path: string, beforeRemoval = false): Promise<void> => {
-      const blocker = await blockingAncestor(source, path)
+      const current = isEmpty(applied) ? signal : undefined
+      const blocker = await blockingAncestor(source, path, current)
       if (blocker && !(beforeRemoval && removeFirst.has(blocker.path)))
         throw sandboxApplyConflict([
           { path, reason: 'link', message: '源路径的上级在暂存期间改变了' },
         ])
       if (beforeRemoval && underRemoved(path)) return
-      const conflict = await conflictOf(source, manifest, path, kinds.get(path)!)
+      const conflict = await conflictOf(source, manifest, path, kinds.get(path)!, current)
       if (conflict) throw sandboxApplyConflict([conflict])
-      if ((await sandboxEntryVersion(join(source, path))) !== sourceVersions.get(path))
+      if ((await sandboxEntryVersion(join(source, path), current)) !== sourceVersions.get(path))
         throw sandboxApplyConflict([
           { path, reason: 'changed', message: '源文件内容在暂存期间改变了' },
         ])
@@ -795,7 +981,7 @@ export async function applyMirrorChanges(
       const results = await Promise.allSettled(
         batch.map(async (path, offset) => {
           const stagedPath = join(stage!, String(start + offset))
-          await stageEntry(join(root, path), stagedPath)
+          await stageEntry(join(root, path), stagedPath, signal)
           return { path, staged: stagedPath }
         })
       )
@@ -807,12 +993,13 @@ export async function applyMirrorChanges(
     for (const path of kinds.keys()) await verifySource(path, true)
     // 只读复核互相独立；整批结束之后才允许清理或进入提交阶段。
     for (let start = 0; start < staged.length; start += 16) {
+      signal?.throwIfAborted()
       const results = await Promise.allSettled(
         staged.slice(start, start + 16).map(async (entry) => {
           const expected = mirrorVersions.get(entry.path)
           if (
-            (await sandboxEntryVersion(entry.staged)) !== expected ||
-            (await sandboxEntryVersion(join(root, entry.path))) !== expected
+            (await sandboxEntryVersion(entry.staged, signal)) !== expected ||
+            (await sandboxEntryVersion(join(root, entry.path), signal)) !== expected
           )
             throw sandboxChangedSinceDiff()
         })
@@ -822,7 +1009,10 @@ export async function applyMirrorChanges(
       }
     }
     if (fingerprint) {
-      const current = await diffMirror(manifest, await scanTree(root), { textDiffs: false })
+      const current = await diffMirror(manifest, await scanTree(root, signal), {
+        textDiffs: false,
+        signal,
+      })
       if (current.fingerprint !== fingerprint) throw sandboxChangedSinceDiff()
     }
     signal?.throwIfAborted()
@@ -850,8 +1040,23 @@ export async function applyMirrorChanges(
     await removeEmptiedDirectories(root, source, deleted)
     return { created, modified, deleted, skippedGit }
   } catch (error) {
-    throw sandboxApplyFailure(error, applied)
+    failure = sandboxApplyFailure(error, applied)
+    throw failure
   } finally {
-    if (stage) await rm(stage, { recursive: true, force: true })
+    if (stage) {
+      await rm(stage, { recursive: true, force: true }).catch((error: unknown) => {
+        // 清理失败也必须保留已提交路径；已有落回错误时同时保留原因，不让 finally 覆盖它。
+        const cleanupError = AppError.from(error)
+        const outcome = failure ?? sandboxApplyFailure(cleanupError, applied)
+        throw new AppError(
+          outcome.code,
+          failure
+            ? `${outcome.message}；暂存目录清理失败：${cleanupError.message}`
+            : `${outcome.message}（暂存目录清理失败）`,
+          outcome,
+          { ...outcome.context, cleanupError, stagingDirectory: stage }
+        )
+      })
+    }
   }
 }

@@ -6,10 +6,8 @@ import { join } from 'node:path'
 import { createContextRuntime, createContextView } from '../../packages/context/dist/index.js'
 import { localContextStorage } from '../../packages/context/dist/node.js'
 import { ContextMemory } from '../../packages/velaros/dist/act/runtime/impl/ContextMemory.js'
-import {
-  memoryReference,
-  noteEntry,
-} from '../../packages/velaros/dist/act/runtime/utils/context-memory.js'
+import { memoryReference } from '../../packages/velaros/dist/act/runtime/utils/context-memory.js'
+import { noteEntry } from '../../packages/velaros/dist/act/runtime/utils/session-notes.js'
 
 // 复现修复前的目录授权与材料召回路径，和当前路径使用同一数据库及相同返回值。
 async function legacyNotes(storage) {

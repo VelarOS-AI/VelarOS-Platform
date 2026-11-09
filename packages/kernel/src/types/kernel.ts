@@ -112,7 +112,7 @@ export interface KernelModuleHealth {
   readonly status: KernelModuleHealthStatus
   /** 给人看的一句话；不健康时说清楚哪里不对。 */
   readonly message?: string
-  /** 诊断细节，随模块自己定义。 */
+  /** 模块定义的 JSON 诊断细节；宿主采样时复制并递归冻结，非法 JSON 标记为不健康。 */
   readonly details?: Readonly<Record<string, unknown>>
 }
 

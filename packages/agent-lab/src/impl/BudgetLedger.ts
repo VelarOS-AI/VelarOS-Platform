@@ -9,19 +9,19 @@ import { collectToolCalls } from '../utils/measure/normalize.js'
 /**
  * 一本用量账本。
  *
- * **口径**：墙钟从这本账开张时算起，工具调用与 token 取这段时间里驱动报上来的累计值。
- * 整程一本（旅程开头开），每段再开一本（`beginLeg`）：段预算拿本段账本比，整程预算拿整程账本比。
- * 两者混用就是「第二段刚开始就被整程时间判成超预算」的来源，而驱动那边的等待本来就是按本段计时的。
+ * 观测是会话累计快照，段账必须拿真实开段基线求差；原生用量只累计当前 send 段，整程按段相加。
+ * 两个来源测的是同一批调用，取已知较大者而不相加。基线或某段原生用量未知时保持未知。
+ * 墙钟归本账时钟，完成段数只由运行器登记，不把驱动报的段数再加一次。
  * 账本是包内的东西，不出包。
  */
 export interface BudgetLedgerApi {
-  /** 开一本只记本段的账本：墙钟从现在起算，段预算按它判。 */
-  beginLeg: () => BudgetLedgerApi
+  /** 用发送前的真实观测开本段账；墙钟仍从实际开段时刻算起。 */
+  beginLeg: (baseline: Observation, startedAt: number) => BudgetLedgerApi
   /** 记一次观测：工具调用按 `unique-tool-call` 数，token 取观测里的总量，墙钟刷到现在。 */
   observe: (observation: Observation) => void
-  /** 记一次驱动自己报的用量：每一维都取「已知的较大者」，驱动报不出来的维度不覆盖已有的。 */
+  /** 记当前段的原生累计用量；重复采样不重复收费，未知不当成零。 */
   observeDriverUsage: (usage: BudgetUsage) => void
-  /** 记一段跑完：墙钟刷到现在，段数加一。 */
+  /** 结清当前段的原生用量，完成段数只加一次。 */
   finishLeg: () => void
   /** 取这一刻的用量快照；墙钟总是刷到现在。 */
   snapshot: () => BudgetUsage
@@ -30,60 +30,105 @@ export interface BudgetLedgerApi {
 }
 
 export class BudgetLedger implements BudgetLedgerApi {
-  private readonly startedAt: number
+  private readonly baseline: {
+    readonly toolCallIds: ReadonlySet<string> | null
+    readonly tokens: number | null
+  } | null
 
-  private currentUsage: BudgetUsage
+  private observedToolCalls: number | null = null
+
+  private observedTokens: number | null = null
+
+  private nativeUsage: Pick<BudgetUsage, 'toolCalls' | 'workingMs' | 'tokens'> | null = null
+
+  // 尚无已结束段时的空和；不能拿它替代缺失的当前段读数。
+  private finishedNativeUsage: Pick<BudgetUsage, 'toolCalls' | 'workingMs' | 'tokens'> = {
+    toolCalls: 0,
+    workingMs: 0,
+    tokens: 0,
+  }
+
+  private completedLegs = 0
 
   constructor(
     private readonly now: () => number,
-    startedAt = now()
+    private readonly startedAt = now(),
+    baseline: Observation | null = null
   ) {
-    this.startedAt = startedAt
-    this.currentUsage = { toolCalls: null, workingMs: null, wallClockMs: 0, tokens: null, legs: 0 }
+    this.baseline =
+      baseline === null
+        ? null
+        : {
+            toolCallIds:
+              baseline.coverage.turns === 'full'
+                ? new Set(collectToolCalls(baseline).map((call) => call.id))
+                : null,
+            tokens: baseline.usage?.totalTokens ?? null,
+          }
   }
 
-  public beginLeg(): BudgetLedgerApi {
-    return new BudgetLedger(this.now, this.now())
+  public beginLeg(baseline: Observation, startedAt: number): BudgetLedgerApi {
+    return new BudgetLedger(this.now, startedAt, baseline)
   }
 
   public observe(observation: Observation): void {
-    const calls =
-      observation.coverage.turns === 'none' ? null : collectToolCalls(observation).length
-    const tokens = observation.usage?.totalTokens ?? null
-    this.currentUsage = {
-      ...this.currentUsage,
-      toolCalls: maximumNullable(this.currentUsage.toolCalls, calls),
-      wallClockMs: Math.max(0, this.now() - this.startedAt),
-      tokens: maximumNullable(this.currentUsage.tokens, tokens),
+    let calls: number | null = null
+    if (observation.coverage.turns !== 'none') {
+      const toolCalls = collectToolCalls(observation)
+      if (this.baseline === null) calls = toolCalls.length
+      else {
+        const baselineIds = this.baseline.toolCallIds
+        if (baselineIds !== null)
+          calls = toolCalls.filter((call) => !baselineIds.has(call.id)).length
+      }
     }
+    let tokens = observation.usage?.totalTokens ?? null
+    if (this.baseline !== null) {
+      if (this.baseline.tokens === null || tokens === null) tokens = null
+      else if (tokens < this.baseline.tokens) throw new Error('会话累计 token 不能小于开段基线')
+      else tokens -= this.baseline.tokens
+    }
+    this.observedToolCalls = maximumNullable(this.observedToolCalls, calls)
+    this.observedTokens = maximumNullable(this.observedTokens, tokens)
   }
 
   public observeDriverUsage(usage: BudgetUsage): void {
-    this.currentUsage = {
-      toolCalls: maximumNullable(this.currentUsage.toolCalls, usage.toolCalls),
-      workingMs: maximumNullable(this.currentUsage.workingMs, usage.workingMs),
-      wallClockMs: Math.max(this.currentUsage.wallClockMs ?? 0, usage.wallClockMs ?? 0),
-      tokens: maximumNullable(this.currentUsage.tokens, usage.tokens),
-      legs: Math.max(this.currentUsage.legs, usage.legs),
+    this.nativeUsage = {
+      toolCalls: maximumNullable(this.nativeUsage?.toolCalls ?? null, usage.toolCalls),
+      workingMs: maximumNullable(this.nativeUsage?.workingMs ?? null, usage.workingMs),
+      tokens: maximumNullable(this.nativeUsage?.tokens ?? null, usage.tokens),
     }
   }
 
   public finishLeg(): void {
-    this.currentUsage = {
-      ...this.currentUsage,
-      wallClockMs: Math.max(0, this.now() - this.startedAt),
-      legs: this.currentUsage.legs + 1,
+    this.finishedNativeUsage = {
+      toolCalls: this.nativeUsage === null ? null : this.nativeTotal('toolCalls'),
+      workingMs: this.nativeUsage === null ? null : this.nativeTotal('workingMs'),
+      tokens: this.nativeUsage === null ? null : this.nativeTotal('tokens'),
     }
+    this.nativeUsage = null
+    this.completedLegs += 1
   }
 
   public snapshot(): BudgetUsage {
     return {
-      ...this.currentUsage,
-      wallClockMs: Math.max(this.currentUsage.wallClockMs ?? 0, this.now() - this.startedAt),
+      toolCalls: maximumNullable(this.observedToolCalls, this.nativeTotal('toolCalls')),
+      workingMs: this.nativeTotal('workingMs'),
+      wallClockMs: Math.max(0, this.now() - this.startedAt),
+      tokens: maximumNullable(this.observedTokens, this.nativeTotal('tokens')),
+      legs: this.baseline === null ? this.completedLegs : 1,
     }
   }
 
   public exceeded(limit: Budget): BudgetLimit | null {
     return exceededBudget(this.snapshot(), limit)
+  }
+
+  /** 已结束段与当前段的同源用量求和；缺失任一段就不能声称知道整程总量。 */
+  private nativeTotal(field: 'toolCalls' | 'workingMs' | 'tokens'): number | null {
+    const completed = this.finishedNativeUsage[field]
+    if (this.nativeUsage === null) return this.completedLegs === 0 ? null : completed
+    const current = this.nativeUsage[field]
+    return completed === null || current === null ? null : completed + current
   }
 }

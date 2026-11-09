@@ -5,11 +5,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
-
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 async function submit(session, input) {
   const events = []
@@ -23,7 +21,6 @@ test('INV-26 continue keeps task identity and accounting; new archives the previ
   const frames = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     context: { maintenance: false },
     model: {
@@ -75,7 +72,6 @@ test('inputs of earlier runs stay in the task as context and are marked earlier'
   const frames = []
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     context: { maintenance: false },
     model: {
@@ -106,7 +102,6 @@ test('inputs of earlier runs stay in the task as context and are marked earlier'
 test('unknown effects do not stop the user from starting a new task', async (t) => {
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [
       {
         binding: {
@@ -150,125 +145,139 @@ test('unknown effects do not stop the user from starting a new task', async (t) 
   assert.notEqual((await session.view.inspect()).id, task.id)
 })
 
-test('uncertain observation effects pause immediately and are never retried automatically', async (t) => {
-  let dispatches = 0
-  const frames = []
-  const collect = () => {
-    dispatches++
-    throw Error('transport lost after dispatch')
-  }
-  const module = {
-    binding: { moduleId: 'test:observe', instanceId: 'one', generation: 1, schemaRevision: '1' },
-    summary: 'constrained command',
-    operations: {
-      read: {
-        summary: 'collect',
-        input: { type: 'null' },
-        output: { type: 'null' },
-        effects: 'write',
-        allowedModes: ['observe', 'execute'],
-        observe: collect,
-        run: collect,
+test(
+  'uncertain observation effects pause immediately and are never retried automatically',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Dispatching an observation requires the default read-only process backend.'
+        : false,
+  },
+  async (t) => {
+    let dispatches = 0
+    const frames = []
+    const collect = () => {
+      dispatches++
+      throw Error('transport lost after dispatch')
+    }
+    const module = {
+      binding: { moduleId: 'test:observe', instanceId: 'one', generation: 1, schemaRevision: '1' },
+      summary: 'constrained command',
+      operations: {
+        read: {
+          summary: 'collect',
+          input: { type: 'null' },
+          output: { type: 'null' },
+          effects: 'write',
+          allowedModes: ['observe', 'execute'],
+          observe: collect,
+          run: collect,
+        },
       },
-    },
-  }
-  const runtime = await createRuntime({
-    storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
-    modules: [module],
-    context: { maintenance: false },
-    model: {
-      id: 'uncertain',
-      limits,
-      estimate,
-      async *stream(request) {
-        frames.push(JSON.parse(request.materials[0].text))
-        yield* done(request)
+    }
+    const runtime = await createRuntime({
+      storage: localContextStorage({ path: ':memory:' }),
+      modules: [module],
+      context: { maintenance: false },
+      model: {
+        id: 'uncertain',
+        limits,
+        estimate,
+        async *stream(request) {
+          frames.push(JSON.parse(request.materials[0].text))
+          yield* done(request)
+        },
       },
-    },
-  })
-  t.after(() => runtime.close())
-  const session = await runtime.openSession('root')
-  await session.observe({ source: "import {read} from 'test:observe';await read();" })
-  assert.equal((await submit(session, 'Inspect')).at(-1).status, 'completed')
-  assert.equal(dispatches, 1)
-  assert.equal(frames[0].partitions.observation.health.status, 'paused')
-  await submit(session, 'Continue inspection')
-  assert.equal(dispatches, 1)
-  assert((await session.view.inspect()).mandatory.some((item) => item.effect === 'unknown'))
-})
+    })
+    t.after(() => runtime.close())
+    const session = await runtime.openSession('root')
+    await session.observe({ source: "import {read} from 'test:observe';await read();" })
+    assert.equal((await submit(session, 'Inspect')).at(-1).status, 'completed')
+    assert.equal(dispatches, 1)
+    assert.equal(frames[0].partitions.observation.health.status, 'paused')
+    await submit(session, 'Continue inspection')
+    assert.equal(dispatches, 1)
+    assert((await session.view.inspect()).mandatory.some((item) => item.effect === 'unknown'))
+  }
+)
 
-test('INV-27 repeated observer failures pause across restart; a substantive source update resumes collection', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'act-health-'))
-  const path = join(root, 'state.sqlite')
-  let reads = 0
-  let fail = true
-  const frames = []
-  const options = () => ({
-    storage: localContextStorage({ path }),
-    runner: nodeSubprocessCodeRunner,
-    context: { maintenance: false },
-    modules: [
-      {
-        binding: { moduleId: 'test:read', instanceId: 'one', generation: 1, schemaRevision: '1' },
-        summary: 'read',
-        operations: {
-          read: {
-            summary: 'read',
-            input: { type: 'null' },
-            output: { type: 'integer' },
-            effects: 'none',
-            run: () => {
-              reads++
-              if (fail) throw Error('unavailable')
-              return 7
+test(
+  'INV-27 repeated observer failures pause across restart; a substantive source update resumes collection',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Observer RPC failure and recovery require the default read-only process backend.'
+        : false,
+  },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), 'act-health-'))
+    const path = join(root, 'state.sqlite')
+    let reads = 0
+    let fail = true
+    const frames = []
+    const options = () => ({
+      storage: localContextStorage({ path }),
+      context: { maintenance: false },
+      modules: [
+        {
+          binding: { moduleId: 'test:read', instanceId: 'one', generation: 1, schemaRevision: '1' },
+          summary: 'read',
+          operations: {
+            read: {
+              summary: 'read',
+              input: { type: 'null' },
+              output: { type: 'integer' },
+              effects: 'none',
+              run: () => {
+                reads++
+                if (fail) throw Error('unavailable')
+                return 7
+              },
             },
           },
         },
+      ],
+      model: {
+        id: 'health',
+        limits,
+        estimate,
+        async *stream(request) {
+          frames.push(JSON.parse(request.materials[0].text))
+          yield* done(request)
+        },
       },
-    ],
-    model: {
-      id: 'health',
-      limits,
-      estimate,
-      async *stream(request) {
-        frames.push(JSON.parse(request.materials[0].text))
-        yield* done(request)
-      },
-    },
-  })
-  let runtime = await createRuntime(options())
-  let session = await runtime.openSession('root')
-  t.after(async () => {
+    })
+    let runtime = await createRuntime(options())
+    let session = await runtime.openSession('root')
+    t.after(async () => {
+      await runtime.close()
+      await rm(root, { recursive: true, force: true })
+    })
+    const source =
+      "import {output} from 'velaros';import {read} from 'test:read';output(await read(),{key:'state'});"
+    await session.observe({ source })
+    for (let i = 0; i < 3; i++) await submit(session, 'Inspect')
+    assert.equal(reads, 3)
+    assert.equal(frames.at(-1).partitions.observation.health.status, 'paused')
     await runtime.close()
-    await rm(root, { recursive: true, force: true })
-  })
-  const source =
-    "import {output} from 'velaros';import {read} from 'test:read';output(await read(),{key:'state'});"
-  await session.observe({ source })
-  for (let i = 0; i < 3; i++) await submit(session, 'Inspect')
-  assert.equal(reads, 3)
-  assert.equal(frames.at(-1).partitions.observation.health.status, 'paused')
-  await runtime.close()
-  runtime = await createRuntime(options())
-  session = await runtime.openSession('root')
-  await submit(session, 'Inspect again')
-  assert.equal(reads, 3)
-  assert.equal(frames.at(-1).partitions.observation.health.status, 'paused')
-  fail = false
-  await session.observe({ source: `${source}\n// repaired data source` })
-  await submit(session, 'Inspect fixed source')
-  assert.equal(reads, 4)
-  assert.equal(frames.at(-1).partitions.observation.health.status, 'healthy')
-})
+    runtime = await createRuntime(options())
+    session = await runtime.openSession('root')
+    await submit(session, 'Inspect again')
+    assert.equal(reads, 3)
+    assert.equal(frames.at(-1).partitions.observation.health.status, 'paused')
+    fail = false
+    await session.observe({ source: `${source}\n// repaired data source` })
+    await submit(session, 'Inspect fixed source')
+    assert.equal(reads, 4)
+    assert.equal(frames.at(-1).partitions.observation.health.status, 'healthy')
+  }
+)
 
 test('completed task snapshot keeps accepted turns and a fixed archive boundary', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
-    agents: false,
-    search: false,
+
     context: { maintenance: false },
     model: {
       id: 'snapshot',

@@ -10,7 +10,7 @@ import type { ShellResolverApi } from '../impl/local/ShellResolver'
 import { createShellEnvironment } from '../local'
 import type { ResolvedShell } from '../types/local'
 import { parseLoginEnvironment } from '../utils/environment'
-import { isRegularFile } from '../utils/shells'
+import { isRegularFile, toShellDescriptor } from '../utils/shells'
 
 /** 用显式环境形成固定的已自检描述，供代次与关闭测试。 */
 function resolved(env: NodeJS.ProcessEnv): ResolvedShell {
@@ -21,6 +21,7 @@ function resolved(env: NodeJS.ProcessEnv): ResolvedShell {
     name: 'CMD',
     readiness: 'ready',
     version: '1',
+    args: ['/d'],
     recommendation: null,
   }
 }
@@ -57,6 +58,31 @@ test('shell candidate probes distinguish files, directories and expected missing
     expect(isRegularFile(join(directory, 'missing'))).toBe(false)
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('shell snapshots own args and recommendation independently of the cached selection', async () => {
+  const cached = resolved({ PATH: '/owned' })
+  cached.recommendation = {
+    code: 'INSTALL_GIT_BASH',
+    message: 'original',
+    url: 'https://example.test',
+  }
+  const shells = resolver(async () => ({ env: {}, revision: '', refreshed: true }))
+  shells.resolveReady = async () => cached
+  const environment = new ShellEnvironment({ platform: 'win32' }, shells)
+  try {
+    const first = await environment.resolveShell()
+    first.args.push('caller')
+    first.recommendation!.message = 'caller'
+    const descriptor = toShellDescriptor(await environment.resolveShell())
+    descriptor.args.push('descriptor')
+    descriptor.recommendation!.message = 'descriptor'
+    expect((await environment.resolveShell()).args).toEqual(['/d'])
+    expect(cached.args).toEqual(['/d'])
+    expect(cached.recommendation.message).toBe('original')
+  } finally {
+    await environment.dispose()
   }
 })
 

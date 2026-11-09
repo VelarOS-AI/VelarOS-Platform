@@ -15,6 +15,7 @@ import {
 } from '@velaros-ai/core'
 import { textCodec } from '@velaros-ai/core/text-files'
 
+import { ProjectTransactionStateFormat } from '../../contract/constants.js'
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 import type {
   ProjectTransactionFileState,
@@ -27,24 +28,6 @@ import { ProjectTuning } from '../tuning.js'
 
 import { isDeletePatch } from './patch-chain.js'
 import { createsMissingFile } from './patch-ownership.js'
-
-/**
- * 事务状态文件的格式版本。旧的两版只读不写，读回时单槽位的 pending 归一成只有一项的 pendings。
- * legacy：没有字节计划、未完成操作只有一个槽位；bytePlans：加了字节计划，仍是单槽位；current：未完成操作按事务号并存（pendings）。
- */
-export const TransactionStateFormatVersions = Object.freeze({
-  legacy: 1,
-  bytePlans: 2,
-  current: 3,
-} as const)
-
-/** 这一版格式认不认识字节计划。 */
-function supportsBytePlans(formatVersion: unknown): boolean {
-  return (
-    formatVersion === TransactionStateFormatVersions.bytePlans ||
-    formatVersion === TransactionStateFormatVersions.current
-  )
-}
 
 /** 按事务状态文件损坏抛 TRANSACTION_RECOVERY_CONFLICT：message 是哪一项没通过（同时放进 details.stateValidationFailure），建议先保全两侧再人工恢复。 */
 export function invalidTransactionState(message: string): never {
@@ -393,17 +376,9 @@ export function assertTransactionStateSnapshot(
   root: string
 ): asserts value is ProjectTransactionStateSnapshot {
   if (!isRecord(value)) invalidTransactionState('root object')
-  if (!Object.values(TransactionStateFormatVersions).includes(value.formatVersion as never))
+  if (value.formatVersion !== ProjectTransactionStateFormat.version)
     invalidTransactionState('format version')
-  if (!supportsBytePlans(value.formatVersion) && !isUndefined(value.bytePlans))
-    invalidTransactionState('byte plans require state version 2')
-  if (
-    value.formatVersion !== TransactionStateFormatVersions.current &&
-    !isUndefined(value.pendings)
-  )
-    invalidTransactionState('pending operations require state version 3')
-  if (value.formatVersion === TransactionStateFormatVersions.current && !isUndefined(value.pending))
-    invalidTransactionState('state version 3 records pending operations in pendings')
+  if (!isUndefined(value.pending)) invalidTransactionState('pending operations must use pendings')
   if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0)
     invalidTransactionState('revision')
   if (value.root !== root) invalidTransactionState('project root mismatch')
@@ -432,12 +407,6 @@ export function assertTransactionStateSnapshot(
       invalidTransactionState('duplicate projection transaction id')
     projectionIds.add(projection.transactionId)
   }
-  const pending = value.pending
-  if (!isUndefined(pending)) {
-    assertPending(pending)
-    assertPendingAgainstTransactions(pending, transactionsById)
-  }
-
   const pendings = value.pendings
   if (!isUndefined(pendings)) {
     if (!isArray(pendings) || pendings.length > ProjectTuning.persistence.stateTransactions)
@@ -451,15 +420,6 @@ export function assertTransactionStateSnapshot(
       assertPendingAgainstTransactions(entry, transactionsById)
     }
   }
-}
-
-/** 读回的状态归一成现行形状：旧格式的单槽位 pending 变成只有一项的 pendings，调用方只看 pendings。 */
-export function normalizeTransactionState(
-  value: ProjectTransactionStateSnapshot
-): ProjectTransactionStateSnapshot {
-  if (isUndefined(value.pending)) return value
-  const { pending, ...rest } = value
-  return { ...rest, pendings: [pending] }
 }
 
 /** 深拷贝一份事务状态（JSON 往返）：进出状态文件都复制，外面改不到里面存的那份。 */

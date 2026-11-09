@@ -8,7 +8,6 @@ export interface ContextModelRequestIdentity {
 export interface ContextModelBudgetRequest {
   readonly role: 'main' | 'context'
   readonly tokens: number
-  readonly hourStart: number
   readonly status: 'reserved' | 'dispatched' | 'settled' | 'released' | 'transferred'
   /** 收尾占位原子转交给实际请求，原身份仍可用于取消清理。 */
   readonly transferredTo?: string
@@ -16,19 +15,8 @@ export interface ContextModelBudgetRequest {
   readonly outputTokens?: number
 }
 
-/** 旧聚合记录无法恢复单次身份，继续按保守总量占位。 */
-export interface ContextLegacyModelUsage {
-  readonly mainCalls: number
-  readonly contextCalls: number
-  readonly reservedTokens: number
-  readonly inputTokens: number
-  readonly outputTokens: number
-  readonly unmeasuredCalls: number
-}
-
 /** 同任务 CAS 中的请求账本；不作为模型提示材料。 */
 export interface ContextModelBudgetState {
-  readonly legacy: ContextLegacyModelUsage
   readonly requests: Readonly<Record<string, ContextModelBudgetRequest>>
 }
 
@@ -38,13 +26,13 @@ export type ContextModelBudgetUpdate =
       readonly type: 'reserve'
       readonly role: 'main' | 'context'
       readonly tokens: number
-      readonly request?: ContextModelRequestIdentity
+      readonly request: ContextModelRequestIdentity
     }
   | {
       readonly type: 'release'
       readonly role: 'main' | 'context'
       readonly tokens: number
-      readonly request?: ContextModelRequestIdentity
+      readonly request: ContextModelRequestIdentity
       /** 派发登记链失败，宿主确认实际驱动尚未开始；用于回收部分祖先登记。 */
       readonly confirmedNotDispatched?: boolean
     }
@@ -58,5 +46,5 @@ export type ContextModelBudgetUpdate =
       readonly type: 'usage'
       readonly inputTokens: number
       readonly outputTokens: number
-      readonly request?: ContextModelRequestIdentity
+      readonly request: ContextModelRequestIdentity
     }

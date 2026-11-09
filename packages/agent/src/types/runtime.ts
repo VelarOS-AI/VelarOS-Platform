@@ -4,10 +4,12 @@ import type { ActChildSession } from '../contract/requires.js'
 
 import type { ActImage, ActInteraction } from './act.js'
 
-/** 已接受出线的快照；图片只在当前投影仍授权展示时复用。 */
+/** 已接受出线的稳定前缀，不含动态观察和协议尾区；图片只在当前投影仍授权展示时复用。 */
 export interface ActRequestTranscript {
   readonly logical: readonly ModelHistoryMessage[]
+  /** 编码器标明可保留的完整消息，不能从消息正文截取。 */
   readonly sent: readonly ModelHistoryMessage[]
+  /** 每个逻辑条目在 sent 中的 canonical 消息位置，不是供应商展开后的工具行号。 */
   readonly positions: readonly number[]
   readonly body: string
   readonly images: readonly ActImage[]

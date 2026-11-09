@@ -10,7 +10,7 @@ import type {
 import type { ContextStorage } from '../contract/requires.js'
 import type { ContextState } from '../types/context.js'
 import { journalKey, journalState } from '../utils/journal.js'
-import { emptyContextMetadata, emptyContextState } from '../utils/state.js'
+import { emptyContextMetadata } from '../utils/state.js'
 
 /** 用上下文对象存储兑现 Kernel 的持久化调用契约。 */
 export interface ContextInvocationJournalApi {
@@ -127,17 +127,12 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
   public async list(sessionId: string, executionId?: string): Promise<readonly InvocationRecord[]> {
     const key = JSON.stringify(['kernel-invocation-index', sessionId])
     const entries = []
-    if (this.storage.records && executionId) {
-      // 新记录按 executionId 命中索引；旧空标题记录仍按原回执核对，迁移不中断。
-      for (const title of [executionId, '']) {
-        let after: Nullable<number> = 0
-        do {
-          const page = await this.storage.records(key, { title, after })
-          entries.push(...page.items)
-          after = page.nextAfter
-        } while (!isNull(after))
-      }
-    } else entries.push(...((await this.storage.load(key))?.records ?? []))
+    let after: Nullable<number> = 0
+    do {
+      const page = await this.storage.records(key, { title: executionId, after })
+      entries.push(...page.items)
+      after = page.nextAfter
+    } while (!isNull(after))
     const records: InvocationRecord[] = []
     for (const entry of entries) {
       const record = await this.read(sessionId, entry.ref.id)
@@ -150,38 +145,10 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
   private async index(sessionId: string, id: string, executionId: string): Promise<void> {
     const key = JSON.stringify(['kernel-invocation-index', sessionId])
     for (let retry = 0; retry < 32; retry++) {
-      if (
-        this.storage.loadMetadata &&
-        this.storage.compareAndSwapMetadata &&
-        this.storage.records
-      ) {
-        const state = (await this.storage.loadMetadata(key)) ?? emptyContextMetadata()
-        if (!isEmpty((await this.storage.records(key, { refId: id, limit: 1 })).items)) return
-        const entry = {
-          ref: { sessionId, id },
-          kind: 'event' as const,
-          title: executionId,
-          objectId: '',
-          chars: 0,
-          sources: [],
-          createdAt: new Date().toISOString(),
-        }
-        if (
-          await this.storage.compareAndSwapMetadata(
-            key,
-            state.version,
-            { ...state, version: state.version + 1 },
-            [entry]
-          )
-        )
-          return
-        continue
-      }
-      const state = (await this.storage.load(key)) ?? emptyContextState()
-      if (state.records.some((record) => record.ref.id === id)) return
+      const state = (await this.storage.loadMetadata(key)) ?? emptyContextMetadata()
+      if (!isEmpty((await this.storage.records(key, { refId: id, limit: 1 })).items)) return
       const entry = {
         ref: { sessionId, id },
-        sequence: state.records.length + 1,
         kind: 'event' as const,
         title: executionId,
         objectId: '',
@@ -190,11 +157,12 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
         createdAt: new Date().toISOString(),
       }
       if (
-        await this.storage.compareAndSwap(key, state.version, {
-          ...state,
-          version: state.version + 1,
-          records: [...state.records, entry],
-        })
+        await this.storage.compareAndSwapMetadata(
+          key,
+          state.version,
+          { ...state, version: state.version + 1 },
+          [entry]
+        )
       )
         return
     }

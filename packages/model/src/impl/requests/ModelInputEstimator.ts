@@ -12,7 +12,7 @@ export interface ModelInputEstimatorApi {
   /** 计量将发送的同源文本，保留图片、字节分项和独立不透明容量。 */
   prepare(
     request: ModelTurnRequest,
-    restored: { messages: readonly ModelMessage[]; opaqueTokens: number }
+    restored: { messages: readonly ModelMessage[]; opaqueTokens: number; currentFrom?: number }
   ): Promise<ModelInputSample>
   /** 只采纳这一代无图片请求的实际输入用量。 */
   record(sample: ModelInputSample, inputTokens: number): void
@@ -32,7 +32,7 @@ export class ModelInputEstimator implements ModelInputEstimatorApi {
 
   public async prepare(
     request: ModelTurnRequest,
-    restored: { messages: readonly ModelMessage[]; opaqueTokens: number }
+    restored: { messages: readonly ModelMessage[]; opaqueTokens: number; currentFrom?: number }
   ): Promise<ModelInputSample> {
     const generation = this.generation
     if (this.encoding && !this.counter)

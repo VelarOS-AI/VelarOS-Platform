@@ -74,7 +74,7 @@ export function buildDefaultResourceRoots(resources: ComputerResourcePort): stri
 }
 
 /**
- * 平台包里自包含 Python 的路径，兼容已有 venv 布局；显式 `VELAROS_COMPUTER_PYTHON` 可覆盖。
+ * 平台包里当前自包含 Python 的路径；显式 `VELAROS_COMPUTER_PYTHON` 可覆盖。
  *
  * 自包含解释器是执行边界：回落到系统 Python 意味着要靠 `pip install` 自行补依赖，
  * 那等于让智能体往用户机器上装东西，解释器与第三方包的来源完全不可控。
@@ -90,12 +90,7 @@ export function resolvePythonCommand(
     platform === 'win32'
       ? join(packageRoot, 'python', 'python.exe')
       : join(packageRoot, 'python', 'bin', 'python3')
-  if (existsSync(portablePython)) return portablePython
-  const venvPython =
-    platform === 'win32'
-      ? join(packageRoot, 'venv', 'Scripts', 'python.exe')
-      : join(packageRoot, 'venv', 'bin', 'python')
-  return existsSync(venvPython) ? venvPython : null
+  return existsSync(portablePython) ? portablePython : null
 }
 
 /** 读平台包的版本号；读不到就给占位值，绝不因此把「已安装」判成「未安装」。 */

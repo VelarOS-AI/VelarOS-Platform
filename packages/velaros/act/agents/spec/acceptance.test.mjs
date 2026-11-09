@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import {
   AgentsLimits,
@@ -27,9 +26,9 @@ import {
   normalizeInteractionAnswer,
 } from '../../../dist/act/agents/utils/answers.js'
 import { checkInteractionRequest } from '../../../dist/act/agents/utils/requests.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 test('INV-1 agents 的实际操作与模板一致', () =>
   verifyModule(agentsModule, new URL('../template.js', import.meta.url)))
@@ -148,6 +147,18 @@ test('INV-4 提问详情只带选项与表单；回答只留下和问题对得�
     declined: true,
     reason: '稍后再说',
   })
+  const prototypeField = {
+    message: '请填写内容',
+    fields: [{ id: '__proto__', label: '内容', kind: 'text' }],
+  }
+  checkInteractionRequest(prototypeField)
+  const prototypeAnswer = normalizeInteractionAnswer(
+    prototypeField,
+    JSON.parse('{"values":{"__proto__":"保留原样"}}')
+  )
+  assert(Object.hasOwn(prototypeAnswer.values, '__proto__'))
+  assert.equal(Object.getPrototypeOf(prototypeAnswer.values), Object.prototype)
+  assert.equal(JSON.stringify(prototypeAnswer), '{"values":{"__proto__":"保留原样"}}')
 })
 
 test('INV-4 确认的回答：布尔值与 approved 照实转，含糊的回答按不同意', () => {
@@ -231,7 +242,6 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
   })
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     widgets: { show: (widget, sessionId) => received.push({ ...widget, sessionId }) },
     model: model(async function* (request) {
@@ -259,7 +269,6 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
 
   const bare = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   t.after(() => bare.close())

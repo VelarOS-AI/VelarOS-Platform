@@ -15,9 +15,45 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryLimits, MemoryTypes } from '../contract/constants.js'
-import type { MemorySaveInput, MemoryType } from '../types/memory.js'
+import type { MemoryIdInput, MemorySaveInput, MemoryType } from '../types/memory.js'
 
-import { isMemoryId, normalizeTags } from './entry-file.js'
+/** id 的写法：小写字母与数字，连字符只在中间。 */
+const MemoryIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
+
+/** Windows 上当不了文件名的保留名，带不带扩展名都不行。 */
+const WindowsReservedNames: ReadonlySet<string> = new Set([
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  'com1',
+  'com2',
+  'com3',
+  'com4',
+  'com5',
+  'com6',
+  'com7',
+  'com8',
+  'com9',
+  'lpt1',
+  'lpt2',
+  'lpt3',
+  'lpt4',
+  'lpt5',
+  'lpt6',
+  'lpt7',
+  'lpt8',
+  'lpt9',
+])
+
+/** 是不是合法的记忆 id：小写字母、数字和连字符，不超长，也不是 Windows 的保留名。 */
+export function isMemoryId(value: string): boolean {
+  return (
+    value.length <= MemoryLimits.idChars &&
+    MemoryIdPattern.test(value) &&
+    !WindowsReservedNames.has(value)
+  )
+}
 
 /**
  * 核对并规整 save 的入参：去掉首尾空白、标签规整好，多出来的字段不要。
@@ -42,10 +78,13 @@ export function saveInput(input: unknown): MemorySaveInput {
   return entry
 }
 
-/** 核对 remove 的入参，交回 id。 */
-export function removeInput(input: unknown): string {
+/** 核对 remove 的完整入参，交回独立的规范输入快照；不读磁盘、不核对当前版本。 */
+export function removeInput(input: unknown): MemoryIdInput {
   if (!isPlainObject(input)) throw new AppError('VALIDATION', 'remove 要一个对象：{ id }')
-  return memoryId(input.id)
+  const result: MemoryIdInput = { id: memoryId(input.id) }
+  const expected = expectedRevisionInput(input)
+  if (!isUndefined(expected)) result.expectedRevision = expected
+  return result
 }
 
 /** id：小写字母、数字和连字符，不超长，不是 Windows 的保留名。 */
@@ -101,12 +140,24 @@ function tagsField(value: unknown): string[] {
       )
   }
   const tags = normalizeTags(value)
+  for (const tag of tags) {
+    if (tag.length > MemoryLimits.tagChars)
+      throw new AppError(
+        'VALIDATION',
+        `一个标签规整后最多 ${MemoryLimits.tagChars} 个字符，「${tag}」超了`
+      )
+  }
   if (tags.length > MemoryLimits.tagCount)
     throw new AppError(
       'VALIDATION',
       `一条最多 ${MemoryLimits.tagCount} 个标签，这里有 ${tags.length} 个`
     )
   return tags
+}
+
+/** 规整一组标签：去掉首尾空白、转小写、丢掉空的、去重，顺序照旧。 */
+function normalizeTags(tags: readonly string[]): string[] {
+  return [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))]
 }
 
 /** 条件写入版本：省略沿用无条件语义，null 明确要求目标不存在。 */

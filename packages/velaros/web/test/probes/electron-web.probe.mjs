@@ -3,7 +3,7 @@
 // 弹窗时正文被标成 aria-hidden 的页面、页面自己跳走、分两步渲染的单页应用，响应头 CSP 带 sandbox、禁了脚本的源码文件与网页），
 // 再真搜一次中文、一次英文（用户选 Google：打不开就换 Bing），读第一条结果与 raw.githubusercontent.com 上的一份 README（禁了脚本的纯文本），
 // 并打印用了哪个搜索引擎、几条结果、前几条标题；最后在一个发往 Google 的请求一律卡住的临时会话里真走一遍换 Bing，
-// 量从开始搜到开始装 Bing 结果页用了多久，并把 12 小时的退避写进一个临时 JSON 文件，再用一份新起的操作（像重启之后）核对它照这份文件跳过 Google。bun test 不跑它。
+// 量从开始搜到开始装 Bing 结果页用了多久，并把当前短暂失败的退避写进临时 JSON 文件，再用一份新起的操作核对它照这份文件跳过 Google。bun test 不跑它。
 // 跑法（先在 packages/velaros 下 bun run build）：
 //   node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/web/test/probes/electron-web.probe.mjs
 // 不碰用户自己的 Chrome：页面都是 Electron 自己的隐藏窗口，会话只在内存里，跑完就没了。
@@ -21,6 +21,7 @@ import {
   GoogleResultsScript,
   ReadableTextScript,
 } from '../../../dist/web/utils/page-scripts.js'
+import { WebTuning } from '../../../dist/web/utils/tuning.js'
 
 /** 不带 persist: 的分区只在内存里：碰不到用户的登录与记录，退出就没了。 */
 const Partition = `velaros-web-probe-${process.pid}`
@@ -432,9 +433,7 @@ async function liveSuite() {
   const chinese = await liveSearch(google.port, '上海 天气 预报')
   const english = await liveSearch(google.port, 'TypeScript satisfies operator')
   if (chinese?.engine === 'bing')
-    info(
-      'Google 搜不通，换成了 Bing；接下来 12 小时的搜索直接走 Bing（上面第二次搜索的耗时就是这样来的）'
-    )
+    info('Google 搜不通，换成了 Bing；短暂失败冷却1分钟，验证或限流页冷却15分钟，期间直接走Bing')
   const gotos = [chinese, english]
     .flatMap((found) => found?.results ?? [])
     .filter((result) => result.url.includes('google.com/goto'))
@@ -514,11 +513,11 @@ async function googleDownSuite() {
       `${first?.engine}，从开始搜到开始装 Bing 用了 ${fallbackMs} ms`
     )
     const saved = JSON.parse(readFileSync(backoffPath, 'utf8'))
-    const hours = (saved.google - Date.now()) / 3_600_000
+    const remainingMs = saved.google - Date.now()
     check(
-      '退避写进了宿主的 JSON 文件：12 小时',
-      hours > 11.9 && hours <= 12,
-      `${JSON.stringify(saved)}（约 ${hours.toFixed(2)} 小时后到期）`
+      '短暂网络失败按当前期限写入宿主的 JSON 文件',
+      remainingMs > 0 && remainingMs <= WebTuning.search.googleBackoffMs,
+      `${JSON.stringify(saved)}（约 ${Math.round(remainingMs / 1000)} 秒后到期）`
     )
     const before = googleRequests
     const again = Date.now()

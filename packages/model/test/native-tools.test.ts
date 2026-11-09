@@ -134,8 +134,17 @@ test('INV-21 Responses declares native tools, preserves call identity and replay
   expect(Object.values(parts).reduce((a, b) => a + b, 0)).toBe(total)
   const compiler = createProviderRequestCompiler()
   const compiled = await compiler.compileModelTurn(next, driver, 100)
-  expect(compiled.providerRequest.tools.length).toBe(1)
-  await expect(compiler.verify({ ...compiled.providerRequest, tools: [] })).rejects.toThrow()
+  expect(compiled.requestAudit.toolCount).toBe(1)
+  const withoutTools = await compiler.compileModelTurn(
+    { ...next, response: { type: 'text' } },
+    driver,
+    100
+  )
+  expect(compiled.requestAudit.requestFingerprint.toolsHash).toBeDefined()
+  expect(withoutTools.requestAudit.requestFingerprint.toolsHash).toBeUndefined()
+  expect(withoutTools.requestAudit.requestFingerprint.id).not.toBe(
+    compiled.requestAudit.requestFingerprint.id
+  )
 })
 
 test('INV-21 missing, repeated and mismatched tool results cannot become model history', () => {

@@ -30,11 +30,10 @@ import type {
   BrowserViewportResult,
   BrowserWheelInput,
 } from '../../types/browser.js'
-import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
+import type { BrowserPageDriverPointerListener } from '../../types/driver'
 import type {
   BrowserInputState,
   BrowserPageDriverKernel,
-  BrowserPageDriverSession,
   BrowserPointerPoint,
   BrowserTargetActionClickMode,
   BrowserTargetActionInternalEffectSnapshot,
@@ -366,51 +365,6 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     })
   }
 
-  // ---- kernel 桥接 ----
-  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
-  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
-  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
-  protected getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
-    return this.kernel.getExternalPageSession(sessionId)
-  }
-
-  protected refreshPageDriverSessionState(
-    sessionId: string,
-    pageSession: BrowserPageDriverSession,
-    fallbackUrl: string
-  ): Promise<BrowserPageDriverState> {
-    return this.kernel.refreshPageDriverSessionState(sessionId, pageSession, fallbackUrl)
-  }
-
-  protected refreshExternalPageState(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    fallbackUrl: string
-  ): Promise<BrowserPageDriverState> {
-    return this.kernel.refreshExternalPageState(sessionId, session, fallbackUrl)
-  }
-
-  protected updateExternalPageStateFromInspection(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    inspection: BrowserPageInspection
-  ): void {
-    this.kernel.updateExternalPageStateFromInspection(sessionId, session, inspection)
-  }
-
-  protected syncExternalPageStateFromScriptResult(
-    sessionId: string,
-    session: ExternalBrowserPageSession,
-    result: unknown,
-    fallbackUrl: string
-  ): void {
-    this.kernel.syncExternalPageStateFromScriptResult(sessionId, session, result, fallbackUrl)
-  }
-
-  protected delay(ms: number): Promise<void> {
-    return this.kernel.delay(ms)
-  }
-
   /**
    * 把页面 CSS 坐标换算为桌面逻辑坐标并尝试移动原生系统指针。
    *
@@ -473,7 +427,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   }
 
   private requireExternalPageSession(sessionId: string): ExternalBrowserPageSession {
-    const externalSession = this.getExternalPageSession(sessionId)
+    const externalSession = this.kernel.getExternalPageSession(sessionId)
     if (!externalSession) {
       throw new AppError('NOT_FOUND', `外部浏览器会话不存在：${sessionId}`)
     }
@@ -513,7 +467,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       options: hydratedOptions,
       result: healedActionResult,
     })
-    const state = await this.refreshExternalPageState(
+    const state = await this.kernel.refreshExternalPageState(
       sessionId,
       externalSession,
       actionResult.url || context.url
@@ -551,7 +505,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     // 这是 action 失败后的内部探测，不会作为 observation 返回给模型。不得把它发布到
     // ref store，否则模型仍持有的上一次 inspect refs 会被一个不可见 generation 换代。
     if (input.externalSession) {
-      this.updateExternalPageStateFromInspection(input.sessionId, input.externalSession, inspection)
+      this.kernel.updateExternalPageStateFromInspection(
+        input.sessionId,
+        input.externalSession,
+        inspection
+      )
     }
 
     return inspection
@@ -682,39 +640,23 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         failureReason: 'not-interactable',
       }
 
-    try {
-      if (input.externalSession) {
-        await this.tryMoveSystemPointer(
-          input.driver,
-          clickPoint,
-          input.externalSession.visible,
-          220
-        )
-      }
-      await input.driver.clickCoordinates({
-        x: clickPoint.x,
-        y: clickPoint.y,
-        button: input.options.button ?? 'left',
-        clickCount: input.options.clickCount ?? 1,
-        modifiers: this.heldModifiers(input.sessionId),
-        waitForNavigation: false,
-        onPointerEvent: input.externalSession
-          ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'click')
-          : undefined,
-      })
-      this.rememberPointer(input.sessionId, clickPoint)
-
-      return input.result
-    } catch (error) {
-      this.log.debug('坐标目标点击失败，回退 DOM click', {
-        error: AppError.from(error).message,
-      })
-
-      return input.driver.executeJavaScript<BrowserTargetActionResult>(
-        buildTargetActionScript(input.options, { clickMode: 'dom' }),
-        true
-      )
+    if (input.externalSession) {
+      await this.tryMoveSystemPointer(input.driver, clickPoint, input.externalSession.visible, 220)
     }
+    // 能力选择已在页面脚本运行前完成；派发后的失败可能已有真实输入，不能再 DOM click。
+    await input.driver.clickCoordinates({
+      x: clickPoint.x,
+      y: clickPoint.y,
+      button: input.options.button ?? 'left',
+      clickCount: input.options.clickCount ?? 1,
+      modifiers: this.heldModifiers(input.sessionId),
+      waitForNavigation: false,
+      onPointerEvent: input.externalSession
+        ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'click')
+        : undefined,
+    })
+    this.rememberPointer(input.sessionId, clickPoint)
+    return input.result
   }
 
   private async dispatchCoordinateTargetHoverIfNeeded(input: {
@@ -760,7 +702,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持文本输入。')
     }
     await externalSession.driver.insertText(options)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       textLength: options.text.length,
@@ -777,7 +723,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const repeat = await this.pressWithDriver(externalSession.driver, sessionId, options)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       key: options.key,
@@ -811,7 +761,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       onPointerEvent: this.createPreviewPointerListener(sessionId, externalSession, 'click'),
     })
     this.rememberPointer(sessionId, point)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       x: point.x,
@@ -914,7 +868,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     ])
 
     this.rememberPointer(input.sessionId, target)
-    const state = await this.refreshExternalPageState(
+    const state = await this.kernel.refreshExternalPageState(
       input.sessionId,
       input.externalSession,
       resolved.url || input.context.url
@@ -955,7 +909,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       externalSession,
       'move'
     )({ x: point.x, y: point.y, phase: 'move' })
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return this.mouseSnapshot(sessionId, state.url || context.url)
   }
 
@@ -968,7 +926,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const held = await this.keyDownWithDriver(externalSession.driver, sessionId, input.key)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return { url: state.url || context.url, key: input.key, held }
   }
 
@@ -981,7 +943,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const held = await this.keyUpWithDriver(externalSession.driver, sessionId, input.key)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return { url: state.url || context.url, key: input.key, held }
   }
 
@@ -1006,7 +972,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     await this.mouseButtonWithDriver(externalSession.driver, sessionId, 'mouseReleased', input)
-    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    const state = await this.kernel.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      context.url
+    )
     return this.mouseSnapshot(sessionId, state.url || context.url)
   }
 
@@ -1063,7 +1033,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     }
 
     await pageSession.driver.setViewport({ width, height, mobile })
-    const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
 
     return {
       url: state.url || context.url,
@@ -1090,7 +1064,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     const zoomFactor = resolvePageZoomFactor(options, previousZoomFactor)
     await pageSession.driver.setPageZoomFactor(zoomFactor)
     // 缩放 HUD 是 webview 专属浮层，外部 CDP driver 无对应；Electron 子类覆盖时补 HUD。
-    const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
 
     return {
       url: state.url || context.url,

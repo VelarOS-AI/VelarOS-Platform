@@ -2,9 +2,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { localContextStorage } from '../../packages/context/dist/node.js'
+import { observationEvidence, observedFiles, traceBody as raw } from './act-trace.mjs'
 
-const raw = (record) =>
-  record && !record.truncated && record.body !== null ? JSON.parse(record.body) : null
 const calls = (traces) => [
   ...new Map(
     traces
@@ -12,13 +11,6 @@ const calls = (traces) => [
       .map((value) => [value.prepared.id, value])
   ).values(),
 ]
-const frames = (traces) =>
-  traces.flatMap((trace) => {
-    const material = raw(trace.request)?.request.materials.find(
-      (item) => item.origin === 'runtime-view'
-    )
-    return material ? [JSON.parse(material.text)] : []
-  })
 const completed = (traces, module, operation) =>
   calls(traces).filter(
     (item) =>
@@ -42,27 +34,18 @@ const exactReport = (value, expected) =>
   Object.keys(value).length === Object.keys(expected).length &&
   Object.entries(expected).every(([key, number]) => value[key] === number)
 
-// 把实际观察读取回执关联到被模型接受的可见观察，不能用文件落盘或旧观察次数代替。
+// 核对实际帧中的观察来源、原始输出和读取回执，不能用最终文件代替观察。
 function observedReport(traces, expected) {
   return traces.some((trace) => {
     if (raw(trace.decision)?.status !== 'accepted') return false
-    const observation = frames([trace])[0]?.partitions.observation
-    if (!observation?.bodyIncluded || !observation.text) return false
-    const result = raw(trace.records.find((record) => record.ref.id === observation.resultRef))
-    if (result?.mode !== 'observe') return false
-    return completed([trace], 'velaros:project', 'read').some(
-      (call) =>
-        call.prepared.mode === 'observe' &&
-        call.prepared.executionId === result.executionId &&
-        call.receipt.value?.files?.some((file) => {
-          if (file.path !== 'report.json') return false
-          try {
-            return exactReport(JSON.parse(file.text), expected)
-          } catch {
-            return false
-          }
-        })
-    )
+    return observedFiles(trace).some(({ file }) => {
+      if (file.path !== 'report.json') return false
+      try {
+        return exactReport(JSON.parse(file.text), expected)
+      } catch {
+        return false
+      }
+    })
   })
 }
 
@@ -96,7 +79,7 @@ export function evaluationScenario(name) {
       title: '局部编辑、重复文本定位与约束保持',
       files: { 'settings.txt': 'heading\nobsolete hint\nkeep\nrepeat\nrepeat\nfooter\n' },
       prompt:
-        '只修改 settings.txt：删除 obsolete hint 整行，把原第5行的 repeat 改为 updated，保留原第4行的 repeat；在 footer 前插入 added 一行。可以按文本、行范围或其他可靠方法编辑，方法不限。保留其余正文、state.txt 和 protected.txt，核实结果后完成，不需要持续观察。',
+        '只修改 settings.txt：删除 obsolete hint 整行，把原第5行的 repeat 改为 updated，保留原第4行的 repeat；在 footer 前插入 added 一行。使用 Node 读取、定位和转换正文，通过 velaros:project.commit 提交。保留其余正文、state.txt 和 protected.txt，核实结果后完成，不需要持续观察。',
       async verify({ root, status }) {
         const checks = {
           completed: status === 'completed',
@@ -116,7 +99,7 @@ export function evaluationScenario(name) {
       modelTools: true,
       files: { 'orders.json': JSON.stringify([12, 7, 25, 6]) + '\n' },
       prompt:
-        '完成 orders.json 的汇总。在脚本中解析完整真实 JSON 并求和、计数，确认读取完整后再保存。父线独立核验不匹配时，resume 同一个 worker 重新读取并纠正。先创建名为 handoff、用途明确的 store，记录输入并订阅 result/ 消息；在工作笔记 progress 中记录目标。派发一个 worker 子任务读取 orders.json，把 {total,count} 写入共享空间的 result/summary，并通过同一 set 的 event 发布 result/ready；父线要先订阅再派发，给子任务明确的 store 读写授权，子任务无需外部写权限。父线读取并核实子结果，确认处理对应消息；在子任务收束后让 memory.organize 整理一次工作上下文，确认 memoryStatus.maintenance.lastAttempt.status 为 applied 后继续；失败反馈需要处理后重试。写 report.json 为 {total,count}，用带稳定 key 和 purpose 的 observe 持续核实报告，最终确认后完成。脚本中用 output 选择必要上下文，勿把整个历史反复输出。保留所有输入及 protected.txt。按真实合同先发现所需模块和 profiles。',
+        '完成 orders.json 的汇总。在脚本中用 Node 读取、解析完整真实 JSON 并求和、计数，确认读取完整后再保存。父线独立核验不匹配时，resume 同一个 worker 重新读取并纠正。先创建名为 handoff、用途明确的 store，记录输入并订阅 result/ 消息；在工作笔记 progress 中记录目标。派发一个 worker 子任务读取 orders.json，把 {total,count} 写入共享空间的 result/summary，并通过同一 set 的 event 发布 result/ready；父线要先订阅再派发，给子任务明确的 store 读写授权，子任务无需外部写权限。父线读取并核实子结果，确认处理对应消息；在子任务收束后让 memory.organize 整理一次工作上下文，确认 memoryStatus.maintenance.lastAttempt.status 为 applied 后继续；失败反馈需要处理后重试。用 project.commit 写 report.json 为 {total,count}，再用 observe 调用 project.snapshot（文件给稳定 key 和 purpose），output 完整快照回执，持续核实报告，最终确认后完成。脚本中用 output 选择必要上下文，勿把整个历史反复输出。保留所有输入及 protected.txt。按真实合同先发现所需模块和 profiles。',
       async verify({ root, traces, branches, statePath, status }) {
         const all = [...traces, ...branches.flatMap((branch) => branch.turns)],
           storage = localContextStorage({ path: statePath })
@@ -158,14 +141,19 @@ export function evaluationScenario(name) {
             child: branches.some((branch) => branch.kind === 'agent' && branch.turns.length),
             maintenance: outcomes.some((item) => item.status === 'applied'),
             note: completed(all, 'velaros:system-memory-persistent', 'update').length > 0,
-            stableReference:
+            reusedStore:
               space &&
-              frames(traces).filter((frame) =>
-                frame.partitions.runtime.stores?.active.items.some((item) => item.id === space.id)
-              ).length >= 2,
-            observedReport: frames(traces).some((frame) =>
-              frame.partitions.observation?.text?.includes('50')
-            ),
+              new Set(
+                calls(traces)
+                  .filter(
+                    (call) =>
+                      call.prepared.binding.moduleId === 'velaros:system-store' &&
+                      call.prepared.input.store === space.id &&
+                      call.receipt?.outcome === 'succeeded'
+                  )
+                  .map((call) => call.prepared.executionId)
+              ).size >= 2,
+            observedReport: observedReport(traces, { total: 50, count: 4 }),
             protected: (await readFile(join(root, 'protected.txt'), 'utf8')) === 'keep this\n',
           }
           return {
@@ -200,7 +188,7 @@ export function evaluationScenario(name) {
           '认证规则：有效期上界排除，当前时间等于 expiresAt 时必须失效；revoked 会话始终失效。\n',
       },
       prompt:
-        '调查并修复会话到期边界问题。先用 velaros:search 的高级搜索找出认证判断、需求和相关影响，取得带真实证据 ID 的报告；之后使用 read 的 current 模式核实选定证据。结合 requirements.md 修改实际判断，保留展示逻辑和 protected.txt。修复后用 observe 返回当前代码和必要依据，再完成。搜索的档位通过 profiles 选择，所用证据必须来自 Runtime 读取。',
+        '调查并修复会话到期边界问题。先用 velaros:search 的高级搜索找出认证判断、需求和相关影响，取得带真实证据 ID 的报告；之后使用 search.read 的 current 模式核实选定证据。用 Node 读取 requirements.md 和代码，通过 project.commit 修改实际判断，保留展示逻辑和 protected.txt。修复后用 observe 调用 project.snapshot（文件给稳定 key 和 purpose）并 output 完整快照回执，再完成。搜索的档位通过 profiles 选择，所用证据必须来自 Runtime 读取。',
       async verify({ root, traces, branches, status }) {
         const all = [...traces, ...branches.flatMap((branch) => branch.turns)]
         const check = spawnSync(
@@ -230,8 +218,10 @@ export function evaluationScenario(name) {
           ),
           leaf: branches.some((branch) => branch.kind === 'search' && branch.turns.length),
           evidence: completed(all, 'velaros:evidence', 'read').length > 0,
-          observation: frames(traces).some((frame) =>
-            frame.partitions.observation?.text?.includes('isActive')
+          observation: traces.some((trace) =>
+            observedFiles(trace).some(
+              ({ file }) => file.path === 'src/session.mjs' && file.text.includes('isActive')
+            )
           ),
           display:
             (await readFile(join(root, 'src/display.mjs'), 'utf8')) ===
@@ -301,7 +291,7 @@ export function evaluationScenario(name) {
         Object.entries(initial).map(([file, orders]) => [file, JSON.stringify(orders) + '\n'])
       ),
       prompt:
-        '核对 orders/ 下全部 12 批订单，只汇总 status=approved 的 cents，报告严格为 {totalCents,approved,pending,count}，pending 表示所有未批准订单数量。创建 handoff store 并先订阅 result/ 消息，笔记记录推进阶段。派发一个 worker 读取全部真实文件并将汇总写入 result/summary，同时原子发布 result/ready。主线核验、处理并确认消息，将初始汇总写入 stage-0.json。之后通过 interaction.ask 依次请求 revision:1、revision:2、revision:3；宿主会在每次回答前实际修订输入，必须先收到回答，再 resume 原来的同一个子任务，重新读取实际输入、更新同一 store 键并发布新通知。每阶段主线确认消息后将对应结果写到 stage-1.json、stage-2.json、stage-3.json。每完成一个阶段更新工作笔记；在子任务已收束的阶段边界，至少完成一次上下文整理并确认 memoryStatus.maintenance.lastAttempt.status 为 applied，失败反馈需要处理后重试；让 observe 持续提供当前阶段、输入/结果状态等必要信息，使用有目的和上限的输出。每个 stage-N.json 必须落盘之后才能请求下一阶段。最后将最新汇总写入 report.json，并通过下一轮 observe 核实后完成。保留所有原始输入供宿主修订，保留 protected.txt。不要创建新的子任务来代替续跑。按真实模块合同发现用法和档位。',
+        '核对 orders/ 下全部 12 批订单，只汇总 status=approved 的 cents，报告严格为 {totalCents,approved,pending,count}，pending 表示所有未批准订单数量。创建 handoff store 并先订阅 result/ 消息，笔记记录推进阶段。派发一个 worker 用 Node 读取全部真实文件并将汇总写入 result/summary，同时原子发布 result/ready。主线核验、处理并确认消息，通过 project.commit 将初始汇总写入 stage-0.json。之后通过 interaction.ask 依次请求 revision:1、revision:2、revision:3；宿主会在每次回答前实际修订输入，必须先收到回答，再 resume 原来的同一个子任务，重新读取实际输入、更新同一 store 键并发布新通知。每阶段主线确认消息后将对应结果提交到 stage-1.json、stage-2.json、stage-3.json。每完成一个阶段更新工作笔记；在子任务已收束的阶段边界，至少完成一次上下文整理并确认 memoryStatus.maintenance.lastAttempt.status 为 applied，失败反馈需要处理后重试；让 observe 持续提供当前阶段、输入/结果状态等必要信息，使用有目的和上限的输出。每个 stage-N.json 必须落盘之后才能请求下一阶段。最后将最新汇总提交到 report.json，通过下一轮 observe 调用 project.snapshot（文件给稳定 key 和 purpose），output 完整快照回执，核实后完成。保留所有原始输入供宿主修订，保留 protected.txt。不要创建新的子任务来代替续跑。按真实模块合同发现用法和档位。',
       async restore({ root, events }) {
         if (answered.size) throw Error('修订检查点已经装载')
         const requests = new Map(
@@ -404,7 +394,12 @@ export function evaluationScenario(name) {
             maintenance: outcomes.some((outcome) => outcome.status === 'applied'),
             notes: completed(traces, 'velaros:system-memory-persistent', 'update').length >= 4,
             observe:
-              frames(traces).filter((frame) => frame.partitions.observation?.text).length >= 4,
+              new Set(
+                traces.flatMap((trace) => {
+                  const observation = observationEvidence(trace)
+                  return observation?.outputs.length ? [observation.resultRef.id] : []
+                })
+              ).size >= 4,
             protected: (await readFile(join(root, 'protected.txt'), 'utf8')) === 'keep this\n',
           }
           return {

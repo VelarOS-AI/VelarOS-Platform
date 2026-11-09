@@ -20,6 +20,7 @@ import {
   isUndefined,
   Log,
   toNullable,
+  toOptional,
 } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -46,9 +47,18 @@ import type {
   ProgramPublishInput,
   ProgramQuery,
 } from '../../system/types/programs.js'
+import { ObservationLimits } from '../contract/constants.js'
 import type { ProgramCatalogValidator } from '../contract/requires.js'
 import type { ExecutionOutputState } from '../types/execution-output.js'
 import type { MemoryReadDelivery } from '../types/memory.js'
+import type {
+  ObservationContentLocator,
+  ObservationHistoryListing,
+  ObservationHistoryRequest,
+  ObservationSnapshotContent,
+  ObservationSnapshotSummary,
+  ObservationSnapshotTransition,
+} from '../types/observation.js'
 import type { PreparedScript } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
 import type {
@@ -81,6 +91,43 @@ import { ActRuntimeTuning } from '../utils/tuning.js'
 export interface ProgramContextApi {
   /** 当前会话源码归档上的持久程序目录；发布仍重新检查当前授权。 */
   readonly catalog: ProgramCatalogPort
+  /** 绑定待交付内容接受时的任务与授权水位；模型请求必须仍属于当前任务。 */
+  observationDeliveryOwner(signal: AbortSignal, requestRef?: ContextRef): Promise<string>
+  /** 同值不增加历史；目录只引用已归档的真实采集或结果。 */
+  recordObservationSnapshot(
+    input: {
+      sourceRef: string
+      fingerprint: string
+      scopeFingerprint: string
+      observedAt: string
+      chars: number
+      locator: ObservationContentLocator
+      captureRef?: ContextRef
+      resultRef?: ContextRef
+    },
+    signal: AbortSignal
+  ): Promise<string>
+  /** 只读取当前会话与授权范围的小型目录。 */
+  listObservationSnapshots(
+    input: Extract<ObservationHistoryRequest, { kind: 'list' }>,
+    scopeFingerprint: string,
+    signal: AbortSignal
+  ): Promise<ObservationHistoryListing>
+  /** 正文仍由原始结果或权威 journal 提供。 */
+  readObservationSnapshot(
+    snapshotId: string,
+    scopeFingerprint: string,
+    signal: AbortSignal
+  ): Promise<{ summary: ObservationSnapshotSummary; content: ObservationSnapshotContent }>
+  /** 排入下一真实请求，失败或取消不消费待交付引用。 */
+  stageDynamicExchange(ref: ContextRef, signal: AbortSignal): Promise<void>
+  /** 最终发布帧固定本次实际交付的引用，响应接纳后消费。 */
+  registerDynamicDelivery(
+    id: string,
+    selectionRef: Optional<string>,
+    exchanges: readonly ContextRef[],
+    signal: AbortSignal
+  ): Promise<void>
   /** 保存实际采集或复用决定；仅消耗本次准备时看到的刷新身份。 */
   observationCollection(collection: ObservationCollection, refresh?: string): Promise<void>
   /** 更新真实观察健康状态；未知效果立即暂停，源码实质修改才能恢复。 */
@@ -321,6 +368,392 @@ export class ProgramContext implements ProgramContextApi {
     return descriptor
   }
 
+  private dynamicOwner(snapshot: Nullable<ContextRecordSnapshot>): string {
+    return scriptOutputs.hash({
+      sessionId: this.sessionId,
+      taskId: snapshot?.metadata.task?.id,
+      startedSequence: snapshot?.metadata.task?.startedSequence ?? 0,
+      reset:
+        snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0,
+    })
+  }
+
+  public async observationDeliveryOwner(
+    signal: AbortSignal,
+    requestRef?: ContextRef
+  ): Promise<string> {
+    let snapshot = await this.snapshot([
+      { title: 'search:history-reset', latest: true },
+      ...(requestRef ? [{ refId: requestRef.id }] : []),
+    ])
+    if (requestRef) {
+      const origin = snapshot?.records.find((item) => item.ref.id === requestRef.id)
+      let record = origin?.title === 'model-request' ? origin : undefined
+      let assistant = origin?.kind === 'assistant' ? origin : undefined
+      if (origin?.title === 'script:dispatch')
+        assistant = (
+          await this.snapshot(origin.sources.map((source) => ({ refId: source.id })))
+        )?.records.find((item) => item.kind === 'assistant')
+      if (assistant)
+        record = (
+          await this.snapshot(assistant.sources.map((source) => ({ refId: source.id })))
+        )?.records.find(
+          (item) => item.title === 'model-request' && item.sequence < assistant!.sequence
+        )
+      const raw = record ? await this.storage.get(this.sessionId, record.objectId) : null
+      if (requestRef.sessionId !== this.sessionId || !record || isNull(raw))
+        throw new AppError('STALE_VIEW', '动态交付缺少已接受的原始模型请求')
+      const request = JSON.parse(raw)
+      const frameRef = request.frameRef as Optional<ContextRef>
+      if (!frameRef || frameRef.sessionId !== this.sessionId || !isString(frameRef.id))
+        throw new AppError('STALE_VIEW', '原始请求缺少已发布帧的归属证据')
+      snapshot = await this.snapshot([
+        { title: 'search:history-reset', latest: true },
+        { refId: frameRef.id },
+      ])
+      const frameRecord = snapshot?.records.find(
+        (item) => item.ref.id === frameRef.id && item.title.startsWith('context:frame:')
+      )
+      const frameRaw = frameRecord
+        ? await this.storage.get(this.sessionId, frameRecord.objectId)
+        : null
+      if (!frameRecord || isNull(frameRaw))
+        throw new AppError('STALE_VIEW', '动态交付的原始发布帧缺失')
+      const frame = JSON.parse(frameRaw)
+      const reset = Math.max(
+        snapshot?.metadata.task?.startedSequence ?? 0,
+        snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+      )
+      if (
+        !isString(frame.taskId) ||
+        frame.taskId !== snapshot?.metadata.task?.id ||
+        frame.taskStartedSequence !== snapshot?.metadata.task?.startedSequence ||
+        frame.authorizationReset !== reset ||
+        frameRecord.title !== `context:frame:${frame.frameId}` ||
+        frameRecord.sequence >= record.sequence ||
+        record.sequence <= reset ||
+        (!isUndefined(request.budgetRequest?.taskId) &&
+          request.budgetRequest.taskId !== frame.taskId)
+      )
+        throw new AppError('STALE_VIEW', '原生调用的原始请求不属于当前任务授权范围')
+    }
+    signal.throwIfAborted()
+    return this.dynamicOwner(snapshot)
+  }
+
+  public async recordObservationSnapshot(
+    input: {
+      sourceRef: string
+      fingerprint: string
+      scopeFingerprint: string
+      observedAt: string
+      chars: number
+      locator: ObservationContentLocator
+      captureRef?: ContextRef
+      resultRef?: ContextRef
+    },
+    signal: AbortSignal
+  ): Promise<string> {
+    const previous = (await this.state()).observationHistoryHead
+    if (
+      previous?.sourceRef === input.sourceRef &&
+      previous.fingerprint === input.fingerprint &&
+      previous.scopeFingerprint === input.scopeFingerprint
+    )
+      return previous.snapshotId
+    const contentTitle = `observation:content:${input.scopeFingerprint}:${input.fingerprint}`
+    const saved = (await this.snapshot([{ title: contentTitle, latest: true }]))?.records[0]
+    const locatorRef =
+      input.locator.kind === 'capture' ? input.locator.captureRef : input.locator.resultRef
+    const content: ObservationSnapshotContent = {
+      fingerprint: input.fingerprint,
+      locator: input.locator,
+      chars: input.chars,
+    }
+    const contentRecord =
+      saved ?? (await this.record(contentTitle, JSON.stringify(content), undefined, [locatorRef]))
+    const revision =
+      (previous?.scopeFingerprint === input.scopeFingerprint ? previous.revision : 0) + 1
+    const transition: ObservationSnapshotTransition = {
+      sourceRef: { sessionId: this.sessionId, id: input.sourceRef },
+      contentRef: contentRecord.ref,
+      captureRef: toOptional(input.captureRef),
+      resultRef: toOptional(input.resultRef),
+      revision,
+      observedAt: input.observedAt,
+      scopeFingerprint: input.scopeFingerprint,
+    }
+    const record = await this.record(
+      'observation:snapshot',
+      JSON.stringify(transition),
+      undefined,
+      [
+        transition.sourceRef,
+        contentRecord.ref,
+        ...(input.captureRef ? [input.captureRef] : []),
+        ...(input.resultRef ? [input.resultRef] : []),
+      ]
+    )
+    await this.update(
+      (state) => {
+        if (
+          state.observation !== input.sourceRef ||
+          state.observationHistoryHead?.snapshotId !== previous?.snapshotId
+        )
+          throw new AppError('STALE_VIEW', '观察历史发布期间程序或历史头已经变化')
+        return {
+          ...state,
+          observationHistoryHead: {
+            snapshotId: record.ref.id,
+            sourceRef: input.sourceRef,
+            fingerprint: input.fingerprint,
+            scopeFingerprint: input.scopeFingerprint,
+            revision,
+          },
+        }
+      },
+      [...(saved ? [] : [contentRecord]), record],
+      signal
+    )
+    return record.ref.id
+  }
+
+  public async readObservationSnapshot(
+    snapshotId: string,
+    scopeFingerprint: string,
+    signal: AbortSignal
+  ): Promise<{ summary: ObservationSnapshotSummary; content: ObservationSnapshotContent }> {
+    signal.throwIfAborted()
+    const selected = await this.snapshot([{ refId: snapshotId }])
+    const record = selected?.records.find(
+      (item) => item.ref.id === snapshotId && item.title === 'observation:snapshot'
+    )
+    if (!record) throw new AppError('NOT_FOUND', '当前会话没有该观察快照')
+    const body = await this.storage.get(this.sessionId, record.objectId)
+    if (isNull(body)) throw new AppError('NOT_FOUND', '观察快照目录原文缺失')
+    const transition = JSON.parse(body) as ObservationSnapshotTransition
+    if (
+      !isPlainObject(transition) ||
+      !isPlainObject(transition.sourceRef) ||
+      !isPlainObject(transition.contentRef) ||
+      !isString(transition.sourceRef.id) ||
+      !isString(transition.contentRef.id) ||
+      !Number.isSafeInteger(transition.revision) ||
+      transition.revision < 1 ||
+      !isString(transition.observedAt)
+    )
+      throw new AppError('UNAVAILABLE', '观察快照目录损坏')
+    if (
+      transition.scopeFingerprint !== scopeFingerprint ||
+      transition.sourceRef.sessionId !== this.sessionId ||
+      transition.contentRef.sessionId !== this.sessionId
+    )
+      throw new AppError('PERMISSION', '观察快照不在当前会话授权范围')
+    const contents = await this.snapshot([{ refId: transition.contentRef.id }])
+    const contentRecord = contents?.records.find(
+      (item) =>
+        item.ref.id === transition.contentRef.id &&
+        item.title.startsWith(`observation:content:${scopeFingerprint}:`)
+    )
+    const raw = contentRecord
+      ? await this.storage.get(this.sessionId, contentRecord.objectId)
+      : null
+    if (isNull(raw)) throw new AppError('NOT_FOUND', '观察快照内容引用缺失')
+    const content = JSON.parse(raw) as ObservationSnapshotContent
+    if (
+      !isPlainObject(content) ||
+      !isPlainObject(content.locator) ||
+      !['capture', 'result'].includes(content.locator.kind) ||
+      (content.locator.kind === 'capture' && !isString(content.locator.invocationId)) ||
+      !isString(content.fingerprint) ||
+      !Number.isSafeInteger(content.chars) ||
+      content.chars < 0
+    )
+      throw new AppError('UNAVAILABLE', '观察快照内容目录损坏')
+    const ref =
+      content.locator.kind === 'capture' ? content.locator.captureRef : content.locator.resultRef
+    if (
+      !isPlainObject(ref) ||
+      !isString(ref.id) ||
+      ref.sessionId !== this.sessionId ||
+      contentRecord!.title !== `observation:content:${scopeFingerprint}:${content.fingerprint}`
+    )
+      throw new AppError('PERMISSION', '观察快照正文归属无效')
+    signal.throwIfAborted()
+    return {
+      summary: {
+        snapshotId,
+        sourceRef: transition.sourceRef.id,
+        revision: transition.revision,
+        observedAt: transition.observedAt,
+        fingerprint: content.fingerprint,
+        chars: content.chars,
+        available: true,
+      },
+      content,
+    }
+  }
+
+  public async listObservationSnapshots(
+    input: Extract<ObservationHistoryRequest, { kind: 'list' }>,
+    scopeFingerprint: string,
+    signal: AbortSignal
+  ): Promise<ObservationHistoryListing> {
+    const limit = input.limit ?? ObservationLimits.defaultList
+    let after = 0
+    let through: number
+    if (input.cursor) {
+      let cursor: { after: number; through: number; scope: string; sessionId: string }
+      try {
+        cursor = JSON.parse(input.cursor)
+      } catch {
+        throw new AppError('VALIDATION', '观察历史游标无效')
+      }
+      if (
+        !isPlainObject(cursor) ||
+        !Number.isSafeInteger(cursor.after) ||
+        cursor.after < 0 ||
+        !Number.isSafeInteger(cursor.through) ||
+        cursor.through < cursor.after ||
+        cursor.scope !== scopeFingerprint ||
+        cursor.sessionId !== this.sessionId
+      )
+        throw new AppError('PERMISSION', '观察历史游标不在当前会话授权范围')
+      after = cursor.after
+      through = cursor.through
+    } else {
+      through =
+        (await this.snapshot([{ title: 'observation:snapshot', latest: true }]))?.records[0]
+          ?.sequence ?? 0
+    }
+    const selected = await this.snapshot([
+      { title: 'observation:snapshot', after, through, first: limit + 1 },
+    ])
+    const entries: ObservationSnapshotSummary[] = []
+    let last = after
+    const records = selected?.records ?? []
+    let more = records.length > limit
+    for (const record of records.slice(0, limit)) {
+      signal.throwIfAborted()
+      try {
+        const snapshot = await this.readObservationSnapshot(record.ref.id, scopeFingerprint, signal)
+        const cursor = JSON.stringify({
+          after: record.sequence,
+          through,
+          scope: scopeFingerprint,
+          sessionId: this.sessionId,
+        })
+        if (
+          JSON.stringify({
+            kind: 'list',
+            entries: [...entries, snapshot.summary],
+            nextCursor: cursor,
+          }).length > ObservationLimits.maxReadChars
+        ) {
+          more = true
+          break
+        }
+        entries.push(snapshot.summary)
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== 'PERMISSION') throw error
+      }
+      last = record.sequence
+    }
+    return {
+      kind: 'list',
+      entries,
+      nextCursor: more
+        ? JSON.stringify({
+            after: last,
+            through,
+            scope: scopeFingerprint,
+            sessionId: this.sessionId,
+          })
+        : null,
+    }
+  }
+
+  public async stageDynamicExchange(ref: ContextRef, signal: AbortSignal): Promise<void> {
+    if (ref.sessionId !== this.sessionId) throw new AppError('PERMISSION', '动态往返不属于当前会话')
+    const record = await this.context.read(ref, { limit: 1 })
+    if (record.record.title !== 'model-tool-exchange')
+      throw new AppError('VALIDATION', '动态往返引用类型无效')
+    const raw = await this.storage.get(this.sessionId, record.record.objectId)
+    if (isNull(raw) || JSON.parse(raw).delivery !== 'dynamic')
+      throw new AppError('VALIDATION', '往返记录没有声明动态交付')
+    const snapshot = await this.snapshot([
+      { title: 'search:history-reset', latest: true },
+      ...record.record.sources.map((source) => ({ refId: source.id })),
+    ])
+    const reset = Math.max(
+      snapshot?.metadata.task?.startedSequence ?? 0,
+      snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+    )
+    if (
+      record.record.sequence <= reset ||
+      !snapshot?.records.some(
+        (source) =>
+          source.kind === 'assistant' &&
+          source.sequence > reset &&
+          record.record.sources.some(
+            (item) => item.sessionId === this.sessionId && item.id === source.ref.id
+          )
+      )
+    )
+      throw new AppError('PERMISSION', '动态往返不在当前任务授权范围')
+    const assistant = snapshot?.records.find(
+      (source) =>
+        source.kind === 'assistant' &&
+        record.record.sources.some(
+          (item) => item.sessionId === this.sessionId && item.id === source.ref.id
+        )
+    )
+    if (!assistant) throw new AppError('PERMISSION', '动态往返缺少已接受的原始助手响应')
+    const requests = await this.snapshot(assistant.sources.map((source) => ({ refId: source.id })))
+    const request = requests?.records.find((source) => source.title === 'model-request')
+    if (!request) throw new AppError('PERMISSION', '动态往返缺少已接受的原始模型请求')
+    const owner = await this.observationDeliveryOwner(signal, request.ref)
+    await this.update(
+      (state, _reset, currentOwner) => {
+        if (currentOwner !== owner) throw new AppError('STALE_VIEW', '动态往返受理期间任务已经变化')
+        return {
+          ...state,
+          pendingDynamicOwner: owner,
+          pendingDynamicExchanges: state.pendingDynamicExchanges?.some((item) => item.id === ref.id)
+            ? state.pendingDynamicExchanges
+            : [...(state.pendingDynamicExchanges ?? []), ref],
+        }
+      },
+      [],
+      signal
+    )
+  }
+
+  public async registerDynamicDelivery(
+    id: string,
+    selectionRef: Optional<string>,
+    exchanges: readonly ContextRef[],
+    signal: AbortSignal
+  ): Promise<void> {
+    await this.update(
+      (state) => {
+        if (
+          state.pendingFrame !== id ||
+          (selectionRef && state.pendingObservationHistory?.selectionRef !== selectionRef) ||
+          exchanges.some(
+            (ref) =>
+              ref.sessionId !== this.sessionId ||
+              !state.pendingDynamicExchanges?.some((item) => item.id === ref.id)
+          )
+        )
+          throw new AppError('STALE_VIEW', '动态交付的待办引用已变化')
+        return { ...state, pendingDynamicDelivery: { id, selectionRef, exchanges } }
+      },
+      [],
+      signal
+    )
+  }
+
   public async observationCollection(
     collection: ObservationCollection,
     refresh?: string
@@ -376,17 +809,10 @@ export class ProgramContext implements ProgramContextApi {
       ])
     )
   }
-
   private async snapshot(
-    selections: readonly ContextRecordSelection[],
-    incremental = false
+    selections: readonly ContextRecordSelection[]
   ): Promise<Nullable<ContextRecordSnapshot>> {
-    if (this.storage.selectSnapshot && (!incremental || this.storage.compareAndSwapMetadata))
-      return this.storage.selectSnapshot(this.sessionId, selections)
-    const state = await this.storage.load(this.sessionId)
-    if (!state) return null
-    const { records, ...metadata } = state
-    return { metadata, records }
+    return this.storage.selectSnapshot(this.sessionId, selections)
   }
 
   /** 只接受宿主登记的原样页对象；读取回执自身不是已交付证明。 */
@@ -528,9 +954,20 @@ export class ProgramContext implements ProgramContextApi {
       snapshot?.metadata.task?.startedSequence ?? 0,
       snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
     )
+    const dynamic =
+      record.sequence <= reset || state.pendingDynamicOwner !== this.dynamicOwner(snapshot)
+        ? {
+            pendingObservationHistory: undefined,
+            pendingDynamicExchanges: undefined,
+            pendingDynamicDelivery: undefined,
+            pendingDynamicOwner: undefined,
+          }
+        : {}
+    if (record.sequence <= reset) Object.assign(dynamic, { observationHistoryHead: undefined })
     return state.observationSnapshot && state.observationSnapshotReset !== reset
       ? {
           ...state,
+          ...dynamic,
           observation: undefined,
           observationSnapshot: undefined,
           observationSnapshotReset: undefined,
@@ -538,32 +975,26 @@ export class ProgramContext implements ProgramContextApi {
           observationCollection: undefined,
           health: undefined,
         }
-      : state
+      : { ...state, ...dynamic }
   }
 
   private async update(
-    change: (state: ProgramLeaseState, reset: number) => ProgramLeaseState,
+    change: (state: ProgramLeaseState, reset: number, owner: string) => ProgramLeaseState,
     additions: readonly ContextRecord[] = [],
     signal?: AbortSignal
   ): Promise<void> {
     for (let attempt = 0; attempt < 64; attempt++) {
       signal?.throwIfAborted()
-      const incremental = Boolean(
-        this.storage.selectSnapshot && this.storage.compareAndSwapMetadata
-      )
       const refs = [
         ...new Set(
           additions.flatMap((item) => [item.ref.id, ...item.sources.map((ref) => ref.id)])
         ),
       ]
-      const snapshot = (await this.snapshot(
-        [
-          { title: 'script:lease-state', kind: 'audit', latest: true },
-          { title: 'search:history-reset', latest: true },
-          ...refs.map((refId) => ({ refId })),
-        ],
-        true
-      )) ?? {
+      const snapshot = (await this.snapshot([
+        { title: 'script:lease-state', kind: 'audit', latest: true },
+        { title: 'search:history-reset', latest: true },
+        ...refs.map((refId) => ({ refId })),
+      ])) ?? {
         metadata: {
           version: 0,
           objectReferencesVersion: 1,
@@ -586,7 +1017,8 @@ export class ProgramContext implements ProgramContextApi {
         Math.max(
           snapshot.metadata.task?.startedSequence ?? 0,
           snapshot.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
-        )
+        ),
+        this.dynamicOwner(snapshot)
       )
       const identities = new Set(previous.leases.map((item) => item.ref))
       const state = {
@@ -598,29 +1030,14 @@ export class ProgramContext implements ProgramContextApi {
       const record = await this.record('script:lease-state', JSON.stringify(state))
       const metadata = { ...snapshot.metadata, version: snapshot.metadata.version + 1 }
       signal?.throwIfAborted()
-      if (incremental) {
+      {
         if (
-          await this.storage.compareAndSwapMetadata!(
+          await this.storage.compareAndSwapMetadata(
             this.sessionId,
             snapshot.metadata.version,
             metadata,
             [...additions, record]
           )
-        )
-          return
-      } else {
-        const records = [
-          ...snapshot.records,
-          ...[...additions, record].map((item, index) => ({
-            ...item,
-            sequence: (snapshot.records.at(-1)?.sequence ?? 0) + index + 1,
-          })),
-        ]
-        if (
-          await this.storage.compareAndSwap(this.sessionId, snapshot.metadata.version, {
-            ...metadata,
-            records,
-          })
         )
           return
       }
@@ -718,9 +1135,22 @@ export class ProgramContext implements ProgramContextApi {
     signal: AbortSignal
   ): Promise<{ receipt: ScriptSubmissionReceipt; claimed: boolean }> {
     const receipt = JSON.parse(JSON.stringify(input)) as ScriptSubmissionReceipt
+    const history =
+      receipt.status !== 'rejected' && receipt.observe?.status === 'selected'
+        ? prepared.find((item) => item.history)
+        : undefined
+    const activating = activate && !history
     const prior = await this.receipt(control)
     if (prior) return { receipt: prior, claimed: false }
     const additions: ContextRecord[] = []
+    if (history?.history && history.receipt.selectionRef)
+      additions.push(
+        await this.record(
+          'observation:selection',
+          JSON.stringify(history.history),
+          history.receipt.selectionRef
+        )
+      )
     for (const { program, version } of prepared)
       if (program && version) {
         additions.push(
@@ -766,8 +1196,10 @@ export class ProgramContext implements ProgramContextApi {
     )
     try {
       await this.update(
-        (state, reset) => {
-          if (activate && toNullable(state.observation) !== control.expectedObservation)
+        (state, reset, owner) => {
+          if (history && history.historyOwner !== owner)
+            throw new AppError('STALE_VIEW', '观察历史选择的接受任务已经失效')
+          if (activating && toNullable(state.observation) !== control.expectedObservation)
             throw AppError.withFields(
               'SCRIPT_CONFLICT',
               '观察版本已经变化，请基于 currentRef 继续编辑',
@@ -783,8 +1215,17 @@ export class ProgramContext implements ProgramContextApi {
             }))
           return {
             ...state,
+            ...(history?.history && history.receipt.selectionRef
+              ? {
+                  pendingDynamicOwner: owner,
+                  pendingObservationHistory: {
+                    selectionRef: history.receipt.selectionRef,
+                    request: history.history,
+                  },
+                }
+              : {}),
             jobs: !isEmpty(jobs) ? [...(state.jobs ?? []), ...jobs] : state.jobs,
-            ...(activate
+            ...(activating
               ? {
                   observation: receipt.observe!.sourceRef,
                   observationSnapshot: prepared.find(
@@ -1662,24 +2103,8 @@ export class ProgramContext implements ProgramContextApi {
         to: block.representation,
         reason: 'presentation-policy-or-budget',
       }))
-    const observationEligible = (index: number) => {
-      const binding = original?.outputAttachments?.find(
-        (item: { index: number }) => item.index === index
-      )
-      return (
-        maxChars > 6000 &&
-        (!binding ||
-          Boolean(
-            presentation?.blocks.some(
-              (block) => block.key === binding.key && block.reason === 'native-attachment-required'
-            )
-          ))
-      )
-    }
-    const observationAttachedIndexes = new Set<number>()
-    for (const [index, image] of observationImages.entries())
-      if (observationEligible(index) && attachImage(image)) observationAttachedIndexes.add(index)
-    const observationAttached = (index: number) => observationAttachedIndexes.has(index)
+    const observationEligible = (_index: number) => false
+    const observationAttached = (_index: number) => false
     const safety = current
       ? (JSON.parse((await this.storage.get(this.sessionId, current.record.objectId))!)
           .observationFeedback ?? [])
@@ -1779,6 +2204,10 @@ export class ProgramContext implements ProgramContextApi {
           return job
         }),
       observation: {
+        snapshotId:
+          state.observationHistoryHead?.sourceRef === state.observation
+            ? state.observationHistoryHead?.snapshotId
+            : undefined,
         health: state.health,
         freshness: state.observationCollection,
         sourceRef: toNullable(state.observation),
@@ -2001,6 +2430,21 @@ export class ProgramContext implements ProgramContextApi {
         )
         return {
           ...state,
+          pendingObservationHistory:
+            state.pendingDynamicDelivery?.id === frameId &&
+            state.pendingDynamicDelivery.selectionRef ===
+              state.pendingObservationHistory?.selectionRef
+              ? undefined
+              : state.pendingObservationHistory,
+          pendingDynamicExchanges:
+            state.pendingDynamicDelivery?.id === frameId
+              ? state.pendingDynamicExchanges?.filter(
+                  (ref) =>
+                    !state.pendingDynamicDelivery!.exchanges.some((item) => item.id === ref.id)
+                )
+              : state.pendingDynamicExchanges,
+          pendingDynamicDelivery:
+            state.pendingDynamicDelivery?.id === frameId ? undefined : state.pendingDynamicDelivery,
           previousObservationSource: state.pendingObservationSource,
           pendingObservationSource: undefined,
           previousOutputPresentation: state.pendingOutputPresentation,

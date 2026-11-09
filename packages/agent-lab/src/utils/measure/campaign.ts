@@ -15,15 +15,16 @@ import type {
 } from '../../types/agent-lab.js'
 import { AgentLabTuning } from '../tuning.js'
 
-/** 失败账允许的状态流转；不在表里的一律拒绝。 */
-const FailureTransitions: Readonly<Record<CampaignFailureState, readonly CampaignFailureState[]>> =
-  {
-    open: ['diagnosed'],
-    diagnosed: ['fixed'],
-    fixed: ['fixed', 'proving'],
-    proving: ['fixed', 'closed'],
-    closed: ['open'],
-  }
+/** 普通失败账流转不能关账；closed 只能由证明路径产生，不在表里的流转一律拒绝。 */
+const FailureTransitions: Readonly<
+  Record<CampaignFailureState, ReadonlyArray<TransitionCampaignFailureInput['state']>>
+> = {
+  open: ['diagnosed'],
+  diagnosed: ['fixed'],
+  fixed: ['fixed', 'proving'],
+  proving: ['fixed'],
+  closed: ['open'],
+}
 
 /** 去重并保持顺序。 */
 function unique(values: readonly string[]): string[] {
@@ -83,7 +84,8 @@ export function selectAdaptiveCampaignTasks(
   input: AdaptiveCampaignInput
 ): AdaptiveCampaignSelection {
   const revisions = new Map(input.revisions.map((entry) => [entry.taskId, entry.revision]))
-  if (revisions.size !== input.cases.length) throw new Error('每条战役用例必须且只能有一个修订版')
+  if (input.revisions.length !== input.cases.length || revisions.size !== input.cases.length)
+    throw new Error('每条战役用例必须且只能有一个修订版')
   const ids = new Set(input.cases.map((task) => task.id))
   if (ids.size !== input.cases.length) throw new Error('战役用例的 id 必须唯一')
   for (const id of ids) {
@@ -114,9 +116,16 @@ export function selectAdaptiveCampaignTasks(
   )
 
   const duplicateTaskIds: string[] = []
+  const provingTasks = input.cases.filter((task) => provingTaskIds.has(task.id))
+  const provingSignatures = new Set(provingTasks.map(realTaskSemanticSignature))
   const bySignature = new Map<string, RealTaskCase>()
   for (const task of input.cases) {
+    if (provingTaskIds.has(task.id)) continue
     const signature = realTaskSemanticSignature(task)
+    if (provingSignatures.has(signature)) {
+      duplicateTaskIds.push(task.id)
+      continue
+    }
     const previous = bySignature.get(signature)
     if (!previous) {
       bySignature.set(signature, task)
@@ -130,10 +139,10 @@ export function selectAdaptiveCampaignTasks(
 
   const scoring = AgentLabTuning.campaign
   const scores: Record<string, number> = {}
-  const candidates = [...bySignature.values()].filter((task) => {
-    if (provingTaskIds.has(task.id)) return true
-    return current.get(task.id)?.outcome !== 'pass'
-  })
+  const candidates = [
+    ...provingTasks,
+    ...[...bySignature.values()].filter((task) => current.get(task.id)?.outcome !== 'pass'),
+  ]
   const selected: RealTaskCase[] = []
   const selectionDimensions = new Set(coveredDimensions)
   while (selected.length < Math.max(0, input.limit) && candidates.length > 0) {

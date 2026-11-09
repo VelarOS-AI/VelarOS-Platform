@@ -9,7 +9,6 @@
  */
 
 import { isEmpty } from './utils/array.js'
-import { optionalWhen } from './utils/optionalWhen.js'
 import { clampToCodePointBoundary } from './utils/string.js'
 import {
   isArray,
@@ -64,7 +63,8 @@ export class AppError extends Error {
   readonly context: ErrorContext
 
   public static [Symbol.hasInstance](value: unknown): boolean {
-    if (this !== AppError) return Function.prototype[Symbol.hasInstance].call(this, value)
+    if (Function.prototype[Symbol.hasInstance].call(this, value)) return true
+    if (this !== AppError) return false
 
     const record = value as Error & { code?: unknown; message?: unknown }
     return (
@@ -117,7 +117,7 @@ export class AppError extends Error {
     return {
       code: this.code,
       message: this.message,
-      context: optionalWhen(!isEmpty(Object.keys(this.context)), this.context),
+      context: isEmpty(Object.keys(this.context)) ? undefined : this.context,
     }
   }
 

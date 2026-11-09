@@ -3,14 +3,14 @@ import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { NodeCodeRunnerOptions, NodeRuntimePackage } from '@velaros-ai/script'
 import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 
-import type { PluginSkillSource, SkillMutation, SkillSelection } from '../types/skills.js'
+import type { SkillSelection } from '../types/skills.js'
 
 import type { SkillEnvironmentLease, SkillRegistryApi, SkillSessionApi } from './provides.js'
 
 /** 宿主允许模型按需加载本机已安装的 Skill；显式选择只决定预加载项。 */
 export interface SkillSessionOptions {
   /** 本机安装库，加载时重新核对固定代次。 */
-  readonly registry: SkillRegistryApi
+  readonly registry: Pick<SkillRegistryApi, 'list' | 'acquire'>
   /** 工作区默认项与显式选择；其余安装项保留按需加载资格。 */
   readonly selection?: readonly SkillSelection[]
 }
@@ -35,13 +35,6 @@ export interface SkillRegistryOptions {
   readonly packages?: readonly NodeRuntimePackage[]
   /** 宿主提供的只读内置 Skill 包目录，身份不由安装清单决定。 */
   readonly builtins?: readonly string[]
-  /** 插件作为整体安装；内部 Skill 由宿主实时提供，独立 Skill 安装器不能覆盖它们。 */
-  readonly plugins?: {
-    /** 只返回已安装并启用的插件内部 Skill。 */
-    list(): Promise<readonly PluginSkillSource[]>
-    /** 插件安装、启停和移除后通知目录失效。 */
-    subscribe(listener: () => void): () => void
-  }
 }
 
 /** npm CLI 运行在应用自带 Node 上，安装权限和进程回收由宿主负责。 */
@@ -59,7 +52,7 @@ export interface NpmSkillInstallerOptions {
 /** 已选环境中的宿主能力只通过 Kernel 模块公开。 */
 export interface SkillCapabilityModuleOptions {
   /** 每次调用重新查询当前授权。 */
-  readonly registry: SkillRegistryApi
+  readonly registry: Pick<SkillRegistryApi, 'assertGranted'>
   /** 当前会话持有的安装代次和依赖集合。 */
   readonly lease: SkillEnvironmentLease
   /** 按需模式的发现目录和加载所有者；不提供时沿用固定授权租约。 */
@@ -68,24 +61,4 @@ export interface SkillCapabilityModuleOptions {
   readonly node: NodeCodeRunnerOptions
   /** 宿主已绑定资源的能力；只装配租约授予的模块。 */
   readonly hostModules?: Readonly<Record<string, OperationModuleDefinition>>
-}
-
-/** 模型管理模块的调用上下文；每轮固定租约，权限决策由宿主注入。 */
-export interface SkillsOperationContext {
-  /** 本次调用的取消信号。 */
-  readonly abortSignal: AbortSignal
-  /** 本机安装库的唯一服务。 */
-  readonly registry: SkillRegistryApi
-  /** 当前会话已选择的环境租约。 */
-  readonly lease: SkillEnvironmentLease
-  /** 按需模式允许模型加载目录中的 Skill，无须先在聊天框勾选。 */
-  readonly session?: SkillSessionApi
-  /** 相对来源路径的解析根。 */
-  readonly cwd: string
-  /** 沙箱开启时，来源目录和真实符号链接必须在工作区内。 */
-  readonly sourceScope: 'workspace' | 'unrestricted'
-  /** 写入前交给宿主确认；拒绝时抛错，安装脚本不能自行放宽此策略。 */
-  authorize(mutation: SkillMutation, signal: AbortSignal): Promise<void>
-  /** 确认和校验失败记为 none；依赖脚本执行期间记为 unknown，成功发布记为 committed。 */
-  recordEffect(effect: 'none' | 'committed' | 'unknown'): void
 }

@@ -20,8 +20,6 @@ import type {
   RunArchive,
   SessionHandle,
   SettleOutcome,
-  WatchdogAbort,
-  WatchdogBaseline,
 } from '../types/agent-lab.js'
 import type { RunJourneyOptions } from '../types/options.js'
 import { resolveBudget } from '../utils/budget.js'
@@ -39,6 +37,7 @@ import {
 } from '../utils/journey.js'
 import { createUnobservedObservation, normalizeObservation } from '../utils/measure/normalize.js'
 import { journeySpecSchema } from '../utils/wire/journey.js'
+import { runIdSchema } from '../utils/wire/primitives.js'
 
 import { BudgetLedger } from './BudgetLedger.js'
 
@@ -141,7 +140,7 @@ class JourneyRunner implements JourneyRunnerApi {
     }
 
     const now = options.now ?? Date.now
-    const runId = (options.createRunId ?? randomUUID)()
+    const runId = runIdSchema.parse((options.createRunId ?? randomUUID)())
     const startedAt = now()
     let preflightFailure: string | null = null
     const capabilities = await options.driver.capabilities().catch((error: unknown) => {
@@ -166,7 +165,7 @@ class JourneyRunner implements JourneyRunnerApi {
     let session: SessionHandle | null = null
     let environmentReady = false
 
-    if (preflightFailure) {
+    if (preflightFailure !== null) {
       drops.push({
         trialId: options.trial.id,
         legId: null,
@@ -198,81 +197,122 @@ class JourneyRunner implements JourneyRunnerApi {
       const openSession = session
       try {
         for (const leg of journey.legs) {
+          const legStartedAt = now()
           try {
-            const legStartedAt = now()
             const legBudget: Budget = resolveBudget(journey.budget, leg.budget)
-            // 段预算按本段计（与驱动等待的计时口径一致），整程预算仍按整程累计比。
-            const legLedger = ledger.beginLeg()
-            let watchdogBaseline: WatchdogBaseline | null = null
-            // 用一个容器装：中止是在 onSample 回调里定的，闭包外面要读得到它。
-            const watchdog: { current: WatchdogAbort | null } = { current: null }
+            const baseline = normalizeObservation(await options.driver.collect(openSession, 'idle'))
+            ledger.observe(baseline)
+            const legLedger = ledger.beginLeg(baseline, legStartedAt)
             const activeWatchdogDetectorIds = new Set(journey.gatingDetectorIds)
+            const watchdogBaseline = options.detectors.watchdogBaseline(
+              baseline,
+              options.detectors.detect(baseline, { trial: options.trial, journey, leg }),
+              activeWatchdogDetectorIds
+            )
+            // 用一个容器装：中止是在 onSample 回调里定的，闭包外面要读得到它。
+            const interruption: {
+              outcome: Extract<SettleOutcome, { kind: 'aborted' | 'budget-exhausted' }> | null
+            } = { outcome: null }
 
-            await options.driver.send(openSession, leg)
-            let settleOutcome = await options.driver.waitSettled(openSession, {
-              budget: legBudget,
-              signal: new AbortController().signal,
-              onSample: async (sample) => {
-                const observation = normalizeObservation(sample.observation)
-                ledger.observe(observation)
-                ledger.observeDriverUsage(sample.usage)
-                legLedger.observe(observation)
-                legLedger.observeDriverUsage(sample.usage)
-                const sampleFindings = options.detectors.detect(observation, {
-                  trial: options.trial,
-                  journey,
-                  leg,
-                })
-                const budgetLimit = legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget)
-                if (budgetLimit) {
-                  const abort: WatchdogAbort = {
-                    detectorId: JourneyRunner.RunnerDetectorIds.budget,
-                    reason: `预算耗尽: ${budgetLimit}`,
+            const initialBudgetLimit =
+              legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget)
+            let settleOutcome: SettleOutcome
+            if (initialBudgetLimit) {
+              settleOutcome = { kind: 'budget-exhausted', limit: initialBudgetLimit }
+              // 本段未调用 send，原生执行用量确认为零；不把缺失的采样当作零。
+              ledger.observeDriverUsage({
+                toolCalls: 0,
+                tokens: 0,
+                workingMs: 0,
+                wallClockMs: 0,
+                legs: 0,
+              })
+            } else {
+              await options.driver.send(openSession, leg)
+              settleOutcome = await options.driver.waitSettled(openSession, {
+                budget: legBudget,
+                signal: new AbortController().signal,
+                onSample: async (sample) => {
+                  const observation = normalizeObservation(sample.observation)
+                  ledger.observe(observation)
+                  ledger.observeDriverUsage(sample.usage)
+                  legLedger.observe(observation)
+                  legLedger.observeDriverUsage(sample.usage)
+                  const sampleFindings = options.detectors.detect(observation, {
+                    trial: options.trial,
+                    journey,
+                    leg,
+                  })
+                  const budgetLimit =
+                    legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget)
+                  if (budgetLimit) {
+                    const abort = {
+                      detectorId: JourneyRunner.RunnerDetectorIds.budget,
+                      reason: `预算耗尽: ${budgetLimit}`,
+                    }
+                    interruption.outcome = { kind: 'budget-exhausted', limit: budgetLimit }
+                    if (capabilities.canAbortMidRun)
+                      await options.driver.abort(openSession, abort.reason)
+                    return { kind: 'abort', ...abort }
                   }
-                  watchdog.current = abort
-                  if (capabilities.canAbortMidRun)
-                    await options.driver.abort(openSession, abort.reason)
-                  return { kind: 'abort', ...abort }
-                }
-                if (!watchdogBaseline) {
-                  watchdogBaseline = options.detectors.watchdogBaseline(
+                  const candidate = options.detectors.watchdogAbort(
                     observation,
                     sampleFindings,
+                    watchdogBaseline,
                     activeWatchdogDetectorIds
                   )
-                  return { kind: 'continue' }
-                }
-                const candidate = options.detectors.watchdogAbort(
-                  observation,
-                  sampleFindings,
-                  watchdogBaseline,
-                  activeWatchdogDetectorIds
-                )
-                if (!candidate) return { kind: 'continue' }
-                watchdog.current = candidate
-                if (capabilities.canAbortMidRun)
-                  await options.driver.abort(openSession, candidate.reason)
-                return { kind: 'abort', ...candidate }
-              },
-            })
+                  if (!candidate) return { kind: 'continue' }
+                  interruption.outcome = { kind: 'aborted', ...candidate }
+                  if (capabilities.canAbortMidRun)
+                    await options.driver.abort(openSession, candidate.reason)
+                  return { kind: 'abort', ...candidate }
+                },
+              })
+            }
 
-            const abortRequest = watchdog.current
-            if (abortRequest && settleOutcome.kind === 'settled') {
-              settleOutcome = {
-                kind: 'aborted',
-                detectorId: abortRequest.detectorId,
-                reason: abortRequest.reason,
-              }
+            if (
+              interruption.outcome &&
+              (settleOutcome.kind === 'settled' || settleOutcome.kind === 'aborted')
+            ) {
+              settleOutcome = interruption.outcome
             }
             const observation = normalizeObservation(
               await options.driver.collect(openSession, 'idle')
             )
             ledger.observe(observation)
-            const legFindings = options.detectors.detect(observation, {
-              trial: options.trial,
-              journey,
-              leg,
-            })
+            legLedger.observe(observation)
+            const finalBudgetLimit =
+              legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget)
+            if (
+              finalBudgetLimit &&
+              (settleOutcome.kind === 'settled' || settleOutcome.kind === 'awaiting-input')
+            ) {
+              settleOutcome = { kind: 'budget-exhausted', limit: finalBudgetLimit }
+            }
+            const budgetBlocked =
+              finalBudgetLimit !== null && !leg.continueOn.includes('budget-exhausted')
+            const legFindings = [
+              ...options.detectors.detect(observation, {
+                trial: options.trial,
+                journey,
+                leg,
+              }),
+            ]
+            if (
+              finalBudgetLimit &&
+              (settleOutcome.kind === 'unavailable' ||
+                settleOutcome.kind === 'timeout' ||
+                settleOutcome.kind === 'aborted')
+            ) {
+              legFindings.push({
+                detectorId: JourneyRunner.RunnerDetectorIds.budget,
+                severity: budgetBlocked ? 'fail' : 'info',
+                failureClass: 'budget-exhausted',
+                summary: `预算耗尽: ${finalBudgetLimit}`,
+                references: [],
+                evidence: { limit: finalBudgetLimit, nativeOutcome: settleOutcome.kind },
+              })
+            }
             const gatingFinding = legFindings.some(
               (item) =>
                 item.severity === 'fail' && journey.gatingDetectorIds.includes(item.detectorId)
@@ -289,6 +329,8 @@ class JourneyRunner implements JourneyRunnerApi {
               now,
             })
             const score = scoreCriteria(leg, criteria)
+            const passed =
+              gatingFinding || (budgetBlocked && score.passed === true) ? false : score.passed
             ledger.finishLeg()
             legResults.push({
               legId: leg.id,
@@ -299,12 +341,12 @@ class JourneyRunner implements JourneyRunnerApi {
               observation,
               findings: legFindings,
               score: score.score,
-              passed: gatingFinding ? false : score.passed,
+              passed,
             })
             findings.push(...legFindings)
             drops.push(...dropRecords(options.trial.id, leg.id, criteria))
 
-            const blockingFailure = leg.blocking && (score.passed === false || gatingFinding)
+            const blockingFailure = leg.blocking && (passed === false || budgetBlocked)
             const expectedNativeOutcome =
               settleOutcome.kind !== 'settled' && leg.continueOn.includes(settleOutcome.kind)
             if (blockingFailure || (settleOutcome.kind !== 'settled' && !expectedNativeOutcome)) {
@@ -316,7 +358,6 @@ class JourneyRunner implements JourneyRunnerApi {
             }
           } catch (error) {
             const detail = error instanceof Error ? error.message : String(error)
-            const legStartedAt = now()
             const observation = createUnobservedObservation('idle')
             const settleOutcome: SettleOutcome = {
               kind: 'unavailable',

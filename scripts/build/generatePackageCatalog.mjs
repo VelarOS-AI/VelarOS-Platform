@@ -19,7 +19,9 @@ if (unexpectedArguments.length > 0) {
 
 const compareText = (left, right) => (left < right ? -1 : left > right ? 1 : 0)
 
-const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(ROOT_DIR)
+const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(ROOT_DIR, {
+  includeDistributions: false,
+})
 const domainByDirectory = new Map()
 for (const [domain, directories] of Object.entries(rootManifest.velaros.domainPackages)) {
   for (const directory of directories) {

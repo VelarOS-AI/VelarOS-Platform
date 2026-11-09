@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { runGuardedCommand, safePackPackage } from './safe-package-pack.mjs'
+import { platformDistributions } from './platform-distributions.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const fixtureDirectory = path.join(import.meta.dirname, 'fixtures', 'host-contract-consumer')
 // 宿主只消费整体 Platform；不得再同时安装旧内部包。
-const packageDirectories = ['velaros']
+const packageDirectories = ['velaros', 'capabilities']
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
 const nodeTypesVersion = manifest.devDependencies?.['@types/node']
 if (!nodeTypesVersion)
@@ -38,13 +39,13 @@ try {
   const dependencies = {}
   const packedManifests = []
   for (const directoryName of packageDirectories) {
-    const packageDirectory = path.join(root, 'packages', directoryName)
+    const packageDirectory = path.join(root, 'packages', 'velaros')
     const packageManifest = JSON.parse(
       await readFile(path.join(packageDirectory, 'package.json'), 'utf8')
     )
     const tarballPath = path.join(tarballDirectory, `${directoryName}.tgz`)
-    await safePackPackage({ packageDirectory, filename: tarballPath })
-    dependencies[packageManifest.name] = `file:${tarballPath}`
+    await safePackPackage({ packageDirectory, filename: tarballPath, distribution: directoryName })
+    dependencies[platformDistributions[directoryName].name] = `file:${tarballPath}`
     const packed = await runGuardedCommand({
       command: 'tar',
       args: ['-xOf', path.basename(tarballPath), 'package/package.json'],
@@ -76,6 +77,7 @@ try {
         private: true,
         type: 'module',
         dependencies: { ...dependencies, '@types/node': nodeTypesVersion },
+        overrides: { '@velaros-ai/velaros': dependencies['@velaros-ai/velaros'] },
       },
       null,
       2

@@ -45,6 +45,8 @@ function readFailure(error: unknown, shown: string): AppError {
       )
     if (error.code === TextFileErrorCodes.notRegular)
       return new AppError('VALIDATION', `路径不是普通文件：${shown}`)
+    if (error.code === TextFileErrorCodes.externalEdit)
+      return new AppError('VALIDATION', `图片文件在读取期间发生变化：${shown}；请重试查看`)
     return error
   }
   switch (errnoOf(error)) {

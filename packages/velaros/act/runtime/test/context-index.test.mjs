@@ -148,7 +148,7 @@ test('same parent task across user inputs bounds completed child history and rec
   )
 })
 
-async function fixture(t, mode = 'indexed') {
+async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'runtime-index-'))
   const path = join(root, 'context.sqlite')
   const storage = localContextStorage({ path })
@@ -156,34 +156,7 @@ async function fixture(t, mode = 'indexed') {
     await storage.close()
     await rm(root, { recursive: true, force: true })
   })
-  const port =
-    mode === 'indexed' || mode === 'legacy-selector'
-      ? storage
-      : {
-          load: (...args) => storage.load(...args),
-          compareAndSwap: (...args) => storage.compareAndSwap(...args),
-          put: (...args) => storage.put(...args),
-          get: (...args) => storage.get(...args),
-          close: () => storage.close(),
-          ...(mode === 'read-only-index'
-            ? { selectSnapshot: (...args) => storage.selectSnapshot(...args) }
-            : {}),
-        }
-  if (mode === 'legacy-selector') {
-    const select = storage.selectSnapshot.bind(storage)
-    t.mock.method(storage, 'selectSnapshot', (id, queries) =>
-      select(
-        id,
-        queries.map((query) =>
-          Object.fromEntries(
-            Object.entries(query).filter(
-              ([key]) => !['titleSuffix', 'sequence', 'last', 'latestPerTitle'].includes(key)
-            )
-          )
-        )
-      )
-    )
-  }
+  const port = storage
   const context = createContextRuntime({ sessionId: 's', storage: port })
   const goal = await context.append({ kind: 'user', body: 'goal' })
   const view = createContextView({ sessionId: 's', storage: port, context, sources: [] })
@@ -358,99 +331,96 @@ test('completed image receipts store references and replay identical attachments
     code: 'SCRIPT_CALL_CONFLICT',
   })
 })
-
-for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector'])
-  test(`${mode}: program commits and notes preserve conflict, replay and task reset semantics`, async (t) => {
-    const f = await fixture(t, mode)
-    if (mode === 'indexed')
-      t.mock.method(f.storage, 'load', () => {
-        throw Error('unexpected full snapshot')
-      })
-    const sourceRef = crypto.randomUUID()
-    await f.programs.publish(
-      [
-        {
-          program: { source: 'export default 1;' },
-          version: { sourceRef, kind: 'observation', baseObservation: null, reason: 'first' },
-        },
-      ],
-      { id: crypto.randomUUID(), fingerprint: 'register-real-observer', expectedObservation: null },
-      {
-        status: 'completed',
-        executed: false,
-        observe: { status: 'updated', sourceRef, executed: false },
-      },
-      true,
-      false,
-      signal()
-    )
-    await Promise.all([
-      f.programs.observeHealth(sourceRef, 'one', false, false),
-      f.programs.observeHealth(sourceRef, 'two', false, false),
-    ])
-    assert.equal((await f.programs.state()).health.failures, 2)
-    const control = { id: crypto.randomUUID(), fingerprint: 'same', expectedObservation: null }
-    const receipt = { status: 'prepared', executed: false }
-    const published = await Promise.all([
-      f.programs.publish([], control, receipt, false, false, signal()),
-      f.programs.publish([], control, receipt, false, false, signal()),
-    ])
-    assert.equal(published.filter((result) => result.claimed).length, 1)
-    await f.programs.finish(control, { status: 'completed', executed: true })
-    assert.equal((await f.programs.receipt(control)).status, 'completed')
-    await assert.rejects(f.programs.receipt({ ...control, fingerprint: 'different' }), {
-      code: 'SCRIPT_CALL_CONFLICT',
-    })
-    const note = await f.memory.update(
-      { key: 'plan', baseRevision: 0, body: 'first', sources: [f.goal.ref] },
-      signal()
-    )
-    const writes = await Promise.allSettled([
-      f.memory.update({ key: 'plan', baseRevision: 1, body: 'left' }, signal()),
-      f.memory.update({ key: 'plan', baseRevision: 1, body: 'right' }, signal()),
-    ])
-    assert.equal(writes.filter((result) => result.status === 'fulfilled').length, 1)
-    assert.equal(
-      writes.find((result) => result.status === 'rejected').reason.code,
-      'WORKSPACE_CONFLICT'
-    )
-    assert.equal((await f.memory.list({}, signal())).items[0].revision, 2)
-    assert.equal(JSON.parse((await f.memory.read(note.ref, 0, 10000, signal())).text).body, 'first')
-    const frame = await f.context.append({
-      kind: 'audit',
-      title: 'context:frame:one',
-      body: JSON.stringify({ frameId: 'one', entries: [] }),
-    })
-    await f.memory.acknowledge('one', signal())
-    await f.memory.acknowledge('one', signal())
-    assert.equal((await f.storage.records('s', { title: 'context:delivered' })).items.length, 1)
-    const controller = new AbortController()
-    controller.abort()
-    await assert.rejects(f.memory.acknowledge('one', controller.signal), { name: 'AbortError' })
-    assert.equal((await f.storage.records('s', { refId: frame.ref.id })).items.length, 1)
-    await f.view.end('completed')
-    const next = await f.context.append({ kind: 'user', body: 'new task' })
-    await f.view.begin(next.ref, signal(), 'new')
-    assert.deepEqual(await f.programs.state(), { completedTurns: 0, leases: [] })
-    assert.deepEqual((await f.memory.list({}, signal())).items, [])
-    await assert.rejects(
-      f.memory.update(
-        { key: 'invalid', baseRevision: 0, body: 'old source', sources: [f.goal.ref] },
-        signal()
-      ),
-      { code: 'SCOPE_MISMATCH' }
-    )
-    await f.context.append({ kind: 'user', body: 'reattach', sources: [f.goal.ref] })
-    assert.equal(
-      (
-        await f.memory.update(
-          { key: 'valid', baseRevision: 0, body: 'reattached', sources: [f.goal.ref] },
-          signal()
-        )
-      ).revision,
-      1
-    )
+test(`indexed: program commits and notes preserve conflict, replay and task reset semantics`, async (t) => {
+  const f = await fixture(t)
+  t.mock.method(f.storage, 'load', () => {
+    throw Error('unexpected full snapshot')
   })
+  const sourceRef = crypto.randomUUID()
+  await f.programs.publish(
+    [
+      {
+        program: { source: 'export default 1;' },
+        version: { sourceRef, kind: 'observation', baseObservation: null, reason: 'first' },
+      },
+    ],
+    { id: crypto.randomUUID(), fingerprint: 'register-real-observer', expectedObservation: null },
+    {
+      status: 'completed',
+      executed: false,
+      observe: { status: 'updated', sourceRef, executed: false },
+    },
+    true,
+    false,
+    signal()
+  )
+  await Promise.all([
+    f.programs.observeHealth(sourceRef, 'one', false, false),
+    f.programs.observeHealth(sourceRef, 'two', false, false),
+  ])
+  assert.equal((await f.programs.state()).health.failures, 2)
+  const control = { id: crypto.randomUUID(), fingerprint: 'same', expectedObservation: null }
+  const receipt = { status: 'prepared', executed: false }
+  const published = await Promise.all([
+    f.programs.publish([], control, receipt, false, false, signal()),
+    f.programs.publish([], control, receipt, false, false, signal()),
+  ])
+  assert.equal(published.filter((result) => result.claimed).length, 1)
+  await f.programs.finish(control, { status: 'completed', executed: true })
+  assert.equal((await f.programs.receipt(control)).status, 'completed')
+  await assert.rejects(f.programs.receipt({ ...control, fingerprint: 'different' }), {
+    code: 'SCRIPT_CALL_CONFLICT',
+  })
+  const note = await f.memory.update(
+    { key: 'plan', baseRevision: 0, body: 'first', sources: [f.goal.ref] },
+    signal()
+  )
+  const writes = await Promise.allSettled([
+    f.memory.update({ key: 'plan', baseRevision: 1, body: 'left' }, signal()),
+    f.memory.update({ key: 'plan', baseRevision: 1, body: 'right' }, signal()),
+  ])
+  assert.equal(writes.filter((result) => result.status === 'fulfilled').length, 1)
+  assert.equal(
+    writes.find((result) => result.status === 'rejected').reason.code,
+    'WORKSPACE_CONFLICT'
+  )
+  assert.equal((await f.memory.list({}, signal())).items[0].revision, 2)
+  assert.equal(JSON.parse((await f.memory.read(note.ref, 0, 10000, signal())).text).body, 'first')
+  const frame = await f.context.append({
+    kind: 'audit',
+    title: 'context:frame:one',
+    body: JSON.stringify({ frameId: 'one', entries: [] }),
+  })
+  await f.memory.acknowledge('one', signal())
+  await f.memory.acknowledge('one', signal())
+  assert.equal((await f.storage.records('s', { title: 'context:delivered' })).items.length, 1)
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(f.memory.acknowledge('one', controller.signal), { name: 'AbortError' })
+  assert.equal((await f.storage.records('s', { refId: frame.ref.id })).items.length, 1)
+  await f.view.end('completed')
+  const next = await f.context.append({ kind: 'user', body: 'new task' })
+  await f.view.begin(next.ref, signal(), 'new')
+  assert.deepEqual(await f.programs.state(), { completedTurns: 0, leases: [] })
+  assert.deepEqual((await f.memory.list({}, signal())).items, [])
+  await assert.rejects(
+    f.memory.update(
+      { key: 'invalid', baseRevision: 0, body: 'old source', sources: [f.goal.ref] },
+      signal()
+    ),
+    { code: 'SCOPE_MISMATCH' }
+  )
+  await f.context.append({ kind: 'user', body: 'reattach', sources: [f.goal.ref] })
+  assert.equal(
+    (
+      await f.memory.update(
+        { key: 'valid', baseRevision: 0, body: 'reattached', sources: [f.goal.ref] },
+        signal()
+      )
+    ).revision,
+    1
+  )
+})
 
 test('program publication rolls back all additions if lease publication fails', async (t) => {
   const handle = { db: undefined }
@@ -730,74 +700,71 @@ test('all projection stages avoid full snapshots and preserve immutable history'
     (await f.storage.records('s', { title: `context:frame:${frame.frameId}` })).items.length === 1
   )
 })
-
-for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector'])
-  test(`${mode}: volumes seal rule skeletons, leave the last responses to the next segment, take narratives and follow reset`, async (t) => {
-    const f = await fixture(t, mode)
-    const recent = new RecentContext('s', f.context, f.port)
-    const pairs = []
-    for (let i = 0; i < 5; i++) {
-      await f.context.append({
-        kind: 'assistant',
-        body: `step ${i} explanation\n@@sX execute()\ncode\n@@sX`,
-      })
-      pairs.push(
-        await f.context.append({
-          kind: 'audit',
-          title: `script:${crypto.randomUUID()}:result`,
-          body: JSON.stringify({ mode: 'execute', i, output: { blocks: [{ key: `k${i}` }] } }),
-        })
-      )
-    }
-    if (mode === 'indexed')
-      t.mock.method(f.storage, 'load', () => {
-        throw Error('full volume snapshot')
-      })
-    // 最近两个响应及其结果留给新段，之前的封成一卷
-    const through = await recent.cut(segment(), 2, signal())
-    assert.equal(through, pairs[2].sequence)
-    assert.equal(await recent.cut(segment({ from: through }), 2, signal()), undefined)
-    const ref = await recent.seal(0, through, signal())
-    const [sealed] = await recent.volumes(signal())
-    assert.deepEqual(sealed.ref, ref)
-    assert.equal(sealed.volume.turns, 3)
-    assert.equal(sealed.volume.results, 3)
-    assert.match(sealed.volume.skeleton, /step 0 explanation/)
-    assert.doesNotMatch(sealed.volume.skeleton, /@@sX/)
-    assert.match(sealed.volume.skeleton, /输出 k2/)
-    await assert.rejects(recent.seal(through, through, signal()), { code: 'VALIDATION' })
-    const narrative = {
-      summary: 'three steps done',
-      evidence: [pairs[0].ref],
-      unresolved: ['step 3'],
-      negativeAttempts: [],
-    }
-    await recent.narrate(ref, narrative, signal())
-    assert.equal((await recent.volumes(signal()))[0].narrative.summary, 'three steps done')
+test(`indexed: volumes seal rule skeletons, leave the last responses to the next segment, take narratives and follow reset`, async (t) => {
+  const f = await fixture(t)
+  const recent = new RecentContext('s', f.context, f.port)
+  const pairs = []
+  for (let i = 0; i < 5; i++) {
     await f.context.append({
-      kind: 'audit',
-      title: 'search:history-reset',
-      body: 'new authorization',
+      kind: 'assistant',
+      body: `step ${i} explanation\n@@sX execute()\ncode\n@@sX`,
     })
-    assert.deepEqual(await recent.volumes(signal()), [])
-    await assert.rejects(recent.narrate(ref, narrative, signal()), { code: 'NOT_FOUND' })
-    const next = []
-    for (let i = 0; i < 4; i++) {
-      await f.context.append({ kind: 'assistant', body: `next ${i}` })
-      next.push(
-        await f.context.append({
-          kind: 'audit',
-          title: `script:${crypto.randomUUID()}:result`,
-          body: '{}',
-        })
-      )
-    }
-    const fresh = await recent.seal(0, next[0].sequence, signal())
-    const [current] = await recent.volumes(signal())
-    assert.equal(current.volume.turns, 1)
-    await assert.rejects(recent.narrate(fresh, narrative, signal()), /当前授权/)
-    await recent.narrate(fresh, { ...narrative, evidence: [next[0].ref] }, signal())
+    pairs.push(
+      await f.context.append({
+        kind: 'audit',
+        title: `script:${crypto.randomUUID()}:result`,
+        body: JSON.stringify({ mode: 'execute', i, output: { blocks: [{ key: `k${i}` }] } }),
+      })
+    )
+  }
+  t.mock.method(f.storage, 'load', () => {
+    throw Error('full volume snapshot')
   })
+  // 最近两个响应及其结果留给新段，之前的封成一卷
+  const through = await recent.cut(segment(), 2, signal())
+  assert.equal(through, pairs[2].sequence)
+  assert.equal(await recent.cut(segment({ from: through }), 2, signal()), undefined)
+  const ref = await recent.seal(0, through, signal())
+  const [sealed] = await recent.volumes(signal())
+  assert.deepEqual(sealed.ref, ref)
+  assert.equal(sealed.volume.turns, 3)
+  assert.equal(sealed.volume.results, 3)
+  assert.match(sealed.volume.skeleton, /step 0 explanation/)
+  assert.doesNotMatch(sealed.volume.skeleton, /@@sX/)
+  assert.match(sealed.volume.skeleton, /输出 k2/)
+  await assert.rejects(recent.seal(through, through, signal()), { code: 'VALIDATION' })
+  const narrative = {
+    summary: 'three steps done',
+    evidence: [pairs[0].ref],
+    unresolved: ['step 3'],
+    negativeAttempts: [],
+  }
+  await recent.narrate(ref, narrative, signal())
+  assert.equal((await recent.volumes(signal()))[0].narrative.summary, 'three steps done')
+  await f.context.append({
+    kind: 'audit',
+    title: 'search:history-reset',
+    body: 'new authorization',
+  })
+  assert.deepEqual(await recent.volumes(signal()), [])
+  await assert.rejects(recent.narrate(ref, narrative, signal()), { code: 'NOT_FOUND' })
+  const next = []
+  for (let i = 0; i < 4; i++) {
+    await f.context.append({ kind: 'assistant', body: `next ${i}` })
+    next.push(
+      await f.context.append({
+        kind: 'audit',
+        title: `script:${crypto.randomUUID()}:result`,
+        body: '{}',
+      })
+    )
+  }
+  const fresh = await recent.seal(0, next[0].sequence, signal())
+  const [current] = await recent.volumes(signal())
+  assert.equal(current.volume.turns, 1)
+  await assert.rejects(recent.narrate(fresh, narrative, signal()), /当前授权/)
+  await recent.narrate(fresh, { ...narrative, evidence: [next[0].ref] }, signal())
+})
 
 test('current history boundary follows task and authorization metadata without converting persisted checkpoints', async (t) => {
   const f = await fixture(t)
@@ -883,66 +850,63 @@ test('note head queries keep old versions readable and narrow script history wit
   assert.equal(directory.items[0].ref.id, result.ref.id)
   assert.equal(sizes.at(-1), 1)
 })
-
-for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector'])
-  test(`${mode}: material recall isolates unrelated note failures and retains task authorization`, async (t) => {
-    const f = await fixture(t, mode)
-    const first = await f.memory.update({ key: 'plan', baseRevision: 0, body: 'first' }, signal())
-    const latest = await f.memory.update({ key: 'plan', baseRevision: 1, body: 'latest' }, signal())
-    const damaged = await f.memory.update(
-      { key: 'damaged', baseRevision: 0, body: 'unrelated' },
-      signal()
-    )
-    const result = await f.context.append({
-      kind: 'audit',
-      title: `script:${crypto.randomUUID()}:result`,
-      body: '{}',
-      sources: [f.goal.ref],
-    })
-    const record = (await f.storage.records('s', { refId: damaged.ref.id })).items[0]
-    const get = f.storage.get.bind(f.storage)
-    const fault = t.mock.method(f.storage, 'get', (...args) =>
-      args[1] === record.objectId ? null : get(...args)
-    )
-    if (mode === 'indexed')
-      t.mock.method(f.storage, 'load', () => {
-        throw Error('full material history loaded')
-      })
-    assert.equal((await f.memory.readMaterial(f.goal.ref, 0, 100, signal())).text, 'goal')
-    assert.equal(
-      JSON.parse((await f.memory.readMaterial(first.ref, 0, 10000, signal())).text).body,
-      'first'
-    )
-    assert.equal(
-      JSON.parse((await f.memory.read(latest.ref, 0, 10000, signal())).text).body,
-      'latest'
-    )
-    await assert.rejects(f.memory.readMaterial(damaged.ref, 0, 10000, signal()), {
-      code: 'OBJECT_MISSING',
-    })
-    assert.equal((await f.memory.retainMaterial(result.ref, 2, signal())).remainingTurns, 2)
-    assert.equal((await f.memory.retainMaterial(result.ref, null, signal())).released, true)
-    fault.mock.restore()
-    await assert.rejects(f.memory.retainMaterial(first.ref, null, signal()), {
-      code: 'WORKSPACE_CONFLICT',
-    })
-    assert.equal((await f.memory.retainMaterial(latest.ref, null, signal())).resident, false)
-    await f.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
-    await assert.rejects(f.memory.readMaterial(f.goal.ref, 0, 100, signal()), {
-      code: 'SCOPE_MISMATCH',
-    })
-    await f.context.append({ kind: 'user', body: 'reattach', sources: [f.goal.ref] })
-    assert.equal((await f.memory.readMaterial(f.goal.ref.id, 0, 100, signal())).text, 'goal')
-    await assert.rejects(
-      f.memory.readMaterial({ ...f.goal.ref, sessionId: 'other' }, 0, 100, signal()),
-      { code: 'SCOPE_MISMATCH' }
-    )
-    const cancelled = new AbortController()
-    cancelled.abort()
-    await assert.rejects(f.memory.readMaterial(f.goal.ref, 0, 100, cancelled.signal), {
-      name: 'AbortError',
-    })
+test(`indexed: material recall isolates unrelated note failures and retains task authorization`, async (t) => {
+  const f = await fixture(t)
+  const first = await f.memory.update({ key: 'plan', baseRevision: 0, body: 'first' }, signal())
+  const latest = await f.memory.update({ key: 'plan', baseRevision: 1, body: 'latest' }, signal())
+  const damaged = await f.memory.update(
+    { key: 'damaged', baseRevision: 0, body: 'unrelated' },
+    signal()
+  )
+  const result = await f.context.append({
+    kind: 'audit',
+    title: `script:${crypto.randomUUID()}:result`,
+    body: '{}',
+    sources: [f.goal.ref],
   })
+  const record = (await f.storage.records('s', { refId: damaged.ref.id })).items[0]
+  const get = f.storage.get.bind(f.storage)
+  const fault = t.mock.method(f.storage, 'get', (...args) =>
+    args[1] === record.objectId ? null : get(...args)
+  )
+  t.mock.method(f.storage, 'load', () => {
+    throw Error('full material history loaded')
+  })
+  assert.equal((await f.memory.readMaterial(f.goal.ref, 0, 100, signal())).text, 'goal')
+  assert.equal(
+    JSON.parse((await f.memory.readMaterial(first.ref, 0, 10000, signal())).text).body,
+    'first'
+  )
+  assert.equal(
+    JSON.parse((await f.memory.read(latest.ref, 0, 10000, signal())).text).body,
+    'latest'
+  )
+  await assert.rejects(f.memory.readMaterial(damaged.ref, 0, 10000, signal()), {
+    code: 'OBJECT_MISSING',
+  })
+  assert.equal((await f.memory.retainMaterial(result.ref, 2, signal())).remainingTurns, 2)
+  assert.equal((await f.memory.retainMaterial(result.ref, null, signal())).released, true)
+  fault.mock.restore()
+  await assert.rejects(f.memory.retainMaterial(first.ref, null, signal()), {
+    code: 'WORKSPACE_CONFLICT',
+  })
+  assert.equal((await f.memory.retainMaterial(latest.ref, null, signal())).resident, false)
+  await f.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+  await assert.rejects(f.memory.readMaterial(f.goal.ref, 0, 100, signal()), {
+    code: 'SCOPE_MISMATCH',
+  })
+  await f.context.append({ kind: 'user', body: 'reattach', sources: [f.goal.ref] })
+  assert.equal((await f.memory.readMaterial(f.goal.ref.id, 0, 100, signal())).text, 'goal')
+  await assert.rejects(
+    f.memory.readMaterial({ ...f.goal.ref, sessionId: 'other' }, 0, 100, signal()),
+    { code: 'SCOPE_MISMATCH' }
+  )
+  const cancelled = new AbortController()
+  cancelled.abort()
+  await assert.rejects(f.memory.readMaterial(f.goal.ref, 0, 100, cancelled.signal), {
+    name: 'AbortError',
+  })
+})
 
 test('material catalog pagination preserves reset, explicit reattachment, note heads and filtered tails', async (t) => {
   const f = await fixture(t)

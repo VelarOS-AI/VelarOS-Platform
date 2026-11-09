@@ -208,6 +208,8 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
   private rejectStartup: Nullable<(error: Error) => void> = null
   private stdoutBuffer = ''
   private stderrBuffer = ''
+  private stdoutDecoder = new TextDecoder('utf-8', { fatal: true })
+  private stderrDecoder = new TextDecoder('utf-8', { fatal: true })
   private ready = false
   private disposed = false
   private nextRequestId = 1
@@ -317,15 +319,14 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
   }
 
   public async ensureAvailable(): Promise<ComputerAvailability> {
-    const spec = this.resolveHelper()
-    if (!spec)
-      return {
-        available: false,
-        reason: 'helper-missing',
-        detail: '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。',
-      }
-
     try {
+      const spec = this.resolveHelper()
+      if (!spec)
+        return {
+          available: false,
+          reason: 'helper-missing',
+          detail: '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。',
+        }
       await this.start()
     } catch (error) {
       return {
@@ -545,6 +546,16 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
         rejectPromise(error)
       }
       this.rejectStartup = onFail
+      const onDecodeFailure = (error: unknown) => {
+        const failure = new AppError(
+          'PROTOCOL',
+          '桌面控制 helper 输出包含无效 UTF-8，已终止这一代进程。',
+          error
+        )
+        onFail(failure)
+        this.rejectAllPending(failure)
+        this.teardown()
+      }
       // helper 卡在导入阶段不打握手、或握手行被上一轮残片吞掉时，这道闸是唯一出口：
       // 没有它 start() 永不 settle，而请求的超时计时器要等 start() 返回才装，调用方永远挂起。
       startupTimer = this.timers.after(
@@ -566,11 +577,27 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
         // 上一轮进程被 teardown 后管道里还可能吐出残余数据，它属于已死的那一轮：
         // 混进共享的行缓冲会把新进程的握手行从中间劈开（C3 的另一半）。
         if (this.child !== child) return
-        this.handleStdout(String(chunk), onReady)
+        let decoded: string
+        try {
+          decoded =
+            typeof chunk === 'string' ? chunk : this.stdoutDecoder.decode(chunk, { stream: true })
+        } catch (error) {
+          onDecodeFailure(error)
+          return
+        }
+        this.handleStdout(decoded, onReady)
       })
       child.stderr.on('data', (chunk) => {
         if (this.child !== child) return
-        this.stderrBuffer += String(chunk)
+        let decoded: string
+        try {
+          decoded =
+            typeof chunk === 'string' ? chunk : this.stderrDecoder.decode(chunk, { stream: true })
+        } catch (error) {
+          onDecodeFailure(error)
+          return
+        }
+        this.stderrBuffer += decoded
         if (this.stderrBuffer.length > ComputerTuning.stderrTailChars) {
           this.stderrBuffer = this.stderrBuffer.slice(-ComputerTuning.stderrTailChars)
         }
@@ -598,6 +625,17 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
       })
       child.on('exit', (code) => {
         if (this.child !== child) return
+        let stdoutTail: string
+        let stderrTail: string
+        try {
+          stdoutTail = this.stdoutDecoder.decode()
+          stderrTail = this.stderrDecoder.decode()
+        } catch (error) {
+          onDecodeFailure(error)
+          return
+        }
+        this.handleStdout(stdoutTail, onReady)
+        this.stderrBuffer += stderrTail
         this.log(`sidecar exited with code ${code ?? 'null'}`)
         // helper 自己打在 stderr 上的话（多半是 Python 报错）比任何转述都有用，优先原样带出。
         const reason =
@@ -712,6 +750,8 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     // 残片会粘到下一个 helper 的握手行前面，整行解析失败被当坏帧丢掉，新进程于是「永远没准备好」。
     this.stdoutBuffer = ''
     this.stderrBuffer = ''
+    this.stdoutDecoder = new TextDecoder('utf-8', { fatal: true })
+    this.stderrDecoder = new TextDecoder('utf-8', { fatal: true })
     const child = this.child
     this.child = null
     if (child) {

@@ -72,6 +72,7 @@ export class ImageOperations implements ImageOperationsApi {
         })
       }
     }
+    ctx.abortSignal.throwIfAborted()
     if (firstFailure && files.every((file) => 'error' in file)) throw firstFailure
     return { files }
   }
@@ -133,7 +134,7 @@ export class ImageOperations implements ImageOperationsApi {
       mediaType: media.mediaType,
     }
     if (region) request.region = region
-    const shrunk = await shrinkImageToLimits(resize, request, {
+    const shrunk = await shrinkImageToLimits(resize.bind(ctx.images), request, {
       longEdge: ImageLimits.edge,
       base64Bytes: ImageLimits.base64Bytes,
     })

@@ -34,14 +34,10 @@ export class SessionGoal implements SessionGoalApi {
   ) {}
   private async snapshot(signal: AbortSignal) {
     signal.throwIfAborted()
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [{ title: 'session:goal', latest: true }])
-      : undefined
-    const state = this.storage.selectSnapshot
-      ? selected
-        ? { ...selected.metadata, records: selected.records }
-        : null
-      : await this.storage.load(this.id)
+    const selected = await this.storage.selectSnapshot(this.id, [
+      { title: 'session:goal', latest: true },
+    ])
+    const state = selected ? { ...selected.metadata, records: selected.records } : null
     const record = state?.records.findLast((item) => item.title === 'session:goal')
     const body = record ? await this.storage.get(this.id, record.objectId) : null
     signal.throwIfAborted()
@@ -66,7 +62,6 @@ export class SessionGoal implements SessionGoalApi {
   }
   public completion(goal: GoalState, reason: string): ContextCompletionCommitPort {
     return {
-      binding: { kind: 'goal', id: goal.id, revision: goal.revision },
       prepare: async (signal) => {
         const { state, goal: current } = await this.snapshot(signal)
         if (
@@ -75,7 +70,7 @@ export class SessionGoal implements SessionGoalApi {
           current.revision !== goal.revision ||
           current.status !== 'active'
         )
-          throw new AppError('GOAL_CONFLICT', '核查期间目标已变化，请按最新目标状态决定是否收尾')
+          throw new AppError('GOAL_CONFLICT', '完成期间目标已变化，请按最新目标状态决定是否收尾')
         const next = goalChange(
           current,
           {
@@ -134,7 +129,7 @@ export class SessionGoal implements SessionGoalApi {
         createdAt: new Date(next.updatedAt).toISOString(),
       }
       signal.throwIfAborted()
-      if (this.storage.selectSnapshot && this.storage.compareAndSwapMetadata) {
+      {
         const { records: _records, ...metadata } = state
         if (
           await this.storage.compareAndSwapMetadata(
@@ -143,21 +138,6 @@ export class SessionGoal implements SessionGoalApi {
             { ...metadata, version: state.version + 1 },
             [record]
           )
-        )
-          return next
-      } else {
-        // 仅支持完整 CAS 的适配器必须携带完整历史，不能使用索引快照覆盖。
-        const full = this.storage.selectSnapshot ? await this.storage.load(this.id) : state
-        if (!full || full.version !== state.version) continue
-        if (
-          await this.storage.compareAndSwap(this.id, full.version, {
-            ...full,
-            version: full.version + 1,
-            records: [
-              ...full.records,
-              { ...record, sequence: (full.records.at(-1)?.sequence ?? 0) + 1 },
-            ],
-          })
         )
           return next
       }

@@ -17,20 +17,31 @@ import {
   nodeRuntimePackages,
 } from '@velaros-ai/script'
 
+import { ObservationLimits } from '../../../dist/act/runtime/contract/constants.js'
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
-import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
+import { memoryObservation, memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { executionPolicy } from '../../../dist/act/runtime/utils/execution-policy.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
+import { skillCapabilityModules } from '../../../dist/skills/index.js'
 import {
   builtinSkillDirectories,
   BuiltinSkillNames,
   createSkillRegistry,
+  createSkillSession,
   skillComposition,
 } from '../../../dist/skills/index.js'
 
+import { withProjectFixture } from './support/project-fixture.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
+import { withSkillFixture } from './support/skill-fixture.mjs'
+
 const fixtureRoots = new Set()
+const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 // 各测试的 Runtime.close 必须先完成；Windows 不能删除仍由 SQLite 持有的目录。
 after(async () => {
   for (const root of fixtureRoots) await rm(root, { recursive: true, force: true })
@@ -108,10 +119,7 @@ for (const explicit of [false, true])
     let turn = 0
     const runtime = await createRuntime({
       node: f.node,
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
+
       context: {
         maintenance: false,
         policy: {
@@ -161,8 +169,12 @@ for (const explicit of [false, true])
     assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), '1,2,3,4,5,6,7,8,9,')
     let retained = 0
     let rebuilt = 0
-    const content = (request) =>
-      modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
+    const content = (request) => {
+      const { messages, retainablePrefixLength } = modelRequestEncoder.layout(request)
+      return messages
+        .slice(0, retainablePrefixLength)
+        .map(({ role, content }) => ({ role, content }))
+    }
     for (const [index, request] of requests.entries()) {
       const states = request.history.filter(
         (m) =>
@@ -260,10 +272,7 @@ for (const explicit of [true, false])
     const runtime = await createRuntime({
       node: f.node,
       model,
-      project: false,
-      search: false,
-      agents: false,
-      memory: false,
+
       context: { maintenance: false },
       storage: localContextStorage({ path: join(f.root, 'prompt-cache.sqlite') }),
       environment: () => ({ changingState: `revision-${++revision}` }),
@@ -407,10 +416,7 @@ test('provider code-only stream failures retry through the real SDK without repe
   })
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'provider-retry.sqlite') }),
     model,
@@ -440,10 +446,7 @@ for (const reportUsage of [false, true])
     let calls = 0
     const runtime = await createRuntime({
       node: f.node,
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
+
       context: { maintenance: false },
       storage: localContextStorage({ path: join(f.root, 'resume.sqlite') }),
       model: {
@@ -500,10 +503,7 @@ test('native Node calls preserve a restricted runner and expose only the allowed
   const runtime = await createRuntime({
     runner,
     protocol: { allowed: ['blobs', 'execute', 'done'], defaultRetain: 'task' },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'restricted.sqlite') }),
     model: {
@@ -543,7 +543,12 @@ test('native Node calls preserve a restricted runner and expose only the allowed
               },
             },
           }
-        } else yield nativeDone('已读取来源，写入受到宿主的只读限制。')
+        } else
+          yield nativeDone(
+            platformHasDefaultConfinement
+              ? '已读取来源，写入受到宿主的只读限制。'
+              : '宿主无法隔离只读进程，已拒绝读取和写入。'
+          )
         yield { type: 'finish', reason: 'stop' }
       },
     },
@@ -555,8 +560,14 @@ test('native Node calls preserve a restricted runner and expose only the allowed
   assert.deepEqual(modes, ['observe', 'observe'])
   assert.equal(await readFile(join(f.cwd, 'input.txt'), 'utf8'), 'read-only-source')
   const trace = await runtime.trace('restricted', { fullContent: true })
-  assert.equal(trace.turns[0].executions[0].status, 'succeeded')
+  assert.equal(
+    trace.turns[0].executions[0].status,
+    platformHasDefaultConfinement ? 'succeeded' : 'failed'
+  )
   assert.equal(trace.turns[1].executions[0].status, 'failed')
+  if (!platformHasDefaultConfinement)
+    for (const turn of trace.turns.slice(0, 2))
+      assert.equal(turn.executions[0].failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
 })
 
 test('native decoder rejects ungranted Shell and honors configured response budgets', () => {
@@ -596,6 +607,9 @@ test('INV-10 native result leases survive their configured scope without re-exec
       const f = await fixture(t)
       const payload = 'original output retained across subsequent editing steps'
       await writeFile(join(f.cwd, 'source.txt'), payload)
+      const readSource =
+        "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')"
+      const childSource = `import {execa} from 'execa'; await execa(process.execPath,['--input-type=module','-e',${JSON.stringify(readSource)}],{stdin:'ignore',stdout:'inherit',stderr:'inherit'});`
       const storage = localContextStorage({ path: join(f.root, 'retention.sqlite') })
       const id = 'retention'
       const requests = []
@@ -603,10 +617,7 @@ test('INV-10 native result leases survive their configured scope without re-exec
       const runtime = await createRuntime({
         node: f.node,
         protocol: duration === undefined ? {} : { defaultRetain: duration },
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage,
         model: {
@@ -623,10 +634,7 @@ test('INV-10 native result leases survive their configured scope without re-exec
                   id: `step-${turn}`,
                   name: 'exec',
                   input: {
-                    code:
-                      turn % 2
-                        ? commandProgram('cat source.txt; printf x >> calls.txt')
-                        : "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')",
+                    code: turn % 2 ? childSource : readSource,
                   },
                 },
               }
@@ -657,10 +665,24 @@ test('INV-10 native result leases survive their configured scope without re-exec
           finalResults.find((result) => result.ref === firstRef).remainingTurns,
           duration ?? 'segment'
         )
-      const original = requests[1].history.find((message) =>
-        message.content.includes(payload)
-      ).content
-      assert(requests.at(-1).history.some((message) => message.content === original))
+      const wires = requests.map((request) =>
+        modelRequestEncoder
+          .messages(request)
+          .map(({ role, content, toolExchange, toolResult }) => ({
+            role,
+            content,
+            toolExchange,
+            toolResult,
+          }))
+      )
+      const exchange = wires[1].find((message) =>
+        message.toolExchange?.calls.some((call) => call.id === 'step-1')
+      ).toolExchange
+      assert.equal(exchange.results[0].output.resultRef, firstRef)
+      const original = wires[1].find((message) => message.toolResult?.callId === 'step-1')
+      assert.ok(original)
+      assert(original.content.includes(payload))
+      for (const wire of wires.slice(2)) assert.deepEqual(wire.slice(0, wires[1].length), wires[1])
       assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), 'xxxxx')
       const programs = new ProgramContext(id, session.context, storage)
       const leases = (await programs.state()).leases
@@ -679,10 +701,7 @@ test('fresh native output shares unused result capacity and reaches the next req
   let turn = 0
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     limits: { projectionChars: 26000 },
     storage: localContextStorage({ path: join(f.root, 'output.sqlite') }),
@@ -774,10 +793,7 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
   const options = {
     node: f.node,
     model,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'native.sqlite') }),
     context: { maintenance: false },
     limits: { turns: 6, outputTokens: 4000, timeoutMs: 20000 },
@@ -807,8 +823,9 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
   )
   assert(events.some((event) => event.type === 'program' && event.kind === 'execute'))
   const trace = await runtime.trace('native', { fullContent: true })
-  assert.equal(trace.turns[0].executions[0].language, 'node')
-  assert.equal(trace.turns[1].executions[0].language, 'node')
+  assert.equal(trace.turns[0].executions[0].source, commandProgram("printf '7' > input.txt"))
+  assert.equal(trace.turns[1].executions[0].source, nodeSource)
+  assert.match(trace.turns[1].executions[0].processOutput, /42/)
   await runtime.close()
   runtime = await createRuntime({
     ...options,
@@ -832,10 +849,7 @@ test('native independent calls retain a failed command and execute the remaining
       const requests = []
       const runtime = await createRuntime({
         node: f.node,
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage: localContextStorage({ path: join(f.root, 'independent.sqlite') }),
         model: {
@@ -931,10 +945,7 @@ test('native abnormal process termination stops later calls', async (t) => {
             return { exitCode: 7, signal: null, stdout: '', stderr: 'host termination', ...flags }
           },
         },
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage: localContextStorage({ path: join(f.root, 'abnormal.sqlite') }),
         model: {
@@ -987,10 +998,7 @@ test('cancelling a native batch during its first process prevents later calls', 
           signal
         ),
     },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'cancel-batch.sqlite') }),
     model: {
@@ -1026,10 +1034,7 @@ test('native response with a later invalid tool input performs no earlier write'
   let turn = 0
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'invalid-native.sqlite') }),
     context: { maintenance: false },
     model: {
@@ -1073,10 +1078,7 @@ test('cancelling a later native model turn preserves the completed call and neve
   const requests = []
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'cancel-native.sqlite') }),
     context: { maintenance: false },
     model: {
@@ -1227,10 +1229,7 @@ test('explicit runtime deadlines reach Node and source reuse restores the defaul
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'deadline.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1320,10 +1319,7 @@ test('runtime delivers native output to the next model turn with a small standar
   const requests = []
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'state.sqlite') }),
     model: {
       id: 'standard-node-test',
@@ -1331,7 +1327,7 @@ test('runtime delivers native output to the next model turn with a small standar
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
         requests.push(req)
-        const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+        const marker = req.protocol.match(/(@@s\w+) execute/)[1]
         yield {
           type: 'text',
           text:
@@ -1373,6 +1369,13 @@ test('runtime delivers native output to the next model turn with a small standar
   )
   assert.equal(originalFrame.presentation, 'node')
   assert.ok(originalFrame.partitions.observation.read)
+  const support = f.node.observationSupport()
+  if (support.available) assert.equal(requests[0].dynamic, undefined)
+  else {
+    assert.ok(requests[0].dynamic)
+    assert.deepEqual(JSON.parse(requests[0].dynamic.text).current.availability, support)
+    assert.ok(requests[0].dynamic.text.length <= ObservationLimits.defaultChars)
+  }
   const ordinaryFrame = structuredClone(originalFrame)
   delete ordinaryFrame.presentation
   const compact = memoryPrompt(JSON.stringify(originalFrame))
@@ -1434,7 +1437,12 @@ test('runtime delivers native output to the next model turn with a small standar
   state.modelTool = {
     payload: { emptyArray: [], emptyObject: {}, zero: 0, off: false, missing: null },
   }
+  // 人工恢复帧只验证分区投影；不把它当成真实只读采集的隔离证据。
+  const observationFailure = 'observation-failure-detail-'.repeat(100)
+  recovery.partitions.observation.sourceRef = 'failed-observation-source'
+  recovery.partitions.observation.resultRef = 'failed-observation-result'
   recovery.partitions.observation.safety = ['observation-protection-missing']
+  recovery.partitions.observation.failure = observationFailure
   recovery.partitions.workspace.capsule.nextObjective = 'workspace-objective'
   const recovered = memoryPrompt(JSON.stringify(recovery))
   for (const important of [
@@ -1443,10 +1451,18 @@ test('runtime delivers native output to the next model turn with a small standar
     'pending-job',
     'goal-must-remain',
     'missing-page',
-    'observation-protection-missing',
     'workspace-objective',
   ])
     assert.ok(recovered.includes(important), important)
+  assert.ok(!recovered.includes('observation-protection-missing'))
+  assert.ok(!recovered.includes('observation-failure-detail-'))
+  const projectedObservation = memoryObservation(JSON.stringify(recovery))
+  assert.ok(projectedObservation.dynamic)
+  assert.equal(projectedObservation.dynamic.id, recovery.frameId)
+  assert.ok(projectedObservation.dynamic.text.length <= ObservationLimits.defaultChars)
+  const dynamicObservation = JSON.parse(projectedObservation.dynamic.text).current
+  assert.deepEqual(dynamicObservation.safety, ['observation-protection-missing'])
+  assert.equal(dynamicObservation.failure, observationFailure.slice(0, 256))
   const projectedState = JSON.parse(recovered.split('runtime：\n')[1].split('\n')[0])
   assert.deepEqual(projectedState.children, state.children)
   assert.deepEqual(projectedState.modelTool, state.modelTool)
@@ -1662,10 +1678,7 @@ test('native runtime archives long output and bounds escaped preview JSON, inclu
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'large.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1685,10 +1698,7 @@ test('native syntax errors do not execute an earlier file mutation', async (t) =
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'syntax.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1717,7 +1727,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
         inspect?.(req)
-        const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+        const marker = req.protocol.match(/(@@s\w+) execute/)[1]
         assert.match(req.instructions, /Node.js/)
         assert.match(req.instructions, /process.env.VELAROS_HOST_DIR/)
         assert.match(req.instructions, /documentationPath/)
@@ -1735,9 +1745,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   }
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'child.sqlite') }),
     model: driver(
@@ -1812,24 +1820,24 @@ test('Execa command source persists and is reusable by sourceRef', async (t) => 
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'shell.sqlite') }),
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('shell-owner')
-  await session.context.append({ kind: 'user', body: 'Write a literal file using shell' })
+  await session.context.append({ kind: 'user', body: 'Write a literal file using an Execa child' })
+  const literal = '$literal `quoted` 中文\n'
+  const child = `import {writeFile,readFile} from 'node:fs/promises'; await writeFile('literal.txt',${JSON.stringify(literal)}); process.stdout.write(await readFile('literal.txt','utf8'));`
   const receipt = await session.execute({
-    source: commandProgram(
-      "cat <<'EOF' > literal.txt\n$literal `quoted` 中文\nEOF\ncat literal.txt"
-    ),
+    source: `import {execa} from 'execa'; await execa(process.execPath,['--input-type=module','-e',${JSON.stringify(child)}],{stdin:'ignore',stdout:'inherit',stderr:'inherit'});`,
   })
   assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
-  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), '$literal `quoted` 中文\n')
+  assert.equal(receipt.result.process.stdout, literal)
+  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), literal)
   const repeated = await session.execute({ sourceRef: receipt.sourceRef })
-  assert.equal(repeated.result.process.stdout, '$literal `quoted` 中文\n')
+  assert.equal(repeated.result.failed, undefined, JSON.stringify(repeated))
+  assert.equal(repeated.result.process.stdout, literal)
+  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), literal)
 })
 
 test('custom modules import by name and denied static imports run no earlier mutation', async (t) => {
@@ -1867,11 +1875,16 @@ test('read-only Node uses the same standard library and capability bridge with p
   const f = await fixture(t)
   await writeFile(join(f.cwd, 'readable.txt'), '42')
   const { createServer } = await import('node:net')
-  const server = createServer((socket) => socket.end())
+  let connections = 0
+  const server = createServer((socket) => {
+    connections++
+    socket.end()
+  })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise((resolve) => server.close(resolve)))
   const port = server.address().port
   const runner = createNodeCodeRunner(f.node)
+  let calls = 0
   const result = await runner.run(
     {
       ...request(
@@ -1888,17 +1901,30 @@ test('read-only Node uses the same standard library and capability bridge with p
       ),
       mode: 'observe',
     },
-    async () => ({ value: 7 }),
+    async () => {
+      calls++
+      return { value: 7 }
+    },
     () => {}
   )
-  assert.equal(result.ok, true, JSON.stringify(result))
-  const data = result.output.blocks[0].value
-  assert.match(data.node, /^\d+\./)
-  assert.deepEqual(
-    { ...data, node: undefined },
-    { node: undefined, text: '42', value: 7, writeDenied: true, networkDenied: true }
-  )
-  assert.equal(result.process.confinement.mode, 'read-only')
+  if (platformHasDefaultConfinement) {
+    assert.equal(result.ok, true, JSON.stringify(result))
+    const data = result.output.blocks[0].value
+    assert.match(data.node, /^\d+\./)
+    assert.deepEqual(
+      { ...data, node: undefined },
+      { node: undefined, text: '42', value: 7, writeDenied: true, networkDenied: true }
+    )
+    assert.equal(result.process.confinement.mode, 'read-only')
+    assert.equal(calls, 1)
+  } else {
+    assert.equal(result.ok, false, JSON.stringify(result))
+    assert.equal(result.error.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.process, undefined)
+    assert.equal(calls, 0)
+  }
+  assert.equal(connections, 0)
+  assert.equal(await readFile(join(f.cwd, 'readable.txt'), 'utf8'), '42')
   await assert.rejects(readFile(join(f.cwd, 'blocked.txt')), { code: 'ENOENT' })
 })
 
@@ -1912,7 +1938,7 @@ test('runtime observation uses real Node and retains structured input and output
     async *stream(req) {
       observed = JSON.parse(req.materials.find((item) => item.origin === 'runtime-view').text)
         .partitions.observation.text
-      const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+      const marker = req.protocol.match(/(@@s\w+) execute/)[1]
       yield { type: 'text', text: `${marker} done\nVerified.` }
       yield { type: 'finish', reason: 'stop' }
     },
@@ -1921,25 +1947,51 @@ test('runtime observation uses real Node and retains structured input and output
     node: f.node,
     model,
     context: { maintenance: false },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'observe.sqlite') }),
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('native-observe')
   await session.context.append({ kind: 'user', body: 'Observe with Node' })
-  const published = await session.observe({
-    source:
-      "import {input} from 'velaros:program';import {output} from 'velaros';output({node:typeof process.versions.node,value:input.value})",
-    input: { value: 42 },
-  })
+  const source =
+    "import {input} from 'velaros:program';import {output} from 'velaros';import {writeFile} from 'node:fs/promises';let writeDenied=false;try{await writeFile('observation-write.txt','bad')}catch{writeDenied=true}output({node:typeof process.versions.node,value:input.value,writeDenied})"
+  const input = { value: 42 }
+  const published = await session.observe({ source, input })
   assert.equal(published.status, 'updated', JSON.stringify(published))
   for await (const event of session.submit('Verify the observation')) void event
   assert.equal((await session.inspect()).status, 'completed')
-  assert.match(observed, /42/)
-  assert.match(observed, /string/)
+  const trace = (await runtime.trace('native-observe', { fullContent: true })).turns[0]
+  const request = JSON.parse(trace.request.body)
+  assert.equal(request.requestAudit.schemaVersion, 3)
+  assert.equal(request.frameRef.sessionId, 'native-observe')
+  const frameRecord = trace.records.find((record) => record.ref.id === request.frameRef.id)
+  const frame = JSON.parse(frameRecord.body)
+  assert.equal(frameRecord.title, `context:frame:${frame.frameId}`)
+  const sourceRecord = trace.records.find((record) => record.ref.id === frame.observation.sourceRef)
+  const resultRecord = trace.records.find((record) => record.ref.id === frame.observation.resultRef)
+  const saved = JSON.parse(sourceRecord.body)
+  assert.equal(saved.source, source)
+  assert.deepEqual(saved.input, input)
+  assert.equal(trace.observation.run.source, source)
+  const result = JSON.parse(resultRecord.body)
+  assert.equal(result.mode, 'observe')
+  if (platformHasDefaultConfinement) {
+    assert.match(observed, /42/)
+    assert.match(observed, /string/)
+    assert.equal(trace.observation.run.status, 'succeeded')
+    assert.deepEqual(result.output.blocks[0].value, {
+      node: 'string',
+      value: 42,
+      writeDenied: true,
+    })
+  } else {
+    assert.match(observed, /SHELL_CONFINEMENT_UNAVAILABLE/)
+    assert.equal(trace.observation.run.status, 'failed')
+    assert.equal(trace.observation.run.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
+    assert.equal(result.result.process, undefined)
+  }
+  await assert.rejects(readFile(join(f.cwd, 'observation-write.txt')), { code: 'ENOENT' })
 })
 
 test('native child status keeps actionable delivery metadata and recalls the immutable artifact manifest on demand', () => {
@@ -2198,7 +2250,7 @@ test('selected JS/TS Skill refactors TypeScript and format TSX in entrypoints an
 })
 
 test('standard package references expose installed versions, original docs and declarations on demand', async (t) => {
-  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] }, 'workspace-write')
+  const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.jsts] })
   const result = await createNodeCodeRunner(f.node).run(
     request(`
     import {readFile} from 'node:fs/promises';
@@ -2492,17 +2544,15 @@ test('workspace npm packages take precedence and broken workspace packages repor
   assert.equal(privateSubpath.error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
 })
 
-test('only project workspaces receive project transaction capabilities', async (t) => {
+test('only explicit Project modules receive project transaction capabilities', async (t) => {
   const f = await fixture(t)
   for (const project of [false, true]) {
-    const runtime = await createRuntime({
-      node: f.node,
-      ...(project ? { workspace: f.cwd } : {}),
-      dataDir: join(f.root, `scope-${project}`),
-      agents: false,
-      search: false,
-      memory: false,
-    })
+    const runtime = await createRuntime(
+      await withProjectFixture(
+        { node: f.node, storage: await createTestStorage(join(f.root, `scope-${project}`)) },
+        { root: f.cwd, enabled: project }
+      )
+    )
     try {
       const session = await runtime.openSession('scope')
       await session.context.append({
@@ -2524,10 +2574,10 @@ test('only project workspaces receive project transaction capabilities', async (
 
 test('host project bindings compose independently with selected Skills', async (t) => {
   for (const { names, project } of [
-    { names: [], project: false },
+    { names: [] },
     { names: [], project: true },
-    { names: [BuiltinSkillNames.browser], project: false },
-    { names: [BuiltinSkillNames.jsts], project: false },
+    { names: [BuiltinSkillNames.browser] },
+    { names: [BuiltinSkillNames.jsts] },
     { names: [BuiltinSkillNames.jsts], project: true },
     { names: [BuiltinSkillNames.jsts, BuiltinSkillNames.browser], project: true },
   ]) {
@@ -2539,49 +2589,51 @@ test('host project bindings compose independently with selected Skills', async (
     )
     await writeFile(join(f.cwd, 'tiny.png'), png)
     await writeFile(join(f.root, 'outside.png'), png)
-    const runtime = await createRuntime({
-      workspace: f.cwd,
-      node: f.node,
-      project: project
-        ? {
+    const selectedSkillOptions1 = {
+      registry: f.registry,
+      lease: f.lease,
+      hostModules: Object.fromEntries(
+        ['velaros:browser', 'velaros:devtools', 'velaros:cdp'].map((name) => [
+          name,
+          {
+            binding: {
+              moduleId: name,
+              instanceId: 'bound-page',
+              generation: 1,
+              schemaRevision: '1',
+            },
+            summary: 'bound fixture',
+            operations: {
+              identity: {
+                summary: 'current binding',
+                input: { type: 'object' },
+                output: { type: 'string' },
+                effects: 'none',
+                run: async () => 'bound-page',
+              },
+            },
+          },
+        ])
+      ),
+    }
+    const runtime = await createRuntime(
+      await withSkillFixture(
+        await withProjectFixture(
+          { node: f.node, storage: await createTestStorage(join(f.root, 'state')) },
+          {
+            root: f.cwd,
+            enabled: project,
             images: true,
-            code: {
+            codeIndex: {
               isAvailable: () => true,
               query: async (input) => ({ action: input.action, revision: 'bound-code-index' }),
             },
+            skills: selectedSkillOptions1,
           }
-        : false,
-      dataDir: join(f.root, 'state'),
-      skills: {
-        registry: f.registry,
-        lease: f.lease,
-        hostModules: Object.fromEntries(
-          ['velaros:browser', 'velaros:devtools', 'velaros:cdp'].map((name) => [
-            name,
-            {
-              binding: {
-                moduleId: name,
-                instanceId: 'bound-page',
-                generation: 1,
-                schemaRevision: '1',
-              },
-              summary: 'bound fixture',
-              operations: {
-                identity: {
-                  summary: 'current binding',
-                  input: { type: 'object' },
-                  output: { type: 'string' },
-                  effects: 'none',
-                  run: async () => 'bound-page',
-                },
-              },
-            },
-          ])
         ),
-      },
-      agents: false,
-      search: false,
-    })
+        selectedSkillOptions1
+      )
+    )
     t.after(() => runtime.close())
     const modules = runtime.modules().items.map((item) => item.binding.moduleId)
     assert.equal(modules.includes('velaros:project'), project)
@@ -2647,13 +2699,209 @@ test('host project bindings compose independently with selected Skills', async (
     }
   }
   const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.browser] })
+  const selectedSkillOptions2 = { registry: f.registry, lease: f.lease }
   await assert.rejects(
-    createRuntime({
-      node: f.node,
-      project: false,
-      dataDir: join(f.root, 'state'),
-      skills: { registry: f.registry, lease: f.lease },
-    }),
+    skillCapabilityModules.create({ ...selectedSkillOptions2, node: f.node }),
     /未绑定/
   )
+})
+
+async function languageOwnerFixture(t, owners) {
+  const f = await fixture(t)
+  const store = join(f.root, 'language-skills')
+  await mkdir(store)
+  const registry = createSkillRegistry({
+    directory: store,
+    nodeVersion: process.versions.node,
+    packages: nodeRuntimePackages.defaults(),
+    lock: createExclusiveSqliteLock(() => new DatabaseSync(join(store, 'lock.sqlite'))),
+    installer: {
+      install: async () => {
+        throw Error('unexpected install')
+      },
+    },
+  })
+  const install = async (name, grants, version = '1.0.0') => {
+    const directory = join(f.root, `${name}-${version}`)
+    await mkdir(directory)
+    await writeFile(
+      join(directory, 'package.json'),
+      JSON.stringify({ name, version, agentSkill: { hostCapabilities: grants } })
+    )
+    return registry.install({ directory }, new AbortController().signal)
+  }
+  for (const [name, grants] of Object.entries(owners)) await install(name, grants)
+  const skills = await createSkillSession({ registry })
+  const queries = []
+  let runtime
+  try {
+    const selectedSkillOptions3 = { registry, lease: skills, session: skills }
+    runtime = await createRuntime(
+      await withSkillFixture(
+        await withProjectFixture(
+          {
+            node: {
+              cwd: f.node.cwd,
+              directory: f.node.directory,
+              authorize: f.node.authorize,
+              execute: f.node.execute.bind(f.node),
+              runtime: skills.environment,
+              acquireRuntime: (signal) => skills.acquireRuntime(signal),
+            },
+            storage: await createTestStorage(join(f.root, 'state')),
+          },
+          {
+            root: f.cwd,
+            codeIndex: {
+              isAvailable: () => true,
+              query: async (input, context) => {
+                queries.push(context)
+                assert.equal(context.project.getRootPath(), await realpath(f.cwd))
+                assert.equal(context.sessionId, 'language-owners')
+                assert.equal(context.abortSignal.aborted, false)
+                return { action: input.action, revision: 'language-owner-fixture' }
+              },
+            },
+            skills: selectedSkillOptions3,
+          }
+        ),
+        selectedSkillOptions3
+      )
+    )
+  } catch (error) {
+    await skills.release()
+    throw error
+  }
+  const session = await runtime.openSession('language-owners')
+  await session.context.append({ kind: 'user', body: 'Verify current language grant owners' })
+  return {
+    registry,
+    skills,
+    queries,
+    install,
+    query: async (expectedError) => {
+      const result = await session.execute({
+        source:
+          "import {analyze} from 'velaros:code';let result;try {result={value:await analyze({intent:'cycles'})}}catch(error){result={error:{code:error.code,message:error.message}}}export default result;",
+      })
+      assert.equal(result.result.failed, undefined, JSON.stringify(result))
+      if (expectedError)
+        assert.equal(result.rawValue?.error?.code, expectedError, JSON.stringify(result))
+      else {
+        assert.equal(result.rawValue?.error, undefined, JSON.stringify(result))
+        assert(result.rawValue?.value, JSON.stringify(result))
+      }
+      return result.rawValue
+    },
+    close: async () => {
+      await runtime.close()
+      await skills.release()
+    },
+  }
+}
+
+test('shared language grants keep the loaded valid owner after another owner is revoked', async (t) => {
+  const f = await languageOwnerFixture(t, {
+    'language-owner-a': ['project:language:jsts'],
+    'language-owner-b': ['project:language:jsts'],
+  })
+  try {
+    await f.skills.activate('language-owner-b', new AbortController().signal)
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    f.skills.activate = async (name, signal) => {
+      activations.push({ name, signal })
+      return activate(name, signal)
+    }
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner-b']
+    )
+    assert.equal(activations[0].signal, f.queries[0].abortSignal)
+    await f.registry.remove('language-owner-a')
+    activations.length = 0
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner-b']
+    )
+    assert.equal(activations[0].signal, f.queries[1].abortSignal)
+    await f.registry.remove('language-owner-b')
+    activations.length = 0
+    // ProjectCodeOperations 经 projectFailure 把根 PERMISSION 转成公开的项目原因码。
+    const denied = await f.query('PERMISSION_DENIED')
+    assert.match(
+      denied.error.message,
+      /^语言 Skill 授权已失效：project:language:jsts（调用 [\da-f-]+:\d+，效果 none）$/u
+    )
+    assert.deepEqual(activations, [])
+    assert.equal(f.queries.length, 2)
+  } finally {
+    await f.close()
+  }
+})
+
+test('language grants validate before activation, deduplicate an owner and preserve generation conflicts', async (t) => {
+  const grants = ['project:language:jsts', 'project:language:python']
+  const f = await languageOwnerFixture(t, { 'language-owner': grants })
+  try {
+    const assertGranted = f.registry.assertGranted.bind(f.registry)
+    const checks = []
+    f.registry.assertGranted = async (...args) => {
+      await assertGranted(...args)
+      checks.push(args[2])
+    }
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    let replaceBeforeActivation = false
+    f.skills.activate = async (name, signal) => {
+      assert.deepEqual(checks, grants)
+      activations.push({ name, signal })
+      if (replaceBeforeActivation) await f.install(name, grants, '2.0.0')
+      return activate(name, signal)
+    }
+    assert.equal((await f.query()).value.action, 'find_cycles')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner']
+    )
+    assert.equal(activations[0].signal, f.queries[0].abortSignal)
+    checks.length = 0
+    activations.length = 0
+    replaceBeforeActivation = true
+    await f.query('CONFLICT')
+    assert.deepEqual(
+      activations.map((item) => item.name),
+      ['language-owner']
+    )
+    assert.equal(f.queries.length, 1)
+  } finally {
+    await f.close()
+  }
+})
+
+test('a revoked later language grant prevents activation of an earlier valid owner', async (t) => {
+  const f = await languageOwnerFixture(t, {
+    'language-owner-a': ['project:language:jsts'],
+    'language-owner-b': ['project:language:python'],
+  })
+  try {
+    await f.registry.remove('language-owner-b')
+    const activate = f.skills.activate.bind(f.skills)
+    const activations = []
+    f.skills.activate = async (name, signal) => {
+      activations.push(name)
+      return activate(name, signal)
+    }
+    const denied = await f.query('PERMISSION_DENIED')
+    assert.match(
+      denied.error.message,
+      /^语言 Skill 授权已失效：project:language:python（调用 [\da-f-]+:\d+，效果 none）$/u
+    )
+    assert.deepEqual(activations, [])
+    assert.equal(f.queries.length, 0)
+  } finally {
+    await f.close()
+  }
 })

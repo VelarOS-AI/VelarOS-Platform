@@ -32,7 +32,7 @@ export interface ComputerHelperLocatorApi {
 /**
  * 解析宿主分发的 Computer Use 平台包（helper 脚本与自包含 Python）。
  * Desktop 在应用资源中内置该包；其他宿主可经 ComputerResourcePort 注入资源根与停用状态。
- * 兼容已有 venv 布局，缺少自包含解释器时返回 null，交给宿主修复运行资源。
+ * 缺少自包含解释器时返回 null，交给宿主修复运行资源。
  * 仅显式 VELAROS_COMPUTER_PYTHON 可覆盖解释器，不自动探测系统 Python。
  * 本类只查磁盘；解释器启动与权限检测交给 ComputerSidecarManager。
  */
@@ -78,7 +78,6 @@ export class ComputerHelperLocator implements ComputerHelperLocatorApi {
           runtimeDir: packageRoot,
           packageRoot,
           version: readPackageVersion(packageRoot),
-          bundledVenv: true,
         }
       }
     }

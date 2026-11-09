@@ -2,7 +2,7 @@
   "name": "@velaros-ai/agent-lab",
   "version": "0.2.0",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "可复现的连续旅程评测：诊断、统计与认证，连同 velaros-agent-lab 命令行；不认宿主。",
   "license": "Apache-2.0",
@@ -38,7 +38,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test spec/acceptance.test.ts test",
     "check:arch": "node scripts/check-architecture.mjs",
-    "check:legacy": "bun scripts/check-legacy-equivalence.mjs",
     "check": "bun run typecheck && bun run test && bun run check:arch",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-lab",
     "test:built": "bun test spec/acceptance.test.ts test"

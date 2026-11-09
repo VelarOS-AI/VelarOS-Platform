@@ -165,7 +165,7 @@ export function createOutputCollector(
       if (JSON.stringify(metadata).length > limits.metadataChars) throw new Error('输出声明过大')
       const key = metadata.key ?? `$${blocks.length + 1}`
       if (names.has(key)) throw new Error(`输出 key 重复：${key}`)
-      const raw = copy(isUndefined(value) ? null : value)
+      const raw = copy(value)
       const size = JSON.stringify(raw).length
       if (chars + size > limits.rawChars) throw new Error('输出采集上限已达到；此块没有完整归档')
       const type = metadata.type

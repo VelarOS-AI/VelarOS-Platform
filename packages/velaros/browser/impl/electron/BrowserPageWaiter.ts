@@ -1,7 +1,7 @@
 import type { Event as ElectronEvent, LoadURLOptions, WebContents } from 'electron'
 
-import { isFalse, isFunction } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isFalse } from '@velaros-ai/core'
+import { AppError, createAbortError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -15,11 +15,12 @@ import {
   isLiveWebContents,
   isNavigationAbort,
   normalizeStabilityResult,
-  readWebRequestId,
 } from '../../utils/electron/page-wait'
 import { safeWebContentsOff, stopLoading } from '../../utils/electron/page-wait'
 import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
+
+import { ElectronWebContentsBrowserPageDriver } from './ElectronWebContentsBrowserPageDriver'
 
 /** Electron 导航被取消时的错误码。 */
 const log = Log.tag('BrowserPageWaiter')
@@ -68,6 +69,10 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     loadOptions?: LoadURLOptions
   ): Promise<void> {
     return new Promise((resolveLoad, rejectLoad) => {
+      if (abortSignal?.aborted) {
+        rejectLoad(createAbortError('浏览器页面加载已取消。'))
+        return
+      }
       if (!isLiveWebContents(webContents)) {
         rejectLoad(createWindowClosedError())
         return
@@ -181,6 +186,10 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     abortSignal?: AbortSignal
   ): Promise<void> {
     return new Promise((resolveWait, rejectWait) => {
+      if (abortSignal?.aborted) {
+        rejectWait(createAbortError('浏览器动作等待已取消。'))
+        return
+      }
       if (!isLiveWebContents(webContents)) {
         rejectWait(createWindowClosedError())
         return
@@ -282,6 +291,10 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     abortSignal?: AbortSignal
   ): Promise<void> {
     return new Promise((resolveWait, rejectWait) => {
+      if (abortSignal?.aborted) {
+        rejectWait(createAbortError('浏览器导航等待已取消。'))
+        return
+      }
       if (!isLiveWebContents(webContents)) {
         rejectWait(createWindowClosedError())
         return
@@ -445,94 +458,12 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     idleMs: number = BrowserTuning.page.networkIdleMs,
     maxWaitMs: number = BrowserTuning.page.networkIdleTimeoutMs
   ): Promise<boolean> {
-    // 交回等没等到：空闲了是 true，到了 maxWaitMs 还有请求在飞是 false（页面没了也算没等到）。
-    return new Promise<boolean>((resolve) => {
-      if (!isLiveWebContents(webContents)) {
-        resolve(false)
-        return
-      }
-
-      const pendingRequestIds = new Set<string>()
-      let anonymousPendingRequests = 0
-      const timers = new TimerScope({ name: 'BrowserPageWaiter.networkIdle' })
-      let idleTimer: Nullable<TimerLease> = null
-      let maxTimer: Nullable<TimerLease> = timers.after(maxWaitMs, () => {
-        cleanup()
-        resolve(false)
-      })
-
-      const hasPendingRequests = (): boolean =>
-        pendingRequestIds.size > 0 || anonymousPendingRequests > 0
-      const scheduleIdle = (): void => {
-        if (hasPendingRequests()) return
-        cancelIdle()
-        // 没有请求持续 idleMs 后认为网络空闲。
-        idleTimer = timers.after(idleMs, () => {
-          cleanup()
-          resolve(true)
-        })
-      }
-      const cancelIdle = (): void => {
-        idleTimer?.cancel()
-        idleTimer = null
-      }
-      const onStart = (details: unknown): void => {
-        const requestId = readWebRequestId(details)
-        if (requestId) {
-          pendingRequestIds.add(requestId)
-        } else {
-          anonymousPendingRequests++
-        }
-        cancelIdle()
-      }
-      const onEnd = (details: unknown): void => {
-        const requestId = readWebRequestId(details)
-        if (requestId) {
-          pendingRequestIds.delete(requestId)
-        } else {
-          anonymousPendingRequests = Math.max(0, anonymousPendingRequests - 1)
-        }
-        if (!hasPendingRequests()) scheduleIdle()
-      }
-      function cleanup(): void {
-        cancelIdle()
-        maxTimer?.cancel()
-        maxTimer = null
-        timers.dispose()
-        try {
-          webContents?.session?.webRequest?.onBeforeRequest(null)
-        } catch (error) {
-          log.debug('清理网络空闲 onBeforeRequest 钩子失败', { error })
-          /* ignore */
-        }
-        try {
-          webContents?.session?.webRequest?.onCompleted(null)
-        } catch (error) {
-          log.debug('清理网络空闲 onCompleted 钩子失败', { error })
-          /* ignore */
-        }
-        try {
-          webContents?.session?.webRequest?.onErrorOccurred(null)
-        } catch (error) {
-          log.debug('清理网络空闲 onErrorOccurred 钩子失败', { error })
-          /* ignore */
-        }
-      }
-
-      try {
-        webContents.session.webRequest.onBeforeRequest((details, callback) => {
-          onStart(details)
-          if (isFunction(callback)) callback({})
-        })
-        webContents.session.webRequest.onCompleted((details) => onEnd(details))
-        webContents.session.webRequest.onErrorOccurred((details) => onEnd(details))
-      } catch (error) {
-        // 量不了就不拦着：当作已经空闲。
-        log.debug('安装网络空闲 webRequest 钩子失败', { error })
-        resolve(true)
-        return
-      }
-      scheduleIdle()
+    if (!isLiveWebContents(webContents)) return Promise.resolve(false)
+    // Electron Session 的 webRequest 钩子由宿主持有，且同 partition 的页面共享。
+    // 页面的 CDP 网络采集已经有按 WebContents 隔离的请求账与并发等待，直接复用它。
+    return new ElectronWebContentsBrowserPageDriver(webContents).waitForNetworkIdle({
+      idleMs,
+      timeoutMs: maxWaitMs,
     })
   }
 

@@ -2,7 +2,7 @@ import { isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 
 import { ContextLimits } from '../contract/constants.js'
-import type { ContextRuntimeOptions } from '../contract/requires.js'
+import type { ContextRuntimeOptions, ContextStorage } from '../contract/requires.js'
 import type {
   ContextAppend,
   ContextContent,
@@ -26,8 +26,6 @@ import {
   emptyContextState,
   sameContextRef,
 } from '../utils/state.js'
-
-import { createContextReference } from './ContextReferenceAllocator.js'
 
 /** 会话的上下文权威。 */
 export interface ContextRuntime {
@@ -79,11 +77,8 @@ export class SessionContext implements ContextRuntime {
     if (ref.sessionId !== this.options.sessionId)
       throw contextFailure('SCOPE_MISMATCH', '引用不在本会话作用域内。')
     const storage = this.options.storage
-    if (!storage.records && !storage.selectSnapshot) return this.record(await this.state(), ref)
-    const records = storage.records
-      ? (await storage.records(this.options.sessionId, { refId: ref.id, limit: 1 })).items
-      : ((await storage.selectSnapshot!(this.options.sessionId, [{ refId: ref.id }]))?.records ??
-        [])
+    const records = (await storage.records(this.options.sessionId, { refId: ref.id, limit: 1 }))
+      .items
     const record = records.find((item) => sameContextRef(item.ref, ref))
     if (!record) throw contextFailure('REF_NOT_FOUND', '上下文引用不存在。')
     return record
@@ -114,25 +109,7 @@ export class SessionContext implements ContextRuntime {
       createdAt: new Date().toISOString(),
     }
     signal?.throwIfAborted()
-    if (this.options.storage.appendRecord)
-      return this.options.storage.appendRecord(this.options.sessionId, entry)
-    for (;;) {
-      const state = await this.state()
-      for (const source of input.sources ?? []) this.record(state, source)
-      const record: ContextRecord = {
-        ...entry,
-        sequence: (state.records.at(-1)?.sequence ?? 0) + 1,
-      }
-      signal?.throwIfAborted()
-      if (
-        await this.options.storage.compareAndSwap(this.options.sessionId, state.version, {
-          ...state,
-          version: state.version + 1,
-          records: [...state.records, record],
-        })
-      )
-        return record
-    }
+    return this.options.storage.appendRecord(this.options.sessionId, entry)
   }
   public async ingest(input: ContextUserInput, signal?: AbortSignal): Promise<ContextRecord> {
     if (!isUndefined(input.text) && !isString(input.text))
@@ -190,13 +167,12 @@ export class SessionContext implements ContextRuntime {
     const raw = await this.read(ref, original.title === 'user:manifest' ? { limit: 1 } : range)
     if (raw.record.kind !== 'user') {
       const storage = this.options.storage
-      const records = storage.selectSnapshot
-        ? ((
-            await storage.selectSnapshot(this.options.sessionId, [
-              { kind: 'user', title: 'user:manifest' },
-            ])
-          )?.records ?? [])
-        : (await this.state()).records
+      const records =
+        (
+          await storage.selectSnapshot(this.options.sessionId, [
+            { kind: 'user', title: 'user:manifest' },
+          ])
+        )?.records ?? []
       let file = false
       for (const manifest of records.filter(
         (item) =>
@@ -226,7 +202,7 @@ export class SessionContext implements ContextRuntime {
     let cursor = 0
     for (const chunk of manifest.chunks) {
       if (text.length === expected) break
-      // 原始记录已有字符数；兼容固定宽度的旧分块，也支持避开代理对的新边界。
+      // 分块边界避开代理对，按各记录的实际字符数定位。
       const record = await this.reference(chunk)
       const end = cursor + record.chars
       if (end <= offset) {
@@ -311,11 +287,7 @@ export class SessionContext implements ContextRuntime {
       limit: Math.max(1, Math.min(ContextLimits.readChars, maxChars)),
     })
     const storage = this.options.storage
-    const state = storage.loadMetadata
-      ? await storage.loadMetadata(this.options.sessionId)
-      : storage.selectSnapshot
-        ? (await storage.selectSnapshot(this.options.sessionId, []))?.metadata
-        : await this.state()
+    const state = await storage.loadMetadata(this.options.sessionId)
     const entry = state?.inputSummaries?.find((item) => sameContextRef(item.input, ref))
     const manifest =
       raw.record.title === 'user:manifest'
@@ -516,4 +488,12 @@ export class SessionContext implements ContextRuntime {
 /** 创建绑定会话的上下文运行时。 */
 export function createContextRuntime(options: ContextRuntimeOptions): ContextRuntime {
   return new SessionContext(options)
+}
+
+/** 由存储原子保留身份，再绑定当前会话。 */
+export async function createContextReference(
+  storage: ContextStorage,
+  sessionId: string
+): Promise<ContextRef> {
+  return { sessionId, id: await storage.allocateReferenceId(sessionId) }
 }

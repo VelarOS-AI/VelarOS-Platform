@@ -8,5 +8,6 @@
     "outDir": "dist",
     "rootDir": ".",
     "sourceMap": true
-  }
+  },
+  "exclude": ["**/test/**", "**/spec/**", "dist", "node_modules"]
 }

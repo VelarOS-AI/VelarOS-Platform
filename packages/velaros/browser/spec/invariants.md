@@ -29,7 +29,7 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-5 | 地址栏判据只有一份：同一段输入，主进程与渲染进程经 `browserAddress` 得到同一个结论（是网址就导航，不是就按选定引擎搜） | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 偏好永远落在闭集里：读盘读到什么值，`browserPreferences` 都给出一个合法值，不抛也不返回未知值 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 动作策略按词表判定：拒绝名单命中即拒绝并说明命中了哪一条，没有策略表就是放行——判定只有 `browserActionPolicy.check` 这一处 | 测试 | `spec/acceptance.test.ts` |
-| INV-8 | 站点工作区是硬边界：读写只在当前根（读可回退到历史根），`..`、绝对路径与指向根外的路径一律拒绝 | 测试 | `spec/acceptance.test.ts` |
+| INV-8 | 站点工作区是硬边界：读写只在当前根，根外的相对/绝对路径和跨根链接一律拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 用户脚本的命中规则只有一份：`@match` 先过、`@exclude` 一票否决，启用与否不改变匹配判定；程序建的用户脚本一律先停用 | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 登录墙门控每个站点每会话最多问一次：问过就记账，之后无论批准还是拒绝都不再阻塞——死锁防护优先于反复征询 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | `./browser/contracts` 与 `./browser/renderer` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
@@ -49,5 +49,10 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-28 | 模型的 CDP 会话与宿主那条分开：模型开关的域、设的仿真与 Fetch 拦截只算在它自己身上，宿主的诊断、录屏与 mock 不受影响，宿主的事件监听不收子会话的事件；只认它自己挂出来的子会话（**未验证**：要真实 Electron，实现测试与真机探针在 `test/core/browser-protocol-sessions.test.ts` 与 ADR 0012 的验证里） | 文字 | |
 | INV-29 | 被模型的 Fetch 拦下、30000 毫秒没人放行的请求由宿主放行，并在事件里记一条 `Velar.requestAutoContinued`；事件序号只增，缓冲只为守住内存、挤掉的条数如实交回（实现测试在 `test/core/browser-protocol-sessions.test.ts`，经空间端口的那一段要真实浏览器） | 文字 | |
 | INV-30 | 整页截图与高过一屏的区域截图是真的页面：按一屏切块、每块经 captureBeyondViewport 截下再拼成一张，每处页面只出现一次；截图不滚动页面、不改版面，fixed 元素与元素标注只在它们此刻所在的位置出现一次；整张图守住像素上限，超了一起降清晰度（**未验证**：要真实 `<webview>`，切块与拼接的实现测试在 `test/runtime/screenshot-tiles.test.ts`，真机探针 `test/probes/electron-full-page-screenshot.probe.mjs`） | 文字 | |
+| INV-31 | 元素操作只接受当前观察实际签发的带代次引用，第一代也拒绝裸 ref；旧代次不能通过附带 selector 绕过，显式不带 ref 的独立定位仍可用 | 测试 | `test/core/browser-target-resolution.test.mjs` |
+| INV-32 | 会话关闭撤销预览、录屏与性能采集的登记，迟到启动不重新发布；trace 解析或落盘失败允许重新录制；内嵌网络空闲按页面的 CDP 请求判断，不替换宿主共享 Session 的 webRequest 钩子 | 测试 | `test/runtime/browser-lifecycle.test.ts` |
+| INV-33 | 截图标注与上传回查产生的 selector 唯一命中观察到的元素；工作区越界写请求在创建父目录前拒绝，生成的 trace 与模型截图同样遵守真实路径边界 | 测试 | `test/core/browser-page-selectors.test.ts`、`test/core/browser-workspace-file-access.test.ts`、`test/runtime/browser-lifecycle.test.ts` |
+| INV-34 | 已启用用户脚本的执行面确有变化时，先校验并读取可靠旧内容，再持久停用；停用落盘失败不写代码，后续代码或索引失败保持停用，代码回滚失败不重新启用，原错与回滚诊断分别保留 | 测试 | `test/core/browser-user-script-update.test.ts` |
+| INV-35 | 堆快照按 chunk 写入独占暂存文件，跨块 Unicode 和实际字节数保持一致；等待 driver 采集 Promise 结算再收尾，关闭写入口后拒绝迟到 chunk，失败保留旧目标并只清理可确认归属的暂存文件 | 测试 | `test/runtime/heap-snapshot.test.ts` |
 
 2026-09-30 INV-16 明确调用超时与实际动作结算的区别。原放行普通动作可能与迟到动作重叠；当前以世代失效、排队取消及资源复用检查保证互斥。

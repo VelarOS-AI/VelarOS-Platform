@@ -2,19 +2,21 @@
 // 用途：从 packages/*/package.json 的 @velaros-ai/* 依赖派生真实依赖图，拓扑排序后依序构建各包（支持 --for 依赖闭包与全量两种模式）。
 
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
-  closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
-  openSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
   readlinkSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
@@ -130,16 +132,37 @@ function computeBuildOutputFingerprint(node) {
   return hash.digest('hex')
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isBuildCache(value) {
+  return (
+    isRecord(value) &&
+    value.schemaVersion === BUILD_CACHE_SCHEMA_VERSION &&
+    Object.keys(value).length === 2 &&
+    isRecord(value.packages) &&
+    Object.entries(value.packages).every(
+      ([name, entry]) =>
+        name.trim() !== '' &&
+        isRecord(entry) &&
+        Object.keys(entry).length === 2 &&
+        typeof entry.inputFingerprint === 'string' &&
+        /^[a-f0-9]{64}$/u.test(entry.inputFingerprint) &&
+        typeof entry.outputFingerprint === 'string' &&
+        /^[a-f0-9]{64}$/u.test(entry.outputFingerprint)
+    )
+  )
+}
+
 function readBuildCache() {
-  if (!existsSync(BUILD_CACHE_PATH))
-    return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+  const empty = () => ({ schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} })
   try {
     const parsed = readJson(BUILD_CACHE_PATH)
-    if (parsed.schemaVersion !== BUILD_CACHE_SCHEMA_VERSION || typeof parsed.packages !== 'object')
-      return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
-    return parsed
-  } catch {
-    return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+    return isBuildCache(parsed) ? parsed : empty()
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return empty()
+    throw new Error(`无法读取构建缓存 ${BUILD_CACHE_PATH}：${error.message}`, { cause: error })
   }
 }
 
@@ -151,39 +174,117 @@ function writeBuildCache(cache) {
 }
 
 function isProcessAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
   try {
     process.kill(pid, 0)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if (error.code === 'ESRCH') return false
+    throw error
+  }
+}
+
+function assertBuildLockDirectory() {
+  try {
+    if (!lstatSync(BUILD_LOCK_PATH).isDirectory())
+      throw new Error(`包构建锁不是当前目录格式：${BUILD_LOCK_PATH}`)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+}
+
+function readBuildLockOwner() {
+  try {
+    assertBuildLockDirectory()
+    const entries = readdirSync(BUILD_LOCK_PATH, { withFileTypes: true })
+    if (entries.length === 0) return undefined
+    const [entry] = entries
+    if (
+      entries.length !== 1 ||
+      !entry.isFile() ||
+      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.owner$/u.test(entry.name)
+    )
+      throw new Error(`包构建锁 owner 无效：${BUILD_LOCK_PATH}`)
+    const path = resolve(BUILD_LOCK_PATH, entry.name)
+    const text = readFileSync(path, 'utf8')
+    const pid = Number(text.trim())
+    if (!/^[1-9]\d*\n$/u.test(text) || !Number.isSafeInteger(pid))
+      throw new Error(`包构建锁 PID 无效：${path}`)
+    return { path, pid }
+  } catch (error) {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+function reclaimBuildLock() {
+  const owner = readBuildLockOwner()
+  if (owner) {
+    if (isProcessAlive(owner.pid))
+      throw new Error(`已有包拓扑构建正在运行（pid ${owner.pid}），拒绝并发清理 dist。`)
+    try {
+      unlinkSync(owner.path)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+  }
+  try {
+    rmdirSync(BUILD_LOCK_PATH)
+  } catch (error) {
+    if (error.code === 'ENOENT') return
+    throw error
   }
 }
 
 function acquireBuildLock() {
   mkdirSync(BUILD_STATE_DIR, { recursive: true })
-  if (existsSync(BUILD_LOCK_PATH)) {
-    let ownerPid = 0
-    try {
-      ownerPid = Number.parseInt(readFileSync(BUILD_LOCK_PATH, 'utf8'), 10)
-    } catch {
-      ownerPid = 0
-    }
-    if (isProcessAlive(ownerPid))
-      throw new Error(`已有包拓扑构建正在运行（pid ${ownerPid}），拒绝并发清理 dist。`)
-    rmSync(BUILD_LOCK_PATH, { force: true })
-  }
-
-  let fileDescriptor
+  const staging = mkdtempSync(`${BUILD_LOCK_PATH}.`)
+  const ownerName = `${randomUUID()}.owner`
   try {
-    fileDescriptor = openSync(BUILD_LOCK_PATH, 'wx')
-    writeFileSync(fileDescriptor, `${process.pid}\n`, 'utf8')
+    writeFileSync(resolve(staging, ownerName), `${process.pid}\n`, { flag: 'wx', mode: 0o600 })
+    // Windows rename 可替换已存在的普通文件；发布前先拒绝未知锁形态。
+    assertBuildLockDirectory()
+    try {
+      renameSync(staging, BUILD_LOCK_PATH)
+    } catch (error) {
+      if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'ENOTDIR', 'EISDIR'].includes(error.code)) throw error
+      reclaimBuildLock()
+      renameSync(staging, BUILD_LOCK_PATH)
+    }
   } catch (error) {
-    if (fileDescriptor !== undefined) closeSync(fileDescriptor)
-    throw new Error(`无法取得包构建锁：${error.message}`)
+    try {
+      rmSync(staging, { recursive: true, force: true })
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], '包构建锁发布与临时目录清理均失败')
+    }
+    throw error
   }
-  closeSync(fileDescriptor)
-  return () => rmSync(BUILD_LOCK_PATH, { force: true })
+  return () => {
+    // 只删自己发布的 nonce；旧 owner 的收尾不能移除继任者的非空目录。
+    unlinkSync(resolve(BUILD_LOCK_PATH, ownerName))
+    try {
+      rmdirSync(BUILD_LOCK_PATH)
+    } catch (error) {
+      // 自己的 marker 已释放；并发者可能已收走空目录或发布新 marker。
+      if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error
+    }
+  }
+}
+
+async function withBuildLock(consume) {
+  const release = acquireBuildLock()
+  let result
+  try {
+    result = await consume()
+  } catch (error) {
+    try {
+      release()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], '包构建与锁释放均失败')
+    }
+    throw error
+  }
+  release()
+  return result
 }
 
 function collectVelarosDeps(manifest) {
@@ -203,7 +304,14 @@ function listPackageDirectories() {
   const found = []
   for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    if (existsSync(resolve(PACKAGES_DIR, entry.name, 'package.json'))) found.push(entry.name)
+    const manifestPath = resolve(PACKAGES_DIR, entry.name, 'package.json')
+    try {
+      if (!statSync(manifestPath).isFile()) throw new Error(`包清单必须是文件：${manifestPath}`)
+      found.push(entry.name)
+    } catch (error) {
+      if (error.code !== 'ENOENT')
+        throw new Error(`无法读取包清单 ${manifestPath}：${error.message}`, { cause: error })
+    }
   }
   return found
 }
@@ -214,15 +322,32 @@ function scanPackages() {
 
   for (const directory of listPackageDirectories()) {
     const manifestPath = resolve(PACKAGES_DIR, directory, 'package.json')
-    if (!existsSync(manifestPath)) continue
-
     let manifest
     try {
       manifest = readJson(manifestPath)
-    } catch {
-      continue
+    } catch (error) {
+      throw new Error(`无法读取包清单 ${manifestPath}：${error.message}`, { cause: error })
     }
-    if (!manifest.name) continue
+    if (
+      !isRecord(manifest) ||
+      typeof manifest.name !== 'string' ||
+      manifest.name.trim() === '' ||
+      manifest.name !== manifest.name.trim()
+    )
+      throw new Error(`包清单缺少有效 name：${manifestPath}`)
+    for (const section of ['dependencies', 'devDependencies', 'peerDependencies', 'scripts']) {
+      const value = manifest[section]
+      if (
+        value !== undefined &&
+        (!isRecord(value) || Object.values(value).some((entry) => typeof entry !== 'string'))
+      )
+        throw new Error(`包清单 ${section} 必须是字符串映射：${manifestPath}`)
+    }
+    const duplicate = byName.get(manifest.name)
+    if (duplicate)
+      throw new Error(
+        `包清单 name 重复（${manifest.name}）：${resolve(duplicate.dir, 'package.json')} 与 ${manifestPath}`
+      )
 
     const node = {
       name: manifest.name,
@@ -233,9 +358,6 @@ function scanPackages() {
     }
     byName.set(node.name, node)
     byDir.set(directory, node.name)
-    // 分组目录下的包也允许用裸目录名寻址(--for workspace)。
-    const bare = directory.includes('/') ? directory.slice(directory.indexOf('/') + 1) : null
-    if (bare && !byDir.has(bare)) byDir.set(bare, node.name)
   }
 
   return { byDir, byName }
@@ -364,8 +486,7 @@ export async function withVerifiedPackageBuilds(targets, consume) {
   )
   if (external.length)
     throw new Error(`Cannot verify external build dependencies: ${external.join(', ')}`)
-  const releaseLock = acquireBuildLock()
-  try {
+  return withBuildLock(async () => {
     const verify = () => {
       const cache = readBuildCache()
       const resolvedFingerprints = new Map()
@@ -375,19 +496,23 @@ export async function withVerifiedPackageBuilds(targets, consume) {
           node.deps.map((name) => [name, resolvedFingerprints.get(name)])
         )
         const inputFingerprint = computePackageInputFingerprint(node, dependencies)
-        const outputFingerprint = computeBuildOutputFingerprint(node)
-        const cached = cache.packages[node.name]
-        if (
-          !node.hasBuild ||
-          !outputFingerprint ||
-          cached?.inputFingerprint !== inputFingerprint ||
-          cached?.outputFingerprint !== outputFingerprint
-        )
-          throw new Error(
-            `Stale or unverified build for ${node.name}; run the package topology build before preparing a candidate`
+        // 无构建的资源包只证明源输入，其指纹仍参与下游依赖链。
+        const entry = { inputFingerprint }
+        if (node.hasBuild) {
+          const outputFingerprint = computeBuildOutputFingerprint(node)
+          const cached = cache.packages[node.name]
+          if (
+            !outputFingerprint ||
+            cached?.inputFingerprint !== inputFingerprint ||
+            cached?.outputFingerprint !== outputFingerprint
           )
+            throw new Error(
+              `Stale or unverified build for ${node.name}; run the package topology build before preparing a candidate`
+            )
+          entry.outputFingerprint = outputFingerprint
+        }
         resolvedFingerprints.set(node.name, inputFingerprint)
-        proof[node.name] = { inputFingerprint, outputFingerprint }
+        proof[node.name] = entry
       }
       return proof
     }
@@ -396,12 +521,10 @@ export async function withVerifiedPackageBuilds(targets, consume) {
     if (JSON.stringify(verify()) !== JSON.stringify(proof))
       throw new Error('Build inputs or outputs changed while preparing the candidate')
     return result
-  } finally {
-    releaseLock()
-  }
+  })
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
     printHelp()
@@ -425,17 +548,12 @@ function main() {
 
   if (options.list) return
 
-  const releaseLock = acquireBuildLock()
-  const cache = readBuildCache()
-  const resolvedFingerprints = new Map()
   let builtCount = 0
   let skippedCount = 0
-  try {
+  await withBuildLock(() => {
+    const cache = readBuildCache()
+    const resolvedFingerprints = new Map()
     for (const node of order) {
-      if (!node.hasBuild) {
-        buildPackage(node)
-        continue
-      }
       const dependencyFingerprints = new Map(
         node.deps.flatMap((dependencyName) => {
           const fingerprint = resolvedFingerprints.get(dependencyName)
@@ -443,6 +561,11 @@ function main() {
         })
       )
       const inputFingerprint = computePackageInputFingerprint(node, dependencyFingerprints)
+      if (!node.hasBuild) {
+        buildPackage(node)
+        resolvedFingerprints.set(node.name, inputFingerprint)
+        continue
+      }
       const cached = cache.packages[node.name]
       const outputFingerprint = options.incremental ? computeBuildOutputFingerprint(node) : null
       if (
@@ -469,15 +592,13 @@ function main() {
       resolvedFingerprints.set(node.name, inputFingerprint)
       builtCount += 1
     }
-  } finally {
-    releaseLock()
-  }
+  })
   console.log(`完成：构建 ${builtCount} 个包，跳过 ${skippedCount} 个未变化包。`)
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    main()
+    await main()
   } catch (error) {
     console.error(`拓扑构建失败：${error.message}`)
     process.exit(1)

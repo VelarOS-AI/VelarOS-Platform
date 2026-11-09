@@ -12,6 +12,7 @@ import {
   fitLogsToBudget,
   fitValueToBudget,
 } from '../src/utils/budget'
+import { shapeOperationFailure } from '../src/utils/capability-failure'
 import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExports } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readModuleSpecifiers } from '../src/utils/module-form'
@@ -20,6 +21,16 @@ import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { checkScriptPath, resolveLibraryImport } from '../src/utils/refs'
 import { describeProgramOversize } from '../src/utils/result'
 import { CodeSurfaceTuning } from '../src/utils/tuning'
+
+test('能力失败整形接收任意拒绝值并保留真实错误码', () => {
+  for (const cause of [null, undefined, 'host failed'])
+    expect(shapeOperationFailure(cause)).toEqual({
+      code: 'OPERATION_FAILED',
+      message: String(cause),
+    })
+  const denied = { code: 'PERMISSION', message: 'policy denied the operation' }
+  expect(shapeOperationFailure(denied)).toEqual(denied)
+})
 
 void describe('预算裁剪', () => {
   test('没超预算时一个字不动，也不留 notice', () => {
@@ -52,12 +63,24 @@ void describe('预算裁剪', () => {
     expect(notices).toHaveLength(0)
   })
 
-  test('执行账只折连着的那几笔，隔开的同名调用仍然分成两条', () => {
+  test('执行账保留独立改动引用，只折连着的普通调用，隔开的同名调用仍分开', () => {
     const notices: unknown[] = []
     const folded = fitJournalToBudget(
       [
         { call: 'demo.read', ok: true },
         { call: 'demo.read', ok: true },
+        {
+          call: 'velaros:project.commit',
+          ok: true,
+          changeRef: 'change:first',
+          changedFiles: ['first.ts'],
+        },
+        {
+          call: 'velaros:project.commit',
+          ok: true,
+          changeRef: 'change:second',
+          changedFiles: ['second.ts'],
+        },
         { call: 'demo.read', ok: false },
         { call: 'demo.read', ok: true },
       ],
@@ -65,6 +88,18 @@ void describe('预算裁剪', () => {
     )
     expect(folded).toEqual([
       { call: 'demo.read', ok: true, times: 2 },
+      {
+        call: 'velaros:project.commit',
+        ok: true,
+        changeRef: 'change:first',
+        changedFiles: ['first.ts'],
+      },
+      {
+        call: 'velaros:project.commit',
+        ok: true,
+        changeRef: 'change:second',
+        changedFiles: ['second.ts'],
+      },
       { call: 'demo.read', ok: false },
       { call: 'demo.read', ok: true },
     ])

@@ -1,5 +1,4 @@
 import type {
-  ContextCompletionRecord,
   ContextContent,
   ContextFeedback,
   ContextInvocationJournalApi,
@@ -16,7 +15,12 @@ import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isTrue, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage, ModelImage, ModelTurnRequest } from '@velaros-ai/kernel'
+import type {
+  ModelDynamicInput,
+  ModelHistoryMessage,
+  ModelImage,
+  ModelTurnRequest,
+} from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
@@ -56,7 +60,9 @@ import {
   memoryDeliveredOutputs,
   memoryFeedbackKey,
   memoryMaterialKind,
+  memoryMaterialReference,
   memoryMessageKey,
+  memoryObservation,
   memoryOutput,
   memoryOutputRefs,
   memoryPolicy,
@@ -64,18 +70,19 @@ import {
   memoryProofCarriers,
   memoryReference,
   memoryTaskHistory,
-  memoryVerificationProjection,
-  noteEntry,
 } from '../utils/context-memory.js'
 import { decisionStateProjection } from '../utils/decision-state.js'
 import { executionMaterial, materialHistoryDelta, readMaterialField } from '../utils/materials.js'
 import { segmentBase, skeletonLine } from '../utils/segment.js'
+import { noteEntry } from '../utils/session-notes.js'
 import { taskActiveProjection } from '../utils/task-projection.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import { ActiveContext } from './ActiveContext.js'
 import type { ProgramContextApi } from './ProgramContext.js'
 import type { RecentContextApi } from './RecentContext.js'
+import type { SessionNotesApi } from './SessionNotes.js'
+import { SessionNotes } from './SessionNotes.js'
 
 /** 工作区和五分区帧的唯一组装端口。 */
 export interface ContextMemoryApi {
@@ -127,7 +134,7 @@ export interface ContextMemoryApi {
   ): Promise<{
     project(maxChars: number): ReturnType<ContextMemoryApi['project']>
     reconcile: ContextMemoryApi['reconcile']
-    publish(body: string, signal: AbortSignal): Promise<void>
+    publish(body: string, signal: AbortSignal): Promise<ContextRef>
   }>
   /** 合并段底座、段内历史与本帧五分区，生成同一快照。 */
   project(
@@ -140,6 +147,7 @@ export interface ContextMemoryApi {
     body: string
     images: readonly ModelImage[]
     prompt: string
+    dynamic?: ModelDynamicInput
     history: readonly ModelHistoryMessage[]
     segment: SegmentStatus
   }>
@@ -155,7 +163,7 @@ export interface ContextMemoryApi {
     history: readonly ModelHistoryMessage[],
     previous: Optional<string>,
     signal: AbortSignal
-  ): Promise<{ body: string; prompt: string }>
+  ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }>
   /** 把段内较早的历史封成一卷并开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
   fold(reason: SegmentReason, maxChars: number, signal: AbortSignal): Promise<boolean>
   /**
@@ -165,13 +173,12 @@ export interface ContextMemoryApi {
   retire(signal: AbortSignal): Promise<boolean>
   /** 是否处在章节边界：有待处理的整理请求、段内来了新的用户输入，或计划的下一目标变了。 */
   boundary(signal: AbortSignal): Promise<boolean>
-  /** 取走自动封段留下的补写叙事标记，只取一次；没有时返回 null。 */
-  narration(signal: AbortSignal): Promise<Nullable<ContextRef>>
 }
 
 /** 同一可靠存储上的工作内存，分区只改变组装与驻留，不改变事实和权限。 */
 export class ContextMemory implements ContextMemoryApi {
   private readonly policy: Required<ContextMemoryPolicy>
+  private readonly sessionNotes: SessionNotesApi
   /** 已记过缺页的材料，只针对最近送达的那一帧。 */
   private readonly faulted = new Set<string>()
   private faultFrame = ''
@@ -187,6 +194,7 @@ export class ContextMemory implements ContextMemoryApi {
     private readonly journal?: ContextInvocationJournalApi
   ) {
     this.policy = memoryPolicy(policy)
+    this.sessionNotes = new SessionNotes(id, storage)
   }
 
   public updateActive(
@@ -198,16 +206,12 @@ export class ContextMemory implements ContextMemoryApi {
 
   private async snapshot(signal: AbortSignal, selections?: readonly ContextRecordSelection[]) {
     signal.throwIfAborted()
-    const selected =
-      selections && this.storage.selectSnapshot
-        ? await this.storage.selectSnapshot(this.id, selections)
-        : undefined
-    const snapshot =
-      selections && this.storage.selectSnapshot
-        ? selected
-          ? { ...selected.metadata, records: selected.records }
-          : null
-        : await this.storage.load(this.id)
+    const selected = selections ? await this.storage.selectSnapshot(this.id, selections) : undefined
+    const snapshot = selections
+      ? selected
+        ? { ...selected.metadata, records: selected.records }
+        : null
+      : await this.storage.load(this.id)
     signal.throwIfAborted()
     return snapshot
   }
@@ -220,50 +224,16 @@ export class ContextMemory implements ContextMemoryApi {
       { kind: 'user' },
       { refId: ref.id },
     ])
-    const currentGoal = snapshot?.records.findLast((item) => item.title === 'session:goal')
-    const record =
-      memoryReference(snapshot, ref) ??
-      (ref.sessionId === this.id && currentGoal?.kind === 'audit' && currentGoal.ref.id === ref.id
-        ? currentGoal
-        : undefined)
+    const record = memoryMaterialReference(snapshot, this.id, ref)
     return { snapshot, record }
   }
 
-  private async notes(
+  private notes(
     signal: AbortSignal,
     selective = false,
     selections: readonly ContextRecordSelection[] = []
   ) {
-    const snapshot = await this.snapshot(
-      signal,
-      selective
-        ? [
-            { title: 'search:history-reset', latest: true },
-            { titlePrefix: 'workspace:note:', latestPerTitle: true },
-            ...selections,
-          ]
-        : undefined
-    )
-    const reset = Math.max(
-      snapshot?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ??
-        0,
-      snapshot?.task?.startedSequence ?? 0
-    )
-    const records = [
-      ...new Map(
-        (snapshot?.records ?? [])
-          .filter((record) => record.sequence > reset && record.title.startsWith('workspace:note:'))
-          .map((record) => [record.title, record])
-      ).values(),
-    ]
-    const notes = []
-    for (const record of records) {
-      signal.throwIfAborted()
-      const body = await this.storage.get(this.id, record.objectId)
-      if (isNull(body)) throw new AppError('NOT_FOUND', '工作笔记原文缺失')
-      notes.push({ record, note: JSON.parse(body) as WorkspaceNote })
-    }
-    return { snapshot, reset, notes }
+    return this.sessionNotes.load(signal, selective, selections)
   }
 
   public async update(input: WorkspaceUpdate, signal: AbortSignal): Promise<WorkspaceEntry> {
@@ -288,10 +258,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (['body', 'title', 'sources', 'resident'].every((key) => !Object.hasOwn(input, key)))
       throw new AppError('MEMORY_INPUT', '笔记更新为空')
     for (let attempt = 0; attempt < 32; attempt++) {
-      const incremental = Boolean(
-        this.storage.selectSnapshot && this.storage.compareAndSwapMetadata
-      )
-      const { snapshot, notes } = await this.notes(signal, incremental)
+      const { snapshot, notes } = await this.notes(signal, true)
       if (!snapshot) throw new AppError('UNAVAILABLE', '会话尚未建立')
       const prior = notes.find((item) => item.note.key === input.key)
       if ((prior?.note.revision ?? 0) !== input.baseRevision)
@@ -303,8 +270,8 @@ export class ContextMemory implements ContextMemoryApi {
         throw new AppError('WORKSPACE_LIMIT', '工作区笔记目录已满，请复用已有键')
       const sources = input.sources ?? prior?.note.sources ?? []
       let authorization = snapshot
-      if (incremental && !isEmpty(sources)) {
-        const selected = await this.storage.selectSnapshot!(this.id, [
+      if (!isEmpty(sources)) {
+        const selected = await this.storage.selectSnapshot(this.id, [
           { title: 'search:history-reset', latest: true },
           { kind: 'user' },
           ...sources.map((ref) => ({ refId: ref.id })),
@@ -344,10 +311,10 @@ export class ContextMemory implements ContextMemoryApi {
         createdAt: new Date().toISOString(),
       }
       signal.throwIfAborted()
-      if (incremental) {
+      {
         const { records: _records, ...metadata } = snapshot
         if (
-          await this.storage.compareAndSwapMetadata!(
+          await this.storage.compareAndSwapMetadata(
             this.id,
             snapshot.version,
             { ...metadata, version: snapshot.version + 1 },
@@ -355,53 +322,20 @@ export class ContextMemory implements ContextMemoryApi {
           )
         )
           return noteEntry(note, record)
-      } else if (
-        await this.storage.compareAndSwap(this.id, snapshot.version, {
-          ...snapshot,
-          version: snapshot.version + 1,
-          records: [...snapshot.records, record],
-        })
-      )
-        return noteEntry(note, record)
+      }
     }
     throw new AppError('WORKSPACE_BUSY', '工作区持续发生并发变化')
   }
 
-  public async list(input: { after?: string; limit?: number }, signal: AbortSignal) {
-    const limit = input.limit ?? ActRuntimeTuning.workspacePage
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > WorkspaceLimits.maxPage)
-      throw new AppError('VALIDATION', `笔记目录每页 1–${WorkspaceLimits.maxPage} 条`)
-    const { notes } = await this.notes(signal, true)
-    const items = notes
-      .map((item) => noteEntry(item.note, item.record))
-      .filter((item) => isUndefined(input.after) || item.key > input.after)
-      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-    const page = items.slice(0, limit)
-    return { items: page, nextAfter: items.length > limit ? page.at(-1)!.key : null }
+  public list(
+    input: { after?: string; limit?: number },
+    signal: AbortSignal
+  ): Promise<{ items: readonly WorkspaceEntry[]; nextAfter: Nullable<string> }> {
+    return this.sessionNotes.list(input, signal)
   }
 
-  public async readNote(input: RuntimeNoteRead, signal: AbortSignal): Promise<RuntimeNoteContent> {
-    const offset = input.offset ?? 0
-    const limit = input.limit ?? ActRuntimeTuning.noteReadChars
-    if (
-      !Number.isSafeInteger(offset) ||
-      offset < 0 ||
-      !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > ActRuntimeTuning.noteReadChars
-    )
-      throw new AppError('VALIDATION', '笔记正文分页无效')
-    const { notes } = await this.notes(signal, true)
-    const entry = notes.find((item) => item.note.key === input.key)
-    if (!entry) throw new AppError('MEMORY_NOT_FOUND', '工作笔记不存在')
-    if (entry.note.revision !== input.revision)
-      throw new AppError('WORKSPACE_CONFLICT', '笔记版本已变化，请刷新目录')
-    return {
-      entry: noteEntry(entry.note, entry.record),
-      text: entry.note.body.slice(offset, offset + limit),
-      totalChars: entry.note.body.length,
-      offset,
-    }
+  public readNote(input: RuntimeNoteRead, signal: AbortSignal): Promise<RuntimeNoteContent> {
+    return this.sessionNotes.readNote(input, signal)
   }
 
   public async read(
@@ -474,6 +408,7 @@ export class ContextMemory implements ContextMemoryApi {
             .includes(input.query.toLowerCase()))
       )
         continue
+      if (await this.observationMaterial(record, signal)) continue
       const note = latest.get(record.ref.id)
       items.push({ ...record, ...(note ? noteEntry(note.note, record) : {}) })
       if (items.length > limit) break
@@ -494,6 +429,8 @@ export class ContextMemory implements ContextMemoryApi {
     const { snapshot, record } = await this.materialSnapshot(ref, signal)
     if (ref.sessionId !== this.id || !record)
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
+    if (await this.observationMaterial(record, signal))
+      throw new AppError('PERMISSION', '观察历史只能通过 observe 的有界历史选择读取')
     await this.fault(ref, signal)
     const result = /^script:[^:]+:result$/u.test(record.title ?? '')
     const stateDetails = record.title.startsWith('context:decision-state:')
@@ -690,6 +627,9 @@ export class ContextMemory implements ContextMemoryApi {
       { title: 'context:delivered', latest: true },
       { titlePrefix: 'task:completion:', latest: true },
       { titlePrefix: 'context:decision-state:', latest: true },
+      ...active.items.flatMap((item) =>
+        item.sources.filter((ref) => ref.sessionId === this.id).map((ref) => ({ refId: ref.id }))
+      ),
       ...programState.leases
         .filter(
           (item) => item.task || item.segment || item.expiresAfter > programState.completedTurns
@@ -739,9 +679,17 @@ export class ContextMemory implements ContextMemoryApi {
       'released',
       signal
     )
+    const narrativeThrough = new Map<string, number>()
+    for (const record of snapshot?.records ?? []) {
+      if (record.title !== 'context:volume-narrative') continue
+      const volume = record.sources[0]
+      if (!volume) throw new AppError('INVARIANT', '卷叙事缺少原卷引用')
+      narrativeThrough.set(record.ref.id, await this.recent.volumeThrough(volume, signal))
+    }
     return {
       active,
       snapshot,
+      narrativeThrough,
       reset,
       lastAttempt,
       pending,
@@ -817,6 +765,7 @@ export class ContextMemory implements ContextMemoryApi {
         await prepared.registrations.get(JSON.parse(body).frameId)?.()
         audits.clear()
         proofs.clear()
+        return record.ref
       },
     }
   }
@@ -867,8 +816,17 @@ export class ContextMemory implements ContextMemoryApi {
     save?: (input: Parameters<ContextRuntime['append']>[0]) => void
   ): ReturnType<ContextMemoryApi['project']> {
     const stable = prepared ?? (await this.prepareFrame(maxChars, signal))
-    const { active, snapshot, reset, lastAttempt, pending, presentation, residents, segment } =
-      stable
+    const {
+      active,
+      snapshot,
+      narrativeThrough,
+      reset,
+      lastAttempt,
+      pending,
+      presentation,
+      residents,
+      segment,
+    } = stable
     const workspaceBudget = Math.max(
       0,
       Math.floor(maxChars * (segment.workspaceShare ?? this.policy.workspaceShare))
@@ -907,52 +865,6 @@ export class ContextMemory implements ContextMemoryApi {
               : 'recall',
       })),
       omitted: Math.max(0, residents.length - directoryLimit),
-    }
-    const completionRecord = snapshot?.task?.completionRef
-      ? memoryReference(snapshot, snapshot.task.completionRef)
-      : undefined
-    const completion: Optional<ContextCompletionRecord> = completionRecord
-      ? JSON.parse((await this.storage.get(this.id, completionRecord.objectId))!)
-      : undefined
-    const report = completion?.result.report
-    const verification: Optional<Record<string, unknown>> =
-      completion && completion.taskId === snapshot?.task?.id
-        ? {
-            ref: completionRecord!.ref,
-            taskId: completion.taskId,
-            taskRevision: completion.taskRevision,
-            binding: completion.binding,
-            completed: completion.result.completed,
-            verified: completion.result.verified,
-            counts: Object.fromEntries(
-              ['passed', 'failed', 'unknown'].map((status) => [
-                status,
-                report?.checks.filter((check) => check.status === status).length ?? 0,
-              ])
-            ),
-            checkedAt: report?.checkedAt,
-            checks: [],
-            omittedChecks: report?.checks.length ?? 0,
-          }
-        : undefined
-    if (verification && report) {
-      const applicability = await this.view.completionApplicability(completionRecord!.ref, signal)
-      verification.applicabilityCheckedAt = applicability?.checkedAt
-      // 原核查结果和当前适用性分别计数；细节预算不能把历史证明或未知依赖隐藏成当前成功。
-      verification.applicabilityCounts = Object.fromEntries(
-        ['current', 'historical', 'unknown'].map((status) => [
-          status,
-          report.checks.filter(
-            (_check, index) => (applicability?.checks[index]?.status ?? 'unknown') === status
-          ).length,
-        ])
-      )
-      // 核查摘要只占帧预算的一小份；大范围和产物细节按报告引用回看，修复帧始终留给当前状态。
-      const verificationBudget = Math.min(2048, Math.max(0, Math.floor(maxChars / 40)))
-      Object.assign(
-        verification,
-        memoryVerificationProjection(verification, report, applicability, verificationBudget)
-      )
     }
     const workspace = cards.cards.map((card, index) => ({
       ...card,
@@ -1404,7 +1316,12 @@ export class ContextMemory implements ContextMemoryApi {
     const historicalSources = new Set(
       active.items
         .flatMap((item) => item.sources)
-        .filter((ref) => (records.get(ref.id)?.sequence ?? 0) <= latestInputSequence)
+        .filter((ref) => {
+          const source = records.get(ref.id)
+          if (ref.sessionId !== this.id || !source)
+            throw new AppError('NOT_FOUND', '当前事项的来源不在本会话快照中')
+          return (narrativeThrough.get(ref.id) ?? source.sequence) <= latestInputSequence
+        })
         .map((ref) => `${ref.sessionId}:${ref.id}`)
     )
     const partitions = {
@@ -1454,7 +1371,6 @@ export class ContextMemory implements ContextMemoryApi {
       },
       runtime: {
         taskId: snapshot?.task?.id,
-        verification,
         decision,
         scope: material.scope,
         children: material.children,
@@ -1576,6 +1492,21 @@ export class ContextMemory implements ContextMemoryApi {
       title: `context:frame:${material.programFrame.id}`,
       body: JSON.stringify({
         frameId: material.programFrame.id,
+        taskId: snapshot?.task?.id,
+        taskStartedSequence: snapshot?.task?.startedSequence,
+        authorizationReset: reset,
+        input: latestGoal
+          ? {
+              latest: latestGoal.record.ref,
+              after: segment.from,
+              through: latestGoal.record.sequence,
+            }
+          : undefined,
+        observation: {
+          sourceRef: material.observation.sourceRef,
+          resultRef: material.observation.resultRef,
+          freshness: material.observation.freshness,
+        },
         budget: { maxChars, program: frame.budget, historyEntryChars },
         entries,
         segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },
@@ -1620,6 +1551,7 @@ export class ContextMemory implements ContextMemoryApi {
         ? memoryTaskHistory(goals, history, base)
         : [{ role: 'user' as const, content: base, cacheBreakpoint: true }, ...history.messages],
       prompt: memoryPrompt(body),
+      dynamic: memoryObservation(body).dynamic,
       segment: status,
     }
   }
@@ -1633,7 +1565,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (!segment) return false
     const cut = await this.recent.cut(segment, this.policy.recentRecords, signal)
     if (isUndefined(cut)) return false
-    const sealed = await this.recent.seal(segment.from, cut, signal)
+    await this.recent.seal(segment.from, cut, signal)
     // 封段释放 segment 期限的旧结果；显式轮数和 task 期限继续跨段交付。
     const leases = await this.programs.state()
     const visible = leases.leases
@@ -1653,19 +1585,6 @@ export class ContextMemory implements ContextMemoryApi {
       .filter((ref) => !retired.includes(ref))
       .filter((ref) => (sequence.get(ref) ?? Infinity) <= cut)
       .sort((a, b) => sequence.get(a)! - sequence.get(b)!)
-    // 自动封的一卷只有规则骨架；那一段做了很多事却没改笔记和计划时，留给整理支线补写叙事
-    const volume = (await this.recent.volumes(signal)).find(
-      (item) => item.ref.id === sealed.id
-    )?.volume
-    const narrate =
-      reason !== 'organize' &&
-      volume &&
-      (volume.turns >= ActRuntimeTuning.narrateTurns ||
-        volume.results >= ActRuntimeTuning.narrateResults) &&
-      isEmpty(volume.notes) &&
-      (selected?.task?.capsule?.nextObjective ?? '') === segment.objective
-        ? sealed
-        : null
     // 按上一段的缺页调整新段的笔记份额
     const prefix = `context:fault:${segment.id}:`
     const faults = (await this.snapshot(signal, [{ titlePrefix: prefix }]))?.records ?? []
@@ -1684,7 +1603,6 @@ export class ContextMemory implements ContextMemoryApi {
         carried,
         entries: [],
         reason,
-        narrate,
         workspaceShare,
       },
       maxChars,
@@ -1729,13 +1647,6 @@ export class ContextMemory implements ContextMemoryApi {
     }
     await this.recent.commit(next, signal)
     return next
-  }
-
-  public async narration(signal: AbortSignal): Promise<Nullable<ContextRef>> {
-    const segment = await this.recent.segment(signal)
-    if (!segment?.narrate) return null
-    await this.recent.commit({ ...segment, narrate: null }, signal)
-    return segment.narrate
   }
 
   public async boundary(signal: AbortSignal): Promise<boolean> {
@@ -1865,7 +1776,7 @@ export class ContextMemory implements ContextMemoryApi {
   /** 渲染并登记一段的底座；重建底座时沿用段号、起点、条目和章节基准。 */
   private async start(
     input: Pick<ContextSegment, 'index' | 'revision' | 'from' | 'carried' | 'entries' | 'reason'> &
-      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'narrate' | 'workspaceShare'>>,
+      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'workspaceShare'>>,
     maxChars: number,
     signal: AbortSignal
   ): Promise<ContextSegment> {
@@ -1955,7 +1866,6 @@ export class ContextMemory implements ContextMemoryApi {
       policy: presentation.id,
       volumes: volumes.length,
       reason: input.reason,
-      narrate: toNullable(input.narrate),
       workspaceShare,
     }
     await this.recent.commit(segment, signal)
@@ -1995,6 +1905,16 @@ export class ContextMemory implements ContextMemoryApi {
     )
   }
 
+  /** 通用执行材料召回不承担观察历史读取，防止正文经 exec 回流增量区。 */
+  private async observationMaterial(record: ContextRecord, signal: AbortSignal): Promise<boolean> {
+    if (record.title.startsWith('observation:') || /^script:[^:]+:capture$/u.test(record.title))
+      return true
+    if (!/^script:[^:]+:result$/u.test(record.title)) return false
+    const raw = await this.storage.get(this.id, record.objectId)
+    signal.throwIfAborted()
+    return !isNull(raw) && JSON.parse(raw).mode === 'observe'
+  }
+
   public async reconcile(
     body: string,
     history: readonly ModelHistoryMessage[],
@@ -2004,7 +1924,7 @@ export class ContextMemory implements ContextMemoryApi {
       audit: Parameters<ContextRuntime['append']>[0]
       save(input: Parameters<ContextRuntime['append']>[0]): void
     }
-  ): Promise<{ body: string; prompt: string }> {
+  ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }> {
     const projected = JSON.parse(body)
     const selected = await this.snapshot(signal, [
       { title: `context:frame:${projected.frameId}`, latest: true },
@@ -2017,7 +1937,12 @@ export class ContextMemory implements ContextMemoryApi {
     const saved = JSON.parse(
       draft ? draft.audit.body : (await this.storage.get(this.id, record!.objectId))!
     )
-    if (!saved.proof) return { body, prompt: memoryPrompt(body, previous) }
+    if (!saved.proof)
+      return {
+        body,
+        prompt: memoryPrompt(body, previous),
+        dynamic: memoryObservation(body).dynamic,
+      }
     const delivered = selected?.records.findLast((item) => item.title === 'context:delivered')
     const accepted = delivered
       ? JSON.parse((await this.storage.get(this.id, delivered.objectId))!).accepted
@@ -2089,6 +2014,28 @@ export class ContextMemory implements ContextMemoryApi {
       }
     )
     projected.memoryStatus.footprint.runtime = JSON.stringify(projected.partitions.runtime).length
+    const observation = memoryObservation(JSON.stringify(projected))
+    saved.observation = {
+      ...saved.observation,
+      snapshotId: projected.partitions.observation.snapshotId,
+      historySelectionRef: projected.partitions.observation.history?.selectionRef,
+      dynamicExchangeRefs: projected.partitions.observation.dynamicExchangeRefs,
+    }
+    for (const entry of saved.entries ?? []) {
+      if (entry.key === 'observation')
+        entry.bodyIncluded =
+          Boolean(projected.partitions.observation.bodyIncluded) && !observation.limited
+    }
+    if (draft) Object.assign(draft.audit, { body: JSON.stringify(saved) })
+    if (observation.limited && projected.partitions.observation.text) {
+      const gap = {
+        key: 'observation',
+        ref: projected.partitions.observation.resultRef,
+        reason: 'observation-display-limit',
+      }
+      missing.push(gap)
+      projected.partitions.runtime.decision.missing.push(gap)
+    }
     const resolved = JSON.stringify(projected)
     const prompt = memoryPrompt(resolved, previous)
     const proof: Parameters<ContextRuntime['append']>[0] = {
@@ -2101,15 +2048,22 @@ export class ContextMemory implements ContextMemoryApi {
         bodyHash: scriptOutputs.hash(resolved),
         promptHash: scriptOutputs.hash(prompt),
         promptChars: prompt.length,
+        dynamicHash: scriptOutputs.hash(toNullable(observation.dynamic)),
+        dynamicChars: observation.dynamic?.text.length ?? 0,
         carriers: authorized,
         current: currentProofs,
-        missing: saved.proof.missing,
+        missing: [
+          ...saved.proof.missing,
+          ...missing.filter(
+            (item: { reason: string }) => item.reason === 'observation-display-limit'
+          ),
+        ],
       }),
       sources: record ? [record.ref] : [],
     }
     if (draft) draft.save(proof)
     else await this.context.append(proof, signal)
-    return { body: resolved, prompt }
+    return { body: resolved, prompt, dynamic: observation.dynamic }
   }
 
   public async acknowledge(
@@ -2117,14 +2071,12 @@ export class ContextMemory implements ContextMemoryApi {
     signal: AbortSignal,
     request?: ModelTurnRequest
   ): Promise<Optional<ScriptDecisionBasis>> {
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [
-          { title: `context:frame:${frameId}`, latest: true },
-          { title: 'context:delivered', latest: true },
-          { title: `context:request-proof:${frameId}`, latest: true },
-        ])
-      : undefined
-    const snapshot = this.storage.selectSnapshot ? selected : await this.storage.load(this.id)
+    const selected = await this.storage.selectSnapshot(this.id, [
+      { title: `context:frame:${frameId}`, latest: true },
+      { title: 'context:delivered', latest: true },
+      { title: `context:request-proof:${frameId}`, latest: true },
+    ])
+    const snapshot = selected
     signal.throwIfAborted()
     const frame = snapshot?.records.findLast(
       (record) => record.title === `context:frame:${frameId}`
@@ -2186,7 +2138,9 @@ export class ContextMemory implements ContextMemoryApi {
         material &&
         scriptOutputs.hash(material.text) === candidate.bodyHash &&
         scriptOutputs.hash(request.compiledPrompt?.slice(0, candidate.promptChars)) ===
-          candidate.promptHash
+          candidate.promptHash &&
+        (!candidate.dynamicHash ||
+          scriptOutputs.hash(toNullable(request.dynamic)) === candidate.dynamicHash)
       const history = new Set(
         (request.history ?? []).filter((item) => item.role === 'user').map(memoryMessageKey)
       )
@@ -2199,7 +2153,8 @@ export class ContextMemory implements ContextMemoryApi {
           if (!history.has(carrier.message)) continue
           carriers.push(carrier)
         }
-        const message = modelRequestEncoder.messages(request).at(-1)
+        const layout = modelRequestEncoder.layout(request)
+        const message = layout.messages[layout.retainablePrefixLength - 1]
         if (!isEmpty(candidate.current) && message?.role === 'user')
           carriers.push({ message: memoryMessageKey(message), proofs: candidate.current })
       }

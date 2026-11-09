@@ -16,7 +16,12 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserUserScriptLimits } from '../contract/constants'
-import type { BrowserUserScriptLastRun, BrowserUserScriptPatch } from '../types/browser.js'
+import type {
+  BrowserSiteContext,
+  BrowserUserScriptLastRun,
+  BrowserUserScriptOverview,
+  BrowserUserScriptPatch,
+} from '../types/browser.js'
 import type { BrowserUserScriptRecord } from '../types/browser.js'
 import type { BrowserUserScriptValidatedPatch } from '../types/workspace.js'
 import type { BrowserUserScriptStore } from '../types/workspace.js'
@@ -43,6 +48,22 @@ export function sortScripts(scripts: BrowserUserScriptRecord[]): BrowserUserScri
   return [...scripts].sort(
     (left, right) => left.position - right.position || left.createdAt - right.createdAt
   )
+}
+
+/** 从同一次索引读取构造总览，修改过程不再次排队或重读半途状态。 */
+export function buildUserScriptOverview(
+  context: BrowserSiteContext,
+  store: BrowserUserScriptStore
+): BrowserUserScriptOverview {
+  const scripts = sortScripts(store.scripts)
+  return {
+    browserContext: context,
+    globalEnabled: store.globalEnabled,
+    scripts,
+    matchedScriptIds: scripts
+      .filter((script) => browserUserScriptMatchesUrl(script, context.url))
+      .map((script) => script.id),
+  }
 }
 
 /** 脚本名归一：去首尾空白；空名报错。 */
@@ -105,10 +126,11 @@ export function validateUrlPattern(pattern: string, field: string): void {
 /** 脚本代码归一：统一换行、结尾补一个换行。 */
 export function normalizeCode(code: string): string {
   if (!code.trim()) throw new AppError('VALIDATION', '脚本内容不能为空。')
-  if (Buffer.byteLength(code, 'utf8') > BrowserUserScriptLimits.codeBytes) {
+  const normalized = code.endsWith('\n') ? code : `${code}\n`
+  if (Buffer.byteLength(normalized, 'utf8') > BrowserUserScriptLimits.codeBytes) {
     throw new AppError('VALIDATION', '单个用户脚本不能超过 1 MB。')
   }
-  return code.endsWith('\n') ? code : `${code}\n`
+  return normalized
 }
 
 /** 把一段文本转义成正则字面量里安全的形式。 */

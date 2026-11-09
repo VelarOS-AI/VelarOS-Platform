@@ -8,13 +8,12 @@
 import { createCapabilityModule } from '@velaros-ai/velaros'
 import { AppError } from '@velaros-ai/core/error'
 import {
-  createMarkItDownLocator,
   officeOperations,
   type OfficeOperationContext,
-  type OfficeResourcePort,
   type OfficeSpacePort,
 } from '@velaros-ai/velaros/office'
 import { OfficeErrorCodes, VelarOfficeModule } from '@velaros-ai/velaros/office/contracts'
+import { createMarkItDownLocator, type OfficeResourcePort } from '@velaros-ai/velaros/office/locator'
 
 // 宿主给：工作区根，与探测命令、按原生 argv 跑命令的那一份（LibreOffice、LaTeX、MarkItDown 都经它起进程）
 declare const workspaceRoot: string
@@ -26,7 +25,7 @@ const markItDown = createMarkItDownLocator({ resources: plugins })
 const office: OfficeSpacePort = {
   getRootPath: () => workspaceRoot,
   inspectEnvironment: (names) => commands.inspectEnvironment(names),
-  runCommand: (command, options) => commands.runCommand(command, options),
+  runCommand: (command, options, signal) => commands.runCommand(command, options, signal),
   locateMarkItDown: () => markItDown.resolve(),
 }
 
@@ -67,22 +66,25 @@ console.log(page.width, page.height, page.pageCount, page.buffer.byteLength)
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros/office` | Node | `officeOperations`、MarkItDown 定位器 `createMarkItDownLocator`、空间端口 `OfficeSpacePort`、资源端口与调用上下文 |
+| `@velaros-ai/velaros/office` | Node | 文档操作、工作区端口与调用上下文 |
 | `@velaros-ai/velaros/office/contracts` | 任何进程 | 错误码 `OfficeErrorCodes`、环境变量表 `OfficeEnvironmentVariables`、上限表、入参与回执、模型面 `VelarOfficeModule` |
+| `@velaros-ai/velaros/office/locator` | Node | 按宿主资源根与停用状态定位 MarkItDown，不加载文档和图形运行时 |
 | `@velaros-ai/velaros/office/renderer` | Node（Document Renderer） | `officeDocumentRenderer`：解析预览、拼预览 HTML、画预览 PNG、渲染 PDF 单页；宿主产品不引它 |
 
 ## 约定
 
 - 路径相对端口给的 `getRootPath()`，也可以写根里面的绝对路径；端口给了 `resolvePath` 就先经它换成绝对路径（比如系统空间把 `~` 展开到家目录、相对路径按系统工作区算）。按解开符号链接后的真实路径判断，出了根抛 `OFFICE_PATH_OUTSIDE_PROJECT`，不读不写。写盘不问人，这就是全部边界。
 - 目标已在又没传 `overwrite: true` 抛 `OFFICE_OUTPUT_EXISTS`，原文件一个字节不动；只有 `createWord` 的 `appendMode` 例外。
+- 同一执行实例内，Word 按真实输出目标串行创建与追加；追加在发布前核对读取的原字节，发现外部改写就拒绝。它不提供与不合作外部进程之间的原子比较交换。
 - 入参在做事之前整份核对，不对抛 `VALIDATION`（message 点名字段），端口一次都不调；正文 `content` 与结构化的 `blocks`、`slides`、`sheets` 只能给一样。
-- 外部转换器只经端口的 `runCommand` 按原生 argv 执行，本单元不拼 shell 串、不自己起进程、不装东西；超时由本单元在命令选项里给，进程怎么起、怎么收由宿主的 `runCommand` 负责。
+- 导入根操作入口不加载文档与图形引擎；实际调用通过参数核对后，才加载对应的文档、PDF、预览或 Markdown 执行组。执行组复用进程单例，加载后仍核对本次取消信号。
+- 外部转换器只经端口的 `runCommand` 按原生 argv 执行，本单元在第三参数传入取消信号；超时在命令选项里给。宿主在取消时终止并排空进程及输出管道，Promise 结束后本单元才回收临时目录。
 - 缺 LibreOffice 或 LaTeX 编译器抛 `OFFICE_CONVERTER_MISSING`，MarkItDown 没装或被停用抛 `OFFICE_MARKITDOWN_UNAVAILABLE`；装什么、怎么装由宿主界面回答。命令失败或跑完没产出抛 `OFFICE_CONVERSION_FAILED`，message 带输出结尾，LaTeX 的 .tex 留在原处可改。
 - 端口不实现 `locateMarkItDown` 时回落到只按平台约定找资源的缺省定位器，用户的停用开关就到不了本单元；要认开关，照上面用 `createMarkItDownLocator({ resources })` 接上。
 - 截断如实标记：`toMarkdown` 看 `truncated`，`preview` 看 `contentTruncated`，预览的 `summary` 报文档里的真实数量、条目按 `maxItems` 截。
 - 模型模板生成报告或表格后，用 `preview` 解析真实产物，分别交付写入回执与结构计数、摘录范围。结构可解析只证明对应检查范围；布局与具体内容按任务要求核查。
 - Excel 预览只抽取单元格内容，使用文件保存的公式结果，不执行重算。绘图部件只在内存中的读取副本里排除，`summary.drawings` 记录部件数量；含绘图时预览说明图表与图片未渲染，原工作簿不变。
 - `readPdf` 只取文本型 PDF 的可选择文字，不做 OCR；`editPdf` 的文字戳用 PDF 标准字体，只写得了西文，中文当场 `VALIDATION`。
-- 操作是整个进程一份的无状态单例，没有跨调用的状态；转换用的临时目录用完即删。
+- 操作是整个进程共用的单例；Word 串行队列在目标的最后一项完成后回收，转换用的临时目录用完即删。
 - 环境变量只认 `OfficeEnvironmentVariables` 里的两个：MarkItDown 的额外资源根、pdfjs 标准字体目录（打包产物挪了字体位置时用）。
 - `./office/renderer` 只读输入文件、只交回内存里的结果，落盘由调用方决定；页码、倍率不对或超过像素上限抛 `OfficeErrorCodes` 里 `pdfPage*`、`pdfRender*` 那几个码。

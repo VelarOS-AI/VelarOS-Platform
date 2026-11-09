@@ -16,8 +16,8 @@ export interface ModelToolBinding {
   readonly parentSessionId: string
   readonly rootSessionId: string
   /** 根逻辑任务的配额代次，继续运行不能刷新。 */
-  readonly rootTaskId?: string
-  readonly kind: 'search' | 'agent' | 'context' | 'verification'
+  readonly rootTaskId: string
+  readonly kind: 'search' | 'agent' | 'context'
   readonly depth: number
   readonly activationId: string
   readonly deadline: number

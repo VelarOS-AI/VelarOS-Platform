@@ -1,10 +1,14 @@
-/** 本帧会变的协议、阶段与恢复说明在最后一条消息末尾（系统提示在会话内不变）。 */
+import { modelRequestEncoder } from '@velaros-ai/kernel'
+
+/** 本帧协议、阶段与恢复说明独立位于当前请求的 protocol。 */
 export function frameText(request) {
-  return request.compiledPrompt ?? ''
+  return request.protocol
 }
 /** 从真实请求读取本帧标记，测试不跨帧复用控制文本。 */
 export function marker(request) {
-  const value = [...frameText(request).matchAll(/当前帧标记：(@@\w+)。/g)].at(-1)
+  const protocol = frameText(request)
+  if (typeof protocol !== 'string') throw Error('missing frame protocol')
+  const value = [...protocol.matchAll(/当前帧标记：(@@\w+)。/g)].at(-1)
   if (!value) throw Error('missing frame marker')
   return value[1]
 }
@@ -112,10 +116,14 @@ export function runtimeFrame(input) {
   }
 }
 
-/** 按实际消息顺序观察正文，分区正文与有序历史由同一请求共同发送。 */
+/** 按真实编码布局提取文字；保留稳定区、dynamic 与协议，图像仍在原多模态请求里。 */
 export function modelText(request) {
-  return [...(request.history ?? [])]
-    .map((item) => (typeof item.content === 'string' ? item.content : JSON.stringify(item.content)))
-    .concat(request.compiledPrompt ?? '')
+  return modelRequestEncoder
+    .messages(request)
+    .flatMap(({ content }) =>
+      typeof content === 'string'
+        ? [content]
+        : content.filter((part) => part.type === 'text').map((part) => part.text)
+    )
     .join('\n')
 }

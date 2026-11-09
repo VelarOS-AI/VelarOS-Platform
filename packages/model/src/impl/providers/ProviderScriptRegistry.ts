@@ -23,6 +23,7 @@ import type {
   ChatProviderId,
   ListProviderModelsRequest,
   ProviderModelCatalogEntry,
+  ProviderScriptDescriptor,
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
   ValidateProviderRuntimeRequest,
@@ -34,6 +35,7 @@ import type {
 } from '../../types/scripts'
 import { toPositiveInteger } from '../../utils/numbers'
 import {
+  createProviderScriptDescriptor,
   normalizeLoadedDefinition,
   normalizeProviderScriptManifest,
   normalizeProviderScriptModels,
@@ -104,9 +106,10 @@ export class ProviderScriptRegistry
   private readonly clearRequireCache: boolean
   private readonly runtimeMetadataTimeoutMs: number
   private hostBridge: Partial<ProviderScriptHostBridge>
-  private loaded = false
+  private loadState: 'unloaded' | 'loading' | 'loaded' | AppError = 'unloaded'
   private activeConfigPath: Nullable<string> = null
   private scripts = new Map<ChatProviderId, LoadedProviderScript>()
+  private readonly descriptors = new WeakMap<LoadedProviderScript, ProviderScriptDescriptor>()
   /**
    * 内存来源是**另一条生命周期**：磁盘来源由 config 决定，重配一次就该整批重来；
    * `registerSource()` 注册的来源只由调用方（插件安装链）增删，重配宿主不能把它清掉——
@@ -159,7 +162,7 @@ export class ProviderScriptRegistry
       scriptPath,
       configPath: input.configPath ? resolve(input.configPath) : scriptPath,
     }
-    const providerId = this.evaluateRegisteredSource(entry)
+    const providerId = this.evaluateRegisteredSource(entry, this.scripts)
     this.memorySources.set(providerId, entry)
     return providerId
   }
@@ -172,7 +175,8 @@ export class ProviderScriptRegistry
   }
 
   public supportsProvider(provider: ChatProviderId): boolean {
-    return !!this.getProviderScript(provider)
+    this.ensureLoaded()
+    return this.scripts.has(provider)
   }
 
   public getActiveConfigPath(): Nullable<string> {
@@ -180,18 +184,28 @@ export class ProviderScriptRegistry
     return this.activeConfigPath
   }
 
-  public getProviderScript(provider: ChatProviderId): Nullable<LoadedProviderScript> {
+  /** 同一加载代返回稳定的深冻结数据快照；需要编辑时由宿主先复制。 */
+  public getProviderScript(provider: ChatProviderId): Nullable<ProviderScriptDescriptor> {
     this.ensureLoaded()
-    return toNullable(this.scripts.get(provider))
+    const script = this.scripts.get(provider)
+    if (!script) return null
+
+    let descriptor = this.descriptors.get(script)
+    if (!descriptor) {
+      descriptor = createProviderScriptDescriptor(script.manifest)
+      this.descriptors.set(script, descriptor)
+    }
+    return descriptor
   }
 
   public listProviderManifests(): ProviderScriptManifest[] {
     this.ensureLoaded()
-    return [...this.scripts.values()].map((script) => script.manifest)
+    return structuredClone([...this.scripts.values()].map((script) => script.manifest))
   }
 
   public requireProviderScript(provider: ChatProviderId): LoadedProviderScript {
-    const script = this.getProviderScript(provider)
+    this.ensureLoaded()
+    const script = this.scripts.get(provider)
     if (!script) {
       throw new AppError(
         ModelErrorCodes.providerScriptInvalid,
@@ -202,8 +216,10 @@ export class ProviderScriptRegistry
   }
 
   public async validateProviderRuntime(
-    request: ValidateProviderRuntimeRequest
+    request: ValidateProviderRuntimeRequest,
+    signal?: AbortSignal
   ): Promise<{ ok: boolean; message: Nullable<string> }> {
+    signal?.throwIfAborted()
     try {
       const script = this.requireProviderScript(request.provider)
       if (script.definition.validate) {
@@ -213,6 +229,7 @@ export class ProviderScriptRegistry
           baseURL: request.baseURL,
           defaultModel: request.defaultModel,
           helpers: script.helpers,
+          signal,
         })
       } else if (!script.definition.createLanguageModelFactory) {
         throw new AppError(
@@ -221,28 +238,33 @@ export class ProviderScriptRegistry
         )
       }
 
+      signal?.throwIfAborted()
       return { ok: true, message: null }
     } catch (error) {
+      signal?.throwIfAborted()
       return { ok: false, message: AppError.getMessage(error) }
     }
   }
 
   public async listProviderModels(
-    request: ListProviderModelsRequest
+    request: ListProviderModelsRequest,
+    signal?: AbortSignal
   ): Promise<ProviderModelCatalogEntry[]> {
+    signal?.throwIfAborted()
     const script = this.requireProviderScript(request.provider)
     if (!script.definition.listModels) return []
 
-    return normalizeProviderScriptModels(
-      await script.definition.listModels({
-        provider: request.provider,
-        apiKey: request.apiKey,
-        baseURL: request.baseURL,
-        defaultModel: request.defaultModel,
-        purpose: request.purpose,
-        helpers: script.helpers,
-      })
-    )
+    const models = await script.definition.listModels({
+      provider: request.provider,
+      apiKey: request.apiKey,
+      baseURL: request.baseURL,
+      defaultModel: request.defaultModel,
+      purpose: request.purpose,
+      helpers: script.helpers,
+      signal,
+    })
+    signal?.throwIfAborted()
+    return normalizeProviderScriptModels(models)
   }
 
   public async resolveRuntimeMetadata(
@@ -282,29 +304,49 @@ export class ProviderScriptRegistry
   }
 
   /**
-   * **加载生命周期**：`loaded` 是一次性闸（懒加载，首次公开方法触发）；
-   * 任何会改变来源的操作（`configureHost` / `configureSources` / `reload`）都必须走
-   * `resetLoadedState()` 把 `loaded`、`activeConfigPath`、`scripts` 三者一起清零——只清其中一个会留下
-   * "指向旧 config 的已加载脚本"这种半态。
+   * 全部来源成功后才发布目录；失败保持同一错误，直到宿主显式重载或重配。
+   * 脚本与宿主同权，已发生的外部副作用不能回滚，也不能由每次读取自动重放。
    */
   private ensureLoaded(): void {
-    if (this.loaded) return
+    if (this.loadState === 'loaded') return
+    if (this.loadState instanceof AppError) throw this.loadState
+    if (this.loadState === 'loading')
+      throw new AppError('INVARIANT', 'provider script 加载期间不能重入读取注册表。')
 
-    this.loaded = true
-    const configPath = this.configPaths.find((candidate) => existsSync(candidate))
-    if (configPath) {
-      this.activeConfigPath = configPath
-      const config = readProviderScriptDevConfig(configPath)
-      readEnabledScriptEntries(config).forEach((entry) => this.loadScript(configPath, entry))
+    this.loadState = 'loading'
+    try {
+      const scripts = new Map<ChatProviderId, LoadedProviderScript>()
+      const configPath = this.configPaths.find((candidate) => existsSync(candidate))
+      if (configPath) {
+        const config = readProviderScriptDevConfig(configPath)
+        readEnabledScriptEntries(config).forEach((entry) =>
+          this.loadScript(configPath, entry, scripts)
+        )
+      }
+      // 内存来源后加载：同名时显式注册覆盖磁盘条目，helpers 使用本次宿主配置。
+      this.memorySources.forEach((entry) => this.evaluateRegisteredSource(entry, scripts))
+      this.scripts = scripts
+      this.activeConfigPath = toNullable(configPath)
+      this.loadState = 'loaded'
+    } catch (error) {
+      const failure =
+        error instanceof AppError
+          ? error
+          : new AppError(
+              ModelErrorCodes.providerScriptInvalid,
+              `加载 provider script 注册表失败：${AppError.getMessage(error)}`,
+              error
+            )
+      this.loadState = failure
+      throw failure
     }
-
-    // 内存来源排在磁盘来源之后重放：同一个 provider id 上，后到的显式注册覆盖 config 里的条目；
-    // 重新求值（而不是留住旧对象）是为了让 helpers 拿到这次重配后的 cwd/homeDir 与宿主桥。
-    this.memorySources.forEach((entry) => this.evaluateRegisteredSource(entry))
   }
 
   /** 求值一份内存来源并登记；失败与磁盘脚本同口径：显式登记的来源加载不了就抛，不静默跳过。 */
-  private evaluateRegisteredSource(entry: RegisteredProviderScriptSource): ChatProviderId {
+  private evaluateRegisteredSource(
+    entry: RegisteredProviderScriptSource,
+    scripts: Map<ChatProviderId, LoadedProviderScript>
+  ): ChatProviderId {
     try {
       const scriptRequire = createRequire(entry.scriptPath)
       const module = { exports: {} as unknown }
@@ -319,12 +361,15 @@ export class ProviderScriptRegistry
         directory: string
       ) => void
       wrapper(module.exports, scriptRequire, module, entry.scriptPath, dirname(entry.scriptPath))
-      return this.registerExportedDefinition({
-        exported: module.exports,
-        configPath: entry.configPath,
-        velarosDir: dirname(entry.configPath),
-        scriptPath: entry.scriptPath,
-      })
+      return this.registerExportedDefinition(
+        {
+          exported: module.exports,
+          configPath: entry.configPath,
+          velarosDir: dirname(entry.configPath),
+          scriptPath: entry.scriptPath,
+        },
+        scripts
+      )
     } catch (error) {
       throw new AppError(
         ModelErrorCodes.providerScriptInvalid,
@@ -334,13 +379,17 @@ export class ProviderScriptRegistry
   }
 
   private resetLoadedState(): void {
-    this.loaded = false
+    this.loadState = 'unloaded'
     this.activeConfigPath = null
     this.scripts = new Map()
   }
 
   /** 失败方向：加载期任一脚本抛错即整体抛——显式登记的来源静默跳过会让"我明明配了却没生效"不可诊断。 */
-  private loadScript(configPath: string, configuredScriptPath: string): void {
+  private loadScript(
+    configPath: string,
+    configuredScriptPath: string,
+    scripts: Map<ChatProviderId, LoadedProviderScript>
+  ): void {
     const velarosDir = dirname(configPath)
     const scriptPath = isAbsolute(configuredScriptPath)
       ? configuredScriptPath
@@ -352,12 +401,10 @@ export class ProviderScriptRegistry
       if (this.clearRequireCache) delete scriptRequire.cache[resolvedScriptPath]
 
       const exported = scriptRequire(resolvedScriptPath) as unknown
-      this.registerExportedDefinition({
-        exported,
-        configPath,
-        velarosDir,
-        scriptPath: resolvedScriptPath,
-      })
+      this.registerExportedDefinition(
+        { exported, configPath, velarosDir, scriptPath: resolvedScriptPath },
+        scripts
+      )
     } catch (error) {
       throw new AppError(
         ModelErrorCodes.providerScriptInvalid,
@@ -366,18 +413,21 @@ export class ProviderScriptRegistry
     }
   }
 
-  private registerExportedDefinition(input: {
-    exported: unknown
-    configPath: string
-    velarosDir: string
-    scriptPath: string
-  }): ChatProviderId {
+  private registerExportedDefinition(
+    input: {
+      exported: unknown
+      configPath: string
+      velarosDir: string
+      scriptPath: string
+    },
+    scripts: Map<ChatProviderId, LoadedProviderScript>
+  ): ChatProviderId {
     const helpers = this.createHelpers(input)
     const definition = normalizeLoadedDefinition(input.exported, helpers)
     const manifest = normalizeProviderScriptManifest(definition.manifest)
     const providerId = manifest.id
 
-    this.scripts.set(providerId, {
+    scripts.set(providerId, {
       providerId,
       label: manifest.label,
       manifest,

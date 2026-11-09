@@ -23,6 +23,8 @@ export interface NodeCodeRunnerOptions {
   readonly packageDirectory?: string
   /** 当前会话锁定的 Skill 与标准依赖环境。 */
   readonly runtime?: NodeRuntimeEnvironment
+  /** 宿主只读约束的真实规格检测；省略时不宣称程序观察可用。 */
+  readonly observationSupport?: CodeRunnerApi['observationSupport']
   /** 每次执行固定新的依赖快照；优先于静态 runtime，进程树收束后释放。 */
   acquireRuntime?(signal: AbortSignal): Promise<NodeRuntimeLease>
   /** 在计时与启动前完成本次源码的宿主审批；拒绝时不得启动进程。 */
@@ -148,6 +150,8 @@ export interface CodeRunnerApi {
   readonly cwd?: string
   /** 标准 Node 语义；自定义测试执行器可省略。 */
   readonly environment?: 'node'
+  /** 只读程序后端能否构造受约束启动规格；不启动进程，实际执行仍核对约束。 */
+  observationSupport?(): { readonly available: boolean; readonly reason?: string }
   /**
    * 在隔离环境里跑一段程序。
    *

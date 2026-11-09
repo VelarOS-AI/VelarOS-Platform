@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -112,6 +112,27 @@ async function appendBullets(
 }
 
 describe('Word 追加模式的编号与样式定义', () => {
+  test('同一实例中经真实路径与符号链接并发追加，不丢任何一份正文', async () => {
+    const root = await createRoot()
+    const context = createContext(root)
+    await officeOperations.createWord({ outputPath: 'report.docx', content: '原文' }, context)
+    await symlink(join(root, 'report.docx'), join(root, 'alias.docx'))
+    await Promise.all(
+      ['甲', '乙', '丙'].map((text, index) =>
+        officeOperations.createWord(
+          {
+            outputPath: index === 1 ? 'alias.docx' : 'report.docx',
+            appendMode: true,
+            content: `追加${text}`,
+          },
+          context
+        )
+      )
+    )
+    const document = await readDocxPart(join(root, 'report.docx'), WordDocumentXmlPath)
+    for (const text of ['原文', '追加甲', '追加乙', '追加丙']) expect(document).toContain(text)
+  })
+
   test('目标没有编号部件时，把片段的编号与样式定义一并带过去', async () => {
     const root = await createRoot()
     const target = join(root, 'report.docx')

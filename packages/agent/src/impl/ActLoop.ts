@@ -1,4 +1,4 @@
-import { type ContextCompletionResult, ContextLimits, type ContextRef } from '@velaros-ai/context'
+import type { ContextCompletionResult } from '@velaros-ai/context'
 import { isNull, optionalWhen } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isUndefined } from '@velaros-ai/core'
@@ -31,7 +31,7 @@ import type { ActRequestPrefix } from '../types/runtime.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, remainingFrameImages, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
-import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
+import { ContextPlanTuning } from '../utils/tuning.js'
 
 import { ContextPlanner } from './ContextPlanner.js'
 
@@ -291,77 +291,43 @@ export class ActLoop implements ActLoopApi {
             request: { ...compiled.request, budgetRequestId: budgetRequest.requestId },
           }
           const reservedTokens = compiled.estimate.tokens + compiled.request.outputTokens
-          // 每小时用量到上限：等窗口释放后继续；用户总上限到了：暂停等用户，不算失败
-          for (;;)
-            try {
-              await this.options.view.reserveModel('main', reservedTokens, budgetRequest)
-              break
-            } catch (error) {
-              const code = (error as { code?: string }).code
-              if (code === 'MODEL_BUDGET') {
-                yield {
-                  type: 'error',
-                  runId,
-                  message: '任务的模型用量已到上限，已暂停；调高上限后发送任意内容即可继续。',
-                }
-                yielded = true
-                yield { type: 'state', runId, status: 'waiting' }
-                return
-              }
-              if (code !== 'MODEL_RATE') throw error
-              const retryAfterMs =
-                (error as { retryAfterMs?: number }).retryAfterMs ?? AgentTuning.rateRetryMs
-              yield { type: 'throttled', runId, retryAfterMs }
-              await modelProviderRetry.wait(retryAfterMs, controller.signal)
-            }
+          try {
+            await this.options.view.reserveModel('main', reservedTokens, budgetRequest)
+          } catch (error) {
+            if ((error as { code?: string }).code !== 'MODEL_BUDGET') throw error
+            yield { type: 'error', runId, message: '任务的模型用量已到上限，已暂停。' }
+            yielded = true
+            yield { type: 'state', runId, status: 'waiting' }
+            return
+          }
           let dispatched = false
           try {
             const auditPayload = {
               runId,
               turn,
               repair,
+              budgetRequest,
               preparation: repair === 0 ? { observationMs, contextMs } : undefined,
               retention: frame.retention,
-              model: this.options.model.id,
-              estimate: compiled.estimate,
-              providerRequest: compiled.providerRequest,
-              request: compiled.request,
-            }
-            let auditBody = JSON.stringify(auditPayload)
-            const imageRefs = new Map<string, ContextRef>()
-            if (auditBody.length > ContextLimits.objectChars) {
-              // 审计仍可逐字重建；图片拆成合法大小的独立对象，不改变真正发送的请求。
-              for (const image of compiled.request.images ?? []) {
-                if (imageRefs.has(image.data)) continue
-                const archived = await this.options.context.append(
-                  { kind: 'audit', title: 'model-request:image-data', body: image.data },
-                  controller.signal
-                )
-                imageRefs.set(image.data, archived.ref)
-              }
-              auditBody = JSON.stringify(auditPayload, (_key, value) => {
-                if (!isString(value)) return value
-                const ref = imageRefs.get(value)
-                if (ref) return { $velarosType: 'context-image', ref, encoding: 'base64' }
-                if (!value.startsWith('data:image/')) return value
-                const comma = value.indexOf(',')
-                const dataRef = imageRefs.get(value.slice(comma + 1))
-                return dataRef
-                  ? {
-                      $velarosType: 'context-image',
-                      ref: dataRef,
-                      encoding: 'data-url',
-                      prefix: value.slice(0, comma + 1),
-                    }
-                  : value
-              })
+              requestAudit: compiled.requestAudit,
+              frameRef: frame.frameRef,
+              context: compiled.request.contextStatus
+                ? {
+                    phase: compiled.request.contextStatus.phase,
+                    pressure: compiled.request.contextStatus.pressure,
+                    inputLimit: compiled.request.contextStatus.inputLimit,
+                  }
+                : undefined,
             }
             const audit = await this.options.context.append(
               {
                 kind: 'audit',
                 title: 'model-request',
-                body: auditBody,
-                sources: [...(prepared?.sources ?? []), ...imageRefs.values()],
+                body: JSON.stringify(auditPayload),
+                sources: [
+                  ...(prepared?.sources ?? []),
+                  ...(frame.frameRef ? [frame.frameRef] : []),
+                ],
               },
               controller.signal
             )
@@ -458,6 +424,7 @@ export class ActLoop implements ActLoopApi {
                   yield {
                     type: 'usage',
                     runId,
+                    requestId: `${runId}:${audit.ref.id}`,
                     inputTokens: delta.inputTokens,
                     outputTokens: delta.outputTokens,
                     ...cache,
@@ -539,10 +506,12 @@ export class ActLoop implements ActLoopApi {
               acceptedInputTokens = usage?.inputTokens
               acceptedText = received
               acceptedResponseRef = accepted.ref
-              // 图片仍在投影授权集合内时沿用整份出线，下一帧仅追加新图片；过期后退回纯文本基线。
+              // 只保留完整稳定消息；动态观察、待交付观察往返与本轮协议不进入下一轮前缀。
+              // 图片仍在投影授权集合内时沿用稳定出线，下一帧仅追加新图片；过期后退回纯文本基线。
               // 两份基线都受逻辑历史核对与独立历史预算约束，不能通过保留前缀延长附件寿命。
-              const sent = modelRequestEncoder.messages(compiled.request)
-              if (this.options.frames.delta) {
+              const layout = modelRequestEncoder.layout(compiled.request)
+              const sent = layout.messages.slice(0, layout.retainablePrefixLength)
+              if (frame.retainFrames) {
                 const transcript = {
                   logical: frame.logical,
                   sent,
@@ -686,7 +655,7 @@ export class ActLoop implements ActLoopApi {
                 this.compiler.compileModelTurn(
                   {
                     ...frame.request,
-                    compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
+                    protocol: `${frame.request.protocol ?? ''}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
                   },
                   this.options.model,
                   this.options.limits.safetyTokens,
@@ -694,7 +663,7 @@ export class ActLoop implements ActLoopApi {
                 ),
                 controller.signal
               )
-              if (!compiled.okToSend)
+              if (!compiled.okToSend || compiled.estimate.tokens > this.capacity().window)
                 throw new AppError('CONTEXT_BUDGET', '协议修复请求超过上下文预算')
             } finally {
               attemptController.abort()
@@ -726,6 +695,7 @@ export class ActLoop implements ActLoopApi {
             acceptedCalls,
             this.options.control?.turnSignal()
           )
+          let delivery: 'history' | 'dynamic' = 'history'
           if (!isEmpty(acceptedCalls)) {
             if (!isObject(success) || !('results' in success))
               throw new AppError('INVARIANT', '原生工具执行缺少对应回执')
@@ -734,18 +704,26 @@ export class ActLoop implements ActLoopApi {
               calls: acceptedCalls,
               results: success.results,
             })
-            await this.options.context.append(
+            delivery = success.delivery ?? 'history'
+            const record = await this.options.context.append(
               {
                 kind: 'audit',
                 title: 'model-tool-exchange',
-                body: JSON.stringify(exchange),
+                body: JSON.stringify({ ...exchange, delivery }),
                 sources: [acceptedResponseRef!],
               },
               controller.signal
             )
+            if (delivery === 'dynamic') {
+              if (!this.options.frames.stageDynamicExchange)
+                throw new AppError('INVARIANT', '动态工具往返缺少待交付登记端口')
+              await this.options.frames.stageDynamicExchange(record.ref, controller.signal)
+            }
           }
           if (this.options.control?.pending()) continue turns
           if (isFalse(success) || (isObject(success) && !success.succeeded)) continue
+          // 动态往返尚待下一请求交付，不能因既有宿主产物已就绪就跳过这次感知。
+          if (delivery === 'dynamic') continue
           if (!done && !isEmpty(acceptedCalls) && this.options.frames.deliveryReady?.()) {
             await this.options.context.append(
               {
@@ -832,8 +810,7 @@ export class ActLoop implements ActLoopApi {
               compiled.request,
               completionSignal,
               decoded.completion
-            )) ??
-            (await this.options.view.complete(this.options.completionVerifier, completionSignal))
+            )) ?? (await this.options.view.complete(completionSignal))
         } catch (error) {
           if (
             !controller.signal.aborted &&
@@ -843,7 +820,7 @@ export class ActLoop implements ActLoopApi {
             continue turns
           throw error
         }
-        yield { type: 'verification', runId, ...completion }
+        yield { type: 'completion', runId, ...completion }
         if (!completion.completed) {
           await this.options.context.append(
             { kind: 'event', title: 'completion-blocked', body: JSON.stringify(completion) },
@@ -934,7 +911,9 @@ export class ActLoop implements ActLoopApi {
       // 主错误已通过事件送达；提前 return 也必须向宿主暴露收尾失败。
       if (!isEmpty(failures)) {
         // eslint-disable-next-line no-unsafe-finally -- 主错误已作为事件送达，收尾错误必须独立报告
-        throw new AggregateError(failures, '运行收尾失败，必须检查持久状态和操作回执')
+        throw AppError.withFields('UNAVAILABLE', '运行收尾失败，必须检查持久状态和操作回执', {
+          errors: [...failures],
+        })
       }
     }
   }
@@ -967,10 +946,8 @@ export class ActLoop implements ActLoopApi {
     const completionStatus = this.completionFeedback
       ? {
           completed: this.completionFeedback.completed,
-          verified: this.completionFeedback.verified,
           reason: this.completionFeedback.reason,
           recovery: this.completionFeedback.recovery,
-          reportAvailable: Boolean(this.completionFeedback.report),
         }
       : undefined
     const completionRecovery = completionStatus
@@ -987,7 +964,7 @@ export class ActLoop implements ActLoopApi {
     // 同一会话每帧同一个缓存键：认它的供应商把这个会话的请求路由到同一处前缀缓存
     const cacheKey = await sessionCacheKey(this.options.sessionId)
     // 本次组帧只在第一次投影时决定是否沿用上次出线；放弃后同一次组帧里的重组不再沿用
-    let retain = Boolean(frames.delta) && this.policy.retainedFrameRatio > 0
+    let retain = this.policy.retainedFrameRatio > 0
     // 去掉插入帧，保留相同逻辑事件、当前正文、协议和不透明续接；两份同口径估算之差是历史帧开销。
     // 只在本地编译，不发送、不消费租约；固定开销不会被误算成重复状态。
     const historyTokens = async (
@@ -1005,31 +982,29 @@ export class ActLoop implements ActLoopApi {
       signal.throwIfAborted()
       return Math.max(0, compiled.estimate.tokens - plain.estimate.tokens)
     }
-    let cycle: Awaited<ReturnType<NonNullable<typeof frames.beginFrame>>> | undefined
+    let cycle: Awaited<ReturnType<typeof frames.beginFrame>> | undefined
     const compose = async (maxChars: number) => {
-      cycle ??= await frames.beginFrame?.(evidence, signal, budget)
-      const projected = cycle
-        ? await cycle.project(maxChars)
-        : await frames.project(evidence, signal, maxChars)
+      cycle ??= await frames.beginFrame(evidence, signal, budget)
+      if (!cycle.retainFrames) retain = false
+      const projected = await cycle.project(maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
       const logical = projected.history ?? []
       const retained = retain ? this.retained(logical, projected.images) : undefined
       const history = retained ? retained.history : projected.history
-      const reconciled = await (cycle?.reconcile ?? frames.reconcile)?.(
+      const reconciled = await cycle.reconcile(
         projected.body,
         history ?? [],
         retained?.body,
         signal
       )
-      const body = reconciled?.body ?? projected.body
+      const body = reconciled.body
       const request = framedRequest(
         {
           history,
           instructions: this.options.instructions,
           images: retained?.images ?? projected.images,
-          compiledPrompt:
-            reconciled?.prompt ??
-            (retained ? frames.delta!(body, retained.body) : projected.prompt),
+          compiledPrompt: reconciled.prompt,
+          dynamic: reconciled.dynamic,
           materials: [
             {
               ref: evidence.id,
@@ -1051,6 +1026,7 @@ export class ActLoop implements ActLoopApi {
         limits.safetyTokens,
         this.planner.calibration()
       )
+      const layout = modelRequestEncoder.layout(compiled.request)
       return {
         publication: cycle,
         segment: projected.segment,
@@ -1061,7 +1037,9 @@ export class ActLoop implements ActLoopApi {
         logical,
         body,
         images: projected.images,
-        positions: retained?.positions ?? logical.map((_, index) => index),
+        positions: (retained?.positions ?? logical.map((_, index) => index)).map(
+          (index) => layout.historyPositions[index]!
+        ),
         retained: Boolean(retained),
         historyTokens: retained ? await historyTokens(compiled, logical, projected.images) : 0,
       }
@@ -1392,9 +1370,10 @@ export class ActLoop implements ActLoopApi {
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
     signal.throwIfAborted()
-    await current.publication?.publish(current.body, signal)
+    const frameRef = await current.publication.publish(current.body, signal)
     signal.throwIfAborted()
     return {
+      frameRef: frameRef || undefined,
       projection: {
         revision: evidence.scope.revision,
         cursor: 0,
@@ -1408,6 +1387,7 @@ export class ActLoop implements ActLoopApi {
       images: current.images,
       positions: current.positions,
       retained: current.retained,
+      retainFrames: current.publication.retainFrames,
       retention: {
         limitTokens: retainedFrameLimit,
         historyTokens: retainedTokens,
@@ -1419,7 +1399,7 @@ export class ActLoop implements ActLoopApi {
   }
 
   /**
-   * 新投影以上次接受请求的逻辑历史开头时，沿用那次的实际出线（含它的最后一条消息）再追加新条目；
+   * 新投影以上次接受请求的逻辑历史开头时，沿用那次完整的稳定消息前缀，再追加新条目；
    * 历史被改写（封段、超窗重组等）就返回 undefined，本帧完整重发并重新开始保留。
    * 断点跟随逻辑条目的实际位置，另保留上次请求末尾；相同内容和插入帧不共享标记。
    */

@@ -68,21 +68,16 @@ export class FileProjectChangeFeed
     )
   }
 
-  /** 读回已有的记录文件：每行一条，只有最后一行没写完（没有换行结尾）时允许坏掉。 */
+  /** 只发布以换行完整结束的记录；未收束的尾行即使能解析成 JSON，也不进入内存投影。 */
   private load(source: string): void {
-    const lines = source.split('\n')
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index]?.trim()
+    const complete = source.slice(0, source.lastIndexOf('\n') + 1)
+    for (const value of complete.split('\n')) {
+      const line = value.trim()
       if (!line) continue
-      try {
-        const change: unknown = JSON.parse(line)
-        if (!isProjectChangeRecord(change))
-          throw new AppError('VALIDATION', '变更记录文件里有一行不是合法的变更记录。')
-        this.hydrate(change)
-      } catch (error) {
-        const isLastPartialLine = index === lines.length - 1 && !source.endsWith('\n')
-        if (!isLastPartialLine) throw error
-      }
+      const change: unknown = JSON.parse(line)
+      if (!isProjectChangeRecord(change))
+        throw new AppError('VALIDATION', '变更记录文件里有一行不是合法的变更记录。')
+      this.hydrate(change)
     }
   }
 

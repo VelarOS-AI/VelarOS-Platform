@@ -16,7 +16,9 @@ import {
   configureModel,
   desktopClient,
   dispatch,
+  prepareUnattendedPermissions,
   privateJson,
+  restoreModel,
   waitForSettlement,
 } from './client.mjs'
 
@@ -222,8 +224,12 @@ async function main() {
   const identities = []
   const sessions = []
   let outcome
+  let permissions
+  let temporaryKey
   try {
     assert.equal((await hook({ kind: 'bridge_ping', timeoutMs: 1000 })).alive, true)
+    permissions = await prepareUnattendedPermissions(hook)
+    await permissions.enable()
     const before = await cdp.selection()
     for (const name of ['A', 'B']) {
       const identity = {
@@ -236,9 +242,10 @@ async function main() {
         phase: 'source',
       }
       identities.push(identity)
+      temporaryKey = attemptCredential(identity, secret)
       await configureModel(hook, values.settings, {
         baseURL,
-        apiKey: attemptCredential(identity, secret),
+        apiKey: temporaryKey,
         model,
       })
       const workspace = join(directory, 'workspaces', name)
@@ -288,7 +295,6 @@ async function main() {
       assert.equal(trace.omitted, 0)
       assert.equal(trace.turns.length, 2)
       assert.equal(trace.turns.at(-1).done, true)
-      assert.equal(trace.turns[0].executions[0].language, 'node')
       assert.ok(trace.turns[0].executions[0].source.includes('sleep 0.6'))
       assert.ok(
         trace.turns[0].executions[0].processOutput.includes(join(directory, 'workspaces', name))
@@ -311,9 +317,10 @@ async function main() {
       taskId: 'fixture-cancel',
       attemptId: runId + '-cancel',
     }
+    temporaryKey = attemptCredential(cancelIdentity, secret)
     await configureModel(hook, values.settings, {
       baseURL,
-      apiKey: attemptCredential(cancelIdentity, secret),
+      apiKey: temporaryKey,
       model,
     })
     const sessionId = 'native_fixture_cancel_' + runId
@@ -395,12 +402,13 @@ async function main() {
     try {
       await privateJson(join(directory, 'result.json'), outcome)
       await privateJson(join(directory, 'upstream-events.json'), Object.fromEntries(state))
-      await hook({
-        kind: 'config_op',
-        key: 'system',
-        op: 'patch',
-        patch: { providerRuntimeConfigs: original.system.providerRuntimeConfigs },
-      })
+      if (temporaryKey)
+        outcome.configurationRestore = await restoreModel(
+          hook,
+          values.settings,
+          original.system.providerRuntimeConfigs ?? [],
+          temporaryKey
+        )
       outcome.fixtureCleanup = await cdp.deleteFixtures(
         sessions.map((id) => ({
           id,
@@ -414,10 +422,20 @@ async function main() {
       await privateJson(join(directory, 'result.json'), outcome)
       throw error
     } finally {
-      cdp.close()
-      await close(gateway)
-      await close(upstream)
-      ledger.close()
+      try {
+        if (permissions) outcome.permissionRestore = await permissions.restore()
+        await privateJson(join(directory, 'result.json'), outcome)
+      } catch (error) {
+        outcome.status = 'failed'
+        outcome.permissionRestoreError = error.stack
+        await privateJson(join(directory, 'result.json'), outcome)
+        throw error
+      } finally {
+        cdp.close()
+        await close(gateway)
+        await close(upstream)
+        ledger.close()
+      }
     }
   }
   console.log(JSON.stringify(outcome))

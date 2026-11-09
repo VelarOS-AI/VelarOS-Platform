@@ -250,7 +250,11 @@ export const realTaskCaseSchema = z.strictObject({
   surface: z.string().min(1),
   coverage: coverageSchema,
   workspace: workspaceReferenceSchema,
-  acceptance: z.array(realTaskAcceptanceContractSchema).min(1),
+  acceptance: z
+    .array(realTaskAcceptanceContractSchema)
+    .refine((contracts) => contracts.some((contract) => contract.gate), {
+      message: '复跑用例至少要有一条验收门',
+    }),
   privacy: casePrivacySchema,
   labels: z.array(z.string()),
 }) satisfies z.ZodType<RealTaskCase>

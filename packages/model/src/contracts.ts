@@ -4,6 +4,7 @@
  * 没有任何 Node 依赖，浏览器、渲染进程都能 import。
  */
 export * from './contract/constants.js'
+export type { ProviderRequestAudit, ProviderRequestFingerprint } from './types/compiler.js'
 export type {
   ModelDriverLimits,
   ModelImage,

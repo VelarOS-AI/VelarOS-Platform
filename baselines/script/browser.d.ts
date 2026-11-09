@@ -132,7 +132,7 @@ declare module 'velaros:browser' {
    */
   export function handleDialog(input: BrowserDialogInput): Promise<BrowserHandleDialogResult>
 
-  /** 保存或取消一次下载。
+  /** 接受保存或取消一次下载。返回 handled 与 accepted 只表示决策已处理、保存请求已受理，不代表文件已保存。
    */
   export function handleDownload(input: BrowserDownloadDecisionInput): Promise<BrowserHandleDownloadResult>
 
@@ -539,7 +539,7 @@ declare module 'velaros:browser' {
     cancel?: boolean
   }
 
-  /** 下载处理的结果：savePath 是存到的位置，state 是下载的最终状态。 */
+  /** 下载决策的处理结果：handled 表示决策已处理，state 为 accepted 表示接受保存请求，savePath 是请求的目标路径；这些字段均不代表文件已保存。 */
   interface BrowserHandleDownloadResult {
     handled: boolean
     eventId: string
@@ -596,16 +596,11 @@ declare module 'velaros:browser' {
     capturedAt: number
   }
 
-  /** 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里），legacyWorkspaceRoots 是只读的旧工作区（读不到时依次往回找）。 */
+  /** 站点：url 是进站时的地址，workspaceRoot 是这个站点的工作区（截图、下载、PDF 都落在这里）。 */
   interface BrowserSiteContext {
     url: string
     /** 站点工作区根：写入的唯一落点（粒度由宿主定）。 */
     workspaceRoot: string
-    /**
-     * 只读的历史工作区根（换粒度前留下的资产），按新到旧排列：写只写 workspaceRoot，读不到才依次回退。
-     * 不做一次性搬迁——回退读是幂等的，用户每碰一次旧资产就自然继续可用，新写入自动落到新位置。
-     */
-    legacyWorkspaceRoots?: readonly string[]
   }
 
   /** 一个标签页：id 交给 switchTab，active 为真表示当前在操作它。 */

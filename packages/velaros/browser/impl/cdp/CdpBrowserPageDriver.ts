@@ -42,7 +42,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { BrowserErrorCodes } from '../../contract/constants.js'
+import { BrowserErrorCodes, BrowserFetchLimits } from '../../contract/constants.js'
 import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
 import type {
   BrowserFrameInfo,
@@ -98,7 +98,7 @@ import type {
   BrowserPageDriverState,
 } from '../../types/driver'
 import {
-  buildFetchResourceScript,
+  buildFetchResourceFunction,
   buildViewportRect,
   readConsoleSource,
   readNodeId,
@@ -153,6 +153,8 @@ export interface CdpBrowserPageDriverOptions {
   targets?: LooseOptional<CdpBrowserPageDriverTargets>
   /** 驱动释放时回调。 */
   onDispose?: LooseOptional<() => void>
+  /** 启动器登记同一浏览器上的驱动；返回的解除登记只在物理资源排空后调用。 */
+  onDriverCreated?: LooseOptional<(driver: CdpBrowserPageDriver) => () => void>
 }
 
 class CdpBrowserPageDriver implements BrowserPageDriver {
@@ -165,6 +167,9 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   private readonly eventUnsubscribers: Array<() => void> = []
   private readonly downloadListeners = new Set<BrowserPageDriverDownloadListener>()
   private readonly downloads = new Map<string, CdpBrowserPageDownloadItem>()
+  private readonly fetchAborters = new Set<() => void>()
+  private readonly fetchSettlements = new Set<Promise<void>>()
+  private readonly releaseOwner: LooseOptional<() => void>
   private traceCollector: Nullable<CdpTraceCollector> = null
   private screencastRecorder: Nullable<CdpScreencastRecorder> = null
   private destroyed = false
@@ -187,18 +192,17 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     this.subscribeToNetworkEvents()
     this.subscribeToDownloadEvents()
     this.subscribeToDialogEvents()
+    this.releaseOwner = options.onDriverCreated?.(this)
   }
 
   public async executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T> {
-    const response = await this.options.transport.send<CdpRuntimeEvaluateResponse>(
-      'Runtime.evaluate',
-      {
-        expression: script,
-        awaitPromise: true,
-        returnByValue: true,
-        userGesture: !!userGesture,
-      }
-    )
+    this.assertOpen()
+    const response = await this.sendCommand<CdpRuntimeEvaluateResponse>('Runtime.evaluate', {
+      expression: script,
+      awaitPromise: true,
+      returnByValue: true,
+      userGesture: !!userGesture,
+    })
 
     const value = readRuntimeEvaluateValue(response)
     this.updateCachedPageState(value)
@@ -206,11 +210,12 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async navigateTo(url: string): Promise<BrowserPageDriverState> {
+    this.assertOpen()
     if (!isNonBlankString(url)) {
       throw new AppError('VALIDATION', '浏览器 CDP 导航 URL 不能为空。')
     }
 
-    await this.options.transport.send('Page.navigate', { url })
+    await this.sendCommand('Page.navigate', { url })
     this.currentUrl = url
     return this.refreshPageState()
   }
@@ -226,6 +231,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async listPageTargets(): Promise<BrowserPageTargetInfo[]> {
+    this.assertOpen()
     const targets = this.options.targets
     if (!targets) return [this.buildCurrentPageTarget()]
 
@@ -245,6 +251,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public async switchPageTarget(
     options: BrowserSwitchPageTargetOptions
   ): Promise<BrowserPageDriver> {
+    this.assertOpen()
     const targetId = options.targetId.trim()
     if (!targetId) throw new AppError('VALIDATION', 'CDP page target id 不能为空。')
 
@@ -257,30 +264,44 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     if (targetId === targets.targetId) return this
 
     const target = await this.findPageTarget(targetId)
-    const driver = new CdpBrowserPageDriver({
-      transport: await targets.attach(targetId),
-      initialUrl: target.url,
-      initialTitle: target.title,
-      downloadPath: this.options.downloadPath,
-      targets: {
-        targetId,
-        list: () => targets.list(),
-        attach: (id, attachOptions) => targets.attach(id, attachOptions),
-      },
-    })
-    await driver.resumeTargetIfWaitingForDebugger()
-    return driver
+    this.assertOpen()
+    const transport = await targets.attach(targetId)
+    let driver: Nullable<CdpBrowserPageDriver> = null
+    try {
+      this.assertOpen()
+      driver = new CdpBrowserPageDriver({
+        transport,
+        initialUrl: target.url,
+        initialTitle: target.title,
+        downloadPath: this.options.downloadPath,
+        onDriverCreated: this.options.onDriverCreated,
+        targets: {
+          targetId,
+          list: () => targets.list(),
+          attach: (id, attachOptions) => targets.attach(id, attachOptions),
+        },
+      })
+      await driver.resumeTargetIfWaitingForDebugger()
+      driver.assertOpen()
+      return driver
+    } catch (error) {
+      if (driver) driver.dispose()
+      else transport.dispose()
+      throw error
+    }
   }
 
   public async bringToFront(): Promise<void> {
-    await this.options.transport.send('Page.bringToFront')
+    this.assertOpen()
+    await this.sendCommand('Page.bringToFront')
   }
 
   public async captureScreenshot(
     options: BrowserPageDriverScreenshotOptions
   ): Promise<BrowserPageDriverScreenshot> {
+    this.assertOpen()
     const input = await this.resolveScreenshotInput(options)
-    const captured = await this.options.transport.send<CdpCaptureScreenshotResponse>(
+    const captured = await this.sendCommand<CdpCaptureScreenshotResponse>(
       'Page.captureScreenshot',
       input.params
     )
@@ -295,20 +316,24 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async insertText(options: BrowserInsertTextOptions): Promise<void> {
-    await this.options.transport.send('Input.insertText', {
+    this.assertOpen()
+    await this.sendCommand('Input.insertText', {
       text: options.text,
     })
   }
 
   public async dispatchKeyEvent(event: BrowserPageDriverKeyEvent): Promise<void> {
-    await this.options.transport.send('Input.dispatchKeyEvent', { ...event })
+    this.assertOpen()
+    await this.sendCommand('Input.dispatchKeyEvent', { ...event })
   }
 
   public async dispatchMouseEvent(event: BrowserPageDriverMouseEvent): Promise<void> {
-    await this.options.transport.send('Input.dispatchMouseEvent', { ...event })
+    this.assertOpen()
+    await this.sendCommand('Input.dispatchMouseEvent', { ...event })
   }
 
   public async listFrames(): Promise<BrowserFrameInfo[]> {
+    this.assertOpen()
     return (await this.frameSessions.listFrames()).map((frame) => frame.info)
   }
 
@@ -320,6 +345,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     script: string,
     userGesture?: boolean
   ): Promise<T> {
+    this.assertOpen()
     const frame = (await this.frameSessions.listFrames()).find(
       (candidate) => candidate.info.id === frameId
     )
@@ -334,6 +360,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   /** 给模型单开一条 CDP 会话：同一条浏览器连接上、挂到这一页的第二条会话。 */
   public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
+    this.assertOpen()
     const targets = this.options.targets
     if (!targets)
       throw new AppError(
@@ -349,9 +376,10 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async moveMouse(options: BrowserPageDriverMoveMouseOptions): Promise<void> {
+    this.assertOpen()
     const x = Math.round(options.x)
     const y = Math.round(options.y)
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mouseMoved',
       x,
       y,
@@ -362,13 +390,14 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async clickCoordinates(options: BrowserPageDriverClickCoordinatesOptions): Promise<void> {
+    this.assertOpen()
     const x = Math.round(options.x)
     const y = Math.round(options.y)
     const button = resolveMouseButton(options.button ?? 'left')
     const clickCount = clampPositiveInteger(options.clickCount, 1)
 
     const modifiers = options.modifiers ?? 0
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mousePressed',
       x,
       y,
@@ -377,7 +406,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       modifiers,
     })
     options.onPointerEvent?.({ x, y, phase: 'down', button: options.button ?? 'left' })
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mouseReleased',
       x,
       y,
@@ -389,6 +418,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async dragCoordinates(options: BrowserPageDriverDragCoordinatesOptions): Promise<void> {
+    this.assertOpen()
     const startX = Math.round(options.startX)
     const startY = Math.round(options.startY)
     const endX = Math.round(options.endX)
@@ -396,14 +426,14 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const steps = clampPositiveInteger(options.steps, 10)
     const modifiers = options.modifiers ?? 0
 
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mouseMoved',
       x: startX,
       y: startY,
       modifiers,
     })
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'move' })
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mousePressed',
       x: startX,
       y: startY,
@@ -418,7 +448,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       const progress = index / steps
       const x = Math.round(startX + (endX - startX) * progress)
       const y = Math.round(startY + (endY - startY) * progress)
-      await this.options.transport.send('Input.dispatchMouseEvent', {
+      await this.sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseMoved',
         x,
         y,
@@ -429,7 +459,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       options.onPointerEvent?.({ x, y, phase: 'move', button: 'left' })
     }
 
-    await this.options.transport.send('Input.dispatchMouseEvent', {
+    await this.sendCommand('Input.dispatchMouseEvent', {
       type: 'mouseReleased',
       x: endX,
       y: endY,
@@ -446,17 +476,17 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
+    this.assertOpen()
     const metrics = buildBrowserViewportDeviceMetrics(options)
     // 外部窗口按真实内容区设置尺寸，避免设备模拟视口被工具栏和系统边框裁掉。
     // 无窗口的远端/旧版浏览器仍可进行设备模拟，明确记录窗口适配失败。
     if (this.options.targets) {
       try {
-        const window = await this.options.transport.send<{ windowId?: number }>(
-          'Browser.getWindowForTarget',
-          { targetId: this.options.targets.targetId }
-        )
+        const window = await this.sendCommand<{ windowId?: number }>('Browser.getWindowForTarget', {
+          targetId: this.options.targets.targetId,
+        })
         if (isFiniteNumber(window.windowId))
-          await this.options.transport.send('Browser.setContentsSize', {
+          await this.sendCommand('Browser.setContentsSize', {
             windowId: window.windowId,
             width: metrics.width,
             height: metrics.height,
@@ -467,7 +497,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         })
       }
     }
-    await this.options.transport.send('Emulation.setDeviceMetricsOverride', {
+    await this.sendCommand('Emulation.setDeviceMetricsOverride', {
       ...metrics,
     })
     this.viewportState.record(
@@ -476,30 +506,28 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       { ...metrics },
       (method, params) => this.options.transport.send(method, params)
     )
-    await this.options.transport.send('Emulation.setTouchEmulationEnabled', {
+    await this.sendCommand('Emulation.setTouchEmulationEnabled', {
       enabled: metrics.mobile,
     })
   }
 
   public async setFileInputFiles(options: BrowserPageDriverFileInputOptions): Promise<boolean> {
-    await this.options.transport.send('DOM.enable')
-    const document = await this.options.transport.send<CdpDomDocumentResponse>('DOM.getDocument')
+    this.assertOpen()
+    await this.sendCommand('DOM.enable')
+    const document = await this.sendCommand<CdpDomDocumentResponse>('DOM.getDocument')
     const rootNodeId = readNodeId(document.root?.nodeId)
     if (!isNotNull(rootNodeId)) {
       throw new AppError('VALIDATION', '无法定位页面 DOM 根节点。')
     }
 
-    const query = await this.options.transport.send<CdpDomQuerySelectorResponse>(
-      'DOM.querySelector',
-      {
-        nodeId: rootNodeId,
-        selector: options.selector,
-      }
-    )
+    const query = await this.sendCommand<CdpDomQuerySelectorResponse>('DOM.querySelector', {
+      nodeId: rootNodeId,
+      selector: options.selector,
+    })
     const nodeId = readNodeId(query.nodeId)
     if (!isNotNull(nodeId)) return false
 
-    await this.options.transport.send('DOM.setFileInputFiles', {
+    await this.sendCommand('DOM.setFileInputFiles', {
       nodeId,
       files: options.files,
     })
@@ -507,7 +535,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async printToPdf(options: BrowserPageDriverPdfOptions): Promise<Buffer> {
-    const printed = await this.options.transport.send<CdpPrintToPdfResponse>('Page.printToPDF', {
+    this.assertOpen()
+    const printed = await this.sendCommand<CdpPrintToPdfResponse>('Page.printToPDF', {
       printBackground: options.printBackground,
     })
     if (!isString(printed.data) || !printed.data.trim()) {
@@ -520,11 +549,92 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public async fetchResource(
     options: BrowserPageDriverFetchResourceOptions
   ): Promise<BrowserPageDriverFetchResourceResult> {
-    const payload = await this.executeJavaScript<CdpFetchResourcePayload>(
-      buildFetchResourceScript(options),
-      true
+    options.signal?.throwIfAborted()
+    if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+    // 每次抓取独占一个远端对象，不向页面全局写取消注册表。
+    const controller = await this.sendCommand<CdpRuntimeEvaluateResponse>('Runtime.evaluate', {
+      expression: '({ controller: new AbortController(), reader: null })',
+      returnByValue: false,
+    })
+    readRuntimeEvaluateValue(controller)
+    const objectId = controller.result?.objectId
+    if (!isNonBlankString(objectId))
+      throw new AppError('EXECUTION_FAILED', '浏览器 CDP 无法创建资源下载取消句柄。')
+    let cancellationRequested = false
+    const cancel = (): void => {
+      if (cancellationRequested) return
+      cancellationRequested = true
+      void (async () => {
+        try {
+          await this.options.transport.send('Runtime.callFunctionOn', {
+            objectId,
+            functionDeclaration:
+              'function () { this.controller.abort(); void this.reader?.cancel().catch(() => {}); }',
+          })
+        } catch (error) {
+          Log.tag('CdpBrowserPageDriver').debug('取消远端资源传输未完成', {
+            error: AppError.from(error).message,
+          })
+        }
+      })()
+    }
+    this.fetchAborters.add(cancel)
+    let settleFetch!: () => void
+    const settlement = new Promise<void>((resolve) => {
+      settleFetch = resolve
+    })
+    this.fetchSettlements.add(settlement)
+    options.signal?.addEventListener('abort', cancel, { once: true })
+    let payload: CdpFetchResourcePayload
+    try {
+      if (options.signal?.aborted || this.destroyed) cancel()
+      options.signal?.throwIfAborted()
+      if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+      const response = await this.sendCommand<CdpRuntimeEvaluateResponse>(
+        'Runtime.callFunctionOn',
+        {
+          objectId,
+          functionDeclaration: buildFetchResourceFunction(options),
+          awaitPromise: true,
+          returnByValue: true,
+          userGesture: true,
+        }
+      )
+      options.signal?.throwIfAborted()
+      if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+      payload = readRuntimeEvaluateValue(response) as CdpFetchResourcePayload
+    } catch (error) {
+      cancel()
+      options.signal?.throwIfAborted()
+      if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+      throw error
+    } finally {
+      options.signal?.removeEventListener('abort', cancel)
+      this.fetchAborters.delete(cancel)
+      try {
+        await this.options.transport.send('Runtime.releaseObject', { objectId })
+      } catch (error) {
+        Log.tag('CdpBrowserPageDriver').debug('释放资源下载取消句柄未完成', {
+          error: AppError.from(error).message,
+        })
+      }
+      this.fetchSettlements.delete(settlement)
+      settleFetch()
+    }
+    options.signal?.throwIfAborted()
+    if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+    if (
+      isObject(payload) &&
+      isFiniteNumber(payload.limitExceededBytes) &&
+      payload.limitExceededBytes > BrowserFetchLimits.fileBytes
     )
-    if (!isObject(payload) || !isString(payload.data) || !payload.data.trim()) {
+      throw new AppError(
+        'VALIDATION',
+        `资源过大（已读取 ${payload.limitExceededBytes} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
+        undefined,
+        { url: options.url, bytes: payload.limitExceededBytes }
+      )
+    if (!isObject(payload) || !isString(payload.data)) {
       throw new AppError('EXECUTION_FAILED', '浏览器 CDP 资源抓取未返回有效数据。')
     }
 
@@ -544,8 +654,9 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setPageZoomFactor(zoomFactor: number): Promise<void> {
+    this.assertOpen()
     const normalizedZoomFactor = clampZoomFactor(zoomFactor, 1)
-    await this.options.transport.send('Emulation.setPageScaleFactor', {
+    await this.sendCommand('Emulation.setPageScaleFactor', {
       pageScaleFactor: normalizedZoomFactor,
     })
     this.currentZoomFactor = normalizedZoomFactor
@@ -554,27 +665,32 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public async configureNetwork(
     options: BrowserNetworkControlOptions
   ): Promise<BrowserPageDriverNetworkControlState> {
+    this.assertOpen()
     return this.networkController.configureNetwork(options)
   }
 
   public async readNetworkResponseBody(
     options: BrowserNetworkResponseBodyOptions
   ): Promise<BrowserPageDriverNetworkResponseBodyResult> {
+    this.assertOpen()
     return this.networkController.readNetworkResponseBody(options)
   }
 
   public async readNetworkRequestDetails(
     options: BrowserNetworkRequestDetailsOptions
   ): Promise<BrowserPageDriverNetworkRequestDetailsResult> {
+    this.assertOpen()
     return this.networkController.readNetworkRequestDetails(options)
   }
 
   public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean> {
+    this.assertOpen()
     return this.networkController.waitForNetworkIdle(options)
   }
 
   /** 开始录制性能 trace（CDP Tracing domain）。 */
   public async startTracing(): Promise<void> {
+    this.assertOpen()
     if (this.traceCollector?.isRunning()) {
       throw new AppError('VALIDATION', '性能 trace 已在录制中，请先 stop_trace。')
     }
@@ -621,6 +737,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     options: CdpScreencastStartOptions,
     consumer: CdpScreencastConsumerOptions = {}
   ): Promise<void> {
+    this.assertOpen()
     if (this.screencastRecorder?.isRunning()) {
       throw new AppError('VALIDATION', '页面录屏已在进行中，请先 stop。')
     }
@@ -683,6 +800,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     permissions: string[],
     origin?: LooseOptional<string>
   ): Promise<void> {
+    this.assertOpen()
     const normalizedPermissions = permissions
       .map((permission) => permission.trim())
       .filter(isNonBlankString)
@@ -690,7 +808,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       throw new AppError('VALIDATION', 'CDP 权限列表不能为空。')
     }
 
-    await this.options.transport.send('Browser.grantPermissions', {
+    await this.sendCommand('Browser.grantPermissions', {
       permissions: normalizedPermissions,
       origin: optionalWhen(isNonBlankString, origin?.trim()),
     })
@@ -706,6 +824,20 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   public isDestroyed(): boolean {
     return this.destroyed
+  }
+
+  /** 物理传输须等落盘排空再释放；排空期间也不能接收新的页面操作。 */
+  private assertOpen(): void {
+    if (this.destroyed) throw new AppError('EXECUTION_ABORTED', '浏览器 CDP 页面已关闭。')
+  }
+
+  /** 页面操作在物理释放延后时仍立即失效；取消与资源清理保留原始传输。 */
+  private async sendCommand<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>
+  ): Promise<T> {
+    this.assertOpen()
+    return this.options.transport.send<T>(method, params)
   }
 
   /** 在标签页目录里找一页；不在（关了、不在这个浏览器上下文里）抛 NOT_FOUND。 */
@@ -729,7 +861,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   private async resumeTargetIfWaitingForDebugger(): Promise<void> {
     try {
-      await this.options.transport.send('Runtime.runIfWaitingForDebugger')
+      await this.sendCommand('Runtime.runIfWaitingForDebugger')
     } catch (error) {
       this.appendDiagnostic({
         kind: 'network',
@@ -751,6 +883,14 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public dispose(): void {
     if (this.destroyed) return
     this.destroyed = true
+    for (const abortFetch of this.fetchAborters) abortFetch()
+    this.fetchAborters.clear()
+    const finalizers = [...this.fetchSettlements]
+    for (const item of this.downloads.values()) {
+      item.cancel()
+      const pending = item.drainFinalization()
+      if (pending) finalizers.push(pending)
+    }
     if (this.traceCollector) {
       void this.traceCollector.abort()
       this.traceCollector = null
@@ -770,8 +910,23 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const disposable = this.options.transport as CdpBrowserPageDriverTransport & {
       dispose?: () => void
     }
-    disposable.dispose?.()
-    this.options.onDispose?.()
+    const closeTransport = (): void => {
+      try {
+        disposable.dispose?.()
+        this.options.onDispose?.()
+      } finally {
+        this.releaseOwner?.()
+      }
+    }
+    if (finalizers.length)
+      void Promise.allSettled(finalizers)
+        .then(closeTransport)
+        .catch((error) => {
+          Log.tag('CdpBrowserPageDriver').error('资源排空后的驱动释放失败', {
+            error: AppError.from(error).message,
+          })
+        })
+    else closeTransport()
   }
 
   private subscribeToDiagnosticsEvents(): void {
@@ -788,7 +943,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
     this.eventUnsubscribers.push(unsubscribeConsole)
     this.eventUnsubscribers.push(unsubscribeException)
-    void this.options.transport.send('Runtime.enable').catch((error) => {
+    void this.sendCommand('Runtime.enable').catch((error) => {
       this.appendDiagnostic({
         kind: 'console',
         level: 'warning',
@@ -884,7 +1039,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     if (!unsubscribeDialog) return
 
     this.eventUnsubscribers.push(unsubscribeDialog)
-    void this.options.transport.send('Page.enable').catch((error) => {
+    void this.sendCommand('Page.enable').catch((error) => {
       this.appendDiagnostic({
         kind: 'dialog',
         level: 'warning',
@@ -950,19 +1105,42 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const downloadPath = this.options.downloadPath?.trim()
     if (!downloadPath || !isNonBlankString(event.guid) || this.downloads.has(event.guid)) return
 
+    const guid = event.guid
     const url = isNonBlankString(event.url) ? event.url : toNullable(this.currentUrl)
-    const filename = isNonBlankString(event.suggestedFilename)
-      ? event.suggestedFilename
-      : event.guid
+    const filename = isNonBlankString(event.suggestedFilename) ? event.suggestedFilename : guid
     const item = new CdpBrowserPageDownloadItem({
       transport: this.options.transport,
-      guid: event.guid,
+      guid,
       url,
       filename,
       downloadPath,
       appendDiagnostic: (entry) => this.appendDiagnostic(entry),
     })
-    this.downloads.set(event.guid, item)
+    this.downloads.set(guid, item)
+    item.once('done', (_doneEvent, state) => {
+      if (this.destroyed || this.downloads.get(guid) !== item) return
+      this.downloads.delete(guid)
+      const result = state === 'completed' ? '完成' : state === 'interrupted' ? '落盘失败' : '取消'
+      this.appendDiagnostic({
+        kind: 'download',
+        level: state === 'completed' ? 'info' : 'warning',
+        message: `页面下载${result}：${item.getFilename()}`,
+        url: item.getURL(),
+        line: null,
+        column: null,
+        code: null,
+        capturedAt: Date.now(),
+        details: {
+          guid,
+          filename: item.getFilename(),
+          totalBytes: item.getTotalBytes(),
+          receivedBytes: item.getReceivedBytes(),
+          savePath: item.getSavePath() || null,
+          state,
+          pending: false,
+        },
+      })
+    })
     this.appendDiagnostic({
       kind: 'download',
       level: 'info',
@@ -973,7 +1151,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       code: null,
       capturedAt: Date.now(),
       details: {
-        guid: event.guid,
+        guid,
         filename,
         pending: true,
       },
@@ -990,29 +1168,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const item = this.downloads.get(event.guid)
     if (!item) return
 
-    const state = item.updateProgress(event)
-    if (!state) return
-
-    this.downloads.delete(event.guid)
-    this.appendDiagnostic({
-      kind: 'download',
-      level: state === 'completed' ? 'info' : 'warning',
-      message: `页面下载${state === 'completed' ? '完成' : '取消'}：${item.getFilename()}`,
-      url: item.getURL(),
-      line: null,
-      column: null,
-      code: null,
-      capturedAt: Date.now(),
-      details: {
-        guid: event.guid,
-        filename: item.getFilename(),
-        totalBytes: item.getTotalBytes(),
-        receivedBytes: item.getReceivedBytes(),
-        savePath: item.getSavePath() || null,
-        state,
-        pending: false,
-      },
-    })
+    // 浏览器传输完成仍可能等待用户受理与目标落盘；最终诊断只由 done 发布。
+    item.updateProgress(event)
   }
 
   private emitDownload(event: BrowserPageDriverDownloadEvent): void {
@@ -1074,31 +1231,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private parseFrameOrigin(url: unknown): Nullable<string> {
-    if (!isNonBlankString(url)) return null
-
-    try {
-      const origin = new URL(url).origin
-      return origin && origin !== 'null' ? origin : null
-    } catch (error) {
-      this.appendDiagnostic({
-        kind: 'storage',
-        level: 'debug',
-        message: 'CDP frame URL origin 解析失败。',
-        url: toNullable(this.currentUrl),
-        line: null,
-        column: null,
-        code: null,
-        capturedAt: Date.now(),
-        details: {
-          frameUrl: url,
-          error: AppError.from(error).message,
-        },
-      })
-      return null
-    }
-  }
-
   private updateCachedPageState(value: unknown): void {
     if (!isObject(value)) return
 
@@ -1144,8 +1276,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     params: Record<string, unknown>
     capture: BrowserPageDriverScreenshot['capture']
   }> {
-    const metrics =
-      await this.options.transport.send<CdpLayoutMetricsResponse>('Page.getLayoutMetrics')
+    const metrics = await this.sendCommand<CdpLayoutMetricsResponse>('Page.getLayoutMetrics')
     const content = metrics.cssContentSize ?? metrics.contentSize
     const documentWidth = clampPositiveInteger(content?.width, options.metadata.documentWidth)
     const documentHeight = clampPositiveInteger(content?.height, options.metadata.documentHeight)

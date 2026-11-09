@@ -92,9 +92,8 @@ export class OfficeDocumentRenderer implements OfficeDocumentRendererApi {
       standardFontDataUrl: input.standardFontDataUrl ?? getPdfjsStandardFontDataUrl(),
       useWorkerFetch: false,
     })
-    const document = await task.promise
-
     try {
+      const document = await task.promise
       if (pageNumber > document.numPages) {
         throw new AppError(
           OfficeErrorCodes.pdfPageOutOfRange,

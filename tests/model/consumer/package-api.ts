@@ -31,6 +31,7 @@ declare const adapterKind: ModelProviderAdapterKind
 declare const preset: ModelProviderPreset
 declare const runtimeConfig: AgentProviderRuntimeConfig
 declare const selection: ModelSelection
+const identitySelection: ModelSelection = { provider: 'openai', model: 'gpt-5.5' }
 declare const consumerAdapter: ModelProviderAdapter
 
 // 0.7.0 起自定义适配器是注入面的一个接口，不再继承本包的基类。
@@ -54,6 +55,7 @@ void adapterKind
 void preset
 void runtimeConfig
 void selection
+void identitySelection
 void modelCatalog.resolveOllamaChatModel('qwen3:8b', {
   read: () => undefined,
 })

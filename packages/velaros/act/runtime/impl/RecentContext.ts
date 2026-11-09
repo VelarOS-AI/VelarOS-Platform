@@ -54,6 +54,8 @@ export interface RecentContextApi {
   segment(signal: AbortSignal): Promise<Nullable<ContextSegment>>
   /** 目录里的卷（已被合并的不再单列）及各自最新的叙事，按区间排序。 */
   volumes(signal: AbortSignal): Promise<readonly VolumeView[]>
+  /** 同一授权代次内不可变卷的事实终点；叙事迟写不改变这个边界。 */
+  volumeThrough(ref: ContextRef, signal: AbortSignal): Promise<number>
   /** 当前段起点的有界机械交接，不调用模型、不写业务状态。 */
   handoff(signal: AbortSignal): Promise<SegmentHandoff>
   /** 当前授权代次的全部卷叙事，含已并进上一级的卷，按写入顺序。 */
@@ -92,17 +94,11 @@ export class RecentContext implements RecentContextApi {
   private async snapshot(
     selections: Parameters<NonNullable<ContextStorage['selectSnapshot']>>[1]
   ): Promise<Nullable<ContextState>> {
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [
-          { title: 'search:history-reset', latest: true },
-          ...selections,
-        ])
-      : null
-    const state = this.storage.selectSnapshot
-      ? selected
-        ? { ...selected.metadata, records: selected.records }
-        : null
-      : await this.storage.load(this.id)
+    const selected = await this.storage.selectSnapshot(this.id, [
+      { title: 'search:history-reset', latest: true },
+      ...selections,
+    ])
+    const state = selected ? { ...selected.metadata, records: selected.records } : null
     if (state && state.objectReferencesVersion !== 1)
       throw new AppError(
         'CONTEXT_REFERENCES_UNVERIFIED',
@@ -140,6 +136,46 @@ export class RecentContext implements RecentContextApi {
     if (this.resultModes.size < ActRuntimeTuning.historyClassificationEntries)
       this.resultModes.set(objectId, observation)
     return observation
+  }
+
+  private async exchanges(
+    records: readonly ContextRecord[],
+    after: number,
+    signal: AbortSignal
+  ): Promise<{
+    readonly dynamic: ReadonlySet<string>
+    readonly regular: ReadonlyMap<string, unknown>
+  }> {
+    const responses = new Map(
+      records
+        .filter((record) => record.kind === 'assistant' && record.sequence > after)
+        .map((record) => [record.ref.id, record])
+    )
+    const dynamic = new Set<string>()
+    const regular = new Map<string, unknown>()
+    for (const record of records) {
+      signal.throwIfAborted()
+      if (
+        record.kind !== 'audit' ||
+        record.title !== 'model-tool-exchange' ||
+        record.sequence <= after
+      )
+        continue
+      const source = record.sources.find((ref) => {
+        const response = ref.sessionId === this.id ? responses.get(ref.id) : undefined
+        return response && response.sequence < record.sequence
+      })
+      if (!source) continue
+      const raw = await this.storage.get(this.id, record.objectId)
+      if (isNull(raw)) throw new AppError('NOT_FOUND', '原生工具往返记录缺失')
+      const exchange: unknown = JSON.parse(raw)
+      if (isPlainObject(exchange)) {
+        const { delivery, ...value } = exchange
+        if (delivery === 'dynamic') dynamic.add(source.id)
+        else regular.set(source.id, value)
+      } else regular.set(source.id, exchange)
+    }
+    return { dynamic, regular }
   }
 
   public async list(input: HistoryListRequest, signal: AbortSignal): Promise<HistoryPage> {
@@ -204,6 +240,24 @@ export class RecentContext implements RecentContextApi {
 
   public async volumes(signal: AbortSignal): Promise<readonly VolumeView[]> {
     return (await this.historyIndex(signal)).volumes
+  }
+
+  public async volumeThrough(ref: ContextRef, signal: AbortSignal): Promise<number> {
+    signal.throwIfAborted()
+    if (ref.sessionId !== this.id) throw new AppError('PERMISSION', '历史卷不属于当前会话')
+    const state = await this.snapshot([{ refId: ref.id }])
+    const reset = this.reset(state)
+    const record = state?.records.find(
+      (item) => item.ref.id === ref.id && item.title === 'context:volume' && item.sequence > reset
+    )
+    if (!record) throw new AppError('NOT_FOUND', '历史卷不在当前授权代次')
+    const body = await this.storage.get(this.id, record.objectId)
+    signal.throwIfAborted()
+    if (isNull(body)) throw new AppError('NOT_FOUND', '历史卷正文缺失')
+    const volume = JSON.parse(body) as ContextVolume
+    if (!Number.isSafeInteger(volume.through) || volume.through <= volume.from)
+      throw new AppError('INVARIANT', '历史卷事实区间无效')
+    return volume.through
   }
 
   public async ledgers(signal: AbortSignal): Promise<SegmentLedgers> {
@@ -283,7 +337,7 @@ export class RecentContext implements RecentContextApi {
         createdAt: new Date().toISOString(),
       }
       const { records: _records, ...metadata } = state
-      if (this.storage.compareAndSwapMetadata) {
+      {
         if (
           await this.storage.compareAndSwapMetadata(
             this.id,
@@ -291,20 +345,6 @@ export class RecentContext implements RecentContextApi {
             { ...metadata, version: state.version + 1 },
             [entry]
           )
-        )
-          return index
-      } else {
-        const full = await this.storage.load(this.id)
-        if (full?.version !== state.version) continue
-        if (
-          await this.storage.compareAndSwap(this.id, state.version, {
-            ...full,
-            version: state.version + 1,
-            records: [
-              ...full.records,
-              { ...entry, sequence: (full.records.at(-1)?.sequence ?? 0) + 1 },
-            ],
-          })
         )
           return index
       }
@@ -345,10 +385,12 @@ export class RecentContext implements RecentContextApi {
       ),
     ])
     const reset = this.reset(state)
+    const exchanges = await this.exchanges(state?.records ?? [], reset, signal)
     const carried = new Set(segment.carried)
     const candidates = (state?.records ?? []).filter(
       (record) =>
         record.sequence > reset &&
+        !exchanges.dynamic.has(record.ref.id) &&
         (record.sequence > segment.from || carried.has(record.ref.id)) &&
         (record.kind === 'assistant' ||
           /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title))
@@ -384,28 +426,10 @@ export class RecentContext implements RecentContextApi {
     let response = ''
     let responsePrograms: readonly string[] = []
     const nativeResponses = new Map<string, { exchange: ModelToolExchange; body: string }>()
-    for (const record of state?.records ?? []) {
-      if (
-        record.kind !== 'audit' ||
-        record.title !== 'model-tool-exchange' ||
-        record.sequence <= reset
-      )
-        continue
-      const source = record.sources.find((ref) => ref.sessionId === this.id)
-      if (
-        !source ||
-        !candidates.some(
-          (item) =>
-            item.ref.id === source.id &&
-            item.kind === 'assistant' &&
-            item.sequence < record.sequence
-        )
-      )
-        continue
-      const raw = await this.storage.get(this.id, record.objectId)
-      if (isNull(raw)) throw new AppError('NOT_FOUND', '原生工具往返记录缺失')
-      const exchange = modelRequestEncoder.toolExchange(JSON.parse(raw))
-      nativeResponses.set(source.id, {
+    for (const [source, value] of exchanges.regular) {
+      if (!candidates.some((item) => item.ref.id === source && item.kind === 'assistant')) continue
+      const exchange = modelRequestEncoder.toolExchange(value)
+      nativeResponses.set(source, {
         exchange,
         body: JSON.stringify({ text: exchange.text, calls: exchange.calls }),
       })
@@ -775,6 +799,7 @@ export class RecentContext implements RecentContextApi {
     const state = await this.snapshot([
       { kind: 'user', after: from, through },
       { kind: 'assistant', after: from, through },
+      { kind: 'audit', title: 'model-tool-exchange', after: from },
       { titlePrefix: 'script:', titleSuffix: ':result', after: from, through },
       { titlePrefix: 'workspace:note:', after: from, through },
     ])
@@ -832,8 +857,12 @@ export class RecentContext implements RecentContextApi {
     through: number,
     signal: AbortSignal
   ): Promise<ContextVolume> {
+    const exchanges = await this.exchanges(state.records, from, signal)
     const records = state.records.filter(
-      (record) => record.sequence > from && record.sequence <= through
+      (record) =>
+        record.sequence > from &&
+        record.sequence <= through &&
+        !exchanges.dynamic.has(record.ref.id)
     )
     const lines: string[] = []
     const notes = new Map<string, string>()
@@ -976,13 +1005,16 @@ export class RecentContext implements RecentContextApi {
     signal.throwIfAborted()
     const state = await this.snapshot([
       { kind: 'assistant', after: segment.from },
+      { kind: 'audit', title: 'model-tool-exchange', after: segment.from },
       { titlePrefix: 'script:', titleSuffix: ':result', after: segment.from },
     ])
     const reset = this.reset(state)
+    const exchanges = await this.exchanges(state?.records ?? [], reset, signal)
     const records = []
     for (const record of state?.records ?? []) {
       if (
         record.sequence <= Math.max(reset, segment.from) ||
+        exchanges.dynamic.has(record.ref.id) ||
         !(
           record.kind === 'assistant' ||
           /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)

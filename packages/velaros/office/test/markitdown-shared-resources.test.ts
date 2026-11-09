@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
 
-import { createMarkItDownLocator } from '../index'
+import { createMarkItDownLocator } from '../locator'
 
 let restoreSharedDataRoot: Nullable<string | undefined> = null
 let createdRoot: Nullable<string> = null

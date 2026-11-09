@@ -188,7 +188,8 @@ export class KernelServiceStore implements KernelServiceStoreApi {
         if (disposed) return
         disposed = true
         entries.delete(entry)
-        if (entries.size === 0) this.entries.delete(token.id)
+        if (entries.size === 0 && this.entries.get(token.id) === entries)
+          this.entries.delete(token.id)
         if (this.activeEntries.get(token.id) === entry) {
           this.activeEntries.delete(token.id)
         }

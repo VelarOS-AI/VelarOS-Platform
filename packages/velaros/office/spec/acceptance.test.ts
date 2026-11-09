@@ -82,7 +82,7 @@ describe('办公文档不变量验收', () => {
     expect(value.sheet.structure.sheets[0].rows.length).toBeLessThan(33)
   }, 120_000)
 
-  test('INV-1 读写目标按真实路径都在工作区根内', async () => {
+  test('INV-1 读写目标按真实路径都在工作区根内：表格写出', async () => {
     const { office } = await workspace()
     expect(
       await failureOf(
@@ -91,6 +91,10 @@ describe('办公文档不变量验收', () => {
     ).toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
     })
+  })
+
+  test('INV-1 读写目标按真实路径都在工作区根内：PDF 读取', async () => {
+    const { office } = await workspace()
     expect(await failureOf(office.call('readPdf', { inputPath: '../outside.pdf' }))).toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
     })
@@ -406,6 +410,33 @@ describe('办公文档不变量验收', () => {
     )
     expect(tooLong.code).toBe('VALIDATION')
     expect(tooLong.message).toContain('title')
+    let rootCalls = 0
+    const invalidSheets = await failureOf(
+      officeOperations.createSpreadsheet(
+        {
+          outputPath: 'invalid-sheets.xlsx',
+          content: JSON.stringify([
+            {
+              name: 'x'.repeat(OfficeInputLimits.spreadsheet.sheetNameChars + 1),
+              rows: [['must survive']],
+            },
+          ]),
+        },
+        {
+          ...harness.context,
+          office: {
+            ...harness.context.office,
+            getRootPath: () => {
+              rootCalls += 1
+              return harness.root
+            },
+          },
+        }
+      )
+    )
+    expect(invalidSheets.code).toBe('VALIDATION')
+    expect(invalidSheets.message).toContain('content.0.name')
+    expect(rootCalls).toBe(0)
     await putFile(harness.root, 'paper.pdf', await pdfWithPages(['page']))
     const cjkStamp = await failureOf(
       office.call('editPdf', {
@@ -417,8 +448,26 @@ describe('办公文档不变量验收', () => {
     expect(cjkStamp.code).toBe('VALIDATION')
     expect(cjkStamp.message).toContain('textStamps[1].text')
     expect(harness.commands).toEqual([])
-    for (const name of ['a.docx', 'b.docx', 'c.pdf', 'c.tex', 'd.docx', 'e.pdf'])
+    for (const name of [
+      'a.docx',
+      'b.docx',
+      'c.pdf',
+      'c.tex',
+      'd.docx',
+      'e.pdf',
+      'invalid-sheets.xlsx',
+    ])
       await expect(stat(join(harness.root, name))).rejects.toBeDefined()
+
+    const serialized = await office.call('createSpreadsheet', {
+      outputPath: 'serialized-sheets.xlsx',
+      content: JSON.stringify([{ name: '保留结构', rows: [['must survive']] }]),
+    })
+    const preview = await office.call('preview', { inputPath: serialized.path })
+    expect(preview.sheets).toEqual([
+      { name: '保留结构', rowCount: 1, columnCount: 1, rows: [['must survive']] },
+    ])
+    expect(harness.commands).toEqual([])
   })
 
   it('INV-15 模型面是 velaros:office：声明从源码生成，模型的程序照它调到真实操作', async () => {
@@ -475,6 +524,7 @@ export const bytes = written.bytes
       `摘要，最多 ${OfficeInputLimits.word.abstractChars} 个字符`,
       `最多 ${OfficeInputLimits.keywords} 个，每个最多 ${OfficeInputLimits.tinyFieldChars} 个字符`,
       `最多 ${OfficeInputLimits.presentation.slides} 页，每页最多 ${OfficeInputLimits.presentation.elements} 个元素`,
+      `正文最多 ${OfficeInputLimits.presentation.autoBodyChars} 字符`,
       `最多 ${OfficeInputLimits.spreadsheet.sheets} 张`,
       `name 最多 ${OfficeInputLimits.spreadsheet.sheetNameChars} 个字符`,
       `最多 ${OfficeInputLimits.spreadsheet.rows} 行、每行最多 ${OfficeInputLimits.spreadsheet.columns} 格`,

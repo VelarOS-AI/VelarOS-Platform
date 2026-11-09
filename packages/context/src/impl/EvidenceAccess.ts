@@ -1,5 +1,5 @@
-import { Log } from '@velaros-ai/core'
 import { isBoolean, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextSourcePort } from '../contract/requires.js'
 import type {
@@ -98,11 +98,12 @@ class EvidenceAccess implements EvidenceAccessApi {
         throw contextFailure('SOURCE_CONTRACT', '来源返回了其他来源的目标')
       try {
         await this.authorize(scope, hit.target, signal)
-        allowed.push({ ...hit, preview: hit.preview.slice(0, 2000) })
-      } catch {
-        Log.tag('ActRuntime').debug('EvidenceAccess 已进入异常处理或降级分支')
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== 'DENIED') throw error
         signal.throwIfAborted()
+        continue
       }
+      allowed.push({ ...hit, preview: hit.preview.slice(0, 2000) })
     }
     return allowed
   }

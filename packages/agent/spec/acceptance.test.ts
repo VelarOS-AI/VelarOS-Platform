@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 
-import { expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
 
-import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
+import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -15,7 +15,7 @@ import { createAgentSupervisor } from '../src/index.js'
 import { createActRunService } from '../src/index.js'
 import { sessionCacheKey } from '../src/utils/cache-key.js'
 import { agentCollaboration, agentCollaborationConflicts } from '../src/utils/delegation.js'
-import { remainingFrameImages } from '../src/utils/frame-prompt.js'
+import { remainingFrameImages, requestChars } from '../src/utils/frame-prompt.js'
 import { boundedModelStream } from '../src/utils/model-stream.js'
 
 test('collaboration normalizes lexical roots and rejects ambiguous write paths', () => {
@@ -260,6 +260,12 @@ function runFixture() {
   const store = storage()
   const context = createContextRuntime({ storage: store, sessionId: 'fault' })
   const view = createContextView({ storage: store, sessionId: 'fault', context, sources: [] })
+  type Frame = Awaited<ReturnType<ActRunServiceOptions['frames']['beginFrame']>>
+  const frame: {
+    project(maxChars: number): Promise<Awaited<ReturnType<Frame['project']>> & { prompt?: string }>
+    delta?: (body: string, previous: string) => string
+    reconcile?: Frame['reconcile']
+  } = { project: async () => ({ body: '{}', images: [] }) }
   const options: { -readonly [Key in keyof ActRunServiceOptions]: ActRunServiceOptions[Key] } = {
     storage: store,
     context,
@@ -302,8 +308,25 @@ function runFixture() {
       async visibleExecutions() {
         return []
       },
-      async project() {
-        return { body: '{}', images: [] }
+      async beginFrame() {
+        let projected: Awaited<ReturnType<typeof frame.project>>
+        return {
+          retainFrames: Boolean(frame.delta),
+          async project(maxChars) {
+            projected = await frame.project(maxChars)
+            return projected
+          },
+          async reconcile(body, history, previous, signal) {
+            if (frame.reconcile) return frame.reconcile(body, history, previous, signal)
+            return {
+              body,
+              dynamic: projected.dynamic,
+              prompt:
+                previous && frame.delta ? frame.delta(body, previous) : (projected.prompt ?? body),
+            }
+          },
+          async publish() {},
+        }
       },
       async needsRefresh() {
         return false
@@ -312,7 +335,7 @@ function runFixture() {
     },
     execution: { pending: () => false, async wait() {}, async invoke() {}, async stop() {} },
   }
-  return { store, context, view, options }
+  return { store, context, view, options, frame }
 }
 
 for (const phase of ['model', 'refresh'] as const)
@@ -323,7 +346,7 @@ for (const phase of ['model', 'refresh'] as const)
     let listeners = 0
     let wake: (() => void) | undefined
     const waitingAgain = Promise.withResolvers<void>()
-    f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+    f.frame.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
     f.options.frames.needsRefresh = async (request) => {
       const observed = JSON.parse(
         request.materials.find((item) => item.origin === 'runtime-view')!.text
@@ -398,7 +421,7 @@ test('a text-only waiting response refreshes a completed result even when no exe
   const f = runFixture()
   let revision = 0
   let calls = 0
-  f.options.frames.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
+  f.frame.project = async () => ({ body: JSON.stringify({ revision }), images: [] })
   f.options.frames.needsRefresh = async (request) =>
     JSON.parse(request.materials.find((item) => item.origin === 'runtime-view')!.text).revision !==
     revision
@@ -621,10 +644,15 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
   const f = runFixture()
   const requests: ModelTurnRequest[] = []
   let logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+  const observations = ['A', 'A', 'B', 'A']
   let revision = 0
-  f.options.frames.delta = (body) => `current state ${body}`
-  f.options.frames.project = async () => ({
+  f.frame.delta = (body) => `current state ${body}`
+  f.frame.project = async () => ({
     body: JSON.stringify({ revision }),
+    dynamic: {
+      id: `observation-${revision}`,
+      text: `current-perception-${observations[revision]}`,
+    },
     history: structuredClone(logical),
     images: [],
   })
@@ -633,29 +661,54 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
     yield { type: 'text', text: `answer-${revision}` }
     yield { type: 'finish', reason: 'stop' }
   }
+  f.options.protocol.open = () => ({
+    instructions: `current-protocol-${revision}`,
+    reset() {},
+    push() {
+      return []
+    },
+    finish: () => ({ message: 'done', done: true, events: [] }),
+  })
   const service = createActRunService(f.options)
   const withoutMarks = (messages: readonly ModelHistoryMessage[]) =>
     messages.map(({ cacheBreakpoint: _mark, ...message }) => message)
   try {
-    for (const prompt of ['first', 'follow-up', 'corrected history']) {
+    for (const prompt of ['first', 'follow-up', 'changed observation', 'corrected history']) {
       const events = []
       for await (const event of service.submit(prompt)) events.push(event)
       expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       revision++
       logical =
-        revision === 1
+        revision < 3
           ? [
               ...logical,
-              { role: 'assistant', content: 'answer-0' },
-              { role: 'user', content: 'follow-up' },
+              { role: 'assistant', content: `answer-${revision - 1}` },
+              { role: 'user', content: `input-${revision}` },
             ]
           : [{ role: 'user', content: 'revised task after compaction' }]
     }
-    const previous = modelRequestEncoder.messages(requests[0]!)
-    const followup = modelRequestEncoder.messages(requests[1]!)
-    expect(withoutMarks(followup.slice(0, previous.length))).toEqual(withoutMarks(previous))
-    expect(JSON.stringify(followup.at(-1))).toContain('revision')
-    expect(requests[2]!.history).toEqual([
+    for (const index of [1, 2]) {
+      const previous = modelRequestEncoder.layout(requests[index - 1]!)
+      const followup = modelRequestEncoder.layout(requests[index]!)
+      expect(withoutMarks(followup.messages.slice(0, previous.retainablePrefixLength))).toEqual(
+        withoutMarks(previous.messages.slice(0, previous.retainablePrefixLength))
+      )
+    }
+    for (const [index, request] of requests.entries()) {
+      expect(request.dynamic?.text).toBe(`current-perception-${observations[index]}`)
+      expect(request.protocol).toContain(`current-protocol-${index}`)
+      expect(JSON.stringify(request.history)).not.toContain('current-perception-')
+      expect(JSON.stringify(request.history)).not.toContain('current-protocol-')
+      const layout = modelRequestEncoder.layout(request)
+      const prefix = JSON.stringify(layout.messages.slice(0, layout.retainablePrefixLength))
+      expect(prefix).not.toContain('current-perception-')
+      expect(prefix).not.toContain('current-protocol-')
+      const tail = JSON.stringify(layout.messages.slice(layout.retainablePrefixLength))
+      expect(tail).toContain(request.dynamic!.text)
+      expect(tail).toContain(`current-protocol-${index}`)
+    }
+    expect(requests[1]!.compiledPrompt).toContain('revision')
+    expect(requests[3]!.history).toEqual([
       { role: 'user', content: 'revised task after compaction' },
     ])
     expect(new Set(requests.map((request) => request.cacheKey)).size).toBe(1)
@@ -667,7 +720,7 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
 test('INV-40 accepted provider usage drives growth while calibrated admission remains independent', async () => {
   const f = runFixture()
   const requests: ModelTurnRequest[] = []
-  f.options.frames.project = async () => ({
+  f.frame.project = async () => ({
     body: '{}',
     images: [],
     segment: { id: 'one-segment', index: 1, revision: 0, volumes: 0, turns: requests.length },
@@ -720,7 +773,7 @@ test.each(['overflow', 'forecast', 'irreducible'] as const)(
     let executed = 0
     let pressure = 0
     f.options.frames.policy = { windowTokens: 2000 }
-    f.options.frames.project = async () => ({
+    f.frame.project = async () => ({
       body: '{}',
       images: [],
       segment: { id: `segment-${folds}`, index: folds, revision: 0, volumes: folds, turns: 3 },
@@ -874,7 +927,7 @@ test('INV-51 adding final context status retries a smaller projection before blo
   const f = runFixture()
   let calls = 0
   const budgets: number[] = []
-  f.options.frames.project = async (_view, _signal, maxChars) => {
+  f.frame.project = async (maxChars) => {
     budgets.push(maxChars)
     return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
   }
@@ -902,7 +955,7 @@ test('INV-51 adding final context status retries a smaller projection before blo
   }
 })
 
-test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'pending'] as const)(
+test.each(['ready', 'not-ready', 'execution-failed', 'completion-blocked', 'pending'] as const)(
   'INV-52 native host delivery obeys execution and ordinary completion gates: %s',
   async (mode) => {
     const f = runFixture()
@@ -916,9 +969,9 @@ test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'p
     }
     f.options.frames.completion = async () => {
       checks++
-      return mode === 'verification-rejected'
-        ? { completed: false, verified: false, reason: 'not verified', recovery: 'input' }
-        : { completed: true, verified: true }
+      return mode === 'completion-blocked'
+        ? { completed: false, reason: 'NEEDS_INPUT', recovery: 'input' }
+        : { completed: true, reason: 'COMPLETED' }
     }
     f.options.protocol.open = () => ({
       instructions: 'native fixture',
@@ -960,15 +1013,17 @@ test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'p
     const events = []
     try {
       for await (const event of service.submit('work')) events.push(event)
-      expect(calls).toBe(mode === 'ready' || mode === 'verification-rejected' ? 1 : 2)
+      expect(calls).toBe(mode === 'ready' || mode === 'completion-blocked' ? 1 : 2)
       expect(readyChecks).toBe(mode === 'execution-failed' ? 0 : 1)
       expect(checks).toBe(1)
       expect(events.at(-1)).toMatchObject({
         type: 'state',
-        status: mode === 'verification-rejected' ? 'waiting' : 'completed',
+        status: mode === 'completion-blocked' ? 'waiting' : 'completed',
       })
       const records = (await f.store.load('fault'))!.records
       expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
+      const exchange = records.find((record) => record.title === 'model-tool-exchange')!
+      expect(JSON.parse((await f.store.get('fault', exchange.objectId))!).delivery).toBe('history')
       expect(records.filter((record) => record.title === 'execution-completion')).toHaveLength(
         mode === 'execution-failed' || mode === 'not-ready' ? 0 : 1
       )
@@ -977,6 +1032,114 @@ test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'p
     }
   }
 )
+
+test('dynamic native exchanges stage the original persisted receipt and remain outside retained prefixes', async () => {
+  const f = runFixture()
+  const requests: ModelTurnRequest[] = []
+  const staged: string[] = []
+  const receipt = { status: 'registered', sourceRef: 'original-observation-source' }
+  let pending: ModelTurnRequest['dynamic']
+  let calls = 0
+  let consumed = 0
+  let readyChecks = 0
+  f.frame.delta = (body) => body
+  f.frame.project = async () => ({ body: '{}', images: [], dynamic: pending })
+  f.options.frames.deliveryReady = () => {
+    readyChecks++
+    return true
+  }
+  f.options.frames.stageDynamicExchange = async (ref) => {
+    const record = (await f.store.load('fault'))!.records.find((item) => item.ref.id === ref.id)!
+    const stored = JSON.parse((await f.store.get('fault', record.objectId))!)
+    expect(stored.delivery).toBe('dynamic')
+    expect(stored.results).toEqual([
+      { id: 'read-state', name: 'fixture-observer', output: receipt },
+    ])
+    staged.push(ref.id)
+    pending = {
+      id: ref.id,
+      text: 'CURRENT_ONLY observation',
+      exchanges: [{ exchange: modelRequestEncoder.toolExchange(stored) }],
+    }
+  }
+  f.options.frames.acknowledge = async (request) => {
+    if (pending && request.dynamic?.id === pending.id) {
+      consumed++
+      pending = undefined
+    }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'native fixture',
+    response: {
+      type: 'tools',
+      tools: [{ name: 'fixture-observer', description: 'fixture', schema: { type: 'object' } }],
+    },
+    reset() {},
+    push() {
+      return []
+    },
+    acceptTool() {
+      return []
+    },
+    finish() {
+      if (calls === 2) throw new AppError('SCRIPT_PROTOCOL', 'retry the same pending observation')
+      return calls === 1
+        ? { message: '', done: true, submission: {}, events: [] }
+        : { message: 'done', done: true, events: [] }
+    },
+  })
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    calls++
+    if (calls === 1)
+      yield { type: 'tool-call', value: { id: 'read-state', name: 'fixture-observer', input: {} } }
+    else yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.execution.invoke = async () => ({
+    succeeded: true,
+    delivery: 'dynamic',
+    results: [{ id: 'read-state', name: 'fixture-observer', output: receipt }],
+  })
+  const service = createActRunService(f.options)
+  try {
+    for (const input of ['observe once', 'continue without another observation']) {
+      const events = []
+      for await (const event of service.submit(input)) events.push(event)
+      expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+    }
+    expect(requests).toHaveLength(4)
+    expect(staged).toHaveLength(1)
+    expect(consumed).toBe(1)
+    expect(readyChecks).toBe(0)
+    expect(requests[0]!.dynamic).toBeUndefined()
+    expect(requests[1]!.dynamic?.id).toBe(staged[0])
+    expect(requests[2]!.dynamic).toEqual(requests[1]!.dynamic)
+    expect(requests[3]!.dynamic).toBeUndefined()
+    expect(requestChars(requests[1]!)).toBeGreaterThan(
+      requestChars({
+        ...requests[1]!,
+        dynamic: { ...requests[1]!.dynamic!, exchanges: [] },
+      })
+    )
+    for (const request of requests) {
+      const layout = modelRequestEncoder.layout(request)
+      const stable = JSON.stringify(layout.messages.slice(0, layout.retainablePrefixLength))
+      expect(stable).not.toContain('fixture-observer')
+      expect(stable).not.toContain('original-observation-source')
+      expect(stable).not.toContain('CURRENT_ONLY')
+      if (request.dynamic) {
+        const tail = JSON.stringify(layout.messages.slice(layout.retainablePrefixLength))
+        expect(tail).toContain('original-observation-source')
+        expect(tail).toContain('CURRENT_ONLY')
+      }
+    }
+    const records = (await f.store.load('fault'))!.records
+    expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
+  } finally {
+    await service.close()
+  }
+})
 
 test('INV-34 cleanup failure still releases ownership and cannot report a completed run', async () => {
   const f = runFixture()
@@ -1018,7 +1181,7 @@ test.each(['fits', 'needs-finalization'] as const)(
       finalizing = true
     }
     f.options.frames.phase = () => ({ phase: finalizing ? 'finalizing' : 'work', instructions: '' })
-    f.options.frames.project = async (_view, _signal, maxChars) => ({
+    f.frame.project = async (maxChars) => ({
       body: JSON.stringify({ size: maxChars <= 1000 ? 'small' : 'large' }),
       images: [],
     })
@@ -1057,7 +1220,7 @@ test('INV-53 a fitting current projection preserves the history before overflow 
   let folds = 0
   let acknowledged = 0
   f.options.frames.policy = { windowTokens: 3000 }
-  f.options.frames.project = async (_view, _signal, maxChars) => ({
+  f.frame.project = async (maxChars) => ({
     body: JSON.stringify({ required: 'Keep original evidence', optional: 'x'.repeat(maxChars) }),
     history,
     images: [],
@@ -1119,7 +1282,7 @@ test.each([
     let acknowledged = 0
     let finalizing = false
     f.options.frames.policy = { windowTokens: 3000 }
-    f.options.frames.project = async (_view, _signal, maxChars) => {
+    f.frame.project = async (maxChars) => {
       projections.push(maxChars)
       return {
         body: JSON.stringify({
@@ -1210,22 +1373,29 @@ test.each(['default', 0, 0.125, 1] as const)(
       ...f.options.model,
       limits: { contextTokens: 20000, inputTokens: 18000, outputTokens: 100 },
     }
-    f.options.frames = {
-      ...f.options.frames,
-      policy: configuredRatio === 'default' ? undefined : { retainedFrameRatio: configuredRatio },
+    Object.assign(f.frame, {
       async project() {
         return { body: JSON.stringify({ evidence, turn }), images: [], history: [...logical] }
       },
+
       delta: (body) => body,
+
       async reconcile(body, history, previous) {
         const covered =
           previous && history.some((entry) => JSON.stringify(entry).includes(evidence))
         return { body, prompt: `${covered ? 'delta' : 'full'} ${body}` }
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
+      policy: configuredRatio === 'default' ? undefined : { retainedFrameRatio: configuredRatio },
+
       async acknowledge() {
         acknowledged++
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens:
         100 +
@@ -1285,7 +1455,8 @@ test.each(['default', 0, 0.125, 1] as const)(
         ).toEqual(logical.slice(0, 1 + index * 2))
         if (priorFrames.length) {
           retained++
-          const previous = modelRequestEncoder.messages(requests[index - 1]!)
+          const layout = modelRequestEncoder.layout(requests[index - 1]!)
+          const previous = layout.messages.slice(0, layout.retainablePrefixLength)
           expect(
             modelRequestEncoder
               .messages(request)
@@ -1334,24 +1505,31 @@ test.each(['effective', 'weak', 'repeated', 'unavailable', 'failed', 'noop', 'ca
     let acknowledged = 0
     const cost = mode === 'weak' || mode === 'cancel' ? 2500 : 2000
     f.options.model.limits = { contextTokens: 12000, inputTokens: 10000, outputTokens: 100 }
-    f.options.frames = {
-      ...f.options.frames,
-      policy: { windowTokens: 10000 },
+    Object.assign(f.frame, {
       project: async () => ({
         body: JSON.stringify({ evidence: 'exact protected source', turn, organized }),
         images: [],
         history: [...logical],
         segment: { id: 'same-work-set', index: 1, revision: 1, turns: turn + 1, faults: 0 },
       }),
+
       delta: (body) => body,
+
       reconcile: async (body, _history, previous) => ({
         body,
         prompt: `${previous ? 'delta' : 'full'} ${body}`,
       }),
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
+      policy: { windowTokens: 10000 },
+
       acknowledge: async () => {
         acknowledged++
       },
     }
+
     f.options.model.estimate = async (request) => {
       const states = (request.history ?? []).filter(
         (m) => typeof m.content === 'string' && /^(full|delta) /u.test(m.content)
@@ -1432,8 +1610,7 @@ test('INV-48 visual turns preserve an accepted text prefix without accumulating 
   const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
   const requests: ModelTurnRequest[] = []
   let turn = 0
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     project: async () => ({
       body: JSON.stringify({ turn, stable: 'persistent text evidence' }),
       images: turn
@@ -1449,8 +1626,13 @@ test('INV-48 visual turns preserve an accepted text prefix without accumulating 
         : [],
       history: [...logical],
     }),
+
     delta: (body) => body,
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.model.stream = async function* (request) {
     requests.push(request)
     yield { type: 'text', text: 'accepted' }
@@ -1532,15 +1714,19 @@ test.each(
         precision: 'exact',
         basis: 'fixture',
       })
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       project: async () => ({
         body: JSON.stringify({ turn }),
         images: structuredClone(frames[turn]!),
         history: [...logical],
       }),
+
       delta: (body, previous) => `delta ${JSON.parse(previous).turn} -> ${JSON.parse(body).turn}`,
+    })
+    f.options.frames = {
+      ...f.options.frames,
     }
+
     f.options.model.stream = async function* (request) {
       requests.push(request)
       yield { type: 'text', text: 'accepted' }
@@ -1630,14 +1816,19 @@ test('INV-48 cancellation during local frame accounting cannot dispatch or ackno
   let calls = 0
   let acknowledgements = 0
   let executed = 0
+  Object.assign(f.frame, {
+    project: async () => ({ body: '{}', images: [], history: [] }),
+
+    delta: () => 'delta',
+  })
   f.options.frames = {
     ...f.options.frames,
-    project: async () => ({ body: '{}', images: [], history: [] }),
-    delta: () => 'delta',
+
     acknowledge: async () => {
       acknowledgements++
     },
   }
+
   f.options.model.estimate = async (request) => {
     if (executed && !request.history?.length) {
       cancel.abort()
@@ -1686,8 +1877,7 @@ test.each([
   ]
   let turn = 0
   const requests: ModelHistoryMessage[][] = []
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     async project() {
       return {
         body: JSON.stringify({ turn }),
@@ -1696,10 +1886,15 @@ test.each([
         history: logical.map((item) => ({ ...item })),
       }
     },
+
     delta() {
       return `delta frame ${turn}`
     },
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.protocol = {
     open: () => ({
       instructions: 'fixture',
@@ -1758,30 +1953,41 @@ test.each([
     let acknowledgements = 0
     const requests: Array<Parameters<NonNullable<typeof f.options.frames.acknowledge>>[0]> = []
     const calls: Array<{ previous?: string; retained: boolean; body: string }> = []
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       async project() {
         return {
           body: JSON.stringify({ turn }),
+          dynamic: { id: 'unreconciled', text: 'discarded projection' },
           images: [],
           prompt: 'old prompt',
           history: logical,
         }
       },
+
       delta() {
         return 'old delta'
       },
+
       async reconcile(body, history, previous) {
         const retained = history.length > logical.length
         const resolved = JSON.stringify({ ...JSON.parse(body), retained })
         calls.push({ previous, retained, body: resolved })
-        return { body: resolved, prompt: `actual ${resolved}` }
+        return {
+          body: resolved,
+          prompt: `actual ${resolved}`,
+          dynamic: { id: `observation-${turn}`, text: `current-perception-${turn}` },
+        }
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
       async acknowledge(request) {
         acknowledgements++
         expect(request.compiledPrompt).toContain(request.materials[0]!.text)
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens: fallback && turn === 1 && (request.history?.length ?? 0) > logical.length ? 9500 : 1,
       precision: 'exact',
@@ -1820,6 +2026,14 @@ test.each([
       const last = requests.at(-1)!
       expect(JSON.parse(last.materials[0]!.text).retained).toBe(!fallback)
       expect(last.compiledPrompt).toContain(last.materials[0]!.text)
+      expect(last.dynamic).toEqual({ id: 'observation-1', text: 'current-perception-1' })
+      expect(JSON.stringify(last.history)).not.toContain('current-perception-')
+      expect(JSON.stringify(last.history)).not.toContain('synthetic protocol rejection')
+      if (repair) {
+        expect(requests[1]!.compiledPrompt).toBe(requests[0]!.compiledPrompt)
+        expect(requests[1]!.dynamic).toEqual(requests[0]!.dynamic)
+        expect(requests[1]!.protocol).toContain('synthetic protocol rejection')
+      }
       expect(
         calls.some((call) => call.previous === requests[0]!.materials[0]!.text && call.retained)
       ).toBe(true)
@@ -1874,46 +2088,11 @@ test('INV-35 accepted event persistence failure prevents execution and leaves a 
   await reopened.close()
 })
 
-test('INV-41 a run waits out the hourly model limit and continues; the total cap pauses it for the user', async () => {
-  const f = runFixture()
-  let refusals = 1
-  let exhausted = false
-  f.options.view = new Proxy(f.view, {
-    get(target, key) {
-      if (key === 'reserveModel')
-        return async (...args: Parameters<typeof target.reserveModel>) => {
-          if (exhausted) throw Object.assign(Error('budget'), { code: 'MODEL_BUDGET' })
-          if (refusals-- > 0)
-            throw Object.assign(Error('rate'), { code: 'MODEL_RATE', retryAfterMs: 5 })
-          return target.reserveModel(...args)
-        }
-      const value = Reflect.get(target, key)
-      return typeof value === 'function' ? value.bind(target) : value
-    },
-  })
-  const service = createActRunService(f.options)
-  const events = []
-  for await (const event of service.submit('work')) events.push(event)
-  expect(events).toContainEqual(expect.objectContaining({ type: 'throttled', retryAfterMs: 5 }))
-  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
-  exhausted = true
-  const paused = []
-  for await (const event of service.submit('more')) paused.push(event)
-  // 请求还没发出，输入保留给下一次运行；运行本身停在等待
-  expect(paused.some((event) => event.type === 'error')).toBe(true)
-  expect(paused.filter((event) => event.type === 'state').at(-1)).toMatchObject({
-    status: 'waiting',
-  })
-  expect(paused.at(-1)).toMatchObject({ type: 'input-retained' })
-  expect((await service.inspect()).status).toBe('waiting')
-  await service.close()
-})
-
 test('INV-42 fitting requests expose repeated material gaps to the main model without allocating paid maintenance', async () => {
   const f = runFixture()
   const reasons: string[] = []
   const overloads: Array<string | undefined> = []
-  f.options.frames.project = async () => ({
+  f.frame.project = async () => ({
     body: '{}',
     images: [],
     segment: { id: 'segment', index: 1, revision: 0, volumes: 0, turns: 4, faults: 3 },
@@ -2000,6 +2179,7 @@ test('INV-45 measured usage reaches the host and persisted response with reporte
     {
       type: 'usage',
       runId: expect.any(String),
+      requestId: expect.any(String),
       inputTokens: 900,
       outputTokens: 20,
       cacheReadTokens: 600,
@@ -2011,6 +2191,7 @@ test('INV-45 measured usage reaches the host and persisted response with reporte
   expect(plain).toEqual({
     type: 'usage',
     runId: expect.any(String),
+    requestId: expect.any(String),
     inputTokens: 900,
     outputTokens: 20,
   })
@@ -2246,6 +2427,74 @@ test('closing a consumer during thinking releases the view without accepting lat
   expect((await service.inspect()).status).toBe('cancelled')
   expect((await service.events()).some((item) => item.event.type === 'accepted')).toBe(false)
   await service.close()
+})
+
+test('interaction allocation cannot outlive its cancelled run or attach to the next run', async () => {
+  const f = runFixture()
+  const finish = Promise.withResolvers<void>()
+  const allocation = Promise.withResolvers<string>()
+  const allocating = Promise.withResolvers<void>()
+  const allocate = f.store.allocateReferenceId.bind(f.store)
+  const delayedId = await allocate('fault')
+  const open = f.options.protocol.open
+  f.options.protocol.open = () => ({
+    ...open(),
+    push: (text) => [{ type: 'text', text }],
+  })
+  f.options.model.stream = async function* () {
+    yield { type: 'text', text: 'preview' }
+    await finish.promise
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const events: Array<{ type: string; runId: string }> = []
+  const consume = async (
+    input: string,
+    started: ReturnType<typeof Promise.withResolvers<string>>
+  ) => {
+    for await (const event of service.submit(input)) {
+      events.push(event)
+      if (event.type === 'text') started.resolve(event.runId)
+    }
+  }
+  let running: Promise<void> | undefined
+  try {
+    const first = Promise.withResolvers<string>()
+    running = consume('first run', first)
+    const firstRunId = await first.promise
+    let delayNext = true
+    f.store.allocateReferenceId = (sessionId) => {
+      if (delayNext) {
+        delayNext = false
+        allocating.resolve()
+        return allocation.promise
+      }
+      return allocate(sessionId)
+    }
+    const rejected = service.request('input', 'old question', new AbortController().signal).then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    await allocating.promise
+    service.cancel()
+    await running
+
+    const second = Promise.withResolvers<string>()
+    running = consume('second run', second)
+    expect(await second.promise).not.toBe(firstRunId)
+    allocation.resolve(delayedId)
+    finish.resolve()
+    await running
+    expect(await rejected).toMatchObject({ name: 'AbortError' })
+    expect(events.some((event) => event.type === 'interaction')).toBe(false)
+    expect((await service.inspect()).pending).toEqual([])
+  } finally {
+    allocation.resolve(delayedId)
+    finish.resolve()
+    service.cancel()
+    await running
+    await service.close()
+  }
 })
 
 test('INV-36 a fault persisting a child result reaches wait even after the live slot has been released', async () => {
@@ -2563,38 +2812,37 @@ test('all cleanup stages are attempted when both execution and frame cleanup fai
   } catch (value) {
     error = value
   }
-  expect(error).toBeInstanceOf(AggregateError)
-  expect((error as AggregateError).errors).toHaveLength(2)
+  expect(error).toBeInstanceOf(AppError)
+  expect(error).toMatchObject({ code: 'UNAVAILABLE' })
+  expect((error as { errors: readonly unknown[] }).errors).toHaveLength(2)
+  expect((error as AppError).cause).toBeUndefined()
   expect(release).toBe(1)
   expect((await f.view.inspect())?.lease).toBeNull()
   await service.close()
 })
 
-test('steering during completion verification invalidates the old completion and delivers the new goal', async () => {
+test('steering during completion invalidates the old decision and delivers the new goal', async () => {
   const f = runFixture()
   let entered!: () => void
   let release!: () => void
   let checks = 0
   const checking = new Promise<void>((r) => (entered = r))
   const gate = new Promise<void>((r) => (release = r))
-  const service = createActRunService({
-    ...f.options,
-    completionVerifier: {
-      async verify() {
-        if (++checks === 1) {
-          entered()
-          await gate
-        }
-        return { verified: true, reason: 'fixture' }
-      },
-    },
-  })
+  const complete = f.view.complete.bind(f.view)
+  f.view.complete = async (...args) => {
+    if (++checks === 1) {
+      entered()
+      await gate
+    }
+    return complete(...args)
+  }
+  const service = createActRunService(f.options)
   const events = []
   const running = (async () => {
     for await (const event of service.submit('first')) events.push(event)
   })()
   await checking
-  await service.steer('new goal during verification')
+  await service.steer('new goal during completion')
   release()
   await running
   expect(checks).toBe(2)
@@ -2606,29 +2854,20 @@ test('steering during completion verification invalidates the old completion and
   await service.close()
 })
 
+const fixtureStores = new Set<ContextStorage>()
+afterEach(async () => {
+  for (const store of fixtureStores) await store.close()
+  fixtureStores.clear()
+})
+
 function storage(): ContextStorage {
-  const states = new Map<string, ContextState>()
-  const objects = new Map<string, string>()
-  return {
-    async load(id) {
-      return structuredClone(states.get(id) ?? null)
-    },
-    async compareAndSwap(id, version, next) {
-      if ((states.get(id)?.version ?? 0) !== version) return false
-      states.set(id, structuredClone(next))
-      return true
-    },
-    async put(id, text) {
-      const key = crypto.randomUUID()
-      objects.set(id + key, text)
-      return key
-    },
-    async get(id, key) {
-      return objects.get(id + key) ?? null
-    },
-    async close() {},
-  }
+  const store = localContextStorage({ path: ':memory:' })
+  // 故障注入会先保存 put 再覆盖；固定实例接收者。
+  store.put = store.put.bind(store)
+  fixtureStores.add(store)
+  return store
 }
+
 function child(block = false): ActChildSession {
   return {
     async *submit(_input, signal) {
@@ -2695,11 +2934,10 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
     text: 'continued',
     ref: { sessionId: 'child', id: 'accepted' },
   }
-  const verification = {
-    type: 'verification' as const,
+  const completion = {
+    type: 'completion' as const,
     runId: 'child',
     completed: false,
-    verified: false,
     reason: 'required input is unavailable',
   }
   for (const scenario of [
@@ -2711,7 +2949,7 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
       terminal: 'waiting' as const,
       diagnostic: 'no progress',
     },
-    { events: [verification], terminal: 'failed' as const, diagnostic: verification.reason },
+    { events: [completion], terminal: 'failed' as const, diagnostic: completion.reason },
     {
       events: [
         error,
@@ -2726,7 +2964,7 @@ test('child stop diagnostics remain visible after event eviction and reopen, and
     },
     { events: [error, accepted], terminal: 'waiting' as const, diagnostic: undefined },
     {
-      events: [verification, { ...verification, completed: true, verified: true }],
+      events: [completion, { ...completion, completed: true }],
       terminal: 'waiting' as const,
       diagnostic: undefined,
     },
@@ -2841,6 +3079,82 @@ test('INV-31 child quota and parent identity survive reopen and resume does not 
     expect(ids).toEqual([job.sessionId, job.sessionId])
   } finally {
     await next.close()
+  }
+})
+test('INV-31 equal short child ids keep independent parent lifecycles and failure accounts', async () => {
+  const store = storage()
+  const references = new Map<string, number>()
+  store.allocateReferenceId = async (sessionId) => {
+    const next = (references.get(sessionId) ?? 0) + 1
+    references.set(sessionId, next)
+    return next.toString(16).padStart(8, '0')
+  }
+  const finishes = new Map<string, () => void>()
+  const failures = new Map([
+    ['fail-a', new AppError('UNAVAILABLE', 'parent a cleanup failed')],
+    ['fail-b', new AppError('UNAVAILABLE', 'parent b cleanup failed')],
+  ])
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 2,
+    maxChildren: 2,
+    async open(job) {
+      let finish!: () => void
+      const ending = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      finishes.set(job.parentSessionId, finish)
+      return {
+        ...child(),
+        async *submit(_input, signal) {
+          yield { type: 'state', runId: job.sessionId, status: 'thinking' }
+          await ending
+          yield {
+            type: 'state',
+            runId: job.sessionId,
+            status: signal?.aborted ? 'cancelled' : 'completed',
+          }
+        },
+        cancel: finish,
+        async close() {
+          const failure = failures.get(job.profile)
+          if (failure) throw failure
+        },
+      }
+    },
+  })
+  const signal = new AbortController().signal
+  try {
+    const a = await supervisor.start('a', { task: 'first', profile: 'read' }, signal)
+    const b = await supervisor.start('b', { task: 'second', profile: 'fail-b' }, signal)
+    expect(a.id).toBe('00000001')
+    expect(b.id).toBe(a.id)
+    expect(a.sessionId).not.toBe(b.sessionId)
+    finishes.get('a')!()
+    expect((await supervisor.wait('a', a.id, signal)).status).toBe('completed')
+    expect((await supervisor.status('b', b.id)).status).toBe('running')
+    expect((await supervisor.status('a', a.id)).status).toBe('completed')
+    await supervisor.resume('a', a.id, { input: 'fail independently', profile: 'fail-a' }, signal)
+    finishes.get('a')!()
+    await expect(supervisor.wait('a', a.id, signal)).rejects.toBe(failures.get('fail-a'))
+    expect((await supervisor.status('b', b.id)).status).toBe('running')
+    finishes.get('b')!()
+    await expect(supervisor.wait('b', b.id, signal)).rejects.toBe(failures.get('fail-b'))
+    await expect(supervisor.wait('a', a.id, signal)).rejects.toBe(failures.get('fail-a'))
+    // 清掉 a 的失败账不能同时清掉同短 id 的 b；随后两者各自恢复。
+    for (const [parent, job] of [
+      ['a', a],
+      ['b', b],
+    ] as const) {
+      await supervisor.resume(parent, job.id, { input: 'recover', profile: 'read' }, signal)
+      finishes.get(parent)!()
+      expect((await supervisor.wait(parent, job.id, signal)).status).toBe('completed')
+      if (parent === 'a')
+        await expect(supervisor.wait('b', b.id, signal)).rejects.toBe(failures.get('fail-b'))
+    }
+  } finally {
+    for (const finish of finishes.values()) finish()
+    await supervisor.close()
   }
 })
 test('INV-32 parent cancellation reaches children and leaves a readable partial result', async () => {
@@ -3534,8 +3848,7 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
   const requests: Array<ReturnType<typeof modelRequestEncoder.messages>> = []
   const deltas: Array<{ body: string; previous: string }> = []
   f.options.limits = { ...f.options.limits, turns: 8 }
-  f.options.frames = {
-    ...f.options.frames,
+  Object.assign(f.frame, {
     async project() {
       const body = JSON.stringify({ turn, stable: 'same' })
       return {
@@ -3547,11 +3860,16 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
         ),
       }
     },
+
     delta(body, previous) {
       deltas.push({ body, previous })
       return `delta frame ${JSON.parse(body).turn}`
     },
+  })
+  f.options.frames = {
+    ...f.options.frames,
   }
+
   f.options.protocol = {
     open: () => ({
       instructions: 'fixture',
@@ -3614,8 +3932,7 @@ test.each(['available', 'forecast', 'capacity'] as const)(
     const requests: ModelTurnRequest[] = []
     let turn = 0
     let reclaimed = 0
-    f.options.frames = {
-      ...f.options.frames,
+    Object.assign(f.frame, {
       async project() {
         return {
           body: JSON.stringify({ evidence, turn }),
@@ -3624,18 +3941,25 @@ test.each(['available', 'forecast', 'capacity'] as const)(
           history: [...logical],
         }
       },
+
       delta() {
         return `Current step ${turn}; evidence is in the retained history.`
       },
+    })
+    f.options.frames = {
+      ...f.options.frames,
+
       async retire() {
         reclaimed++
         return false
       },
+
       async fold() {
         reclaimed++
         return false
       },
     }
+
     f.options.model.estimate = async (request) => ({
       tokens:
         mode === 'capacity' && turn === 1 && (request.history?.length ?? 0) > logical.length
@@ -3704,7 +4028,7 @@ test.each(['available', 'forecast', 'capacity'] as const)(
   }
 )
 
-test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
+test.each(['fits', 'overflow', 'window', 'provider-reject', 'timeout', 'abort'] as const)(
   'INV-50 protocol repair preserves calibrated admission and execution boundaries: %s',
   async (mode) => {
     const f = runFixture()
@@ -3714,24 +4038,25 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
     let folded = false
     let folds = 0
     let abortTimer: Optional<ReturnType<typeof setTimeout>>
-    const sent: string[] = []
+    const sent: ModelTurnRequest[] = []
     f.options.limits = { ...f.options.limits, timeoutMs: mode === 'timeout' ? 100 : 2000 }
+    if (mode === 'window') f.options.frames.policy = { windowTokens: 2000 }
     f.options.model.estimate = async (request) => {
-      const repair = request.compiledPrompt?.includes('本帧上次响应未通过校验')
+      const repair = request.protocol?.includes('本帧上次响应未通过校验')
       if (repair && (mode === 'timeout' || mode === 'abort')) {
         if (mode === 'abort') abortTimer = setTimeout(() => controller.abort(), 20)
         return new Promise(() => {})
       }
+      const repairTokens = mode === 'overflow' ? 120000 : mode === 'window' ? 30000 : 12020
       return {
-        tokens:
-          folded || executed === 0 ? 1000 : repair ? (mode === 'overflow' ? 120000 : 12020) : 12000,
+        tokens: folded || executed === 0 ? 1000 : repair ? repairTokens : 12000,
         precision: 'estimate',
         basis: 'synthetic repair estimate',
       }
     }
     f.options.model.stream = async function* (request) {
       calls++
-      sent.push(request.compiledPrompt!)
+      sent.push(request)
       if (mode === 'provider-reject' && calls === 2) {
         yield { type: 'error', code: 'context-limit', message: 'synthetic provider rejection' }
         return
@@ -3782,8 +4107,10 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
       )
       // The rejected response cannot be executed or become repair history.
       expect(executed).toBe(1)
-      expect(sent.every((prompt) => !prompt.includes('unaccepted response'))).toBe(true)
-      expect(requests[1].estimate.tokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
+      expect(
+        JSON.stringify(sent.map((request) => modelRequestEncoder.messages(request)))
+      ).not.toContain('unaccepted response')
+      expect(requests[1].requestAudit.inputTokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
       expect(responses[1].status).toBe('rejected')
       if (mode !== 'provider-reject')
         expect(responses[1].usage).toEqual({ inputTokens: 1000, outputTokens: 1 })
@@ -3793,16 +4120,16 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
         // The learned growth is 900 / 11000 with a separately rounded fixed reserve.
         const slope = (1000 - 100) / (12000 - 1000)
         const overhead = Math.ceil((100 - slope * 1000) * 1.1)
-        expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
-        expect(requests[2].request.compiledPrompt).toContain('synthetic invalid intent')
+        expect(requests[2].requestAudit.inputTokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
+        expect(sent[2]!.protocol).toContain('synthetic invalid intent')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
-      } else if (mode === 'overflow') {
+      } else if (mode === 'overflow' || mode === 'window') {
         expect(calls).toBe(2)
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'context_blocked' })
       } else if (mode === 'provider-reject') {
         expect(calls).toBe(3)
         expect(folds).toBe(1)
-        expect(requests[2].estimate.basis).not.toContain('校准')
+        expect(requests[2].requestAudit.basis).not.toContain('校准')
         expect(responses[1]).not.toHaveProperty('usage')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       } else {
@@ -3919,6 +4246,7 @@ test('frame cycle tries local budgets but publishes only its selected final body
   f.options.frames.beginFrame = async () => {
     preparations++
     return {
+      retainFrames: false,
       project: async (maxChars) => {
         budgets.push(maxChars)
         return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
@@ -3929,7 +4257,7 @@ test('frame cycle tries local budgets but publishes only its selected final body
       },
     }
   }
-  f.options.frames.project = async () => {
+  f.frame.project = async () => {
     throw Error('legacy projection must not run')
   }
   f.options.model.estimate = async (request) => ({

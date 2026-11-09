@@ -53,7 +53,11 @@ import {
   type BrowserWebAuthnAccountSelectionRequest,
   type ElectronBrowserRuntimeOptions,
 } from '../../types/electron'
-import type { BrowserPopupBootstrapLease, BrowserSessionLookup } from '../../types/electron.js'
+import type {
+  BrowserPopupBootstrapLease,
+  BrowserSessionLookup,
+  WebContentsListener,
+} from '../../types/electron.js'
 import { browserUserActivityConsolePrefix } from '../../utils/electron/sessions'
 import {
   formatKeyboardActivityDetail,
@@ -62,7 +66,6 @@ import {
   readUserActivityKind,
 } from '../../utils/electron/sessions'
 import {
-  asBrowserDialogEventSource,
   buildBrowserPopupWindowOptions,
   buildBrowserUserActivityBridgeScript,
   isNamedPopupFrame,
@@ -131,6 +134,8 @@ export interface BrowserSessionManagerApi {
 class BrowserSessionManager implements BrowserSessionManagerApi {
   /** 当前活跃浏览器会话。 */
   private readonly sessions = new Map<string, BrowserSession>()
+  /** 只撤销本次挂接安装的页面监听，不触碰宿主自己的监听器。 */
+  private readonly webContentsBindings = new Map<string, () => void>()
   /** 主框架加载失败记录，用于过滤失败后紧跟的 did-finish-load 噪音。 */
   private readonly failedMainFrameNavigations = new Map<
     string,
@@ -149,7 +154,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }>
   >()
   /** 已经在向宿主要后台页面的会话：同一个会话的多个等待者只要一次。 */
-  private readonly backgroundPageRequests = new Set<string>()
+  private readonly backgroundPageRequests = new Map<string, symbol>()
   /** Electron Session 是共享对象，下载/权限监听只安装一次。 */
   private readonly instrumentedElectronSessions = new WeakSet<electron.Session>()
   /** 权限 gateway 的反注册函数，runtime 终止时不得留下指向已释放 broker 的 handler。 */
@@ -286,13 +291,15 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   private requestBackgroundPage(sessionId: string): void {
     const provide = this.callbacks.provideBackgroundPage
     if (!provide || this.backgroundPageRequests.has(sessionId)) return
-    this.backgroundPageRequests.add(sessionId)
+    const generation = Symbol(sessionId)
+    this.backgroundPageRequests.set(sessionId, generation)
     this.timers.after(
       BrowserTuning.session.backgroundPageGraceMs,
       () => {
-        void this.adoptBackgroundPage(sessionId, provide).finally(() =>
-          this.backgroundPageRequests.delete(sessionId)
-        )
+        void this.adoptBackgroundPage(sessionId, provide, generation).finally(() => {
+          if (this.backgroundPageRequests.get(sessionId) === generation)
+            this.backgroundPageRequests.delete(sessionId)
+        })
       },
       { label: 'browser.session.backgroundPage' }
     )
@@ -304,8 +311,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
    */
   private async adoptBackgroundPage(
     sessionId: string,
-    provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>
+    provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>,
+    generation: symbol
   ): Promise<void> {
+    if (this.backgroundPageRequests.get(sessionId) !== generation) return
     if (this.getSession(sessionId) || isEmpty(this.attachWaiters.get(sessionId) ?? [])) return
     let page: Nullable<BrowserBackgroundPage>
     try {
@@ -317,7 +326,14 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       })
       return
     }
-    if (!page || page.webContents.isDestroyed() || this.getSession(sessionId)) return
+    if (
+      !page ||
+      page.webContents.isDestroyed() ||
+      this.getSession(sessionId) ||
+      this.backgroundPageRequests.get(sessionId) !== generation ||
+      isEmpty(this.attachWaiters.get(sessionId) ?? [])
+    )
+      return
 
     const waiters = this.attachWaiters.get(sessionId) ?? []
     this.attachWaiters.delete(sessionId)
@@ -350,6 +366,8 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }
 
     this.closePopupBootstraps(sessionId)
+    this.webContentsBindings.get(sessionId)?.()
+    this.webContentsBindings.delete(sessionId)
 
     const currentUrl = webContents.getURL()
     // about:blank 不能覆盖已有会话 URL，否则会丢失 site context。
@@ -372,7 +390,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
 
     this.sessions.set(sessionId, session)
     this.installElectronSessionEventHandlers(webContents.session)
-    this.bindWebContentsEvents(sessionId, session, webContents)
+    this.webContentsBindings.set(
+      sessionId,
+      this.bindWebContentsEvents(sessionId, session, webContents)
+    )
     this.resolveAttachWaiters(sessionId, session)
 
     return session
@@ -381,13 +402,14 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   /** 关闭并清理某个浏览器会话。 */
   public closeSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
+    this.webContentsBindings.get(sessionId)?.()
+    this.webContentsBindings.delete(sessionId)
     this.closePopupBootstraps(sessionId)
-    if (!session) return
-
+    this.backgroundPageRequests.delete(sessionId)
     this.sessions.delete(sessionId)
     this.failedMainFrameNavigations.delete(sessionId)
     this.pendingEvents.clearSession(sessionId)
-    void this.clearWebContents(session.webContents)
+    if (session) void this.clearWebContents(session.webContents)
     this.rejectAttachWaiters(sessionId, new AppError('VALIDATION', '浏览器页面会话已关闭。'))
     this.callbacks.onSessionClosed?.(sessionId)
   }
@@ -409,6 +431,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       })
     })
     this.attachWaiters.clear()
+    this.backgroundPageRequests.clear()
     this.pendingEvents.clearAll()
   }
 
@@ -923,19 +946,29 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     sessionId: string,
     session: BrowserSession,
     webContents: electron.WebContents
-  ): void {
-    const isCurrentWebContents = (): boolean =>
-      this.sessions.get(sessionId)?.webContents === webContents
+  ): () => void {
+    const disposers: Array<() => void> = []
+    const events = webContents as unknown as {
+      on(eventName: string, listener: WebContentsListener): void
+      off(eventName: string, listener: WebContentsListener): void
+    }
+    const listen = (eventName: string, listener: WebContentsListener): void => {
+      events.on(eventName, listener)
+      disposers.push(() => events.off(eventName, listener))
+    }
+    const isCurrentWebContents = (): boolean => this.sessions.get(sessionId) === session
 
     webContents.setWindowOpenHandler((details) =>
       this.handleWindowOpenRequest(sessionId, session, webContents, details)
     )
-    webContents.on('did-create-window', (popupWindow, details) => {
+    listen('did-create-window', (popupWindow, details) => {
+      if (!isCurrentWebContents()) {
+        if (!popupWindow.isDestroyed()) popupWindow.destroy()
+        return
+      }
       this.bindPopupBootstrapWindow(sessionId, session, webContents, popupWindow, details)
     })
-    const dialogEvents = asBrowserDialogEventSource(webContents)
-
-    dialogEvents.on('dialog', (_event, details, callback) => {
+    listen('dialog', (_event, details, callback) => {
       if (!isCurrentWebContents()) {
         callback(false)
         return
@@ -985,13 +1018,13 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         },
       })
     })
-    webContents.on('dom-ready', () => {
+    listen('dom-ready', () => {
       if (!isCurrentWebContents()) return
 
       // 页面侧只观察活动，不再捕获/改写 click 或 window.open；新窗口策略由主进程唯一持有。
       void this.installUserActivityBridge(sessionId, webContents)
     })
-    webContents.on('before-input-event', (_event, input) => {
+    listen('before-input-event', (_event, input) => {
       if (!isCurrentWebContents()) return
       if (!input || (input.type !== 'keyDown' && input.type !== 'rawKeyDown')) return
 
@@ -1000,12 +1033,12 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         detail: formatKeyboardActivityDetail(input),
       })
     })
-    webContents.on('did-start-navigation', (_event, url, _isInPlace, isMainFrame) => {
+    listen('did-start-navigation', (_event, url, _isInPlace, isMainFrame) => {
       if (!isCurrentWebContents() || !isMainFrame) return
 
       this.clearFailedNavigationIfDifferent(sessionId, url)
     })
-    webContents.on('did-navigate', (_event, url, httpResponseCode) => {
+    listen('did-navigate', (_event, url, httpResponseCode) => {
       if (!isCurrentWebContents()) return
       if (isPlaceholderUrl(url)) return
 
@@ -1023,40 +1056,36 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         session.lastNavigationError = null
       }
     })
-    webContents.on(
-      'did-fail-load',
-      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-        if (!isCurrentWebContents()) return
+    listen('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isCurrentWebContents()) return
+      if (!isMainFrame) return
 
-        // B3: did-fail-load (-3=ERR_ABORTED 用户取消，忽略)
-        if (errorCode !== -3) {
-          session.lastNavigationError = {
-            url: validatedURL || session.url || '',
-            errorCode,
-            errorDescription: errorDescription || `error ${errorCode}`,
-            failedAt: Date.now(),
-          }
+      // B3: did-fail-load (-3=ERR_ABORTED 用户取消，忽略)
+      if (errorCode !== -3) {
+        session.lastNavigationError = {
+          url: validatedURL || session.url || '',
+          errorCode,
+          errorDescription: errorDescription || `error ${errorCode}`,
+          failedAt: Date.now(),
         }
-
-        if (!isMainFrame) return
-
-        if (errorCode !== -3) {
-          this.rememberFailedMainFrameNavigation(sessionId, validatedURL || session.url || '')
-        }
-
-        this.diagnostics.record(session, {
-          kind: 'load-error',
-          level: 'error',
-          message: errorDescription || `页面加载失败，错误码 ${errorCode}`,
-          url: validatedURL || webContents.getURL() || null,
-          line: null,
-          column: null,
-          code: errorCode,
-          capturedAt: Date.now(),
-        })
       }
-    )
-    webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+
+      if (errorCode !== -3) {
+        this.rememberFailedMainFrameNavigation(sessionId, validatedURL || session.url || '')
+      }
+
+      this.diagnostics.record(session, {
+        kind: 'load-error',
+        level: 'error',
+        message: errorDescription || `页面加载失败，错误码 ${errorCode}`,
+        url: validatedURL || webContents.getURL() || null,
+        line: null,
+        column: null,
+        code: errorCode,
+        capturedAt: Date.now(),
+      })
+    })
+    listen('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (!isCurrentWebContents()) return
       if (isPlaceholderUrl(url)) return
 
@@ -1071,7 +1100,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         this.notifyPageReady(sessionId, url)
       }
     })
-    webContents.on('did-finish-load', () => {
+    listen('did-finish-load', () => {
       if (!isCurrentWebContents()) return
 
       const currentUrl = webContents.getURL()
@@ -1086,7 +1115,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         this.notifyPageReady(sessionId, currentUrl)
       }
     })
-    webContents.on('console-message', (details) => {
+    listen('console-message', (details) => {
       if (!isCurrentWebContents()) return
       if (this.tryRecordConsoleUserActivity(sessionId, details.message, details.sourceId)) return
       if (!this.diagnostics.shouldRecordConsoleMessage(details.message, details.sourceId)) return
@@ -1102,7 +1131,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         capturedAt: Date.now(),
       })
     })
-    webContents.on('render-process-gone', (_event, details) => {
+    listen('render-process-gone', (_event, details) => {
       if (!isCurrentWebContents()) return
 
       this.diagnostics.record(session, {
@@ -1116,13 +1145,20 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         capturedAt: Date.now(),
       })
     })
-    webContents.on('destroyed', () => {
+    listen('destroyed', () => {
       if (isCurrentWebContents()) {
+        this.webContentsBindings.get(sessionId)?.()
+        this.webContentsBindings.delete(sessionId)
         this.sessions.delete(sessionId)
         this.failedMainFrameNavigations.delete(sessionId)
         this.closePopupBootstraps(sessionId)
+        this.pendingEvents.clearSession(sessionId)
       }
     })
+    return () => {
+      for (const dispose of disposers) dispose()
+      if (!webContents.isDestroyed()) webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    }
   }
 
   /** 安装 Electron Session 级事件：下载、权限请求和 WebAuthn 账号选择。 */
@@ -1138,7 +1174,11 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     this.electronSessionEventDisposers.add(() => {
       electronSession.off('select-webauthn-account', this.handleWebAuthnAccountSelection)
     })
-    electronSession.on('will-download', (_event, item, downloadWebContents) => {
+    const onDownload = (
+      _event: electron.Event,
+      item: electron.DownloadItem,
+      downloadWebContents: electron.WebContents
+    ): void => {
       const lookup = this.findSessionByWebContents(downloadWebContents)
       if (!lookup) {
         if (downloadWebContents && this.popupSessionOwners.has(downloadWebContents)) {
@@ -1199,7 +1239,9 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
           },
         })
       })
-    })
+    }
+    electronSession.on('will-download', onDownload)
+    this.electronSessionEventDisposers.add(() => electronSession.off('will-download', onDownload))
 
     const unregisterPermissionHandler = this.callbacks.registerPermissionRequestHandler?.(
       electronSession,
@@ -1318,26 +1360,6 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         callback(granted)
       },
     })
-  }
-
-  private resolvePermissionRequest(input: {
-    sessionId: string
-    permission: string
-    url: Nullable<string>
-    requestingUrl: Nullable<string>
-    embeddingOrigin: Nullable<string>
-  }): boolean {
-    try {
-      return isTrue(this.callbacks.resolvePermissionRequest?.(input))
-    } catch (error) {
-      this.log.warn('浏览器权限策略执行失败，默认拒绝权限请求', {
-        sessionId: input.sessionId,
-        permission: input.permission,
-        url: input.url,
-        error: AppError.from(error).message,
-      })
-      return false
-    }
   }
 
   private resolveUnmanagedPermissionRequest(input: BrowserUnmanagedPermissionRequest): boolean {

@@ -1,8 +1,8 @@
 {
   "name": "@velaros-ai/kernel",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
   "license": "Apache-2.0",

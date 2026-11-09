@@ -44,7 +44,7 @@ export const downloaded = await saveDownload()
     expect(values.dragged).toEqual({ url: 'https://example.com/', x: 300, y: 200, buttons: [] })
     expect(values.selected).toEqual({ url: 'https://example.com/', key: 'Shift', held: [] })
     expect(values.framed).toBe('iframe 里的正文')
-    expect(values.downloaded).toEqual({ saved: true, path: 'downloads/report.pdf' })
+    expect(values.downloaded).toEqual({ accepted: true, path: 'downloads/report.pdf' })
 
     // fill 走真实输入：页面里全选、宿主插入文字、再读一次控件状态；下拉框的值经 args 传进页面脚本，没有拼进源码。
     const actions = harness.calls

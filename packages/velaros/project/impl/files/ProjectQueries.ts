@@ -96,7 +96,6 @@ export interface ProjectQueriesDependencies {
 
 export class ProjectQueries implements ProjectQueriesApi {
   private targets = new Map<string, ResolvedTarget>()
-  private evidence = new Map<string, EvidencePack>()
   constructor(private readonly dependencies: ProjectQueriesDependencies) {}
 
   /** 扫描工作区并返回文件快照列表。 */
@@ -155,6 +154,7 @@ export class ProjectQueries implements ProjectQueriesApi {
     const allowRg = this.dependencies.policy.enableRipgrepSearch && (processed.useRipgrep ?? true)
 
     if (allowRg) {
+      let providerResult: SearchResult | undefined
       try {
         const textKinds = await this.classifySearchFiles(authorizedProcessed)
         const rgResult = await searchWithRipgrep({
@@ -226,7 +226,7 @@ export class ProjectQueries implements ProjectQueriesApi {
             rgResult.hits.length >= maxResults ||
             enriched.length >= maxResults
           hits = enriched.slice(0, maxResults)
-          const result: SearchResult = {
+          providerResult = {
             query: authorizedProcessed.query,
             hits,
             truncated,
@@ -234,17 +234,19 @@ export class ProjectQueries implements ProjectQueriesApi {
             diagnostics: rgResult.diagnostics,
             toolRequirements,
           }
-          await this.dependencies.emit('AfterSearch', result)
-          this.dependencies.journal.record({
-            actor: 'system',
-            action: 'search',
-            outputSummary: `${result.hits.length} hits`,
-            inputSummary: `${authorizedProcessed.query} [rg]`,
-          })
-          return result
         }
       } catch {
         // arch-guard:silent-catch-ok ripgrep 搜索失败时按设计回退到 adapter 搜索。
+      }
+      if (providerResult) {
+        await this.dependencies.emit('AfterSearch', providerResult)
+        this.dependencies.journal.record({
+          actor: 'system',
+          action: 'search',
+          outputSummary: `${providerResult.hits.length} hits`,
+          inputSummary: `${authorizedProcessed.query} [rg]`,
+        })
+        return providerResult
       }
     }
 
@@ -470,6 +472,7 @@ export class ProjectQueries implements ProjectQueriesApi {
     const symbolName = authorizedInput.target?.symbol?.name
     // 只有宿主显式启用代码智能时才查询定义，否则回退 adapter resolveTarget。
     if (codeIntel?.isProjectEnabled(this.dependencies.root) && symbolName) {
+      let target: ResolvedTarget | undefined
       try {
         const lineHint = authorizedInput.target?.lineHint
         const locations = await codeIntel.getDefinition({
@@ -481,7 +484,7 @@ export class ProjectQueries implements ProjectQueriesApi {
         })
         const match = locations[0]
         if (match) {
-          const target: ResolvedTarget = {
+          target = {
             targetId: `code-intel:${match.nodeId ?? match.path}:${match.line}`,
             path: match.path,
             kind: 'symbol',
@@ -503,13 +506,16 @@ export class ProjectQueries implements ProjectQueriesApi {
             expectedMatches: authorizedInput.expectedMatches ?? 1,
             adapterId: 'code-intelligence',
           }
-          this.targets.set(target.targetId, target)
-          const resolved = { status: 'resolved' as const, target }
-          await this.dependencies.emit('AfterResolve', resolved)
-          return resolved
         }
       } catch {
         // arch-guard:silent-catch-ok 代码智能解析失败时回退 adapter resolveTarget。
+      }
+      if (target) {
+        this.targets.set(target.targetId, target)
+        capInsertionOrderedMap(this.targets, ProjectTuning.queries.retainedTargets)
+        const resolved = { status: 'resolved' as const, target }
+        await this.dependencies.emit('AfterResolve', resolved)
+        return resolved
       }
     }
     const adapters = await this.dependencies.createAdapters(snap)
@@ -653,8 +659,6 @@ export class ProjectQueries implements ProjectQueriesApi {
         evidenceId: (sanitizedByContextProvider as EvidencePack).evidenceId ?? evidenceId,
       }
     }
-    this.evidence.set(evidenceId, pack)
-    capInsertionOrderedMap(this.evidence, ProjectTuning.queries.retainedEvidence)
     this.dependencies.journal.record({
       actor: 'system',
       action: 'build_evidence',

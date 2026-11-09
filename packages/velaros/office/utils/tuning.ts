@@ -46,8 +46,6 @@ export const OfficeTuning = Object.freeze({
   }),
   /** PowerPoint 生成。 */
   presentation: Object.freeze({
-    /** 自动拆页时单页正文最多多少字符，再多就会溢出版心。 */
-    slideBodyChars: 2_800,
     /** 宽屏版心宽度，英寸。 */
     slideWidthInches: 13.333,
     /** 宽屏版心高度，英寸。 */

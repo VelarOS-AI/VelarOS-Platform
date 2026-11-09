@@ -65,7 +65,7 @@ function dragMiss() {
   }
 }
 
-test('inspection refs are generation-scoped, fail closed, and keep stored targets authoritative', () => {
+test('INV-31 inspection refs are generation-scoped, fail closed, and keep stored targets authoritative', () => {
   const store = new BrowserTargetRefStore()
   const save = target({ ref: '@e1', css: '#save', role: 'button', text: 'Save' })
   const cancel = target({ ref: '@e2', css: '#cancel', role: 'button', text: 'Cancel' })
@@ -93,7 +93,11 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
     '- button "Cancel" (ref=@e2:g1)',
     'custom ref=@e10:g1; state=ready',
   ])
-  assert.equal(store.hydrateTarget('session', target({ ref: '@e1' })).css, '#save')
+  assert.equal(store.hydrateTarget('session', target({ ref: '@e1:g1' })).css, '#save')
+  assert.throws(
+    () => store.hydrateTarget('session', target({ ref: '@e1' })),
+    (error) => error?.context?.reason === 'stale-ref'
+  )
 
   const removeAccount = target({
     ref: '@e1',
@@ -151,6 +155,22 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
     store.hydrateTarget('session', target({ css: '#independent-target' })).css,
     '#independent-target'
   )
+})
+
+test('closing all sessions keeps previously issued ref generations retired when the runtime is reused', () => {
+  const store = new BrowserTargetRefStore()
+  const first = target({ ref: '@e1', css: '#first' })
+  store.storeTargets('session', [first])
+  const retired = first.ref
+  store.clearAll()
+  const next = target({ ref: '@e1', css: '#next' })
+  store.storeTargets('session', [next])
+  assert.notEqual(next.ref, retired)
+  assert.throws(
+    () => store.hydrateTarget('session', target({ ref: retired })),
+    (error) => error?.context?.reason === 'stale-ref'
+  )
+  assert.equal(store.hydrateTarget('session', target({ ref: next.ref })).css, '#next')
 })
 
 test('snapshot only publishes refs retained by the final target collection', () => {

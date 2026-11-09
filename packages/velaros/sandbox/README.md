@@ -16,14 +16,15 @@ declare const approval: ApprovalPort
 // 作用域由宿主定：交回绝对路径，不给就是这个空间的根，越界抛 PERMISSION
 declare function resolveSystemPath(path?: string): string
 
-// 空间端口 = 本机沙箱的五件 + 这个空间的作用域
+// 空间端口转发本机沙箱与只读元数据，并补充这个空间的作用域
 const host = createLocalSandboxHost()
 const sandbox: SandboxSurfacePort = {
-  createSandbox: (options) => host.createSandbox(options),
+  getSandboxRecord: (id, signal) => host.getSandboxRecord(id, signal),
+  createSandbox: (options, signal) => host.createSandbox(options, signal),
   runInSandbox: (options, abortSignal) => host.runInSandbox(options, abortSignal),
-  diffSandbox: (options) => host.diffSandbox(options),
-  applySandbox: (options) => host.applySandbox(options),
-  discardSandbox: (sandboxId) => host.discardSandbox(sandboxId),
+  diffSandbox: (options, signal) => host.diffSandbox(options, signal),
+  applySandbox: (options, signal) => host.applySandbox(options, signal),
+  discardSandbox: (sandboxId, signal) => host.discardSandbox(sandboxId, signal),
   resolveSource: async (source) => resolveSystemPath(source),
 }
 
@@ -60,4 +61,5 @@ export const sandboxModule = createCapabilityModule({
 - 镜像里的危险命令照 execution 宿主的判定经 `approval` 问，被拒就抛错、不起进程；`apply` 不问用户。
 - `apply` 先按完整差量核对再落：点名了没变化的路径抛 `VALIDATION`，源目录自建沙箱以来变过抛 `SANDBOX_CONFLICT`，镜像在核对之后又变过抛 `SANDBOX_CHANGED`，三种都是一个文件都没写；落到一半出错时错误的 `context.applied` 点名已落的路径；`.git` 的变化永远不落。
 - 同时最多 `RehearsalSandboxLimits.sandboxes` 个沙箱，源目录超过 `RehearsalSandboxLimits.files` 个文件或 `RehearsalSandboxLimits.bytes` 字节建不出；差量与输出不折叠，只守内存上限，超出的点名没附差量或标 `truncated`。
-- 镜像落在沙箱基目录（缺省是系统临时目录下的 `velaros-sandbox`），宿主重启后按 id 从清单重新认出；`dispose()` 只停镜像里的进程、保留镜像，删镜像要 `discard`。
+- 镜像落在沙箱基目录（缺省是系统临时目录下的 `velaros-sandbox`），宿主重启后只读取当前格式清单，普通文件必须带完整内容版本，旧格式明确拒绝。活动句柄的源与镜像身份不随磁盘清单改写；只读元数据用于每次调用重新核权。
+- `dispose()` 关闭准入并等待已有操作与自有进程真实收尾，保留镜像；清理未完成则抛错并保留 owner 供重试。删镜像要 `discard`，只有操作和进程都排空才删除。

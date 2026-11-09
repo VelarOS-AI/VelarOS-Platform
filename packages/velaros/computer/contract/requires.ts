@@ -140,19 +140,19 @@ export interface ComputerSidecarProcess {
      */
     on?(event: 'error', listener: (error: Error) => void): void
   }
-  /** helper 的应答流，一行一帧。 */
+  /** helper 的 UTF-8 应答流，一行一帧。 */
   stdout: {
     /** 订阅应答数据；行的切分由调用方自己做。 */
     on(event: 'data', listener: (chunk: Buffer | string) => void): void
   }
-  /** helper 的诊断流，只留尾部给启动失败当 detail。 */
+  /** helper 的 UTF-8 诊断流，只留尾部给启动失败当 detail。 */
   stderr: {
     /** 订阅诊断数据。 */
     on(event: 'data', listener: (chunk: Buffer | string) => void): void
   }
   /** 进程级错误（spawn 失败等）。 */
   on(event: 'error', listener: (error: Error) => void): void
-  /** 进程退出，带退出码。 */
+  /** 进程与 stdout/stderr 均已结束，带退出码。Node 默认启动器用 close 事件；自定义启动器也须先排空数据。 */
   on(event: 'exit', listener: (code: Nullable<number>) => void): void
   /** 终止进程。 */
   kill(signal?: NodeJS.Signals): void

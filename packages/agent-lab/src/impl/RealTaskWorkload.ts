@@ -60,7 +60,6 @@ class RealTaskWorkload implements RealTaskWorkloadApi {
     const record = realTaskRecordSchema.parse(input)
     const prompt = options.prompt?.trim() || record.task.prompt?.trim() || ''
     if (!prompt) throw new Error('复跑用例必须有一条经人复核的提示词')
-    if (options.acceptance.length === 0) throw new Error('复跑用例至少要有一条可判定的验收合同')
     return realTaskCaseSchema.parse({
       schema: RealTaskCaseSchemaId,
       id: options.id,

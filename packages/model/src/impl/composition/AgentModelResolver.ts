@@ -1,4 +1,4 @@
-import { isBlank, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, isNonBlankString, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -106,11 +106,11 @@ class AgentModelResolver implements AgentModelResolverApi {
 
     const apiKey = this.providers.resolveApiKey({
       provider: selection.provider,
-      apiKey: isBlank(selection.apiKey) ? runtimeConfig.apiKey : selection.apiKey,
+      apiKey: isNonBlankString(selection.apiKey) ? selection.apiKey : runtimeConfig.apiKey,
     })
     const baseURL = this.providers.resolveBaseURL({
       provider: selection.provider,
-      baseURL: isBlank(selection.baseURL) ? runtimeConfig.baseURL : selection.baseURL,
+      baseURL: isNonBlankString(selection.baseURL) ? selection.baseURL : runtimeConfig.baseURL,
     })
     const trace = buildResolutionTrace(
       selection.provider,

@@ -13,24 +13,24 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ProviderRequestAuditValue } from '../types/compiler.js'
+import type { ProviderFingerprintValue } from '../types/compiler.js'
 
 /**
- * 造一个带类型标签的审计值 `{ $velarosType, value }`，让 JSON 里表达不了的类型（bigint/bytes/date/url/undefined/非有限数）能落盘又能反解。
- * 两个键的形状是与 `decodeProviderRequestAuditValue` 的硬约定：解码端正是靠「恰好这两个键」认出标签值，不能随便加字段。
+ * 造一个带类型标签的审计值 `{ $velarosType, value }`，保存 JSON 不能直接表达的 bigint、bytes、date、url、undefined 与非有限数。
+ * 两个键的形状属于内容指纹的编码约定。
  */
-function tagged(type: string, value: string): ProviderRequestAuditValue {
+function tagged(type: string, value: string): ProviderFingerprintValue {
   return { $velarosType: type, value }
 }
 
 /**
- * 把真实 provider 输入变成可稳定落 JSONL、可反解的值。二进制、URL、日期和 bigint 都带类型标签；
+ * 为本次内容指纹稳定编码真实 provider 输入。二进制、URL、日期和 bigint 都带类型标签；
  * 普通对象按键排序，因此同一份模型可见输入在不同进程中产生同一字节序。
  */
-export function encodeProviderRequestAuditValue(
+export function encodeProviderFingerprintValue(
   value: unknown,
   seen: Set<object> = new Set()
-): ProviderRequestAuditValue {
+): ProviderFingerprintValue {
   if (isNull(value)) return null
   if (isString(value) || isBoolean(value)) return value
   if (isNumber(value)) {
@@ -54,7 +54,7 @@ export function encodeProviderRequestAuditValue(
   if (!isObject(value)) {
     throw new AppError(
       'INVARIANT',
-      '模型请求包含未登记的原始值类型，无法形成可重建快照。',
+      '模型请求包含未登记的原始值类型，无法形成稳定指纹。',
       undefined,
       {
         source: 'provider-request-audit-serialization',
@@ -62,17 +62,17 @@ export function encodeProviderRequestAuditValue(
     )
   }
   if (seen.has(value)) {
-    throw new AppError('INVARIANT', '模型请求包含循环引用，无法形成可重建快照。', undefined, {
+    throw new AppError('INVARIANT', '模型请求包含循环引用，无法形成稳定指纹。', undefined, {
       source: 'provider-request-audit-serialization',
     })
   }
   seen.add(value)
   try {
-    if (isArray(value)) return value.map((item) => encodeProviderRequestAuditValue(item, seen))
+    if (isArray(value)) return value.map((item) => encodeProviderFingerprintValue(item, seen))
     if (!isPlainObject(value)) {
       throw new AppError(
         'INVARIANT',
-        '模型请求包含未登记的对象类型，无法形成可重建快照。',
+        '模型请求包含未登记的对象类型，无法形成稳定指纹。',
         undefined,
         {
           source: 'provider-request-audit-serialization',
@@ -83,42 +83,11 @@ export function encodeProviderRequestAuditValue(
     return Object.fromEntries(
       Object.keys(value)
         .sort()
-        .map((key) => [key, encodeProviderRequestAuditValue(value[key], seen)])
+        .map((key) => [key, encodeProviderFingerprintValue(value[key], seen)])
     )
   } finally {
     seen.delete(value)
   }
-}
-
-/**
- * `encodeProviderRequestAuditValue` 的逆操作：把审计快照还原成真实的 provider 输入值。
- * 只有「恰好两个键、$velarosType 与 value 都是字符串」的对象才当标签值解（bigint/bytes/date/number/undefined/url），
- * 其余对象与数组递归还原；标签名不认识时不抛错，退化成按普通对象处理，保证老快照遇到新标签也读得下去。
- */
-export function decodeProviderRequestAuditValue(value: ProviderRequestAuditValue): unknown {
-  if (isNull(value) || !isObject(value)) return value
-  if (isArray(value)) return value.map(decodeProviderRequestAuditValue)
-  if (isString(value.$velarosType) && isString(value.value) && Object.keys(value).length === 2) {
-    switch (value.$velarosType) {
-      case 'bigint':
-        return BigInt(value.value)
-      case 'bytes':
-        return Uint8Array.from(atob(value.value), (character) => character.charCodeAt(0))
-      case 'date':
-        return new Date(value.value)
-      case 'number':
-        return Number(value.value)
-      case 'undefined':
-        return undefined
-      case 'url':
-        return new URL(value.value)
-      default:
-        break
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, decodeProviderRequestAuditValue(item)])
-  )
 }
 
 /** 使用标准 Web API 编码字节，避免宿主 Buffer 进入可移植请求图。 */

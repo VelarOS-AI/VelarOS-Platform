@@ -1,5 +1,5 @@
 /**
- * 平台数据（可移植）：运行平台、shell 种类、命令启动规格、路径分隔符、目录符号链接类型、编辑器命令定义、后台启动参数。
+ * 平台数据（可移植）：运行平台、shell 种类、命令启动规格、路径分隔符、目录符号链接类型、编辑器命令定义。
  * 只放类型；带进程环境变量类型的选项在 `options.ts`，常量表在 `contract/constants.ts`。不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
@@ -31,14 +31,6 @@ export interface CommandSpec {
 export interface EditorCommandDefinition {
   darwinApplication?: string
   command?: string
-}
-
-/** 在后台启动一条 shell 命令并把输出追加进日志文件时要的参数。 */
-export interface BackgroundShellLaunchOptions {
-  command: string
-  logPath: string
-  pidMarker: string
-  shellPath: string
 }
 
 /** 路径文本里的分隔符。 */

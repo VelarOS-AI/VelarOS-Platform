@@ -6,19 +6,21 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
+import { scriptOutputs } from '@velaros-ai/script'
 
+import { ObservationLimits } from '../../../dist/act/runtime/contract/constants.js'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { SessionGoal } from '../../../dist/act/runtime/impl/SessionGoal.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import {
   memoryCommittedGroups,
+  memoryMessageKey,
+  memoryObservation,
   memoryOutput,
   memoryPrompt,
   memoryTaskHistory,
-  memoryVerificationProjection,
 } from '../../../dist/act/runtime/utils/context-memory.js'
 import { decisionStateProjection } from '../../../dist/act/runtime/utils/decision-state.js'
 import {
@@ -30,7 +32,8 @@ import { VelarSystemMemoryModule } from '../../../dist/act/system/contract/surfa
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 
-import { baseNotes, baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { baseNotes, baseText, done, historyEntries, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 
@@ -395,7 +398,6 @@ async function fixture(
   }
   const runtime = await createRuntime({
     storage,
-    runner: nodeSubprocessCodeRunner,
     model,
     modules: [],
     limits: {
@@ -430,6 +432,15 @@ async function execute(f, source) {
   const result = await f.session.execute({ source })
   assert(result.checked && !result.result.failed, JSON.stringify(result))
   return result.result.value?.default
+}
+
+async function archivedProgramResults(f) {
+  const selected = await f.storage.selectSnapshot('s', [
+    { titlePrefix: 'script:', titleSuffix: ':result' },
+  ])
+  return Promise.all(
+    selected.records.map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
+  )
 }
 
 test('generated material read hints satisfy the live memory contract and recall original bytes', async (t) => {
@@ -489,341 +500,6 @@ test('generated material read hints satisfy the live memory contract and recall 
     )
     assert.equal(recalled.totalChars, full.length)
   }
-})
-
-test('INV-79 omitted verification details retain trusted current, historical and unknown counts', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Check current artifacts' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 12000 })
-  let token = '1'
-  let unknown = false
-  const spec = {
-    id: 'structure',
-    scope: 'whole-artifact/schema-1',
-    verifierId: 'schema',
-    verifierVersion: '1',
-    probe: async () =>
-      unknown
-        ? { status: 'unknown', cost: { coverage: 'complete', charges: [] } }
-        : {
-            status: 'versioned',
-            providerId: 'atomic-host',
-            token,
-            authorization: 'auth',
-            artifacts: [{ identity: 'artifact.json', contentHash: `content-${token}` }],
-            cost: { coverage: 'complete', charges: [] },
-          },
-  }
-  await f.session.view.complete({
-    verify: async (_view, _signal, checks) => ({
-      verified: false,
-      reason: 'Other delivery checks remain',
-      report: {
-        scope: 'Whole artifact',
-        checkedAt: new Date().toISOString(),
-        checks: [
-          await checks.check(spec, async () => ({
-            label: 'A long exact check label 😀 '.repeat(25),
-            status: 'passed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-        ],
-      },
-    }),
-  })
-  const original = await f.session.view.readCompletion()
-  for (const status of ['current', 'historical', 'unknown']) {
-    if (status === 'historical') token = '2'
-    if (status === 'unknown') unknown = true
-    const view = await f.session.view.build({ maxChars: 12000 })
-    const frame = await f.memory.project(view, undefined, [], signal, 12000)
-    const verification = JSON.parse(frame.body).partitions.runtime.verification
-    assert.deepEqual(verification.checks, [])
-    assert.equal(verification.omittedChecks, 1)
-    assert.deepEqual(verification.counts, { passed: 1, failed: 0, unknown: 0 })
-    assert.deepEqual(
-      verification.applicabilityCounts,
-      Object.fromEntries(
-        ['current', 'historical', 'unknown'].map((item) => [item, +(item === status)])
-      )
-    )
-    assert(verification.applicabilityCheckedAt)
-    assert(frame.prompt.includes('applicabilityCounts'))
-    assert.deepEqual(await f.session.view.readCompletion(), original)
-  }
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 verification diagnostics retain original indexes and applicability under a fixed budget', () => {
-  const report = {
-    scope: 'Whole synthetic artifact',
-    checkedAt: '2026-10-02T01:00:00.000Z',
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        id: `passed-${index}`,
-        label: `Earlier successful check ${index} ${'p'.repeat(80)}`,
-        status: 'passed',
-      })),
-      {
-        id: 'failed-last',
-        label: 'Repair the missing relation',
-        status: 'failed',
-        artifact: { identity: 'synthetic.json', revision: 'old' },
-      },
-      { id: 'unknown-last', label: 'Dependency check has no result', status: 'unknown' },
-    ],
-  }
-  const applicability = {
-    checkedAt: report.checkedAt,
-    checks: report.checks.map((_, index) => ({
-      status: index === 24 ? 'historical' : index === 25 ? 'unknown' : 'current',
-    })),
-  }
-  const identity = {
-    ref: { sessionId: 's', id: 'report-ref' },
-    taskId: 'task',
-    taskRevision: 2,
-    counts: { passed: 24, failed: 1, unknown: 1 },
-  }
-  const original = JSON.stringify(report)
-  const projected = memoryVerificationProjection(identity, report, applicability, 2048)
-  assert(JSON.stringify(projected).length <= 2048)
-  assert.deepEqual(
-    projected.checks.slice(0, 2).map((check) => check.index),
-    [24, 25]
-  )
-  assert.deepEqual(
-    projected.checks.slice(0, 2).map((check) => check.applicability),
-    ['historical', 'unknown']
-  )
-  assert.equal(projected.checks[0].id, 'failed-last')
-  assert.equal(projected.checks[0].artifact.revision, 'old')
-  assert.equal(projected.omittedChecks, report.checks.length - projected.checks.length)
-  assert.equal(projected.omittedByStatus.failed, 0)
-  assert.equal(projected.omittedByStatus.unknown, 0)
-  assert.deepEqual(projected.read, { ref: identity.ref, offset: 0, limit: 60000 })
-  assert.equal(JSON.stringify(report), original)
-})
-
-test('INV-83 long diagnostics and tiny budgets retain omission facts without hiding later failures', () => {
-  const report = {
-    scope: 'Synthetic bounded diagnostics',
-    checkedAt: '2026-10-02T01:00:00.000Z',
-    checks: [
-      {
-        id: 'x'.repeat(1000),
-        label: 'A long failed check 😀 '.repeat(30),
-        status: 'failed',
-        artifact: { identity: 'a'.repeat(1000), revision: 'v1' },
-      },
-      { id: 'second', label: 'Second failure needs repair', status: 'failed' },
-      { id: 'unknown', label: 'Still unknown', status: 'unknown' },
-      { id: 'pass', label: 'A successful check', status: 'passed' },
-    ],
-  }
-  const identity = {
-    ref: { sessionId: 's', id: 'report-ref' },
-    counts: { passed: 1, failed: 2, unknown: 1 },
-  }
-  const original = JSON.stringify(report)
-  const normal = memoryVerificationProjection(identity, report, undefined, 2048)
-  assert(JSON.stringify(normal).length <= 2048)
-  assert.deepEqual(
-    normal.checks.slice(0, 3).map((check) => check.index),
-    [0, 1, 2]
-  )
-  assert.equal(normal.checks[0].detailsInReport, true)
-  assert.equal(normal.checks[0].labelTruncated, true)
-  assert.equal(normal.checks[0].labelChars, report.checks[0].label.length)
-  assert.equal(normal.checks[0].id, undefined)
-  assert(normal.checks.every((check) => JSON.stringify(check).length <= 512))
-  for (const budget of [0, 80, 300, 700]) {
-    const projected = memoryVerificationProjection(identity, report, undefined, budget)
-    assert.deepEqual(projected.ref, identity.ref)
-    assert.deepEqual(projected.counts, identity.counts)
-    assert.equal(projected.omittedChecks, report.checks.length - projected.checks.length)
-    if (JSON.stringify({ ...identity, checks: [], omittedChecks: 4 }).length <= budget)
-      assert(JSON.stringify(projected).length <= budget)
-    else assert.deepEqual(projected.checks, [])
-  }
-  assert.equal(JSON.stringify(report), original)
-})
-
-test('INV-83 real completion reports remain immutable, readable and task-scoped after prioritized projection', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Check synthetic relations' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 12000 })
-  const report = {
-    scope: 'Synthetic relation checks',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        label: `Succeeded earlier ${index} ${'p'.repeat(100)}`,
-        status: 'passed',
-      })),
-      { label: 'Repair the final relation', status: 'failed' },
-      { label: 'An independent check is unknown', status: 'unknown' },
-    ],
-  }
-  await f.session.view.complete({
-    verify: async () => ({ verified: false, reason: 'Repair remains', report }),
-  })
-  const original = await f.session.view.readCompletion()
-  const view = await f.session.view.build({ maxChars: 48000 })
-  const frame = await f.memory.project(view, undefined, [], signal, 48000)
-  const verification = JSON.parse(frame.body).partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => check.index),
-    [24, 25]
-  )
-  assert(verification.read)
-  const recalled = await f.memory.readMaterial(
-    verification.read.ref,
-    verification.read.offset,
-    verification.read.limit,
-    signal
-  )
-  assert.equal(recalled.text.length, recalled.totalChars)
-  assert.deepEqual(JSON.parse(recalled.text), original)
-  assert.deepEqual(await f.session.view.readCompletion(), original)
-  const beforeCancel = (await f.storage.loadMetadata('s')).version
-  const cancelled = new AbortController()
-  cancelled.abort()
-  await assert.rejects(f.memory.project(view, undefined, [], cancelled.signal, 48000))
-  assert.equal((await f.storage.loadMetadata('s')).version, beforeCancel)
-  const next = await f.session.context.append({ kind: 'user', body: 'Start a different task' })
-  await f.session.view.end()
-  await f.session.view.begin(next.ref, signal, 'new')
-  await assert.rejects(
-    f.memory.readMaterial(verification.ref, 0, 60000, signal),
-    (error) => error.code === 'SCOPE_MISMATCH'
-  )
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 real applicability follows the original report index when failed checks move first', async (t) => {
-  const f = await fixture(t, undefined, { context: { sources: [], maintenance: false } })
-  const input = await f.session.context.append({ kind: 'user', body: 'Verify synthetic versions' })
-  await f.session.view.begin(input.ref)
-  await f.session.view.build({ maxChars: 24000 })
-  let failedToken = 'old'
-  const spec = (id) => ({
-    id,
-    scope: `synthetic/${id}`,
-    verifierId: 'synthetic-versioned',
-    verifierVersion: '1',
-    probe: async () => ({
-      status: 'versioned',
-      providerId: 'synthetic-provider',
-      token: id === 'failed-version' ? failedToken : 'unchanged',
-      authorization: 'synthetic-authority',
-      artifacts: [{ identity: id, contentHash: id === 'failed-version' ? failedToken : 'same' }],
-      cost: { coverage: 'complete', charges: [] },
-    }),
-  })
-  await f.session.view.complete({
-    verify: async (_view, _signal, checks) => ({
-      verified: false,
-      reason: 'Synthetic failures need repair',
-      report: {
-        scope: 'Synthetic versions',
-        checkedAt: new Date().toISOString(),
-        checks: [
-          await checks.check(spec('passed-version'), async () => ({
-            label: 'Unchanged successful check',
-            status: 'passed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-          ...Array.from({ length: 24 }, (_, index) => ({
-            label: `Earlier success ${index} ${'p'.repeat(80)}`,
-            status: 'passed',
-          })),
-          await checks.check(spec('failed-version'), async () => ({
-            label: 'Failed artifact was revised after checking',
-            status: 'failed',
-            complete: true,
-            cost: { coverage: 'complete', charges: [] },
-          })),
-          { label: 'Unavailable independent check', status: 'unknown' },
-        ],
-      },
-    }),
-  })
-  const original = await f.session.view.readCompletion()
-  failedToken = 'new'
-  const view = await f.session.view.build({ maxChars: 100000 })
-  const frame = await f.memory.project(view, undefined, [], signal, 100000)
-  const verification = JSON.parse(frame.body).partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => check.index),
-    [25, 26]
-  )
-  assert.equal(verification.checks[0].applicability, 'historical')
-  assert.equal(verification.checks[1].applicability, 'unknown')
-  assert.equal(verification.checks.find((check) => check.index === 0).applicability, 'current')
-  assert.deepEqual(verification.applicabilityCounts, { current: 1, historical: 1, unknown: 25 })
-  assert.deepEqual(await f.session.view.readCompletion(), original)
-  assert.equal(f.requests.length, 0)
-})
-
-test('INV-83 late failed and unknown diagnostics reach the next accepted model request', async (t) => {
-  const report = {
-    scope: 'Synthetic completion checks',
-    checkedAt: new Date().toISOString(),
-    checks: [
-      ...Array.from({ length: 24 }, (_, index) => ({
-        label: `Earlier successful check ${index} ${'p'.repeat(100)}`,
-        status: 'passed',
-      })),
-      { label: 'Repair the final synthetic relation', status: 'failed' },
-      { label: 'Independent synthetic dependency is unknown', status: 'unknown' },
-    ],
-  }
-  let verifications = 0
-  const f = await fixture(t, undefined, {
-    limits: { projectionChars: 80000 },
-    context: {
-      maintenance: false,
-      completion: {
-        verify: async () =>
-          ++verifications === 1
-            ? { verified: false, reason: 'Synthetic relations need repair', report }
-            : { verified: true, reason: 'Synthetic relations pass' },
-      },
-    },
-  })
-  const events = []
-  for await (const event of f.session.submit('Finish the synthetic task')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed')
-  assert.equal(f.requests.length, 2)
-  const request = f.requests[1]
-  const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
-  const verification = frame.partitions.runtime.verification
-  assert.deepEqual(
-    verification.checks.slice(0, 2).map((check) => [check.index, check.status]),
-    [
-      [24, 'failed'],
-      [25, 'unknown'],
-    ]
-  )
-  const wire = modelRequestEncoder
-    .messages(request)
-    .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
-    .join('\n')
-  assert(wire.includes(report.checks[24].label))
-  assert(wire.includes(report.checks[25].label))
-  const recalled = await f.memory.readMaterial(
-    verification.read.ref,
-    verification.read.offset,
-    verification.read.limit,
-    signal
-  )
-  assert.equal(recalled.text.length, recalled.totalChars)
-  assert.deepEqual(JSON.parse(recalled.text).result.report, report)
 })
 
 test('selection units recover missing array items and both sides of text through memory.read', async (t) => {
@@ -1945,7 +1621,6 @@ test('INV-62 reopening preserves task bytes while current-run status changes ind
   await f.runtime.close()
   const runtime = await createRuntime({
     storage: localContextStorage({ path: join(f.root, 'context.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: f.model,
   })
@@ -2031,7 +1706,11 @@ test('INV-18 one partitioned frame carries current observation, persistent notes
       yield { type: 'finish', reason: 'stop' }
     } else yield* done(request)
   })
-  await f.session.observe({ source: "import {output} from 'velaros';output({version:2});" })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({ source: "import {output} from 'velaros';output({version:2});" })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   const frame = JSON.parse(f.requests[1].materials[0].text)
   assert.deepEqual(Object.keys(frame.partitions), [
@@ -2044,9 +1723,24 @@ test('INV-18 one partitioned frame carries current observation, persistent notes
   assert.equal(frame.goals, undefined)
   assert.equal(frame.results, undefined)
   assert.equal(f.requests[1].contextStatus.mode, 'partitioned')
+  assert(
+    frame.partitions.workspace.notes[0],
+    JSON.stringify({
+      notes: frame.partitions.workspace.notes,
+      results: frame.partitions.recent.results,
+    })
+  )
   assert.equal(frame.partitions.workspace.notes[0].text, 'Cache restoration remains unverified')
   assert.equal(frame.partitions.workspace.notes[0].origin, 'model-note')
-  assert.match(frame.partitions.observation.text, /version/)
+  if (support.available) assert.match(frame.partitions.observation.text, /version/)
+  else {
+    assert.equal(frame.partitions.observation.resultRef, null)
+    assert.equal(JSON.parse(f.requests[1].dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
+  }
   assert(frame.partitions.recent.results.length)
   assert(frame.memoryStatus.changes.added.includes('workspace:auth'))
   assert(Object.values(frame.memoryStatus.footprint).every(Number.isSafeInteger))
@@ -2065,7 +1759,6 @@ test('INV-19 workspace revisions survive reopening, compare-and-swap conflicts n
   await f.runtime.close()
   const runtime = await createRuntime({
     storage: localContextStorage({ path: join(f.root, 'context.sqlite') }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
   })
   try {
@@ -2116,13 +1809,24 @@ test('eviction removes only residency, remount preserves exact archived note and
 
 test('observation cannot mutate a workspace through aliases or wrappers', async (t) => {
   const f = await fixture(t)
-  await f.session.observe({
-    source:
-      "import {memory as memoryApi} from 'velaros:system';const {update:edit}=memoryApi;await edit({key:'bad',baseRevision:0,body:'repeat'});",
-  })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({
+      source:
+        "import {memory as memoryApi} from 'velaros:system';const {update:edit}=memoryApi;await edit({key:'bad',baseRevision:0,body:'repeat'});",
+    })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   assert.equal((await f.memory.list({}, signal)).items.length, 0)
-  assert.match(f.requests[0].materials[0].text, /OPERATION_MODE_DENIED/)
+  if (support.available) assert.match(f.requests[0].materials[0].text, /OPERATION_MODE_DENIED/)
+  else {
+    assert.equal(JSON.parse(f.requests[0].dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
+  }
 })
 
 test('oversized notes become honest reference cards and can be recalled without auto-residency changes', async (t) => {
@@ -2241,7 +1945,6 @@ test('host memory policy rejects invalid capacities before a model request', asy
   ]) {
     const runtime = await createRuntime({
       storage: localContextStorage({ path: ':memory:' }),
-      runner: nodeSubprocessCodeRunner,
       modules: [],
       context: { sources: [], memory },
     })
@@ -2257,25 +1960,19 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   let toolCalls = 0
   const maintenance = {
     id: 'maintenance',
+    nativeTools: true,
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
       toolCalls++
-      const snapshot = JSON.parse(
-        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
-      ).snapshot
+      const { material } = JSON.parse(request.materials[0].text)
       const patch = {
-        baseRevision: snapshot.baseRevision,
+        baseRevision: material.baseRevision,
         summary: 'Preserved progress',
         unresolved: [],
         notes: [{ ref: note.ref, summary: 'Maintenance preserved progress' }],
       }
-      const part = turn(request, {
-        execute: {
-          source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`,
-        },
-      })
-      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      yield { type: 'tool-call', value: { id: 'preserve-progress', name: 'submit', input: patch } }
       yield { type: 'finish', reason: 'stop' }
     },
   }
@@ -2289,15 +1986,19 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
       assert.equal(request.mode, 'work')
       yield* done(request)
     },
-    { context: { sources: [], maintenance: { model: maintenance } } }
+    { context: { sources: [], maintenance: { model: maintenance, execution: 'data' } } }
   )
   const note = await f.memory.update(
     { key: 'progress', baseRevision: 0, body: 'Original main-model progress' },
     signal
   )
-  await f.session.observe({
-    source: "import {output} from 'velaros';output('current observation');",
-  })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({
+      source: "import {output} from 'velaros';output('current observation');",
+    })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   assert.equal(
     JSON.parse((await f.memory.read(note.ref, 0, 60000, signal)).text).body,
@@ -2308,14 +2009,11 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   // 派生展示换了投影策略，下一帧重建底座，笔记快照换成整理后的展示
   assert.match(baseText(f.requests[1]), /Maintenance preserved progress/)
   assert.doesNotMatch(baseText(f.requests[1]), /Original main-model progress/)
-  const state = await f.storage.load('s')
-  const results = await Promise.all(
-    state.records
-      .filter((item) => /^script:[0-9a-f-]+:result$/u.test(item.title))
-      .map(async (item) => JSON.parse(await f.storage.get('s', item.objectId)))
-  )
-  assert.equal(results.filter((item) => item.mode === 'observe').length, 1)
+  const results = await archivedProgramResults(f)
+  assert.equal(results.filter((item) => item.mode === 'observe').length, support.available ? 1 : 0)
   assert.equal(results.filter((item) => item.mode === 'execute').length, 0)
+  if (!support.available)
+    assert.equal(JSON.parse(f.requests[1].dynamic.text).current.availability.available, false)
 })
 
 test('INV-74 actual requests retain maintenance narrative provenance through continued execution', async (t) => {
@@ -2442,7 +2140,7 @@ test('business children always own a scoped workspace even without world capabil
     },
     {
       agents: {
-        profiles: { reader: { model: child, modules: [] } },
+        profiles: { reader: { model: child, node: true, modules: [] } },
         concurrency: 1,
         maxChildren: 1,
       },
@@ -2550,64 +2248,6 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.doesNotMatch(next.history.at(-1).content, /当次源码/)
   assert.equal(next.history.at(-1).cacheBreakpoint, true)
   assert.equal(await memory.fold('runway', 24000, signal), false)
-})
-
-test('INV-53 batched execution gets a volume narrative even when it uses few model turns', async (t) => {
-  for (const { label, results, reason, note, expected } of [
-    { label: 'many results in one response', results: 6, reason: 'runway', expected: true },
-    { label: 'small batch', results: 5, reason: 'runway', expected: false },
-    { label: 'explicit organization', results: 6, reason: 'organize', expected: false },
-    {
-      label: 'progress already recorded',
-      results: 6,
-      reason: 'runway',
-      note: true,
-      expected: false,
-    },
-  ])
-    await t.test(label, async (t) => {
-      const f = await fixture(t)
-      const programs = new ProgramContext('s', f.session.context, f.storage)
-      const recent = new RecentContext('s', f.session.context, f.storage)
-      const view = {
-        id: 'batch-frame',
-        scope: { sessionId: 's', revision: 0 },
-        goals: [],
-        capsule: {},
-        mandatory: [],
-        evidence: [],
-        gaps: [],
-        readSet: [],
-        progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
-      }
-      await f.memory.project(view, undefined, [], signal, 24000)
-      await f.session.context.append({
-        kind: 'assistant',
-        body: 'Read independent sources in one batch.',
-      })
-      for (let index = 0; index < results; index++)
-        await archiveResult(f, programs, `source-${index}`)
-      if (note)
-        await f.session.context.append({
-          kind: 'audit',
-          title: 'workspace:note:progress',
-          body: JSON.stringify({
-            key: 'progress',
-            revision: 1,
-            body: 'Current findings are recorded.',
-          }),
-        })
-      // 最近窗口留在下一段；批量执行整体进入将被压缩的那一卷。
-      for (let index = 0; index < 8; index++)
-        await f.session.context.append({ kind: 'assistant', body: `Recent progress ${index}` })
-      assert(await f.memory.fold(reason, 24000, signal))
-      const [sealed] = await recent.volumes(signal)
-      assert.equal(sealed.volume.turns, 1)
-      assert.equal(sealed.volume.results, results)
-      assert.deepEqual(await f.memory.narration(signal), expected ? sealed.ref : null)
-      assert.equal(await f.memory.narration(signal), null, 'the automatic intent is consumed once')
-      assert.equal(f.requests.length, 0, 'folding records an intent without invoking a model')
-    })
 })
 
 test('INV-52 current constraints and unresolved items remain separate from immutable history while task bodies stay chronological', async (t) => {
@@ -2992,7 +2632,7 @@ test('INV-75 authenticated page lineage preserves original debt only when delive
           f.requests[0].materials.find((material) => material.origin === 'runtime-view').text
         )
         assert(!accepted.partitions.runtime.decision.missing.some((item) => item.ref === source.id))
-        assert(events.some((event) => event.type === 'verification' && event.completed))
+        assert(events.some((event) => event.type === 'completion' && event.completed))
       }
     })
   }
@@ -3050,6 +2690,7 @@ test('INV-75 authenticated page lineage rejects stale or foreign inner receipts 
 function acceptedMemoryRequest(frame) {
   return {
     compiledPrompt: frame.prompt,
+    ...(frame.dynamic ? { dynamic: frame.dynamic } : {}),
     history: frame.history,
     instructions: 'synthetic accepted request',
     materials: [
@@ -3150,7 +2791,7 @@ test('INV-75 full recalled carriers beyond the logical entry cap reach actual ac
         )
         assert(!frame.partitions.runtime.decision.missing.some((gap) => gap.ref === source.id))
       }
-      assert(events.some((event) => event.type === 'verification' && event.completed))
+      assert(events.some((event) => event.type === 'completion' && event.completed))
     })
   }
 })
@@ -3297,12 +2938,10 @@ test('INV-69 required recall through a real script reaches the next model reques
               entry.text.includes('verified synthetic source')
           )
         )
-        assert(events.some((event) => event.type === 'verification' && event.completed))
+        assert(events.some((event) => event.type === 'completion' && event.completed))
       } else {
         assert(
-          events.some(
-            (event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED'
-          )
+          events.some((event) => event.type === 'completion' && event.reason === 'CONTEXT_REQUIRED')
         )
         const missing = frame.partitions.runtime.decision.missing.find(
           (gap) => gap.ref === source.id
@@ -4002,23 +3641,43 @@ test('zero-history results and current observation render code without extra str
   const observed = 'function current() {\n  return "当前";\n}'
   const result = 'function receipt() {\n  return "\\n";\n}'
   const f = await fixture(t, undefined, { context: { sources: [], memory: { recentRecords: 0 } } })
-  await f.session.observe({
-    source: `import {output} from 'velaros';output(${JSON.stringify(observed)},{key:'observe-code',type:'code'});`,
-  })
+  const source = `import {output} from 'velaros';output(${JSON.stringify(observed)},{key:'observe-code',type:'code'});`
+  const support = f.session.executionRunner.observationSupport()
+  if (support.available) await f.session.observe({ source })
+  else await assert.rejects(f.session.observe({ source }), { code: 'UNAVAILABLE' })
   await execute(
     f,
     `import {output} from 'velaros';output(${JSON.stringify(result)},{key:'result-code',type:'code'});`
   )
   await run(f)
   const request = f.requests[0]
-  assert(request.compiledPrompt.includes(observed))
   assert(request.compiledPrompt.includes(result))
   assert.equal(request.history.length, 1)
   assert.match(baseText(request), /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
-  assert.equal(frame.partitions.observation.presentation.format, 'text')
-  assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
-  assert(frame.partitions.observation.text.endsWith(observed))
+  const rendered = frame.partitions.recent.results.find((item) => item.text?.includes(result))
+  assert(rendered)
+  assert.equal(rendered.outputFormat, 'text')
+  assert(rendered.text.endsWith(result))
+  assert(!rendered.text.includes(JSON.stringify(result).slice(1, -1)))
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const original = JSON.parse((await programs.read(rendered.ref)).text)
+  assert.equal(original.output.blocks.find((block) => block.key === 'result-code').value, result)
+  if (support.available) {
+    assert(JSON.parse(request.dynamic.text).current.text.includes(observed))
+    assert(!request.compiledPrompt.includes(observed))
+    assert.equal(frame.partitions.observation.presentation.format, 'text')
+    assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
+    assert(frame.partitions.observation.text.endsWith(observed))
+  } else {
+    assert.equal(frame.partitions.observation.resultRef, null)
+    assert.equal(JSON.parse(request.dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
+    assert(!request.compiledPrompt.includes(observed))
+  }
 })
 
 test('INV-69 current original bodies are omitted only after same-request cross-carrier full coverage', async (t) => {
@@ -4221,6 +3880,184 @@ function frameBody(overrides = {}) {
   return JSON.stringify(merged)
 }
 
+test('small dynamic observations retain safety and changes while ordinary prompts contain no observation body', () => {
+  const observation = {
+    sourceRef: 'observer',
+    resultRef: 'observed-result',
+    snapshotId: 'snapshot',
+    text: 'CURRENT_SMALL_STATE',
+    bodyIncluded: true,
+    collection: 'partial',
+    safety: [
+      {
+        id: 'read-1',
+        operation: 'project.read',
+        effect: 'unknown',
+        outcome: 'failed',
+        protection: 'partial',
+        completed: false,
+        code: 'READ_UNCONFIRMED',
+        detail: 'SAFETY_DETAIL',
+      },
+    ],
+    outputChanges: [{ key: 'status', change: 'updated', contentHash: 'new-hash' }],
+    missingOutputs: [{ key: 'expected', status: 'not-produced' }],
+    exitedOutputs: [{ key: 'old', status: 'absent' }],
+    presentationChanges: [{ key: 'status', from: 'full', to: 'excerpt', reason: 'budget' }],
+    missingRequired: ['expected'],
+  }
+  const body = frameBody({ 'partitions.observation': observation })
+  const small = memoryObservation(body)
+  assert.equal(small.limited, false)
+  assert(small.dynamic.text.length <= ObservationLimits.defaultChars)
+  const current = JSON.parse(small.dynamic.text).current
+  for (const key of [
+    'safety',
+    'outputChanges',
+    'missingOutputs',
+    'exitedOutputs',
+    'presentationChanges',
+    'missingRequired',
+  ])
+    assert.deepEqual(current[key], observation[key])
+  assert.equal(current.text, observation.text)
+  assert.equal(current.bodyIncluded, true)
+  assert.equal(current.collection, 'partial')
+  assert.equal(current.requiredMissing, true)
+  assert.doesNotMatch(memoryPrompt(body), /CURRENT_SMALL_STATE|SAFETY_DETAIL|READ_UNCONFIRMED/)
+
+  const bodyLimited = memoryObservation(
+    frameBody({
+      'partitions.observation': {
+        ...observation,
+        text: 'BODY_TOO_LARGE'.repeat(400),
+        totalChars: 5600,
+      },
+    })
+  )
+  const limited = JSON.parse(bodyLimited.dynamic.text).current
+  assert(bodyLimited.limited)
+  assert.equal(limited.text, undefined)
+  assert.equal(limited.bodyIncluded, false)
+  assert.equal(limited.limit.code, 'LIMIT')
+  assert.deepEqual(limited.safety, observation.safety)
+  assert(bodyLimited.dynamic.text.length <= ObservationLimits.maxChars)
+
+  const metadataLimited = memoryObservation(
+    frameBody({
+      'partitions.observation': {
+        ...observation,
+        safety: [{ ...observation.safety[0], detail: 'UNDELIVERED_SAFETY'.repeat(400) }],
+      },
+    })
+  )
+  const unavailable = JSON.parse(metadataLimited.dynamic.text).current
+  assert(metadataLimited.limited)
+  assert.equal(unavailable.status, 'LIMIT')
+  assert.equal(unavailable.requiresReview, true)
+  assert.equal(unavailable.bodyIncluded, false)
+  assert(unavailable.omitted.includes('safety'))
+  assert.equal(unavailable.text, undefined)
+  assert(metadataLimited.dynamic.text.length <= ObservationLimits.maxChars)
+})
+
+test('notes catalog filtering does not read unrelated large execution result bodies', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const ignored = await archiveResult(f, programs, 'UNRELATED_RESULT'.repeat(2048))
+  const note = await f.memory.update(
+    { key: 'visible-note', baseRevision: 0, body: 'note body' },
+    signal
+  )
+  const record = (await f.storage.selectSnapshot('s', [{ refId: ignored.id }])).records[0]
+  const get = f.storage.get.bind(f.storage)
+  let resultReads = 0
+  f.storage.get = async (sessionId, objectId) => {
+    if (objectId === record.objectId) resultReads++
+    return get(sessionId, objectId)
+  }
+  try {
+    const notes = await f.memory.catalog({ kind: 'notes', limit: 10 }, signal)
+    assert(notes.items.some((item) => item.ref.id === note.ref.id))
+    assert.equal(resultReads, 0)
+  } finally {
+    f.storage.get = get
+  }
+  assert.equal(f.requests.length, 0)
+})
+
+test('current result proof requires the complete dynamic exchange and binds the retainable message before the protocol tail', async (t) => {
+  for (const scenario of ['exact', 'drop-exchange', 'mutate-exchange'])
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t, undefined, { context: { memory: { recentRecords: 0 } } })
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(f, programs, ['REQUIRED_CURRENT_BODY'], 8000)
+      const cycle = await f.memory.beginFrame(requiredView(), undefined, [], signal, 600000)
+      const projected = await cycle.project(600000)
+      const body = JSON.parse(projected.body)
+      body.partitions.observation.dynamicExchanges = [
+        {
+          exchange: {
+            text: 'Choose an old snapshot',
+            calls: [
+              {
+                id: 'history-selection',
+                name: 'observe',
+                input: { code: '', options: { history: { kind: 'list' } } },
+              },
+            ],
+            results: [
+              {
+                id: 'history-selection',
+                name: 'observe',
+                output: {
+                  status: 'completed',
+                  effect: 'none',
+                  receipt: {
+                    status: 'selected',
+                    selectionRef: 'selected-history',
+                    executed: false,
+                    effective: 'next-model-turn',
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ]
+      const selected = {
+        ...projected,
+        ...(await cycle.reconcile(JSON.stringify(body), projected.history, undefined, signal)),
+      }
+      await cycle.publish(selected.body, signal)
+      const request = structuredClone(acceptedMemoryRequest(selected))
+      request.protocol = 'CONTROL_TAIL_AFTER_DYNAMIC'
+      if (scenario === 'drop-exchange') delete request.dynamic.exchanges
+      if (scenario === 'mutate-exchange')
+        request.dynamic.exchanges[0].exchange.results[0].output.receipt.selectionRef =
+          'different-history'
+      await f.memory.acknowledge(JSON.parse(selected.body).frameId, signal, request)
+      const delivered = (
+        await f.storage.selectSnapshot('s', [{ title: 'context:delivered', latest: true }])
+      ).records[0]
+      const carriers = JSON.parse(await f.storage.get('s', delivered.objectId)).accepted.carriers
+      const proofs = carriers.flatMap((carrier) => carrier.proofs)
+      assert.equal(
+        proofs.some((proof) => proof.ref === source.id),
+        scenario === 'exact'
+      )
+      if (scenario === 'exact') {
+        const layout = modelRequestEncoder.layout(request)
+        const current = layout.messages[layout.retainablePrefixLength - 1]
+        assert(carriers.some((carrier) => carrier.message === memoryMessageKey(current)))
+        assert(
+          !carriers.some((carrier) => carrier.message === memoryMessageKey(layout.messages.at(-1)))
+        )
+      }
+      assert.equal(f.requests.length, 0)
+    })
+})
+
 /** 仅从实际展示过的完整快照恢复未变任务，不能借用原始内部帧。 */
 function nodeTaskSnapshot(prompt, history = []) {
   const heading = 'task（earlier 为此前运行的输入）：\n'
@@ -4349,7 +4186,7 @@ function section(prompt, name) {
   return JSON.parse(prompt.split(new RegExp(`分区 ${name}[^\\n]*：\\n`, 'u'))[1].split('\n')[0])
 }
 
-test('INV-74 current state is self-contained while unchanged result and observation bodies remain in history', () => {
+test('INV-74 ordinary results remain in history while observation bodies stay self-contained in dynamic', () => {
   const failed = {
     id: 'failed',
     executionId: 'e1',
@@ -4368,6 +4205,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
       resultRef: 'observed',
       source: 'readCurrent()',
       text: 'OBSERVED-BODY',
+      bodyIncluded: true,
       observedAt: 'T1',
     },
     'partitions.recent.results': [{ ref: 'result', text: 'LARGE-RESULT', source: 'readFile()' }],
@@ -4381,6 +4219,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
       resultRef: 'observed',
       source: 'readCurrent()',
       text: 'OBSERVED-BODY',
+      bodyIncluded: true,
       observedAt: 'T1',
     },
     'partitions.recent.results': [
@@ -4388,7 +4227,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
     ],
   })
   const prompt = memoryPrompt(current, before)
-  for (const partition of ['task', 'workspace', 'observation', 'recent', 'runtime'])
+  for (const partition of ['task', 'workspace', 'recent', 'runtime'])
     assert(section(prompt, partition))
   const runtime = section(prompt, 'runtime')
   assert.equal(runtime.mandatory[0].code, 'CONFLICT')
@@ -4406,16 +4245,22 @@ test('INV-74 current state is self-contained while unchanged result and observat
     shell: 'posix',
     time: 'T1',
   })
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, true)
+  assert(!prompt.includes('分区 observation：'))
+  const dynamic = memoryObservation(current).dynamic
+  assert.match(dynamic.text, /OBSERVED-BODY/)
+  assert(!dynamic.text.includes('outputInEarlierFrame'))
+  assert(!dynamic.text.includes('readCurrent()'))
+  assert.deepEqual(dynamic, memoryObservation(before).dynamic)
   assert.match(memoryPrompt(current), /DIAGNOSTIC/)
   assert.match(memoryPrompt(current), /LARGE-RESULT/)
-  assert.match(memoryPrompt(current), /OBSERVED-BODY/)
+  assert.doesNotMatch(memoryPrompt(current), /OBSERVED-BODY/)
   const changed = JSON.parse(current)
   changed.partitions.observation.text = 'CHANGED-OBSERVATION'
   changed.partitions.recent.results[0].text = 'CHANGED-RESULT'
   changed.partitions.runtime.mandatory[0].detail = 'CHANGED-DIAGNOSTIC'
   const updated = memoryPrompt(JSON.stringify(changed), current)
-  assert.match(updated, /CHANGED-OBSERVATION/)
+  assert.doesNotMatch(updated, /CHANGED-OBSERVATION/)
+  assert.match(memoryObservation(JSON.stringify(changed)).dynamic.text, /CHANGED-OBSERVATION/)
   assert.match(updated, /CHANGED-RESULT/)
   assert.match(updated, /CHANGED-DIAGNOSTIC/)
 })
@@ -4616,8 +4461,8 @@ test('INV-74 reference-only materials never claim delivery and source delivery i
   const output = cards.find((card) => card.ref === 'output-only-result')
   assert.equal(output.bodyInEarlierFrame, true)
   assert.equal(output.sourceInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').sourceInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, false)
+  assert(!prompt.includes('分区 observation：'))
+  assert.equal(memoryObservation(frame).dynamic, undefined)
   assert.deepEqual(section(prompt, 'runtime').gaps, [
     { ref: 'reference-result', reason: 'required-body-missing' },
   ])
@@ -4652,6 +4497,7 @@ test('INV-74 actual structured reference presentations distinguish metadata from
           resultRef: 'actual-result',
           source: '',
           text: projection.prompt,
+          bodyIncluded,
           blocks: projection.blocks.map((block) => ({ bodyIncluded: block.bodyIncluded })),
           presentation: { format },
         },
@@ -4669,9 +4515,11 @@ test('INV-74 actual structured reference presentations distinguish metadata from
           : [{ ref: 'actual-result', reason: 'required-body-missing' }],
       })
       const prompt = memoryPrompt(frame, frame)
-      const observation = section(prompt, 'observation')
-      assert.equal(observation.outputInEarlierFrame, bodyIncluded)
-      assert.equal(observation.outputPresentationInEarlierFrame, true)
+      assert(!prompt.includes('分区 observation：'))
+      const observation = JSON.parse(memoryObservation(frame).dynamic.text).current
+      assert.equal(observation.text, projection.prompt)
+      assert.equal(observation.bodyIncluded, bodyIncluded)
+      assert(!Object.hasOwn(observation, 'outputInEarlierFrame'))
       const result = prompt
         .split('\n')
         .filter((line) => line.startsWith('{'))
@@ -4688,15 +4536,27 @@ test('INV-74 actual structured reference presentations distinguish metadata from
 test('INV-74 newly included bodies cannot inherit delivery from identical prior reference metadata', () => {
   const make = (bodyIncluded) =>
     frameBody({
-      'partitions.observation': { source: '', text: 'IMAGE-METADATA', blocks: [{ bodyIncluded }] },
+      'partitions.observation': {
+        sourceRef: 'observer',
+        resultRef: 'observed',
+        source: '',
+        text: 'IMAGE-METADATA',
+        bodyIncluded,
+        blocks: [{ bodyIncluded }],
+      },
       'partitions.workspace.notes': [
         { key: 'note', revision: 1, ref: 'note', text: 'NOTE-METADATA', bodyIncluded },
       ],
       'partitions.recent.results': [{ ref: 'image', text: 'IMAGE-METADATA', bodyIncluded }],
     })
   const prompt = memoryPrompt(make(true), make(false))
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').outputPresentationInEarlierFrame, true)
+  assert(!prompt.includes('分区 observation：'))
+  const dynamic = JSON.parse(memoryObservation(make(true)).dynamic.text).current
+  const previousDynamic = JSON.parse(memoryObservation(make(false)).dynamic.text).current
+  assert.equal(dynamic.bodyIncluded, true)
+  assert.equal(previousDynamic.bodyIncluded, false)
+  assert.equal(dynamic.text, 'IMAGE-METADATA')
+  assert(!Object.hasOwn(dynamic, 'outputInEarlierFrame'))
   const cards = prompt
     .split('\n')
     .filter((line) => line.startsWith('{'))
@@ -4801,14 +4661,27 @@ test('INV-74 same output body under a new ref is delivered again and failures re
 
 test('INV-74 capacity retire turns expired frozen bodies into reference cards once, never touching leased ones', async (t) => {
   const f = await fixture(t)
+  const support = f.session.executionRunner.observationSupport()
+  if (!support.available)
+    await assert.rejects(
+      f.session.observe({ source: "import {output} from 'velaros';output('must not run');" }),
+      { code: 'UNAVAILABLE' }
+    )
   const leased = await f.session.execute(
     { source: "import {output} from 'velaros';output('LEASED-BODY')" },
     'task'
   )
+  assert(leased.checked && !leased.result.failed, JSON.stringify(leased))
   const expiring = await f.session.execute(
     { source: "import {output} from 'velaros';output('EXPIRED-BODY')" },
     1
   )
+  assert(expiring.checked && !expiring.result.failed, JSON.stringify(expiring))
+  if (!support.available)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
   const view = {
     id: 'frame',
     scope: { sessionId: 's', revision: 0 },

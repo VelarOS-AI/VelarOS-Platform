@@ -1,5 +1,4 @@
 import type {
-  ContextCompletionPort,
   ContextCompletionResult,
   ContextRef,
   ContextRuntime,
@@ -9,6 +8,7 @@ import type {
 } from '@velaros-ai/context'
 import type {
   ModelDriver,
+  ModelDynamicInput,
   ModelHistoryMessage,
   ModelImage,
   ModelResponseFormat,
@@ -56,10 +56,20 @@ export interface ActExecutionPort {
     acceptedTurnId: string,
     calls?: readonly ModelToolCall[],
     waitSignal?: AbortSignal
-  ): Promise<void | boolean | { succeeded: boolean; results: readonly ModelToolResult[] }>
+  ): Promise<
+    | void
+    | boolean
+    | {
+        succeeded: boolean
+        results: readonly ModelToolResult[]
+        delivery?: 'history' | 'dynamic'
+      }
+  >
 }
 /** 上下文策略独立于协议解码和执行调度。 */
 export interface ActContextPort {
+  /** 原生观察往返只在动态区交付；由会话 owner 持有并按响应接纳水位消费。 */
+  stageDynamicExchange?(ref: ContextRef, signal: AbortSignal): Promise<void>
   /** 专项原生工具的最终产物已受理；成功执行后可进入普通完成核查。缺省仍由模型声明完成。 */
   deliveryReady?(): boolean
   /** 安全轮边界的独立整理口；pressure 也用于机械回收收益不足或短期再次受阻，不执行业务脚本、不消费业务租约。返回值仅表示发布，循环仍重新核对容量。 */
@@ -100,44 +110,32 @@ export interface ActContextPort {
   prepare(signal: AbortSignal): Promise<void | { readonly sources: readonly ContextRef[] }>
   /** 本轮仍有可见租约的执行身份。 */
   visibleExecutions(): Promise<readonly string[]>
-  /** 单次组帧的稳定准备与本地候选；未提供时沿用 project/reconcile。事实变化须抛 STALE_VIEW，不跨周期复用。 */
-  beginFrame?(
+  /** 单次组帧共用稳定材料；只发布最终选中的正文，事实变化抛 STALE_VIEW。 */
+  beginFrame(
     view: ModelView,
     signal: AbortSignal,
     maxChars: number
   ): Promise<{
-    project(maxChars: number): ReturnType<ActContextPort['project']>
-    reconcile: NonNullable<ActContextPort['reconcile']>
-    /** 仅对容量通过的最终正文发布审计；不消费交付租约。 */
-    publish(body: string, signal: AbortSignal): Promise<void>
+    /** 本周期允许在实际请求历史中保留此前已接纳的帧。 */
+    retainFrames: boolean
+    /** 候选投影只在本地试算，不消费交付租约。 */
+    project(maxChars: number): Promise<{
+      body: string
+      images: readonly ModelImage[]
+      dynamic?: ModelDynamicInput
+      history?: readonly ModelHistoryMessage[]
+      segment?: ActFrameSegment
+    }>
+    /** 依本次实际历史核对正文覆盖，并生成最终请求中的完整正文或变化。 */
+    reconcile(
+      body: string,
+      history: readonly ModelHistoryMessage[],
+      previous: Optional<string>,
+      signal: AbortSignal
+    ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }>
+    /** 只发布选中的最终正文与证明；租约仍在响应接纳后消费。 */
+    publish(body: string, signal: AbortSignal): Promise<void | ContextRef>
   }>
-  /** 根据观察输出、租约和必要事实装配下一轮上下文。 */
-  project(
-    view: ModelView,
-    signal: AbortSignal,
-    maxChars: number
-  ): Promise<{
-    body: string
-    images: readonly ModelImage[]
-    prompt?: string
-    history?: readonly ModelHistoryMessage[]
-    /** 分段投影时的段状态。 */
-    segment?: ActFrameSegment
-  }>
-  /**
-   * 渲染本帧相对上一帧的变化，未列出的沿用上一帧。提供时循环把已发送的帧留在历史里、
-   * 在 policy.retainedFrameRatio 的历史帧预算内只在其后追加，供应商可复用完整前缀缓存；
-   * 超出历史帧或完整请求预算时，从权威投影重建并重新核对实际正文覆盖。
-   * 缺省时每帧完整重发。
-   */
-  delta?(body: string, previous: string): string
-  /** 按本次实际选择的历史核对正文覆盖；不改变逻辑历史，容量重组时重新核对。 */
-  reconcile?(
-    body: string,
-    history: readonly ModelHistoryMessage[],
-    previous: Optional<string>,
-    signal: AbortSignal
-  ): Promise<{ body: string; prompt: string }>
   /**
    * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。
    * `claim` 是本轮 done 声明附带的完成依据，没有附带时缺席。
@@ -166,8 +164,6 @@ export interface ActLoopOptions {
 
   /** 任务事实、未知效果与领域验收由现有视图维护。 */
   readonly view: ContextViewApi
-  /** 领域的真实完成校验。 */
-  readonly completionVerifier?: ContextCompletionPort
 
   /** 会话的唯一上下文权威。 */
   readonly context: ContextRuntime

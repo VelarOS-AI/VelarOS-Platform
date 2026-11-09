@@ -101,8 +101,6 @@ export class WebOperations implements WebOperationsApi {
   private googleBackoffUntil: Nullable<number> = null
   /** 并行子任务共用搜索源，只允许一个 Google 探测在途，不把其他 query 的结果混用。 */
   private googleAttemptRunning = false
-  /** 持久化失败时仍记住同一超长期限的收敛结果，成功探测后也不重启冷却。 */
-  private clampedBackoff: Nullable<{ source: number; until: number }> = null
 
   constructor(private readonly clock: WebOperationsClock) {}
 
@@ -185,19 +183,6 @@ export class WebOperations implements WebOperationsApi {
       stored = toNullable(ctx.web.engineBackoff?.read('google'))
     } catch (error) {
       log.warn('reading the search engine backoff failed', { error: AppError.getMessage(error) })
-    }
-    const maximum = this.clock.now() + WebTuning.search.googleBlockedBackoffMs
-    if (this.clampedBackoff && stored === this.clampedBackoff.source) {
-      stored = this.clampedBackoff.until
-    } else if (isPresent(stored) && stored > maximum) {
-      // 旧版本或异常时钟写入的超长冷却只收敛一次，仍保留完整的验证页冷却窗口。
-      this.clampedBackoff = { source: stored, until: maximum }
-      stored = maximum
-      try {
-        ctx.web.engineBackoff?.write('google', maximum)
-      } catch (error) {
-        log.warn('收敛搜索来源退避期限失败', { error: AppError.getMessage(error) })
-      }
     }
     const known = [this.googleBackoffUntil, stored].filter(isFiniteNumber)
     return isEmpty(known) ? null : Math.max(...known)

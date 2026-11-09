@@ -1,6 +1,6 @@
 /** Electron 截图里用不着实例状态的那部分：裁剪、缩放、标注与差分的纯计算。 */
 import { mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname } from 'node:path'
 
 import electron from 'electron'
 
@@ -35,6 +35,7 @@ import type { ExternalBrowserPageSession } from '../../types/runtime.js'
 import type { BrowserWorkspacePath } from '../../types/workspace.js'
 import { clampInteger, clampNumber, readBoundedString, readFiniteNumber } from '../numbers.js'
 import { browserLoginDetectionScriptFragment } from '../page-scripts/login-detection'
+import { browserElementSelector } from '../page-scripts/selector'
 import { BrowserTuning } from '../tuning'
 import { resolveBrowserWorkspacePath } from '../workspace-paths'
 
@@ -209,7 +210,7 @@ export async function writeScreenshotModelImage(
   const originalName = basename(originalRelativePath.replace(/\\/g, '/'))
   const stem = originalName.replace(/\.[^.]*$/, '') || `screenshot-${Date.now()}`
   const relativePath = `artifacts/screenshots/model/${stem}-model.${extension}`
-  const path = resolve(workspaceRoot, relativePath)
+  const { path } = await resolveBrowserWorkspacePath(workspaceRoot, relativePath, '模型截图路径')
 
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, Buffer.from(modelImage.data, 'base64'))
@@ -421,7 +422,7 @@ export function normalizeScreenshotElementLabels(value: unknown): BrowserScreens
         tagName: readBoundedString(item.tagName, 32) ?? 'element',
         role: readBoundedString(item.role, 80),
         text: readBoundedString(item.text, 120),
-        selector: readBoundedString(item.selector, 240),
+        selector: isString(item.selector) ? item.selector.trim() || null : null,
         x,
         y,
         width,
@@ -546,7 +547,6 @@ const viewportHeight = Math.max(1, window.innerHeight || document.documentElemen
 const candidates = Array.from(document.querySelectorAll(selector));
 const seen = new Set();
 const normalizeText = (value) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
-const quoteAttr = (value) => String(value || '').replace(/"/g, '\\\\"');
 const labelFor = (element) =>
   normalizeText(
     element.getAttribute('aria-label') ||
@@ -556,16 +556,7 @@ const labelFor = (element) =>
     element.value ||
     element.textContent
   );
-const selectorFor = (element) => {
-  const tagName = element.tagName ? element.tagName.toLowerCase() : 'element';
-  const testId = element.getAttribute('data-testid') || element.getAttribute('data-test');
-  const name = element.getAttribute('name');
-  const id = element.getAttribute('id');
-  if (id) return '#' + id;
-  if (testId) return tagName + '[data-testid="' + quoteAttr(testId) + '"]';
-  if (name) return tagName + '[name="' + quoteAttr(name) + '"]';
-  return tagName;
-};
+const selectorFor = ${browserElementSelector.toString()};
 const isVisible = (element) => {
   const rect = element.getBoundingClientRect();
   if (rect.width < 6 || rect.height < 6) return false;

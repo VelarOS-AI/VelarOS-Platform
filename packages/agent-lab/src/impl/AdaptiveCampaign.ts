@@ -34,11 +34,11 @@ export interface AdaptiveCampaignApi {
   requiredProofCount: (classification: CampaignRootCauseClass) => number
   /** 记一次失败：同一把钥匙的账合成一条，重新打开时已有的证明作废。 */
   recordFailure: (input: RecordCampaignFailureInput) => readonly CampaignFailureRecord[]
-  /** 让一条失败账换状态；状态机不许的流转、缺根因或缺修复引用的一律当场报错。 */
+  /** 让一条失败账换状态；不能直接设为 closed，状态机不许的流转、缺根因或缺修复引用的一律当场报错。 */
   transitionFailure: (input: TransitionCampaignFailureInput) => CampaignFailureRecord
-  /** 记一个证明任务通过；数够了就关账。 */
+  /** 记一个计划内证明任务通过；不同任务达到所需数量才关账。 */
   recordProof: (failure: CampaignFailureRecord, taskId: string) => CampaignFailureRecord
-  /** 按当前真正通过的任务集校准缓存的证明；证明可以被撤销，但不假装那次修复没发生过。 */
+  /** 按账本当前真正通过的任务集校准证明，可关账也可撤销证明；调用方负责排除旧修订证据。 */
   reconcileProof: (
     failure: CampaignFailureRecord,
     currentPassingTaskIds: ReadonlySet<string>

@@ -10,7 +10,7 @@ export type SessionWorkspace = 'project' | 'system' | 'browser'
  * @AgentView
  * 这个对话里的一个会话。id 交给 ask、tell 的 to；title 是会话的标题（还没有标题是 null）。
  * root 是项目会话的项目目录，site 是浏览器会话在看的网站，别的会话是 null。
- * running 为真是它正在跑（交给它的事要等这一轮跑完）；self 为真的是你自己。
+ * running 为真是它正在跑：ask 等这轮结束再交活，tell 向当前运行追加引导；self 为真的是你自己。
  */
 export interface SessionPeer {
   id: string
@@ -55,8 +55,8 @@ export interface SessionTellInput {
   message: string
 }
 
-/** @AgentView 传到了没有：delivered 是对方闲着，已经收到、开始为它跑一轮；queued 是对方正在跑，这一轮跑完再收到。 */
+/** @AgentView queued 表示引导已被目标的活动运行接纳，尚不表示已消费或已回答；空闲目标拒绝，不返回结果。 */
 export interface SessionTold {
   session: string
-  status: 'delivered' | 'queued'
+  status: 'queued'
 }

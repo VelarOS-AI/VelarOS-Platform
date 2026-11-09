@@ -77,7 +77,7 @@ function doneAnswer(input: SessionAskInput): SessionAnswer {
 }
 
 /**
- * 一个假宿主：会话表、ask 与 tell 怎么回都能按用例换（缺省是做完了、马上收到）。
+ * 一个假宿主：会话表、ask 与 tell 怎么回都能按用例换（缺省是做完了、活动运行已接纳引导）。
  * 交回端口、调用上下文、代码面宿主装上下文的写法，以及它收到的东西。
  */
 export function sessionsSpace(
@@ -96,11 +96,15 @@ export function sessionsSpace(
     },
     ask: async (input, signal) => {
       record.asks.push({ input, signal })
+      if ((options.peers ?? DefaultPeers).some((peer) => peer.self && peer.id === input.to))
+        throw new AppError('VALIDATION', '同伴消息的目标是发起者自己，已拒绝。')
       return options.answer ? options.answer(input, signal) : doneAnswer(input)
     },
     tell: async (input, signal) => {
       record.tells.push({ input, signal })
-      return options.told ? options.told(input, signal) : { session: input.to, status: 'delivered' }
+      if ((options.peers ?? DefaultPeers).some((peer) => peer.self && peer.id === input.to))
+        throw new AppError('VALIDATION', '同伴消息的目标是发起者自己，已拒绝。')
+      return options.told ? options.told(input, signal) : { session: input.to, status: 'queued' }
     },
   }
   const context: SessionsOperationContext = {

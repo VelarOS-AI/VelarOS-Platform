@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { ContextLimits, createContextRuntime } from '@velaros-ai/context'
@@ -8,10 +10,11 @@ import { AppError } from '@velaros-ai/core/error'
 import {
   codeProgramChecker,
   createCodeSurfaceSession,
-  nodeSubprocessCodeRunner,
+  createNodeCodeRunner,
 } from '@velaros-ai/script'
 
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { SearchLimits } from '../../../dist/act/search/contract/constants.js'
 import {
   VelarEvidenceModule,
@@ -19,6 +22,7 @@ import {
 } from '../../../dist/act/search/contract/surface.js'
 import { AdvancedSearch } from '../../../dist/act/search/impl/AdvancedSearch.js'
 import { evidenceModule, searchModule } from '../../../dist/act/search/index.js'
+import { createLocalShellHost } from '../../../dist/execution/local.js'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
 
 test('INV-1 search 的实际操作与模板一致', () =>
@@ -81,41 +85,54 @@ test('新搜索首次持久化采用当前正文引用格式，不依赖历史�
 
 /** 模板经真实操作类与隔离程序运行；宿主来源由用例固定，记录各次操作。 */
 async function runTemplate(surface, definition, file, expression) {
-  const calls = []
-  const session = createCodeSurfaceSession({
-    checker: codeProgramChecker,
-    runner: nodeSubprocessCodeRunner,
-    capabilities: {
-      listOperations: () => ({ [surface.namespace]: Object.keys(definition.operations) }),
-      invoke: async ({ operation, input }) => {
-        calls.push({ operation, input })
-        try {
-          return {
-            value: await definition.operations[operation].run(input, {
-              signal: new AbortController().signal,
-              invocation: {
-                id: `call-${calls.length}`,
-                sessionId: 'search',
-                executionId: 'execution',
-              },
-              recordEffect() {},
-            }),
+  const directory = await mkdtemp(join(tmpdir(), 'search-template-'))
+  const host = createLocalShellHost({ cwd: directory })
+  try {
+    const calls = []
+    const session = createCodeSurfaceSession({
+      checker: codeProgramChecker,
+      runner: createNodeCodeRunner(
+        createNodeExecutionEnvironment({
+          cwd: directory,
+          directory: join(directory, 'runs'),
+          host,
+        })
+      ),
+      capabilities: {
+        listOperations: () => ({ [surface.namespace]: Object.keys(definition.operations) }),
+        invoke: async ({ operation, input }) => {
+          calls.push({ operation, input })
+          try {
+            return {
+              value: await definition.operations[operation].run(input, {
+                signal: new AbortController().signal,
+                invocation: {
+                  id: `call-${calls.length}`,
+                  sessionId: 'search',
+                  executionId: 'execution',
+                },
+                recordEffect() {},
+              }),
+            }
+          } catch (error) {
+            return { error: { code: error.code ?? 'UNKNOWN', message: error.message } }
           }
-        } catch (error) {
-          return { error: { code: error.code ?? 'UNKNOWN', message: error.message } }
-        }
+        },
       },
-    },
-  })
-  const template = await readFile(new URL(file, import.meta.url), 'utf8')
-  const outcome = await session.submit({
-    program: { source: `${template}\nexport default ${expression}` },
-    granted: [{ namespace: surface.namespace, declarations: surface.declarations }],
-    timeoutMs: 20_000,
-  })
-  assert.equal(outcome.checked, true)
-  assert.equal(outcome.result.failed, undefined)
-  return { value: outcome.result.value, calls }
+    })
+    const template = await readFile(new URL(file, import.meta.url), 'utf8')
+    const outcome = await session.submit({
+      program: { source: `${template}\nexport default ${expression}` },
+      granted: [{ namespace: surface.namespace, declarations: surface.declarations }],
+      timeoutMs: 20_000,
+    })
+    assert.equal(outcome.checked, true)
+    assert.equal(outcome.result.failed, undefined)
+    return { value: outcome.result.value, calls }
+  } finally {
+    await host.dispose()
+    await rm(directory, { recursive: true, force: true })
+  }
 }
 
 test('INV-3 搜索模板保留局部报告、分页失败项和真实证据版本，不把当前页当全部', async () => {

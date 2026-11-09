@@ -97,6 +97,34 @@ class Helpers(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "injection"):
             self.desktop.inputs.drag({"from": point, "to": point, "durationMs": 100})
         self.assertEqual(self.backend.calls[-1], ("up", {"button": "left"}))
+        inputs = self.desktop.inputs
+        self.backend.fail_drag = False
+        drag_error = RuntimeError("drag primary failed")
+        release_error = RuntimeError("mouse release failed")
+
+        def failed_drag(*_args, **_kwargs):
+            self.assertIn("mouse:left", inputs.held)
+            raise drag_error
+
+        with patch.object(self.backend, "dragTo", side_effect=failed_drag), patch.object(
+            self.backend, "mouseUp", side_effect=release_error
+        ):
+            with self.assertRaises(ComputerHelperError) as failure:
+                inputs.drag({"from": point, "to": point, "durationMs": 100})
+            self.assertIs(failure.exception.__cause__, drag_error)
+            self.assertIn(str(drag_error), str(failure.exception))
+            self.assertIn(str(release_error), str(failure.exception))
+            self.assertIn("mouse:left", inputs.held)
+        self.assertEqual(inputs.release_inputs()["released"], ["mouse:left"])
+        self.assertFalse(inputs.held)
+
+        with patch.object(self.backend, "mouseUp", side_effect=release_error):
+            with self.assertRaises(RuntimeError) as failure:
+                inputs.drag({"from": point, "to": point, "durationMs": 100})
+            self.assertIs(failure.exception, release_error)
+            self.assertIn("mouse:left", inputs.held)
+        self.assertEqual(inputs.release_inputs()["released"], ["mouse:left"])
+        self.assertFalse(inputs.held)
 
     def test_hold_leases_release_on_expiry_and_explicit_cleanup(self):
         with patch("computer_input.INPUT_LEASE_MS", 30):
@@ -112,6 +140,18 @@ class Helpers(unittest.TestCase):
         result = self.desktop.inputs.release_inputs()
         self.assertEqual(result["released"], ["mouse:left"])
         self.assertEqual(self.desktop.inputs.mouse_up({})["released"], [])
+
+        # 按下只做了一部分、立即释放也失败时，原租约仍负责稍后的释放。
+        with patch("computer_input.INPUT_LEASE_MS", 30), patch.object(
+            self.backend, "mouseDown", side_effect=RuntimeError("down partly failed")
+        ), patch.object(self.backend, "mouseUp", side_effect=[RuntimeError("up failed"), None]) as release:
+            with self.assertRaises(ComputerHelperError):
+                self.desktop.inputs.mouse_down({"at": self.point()})
+            deadline = time.monotonic() + 1
+            while self.desktop.inputs.held and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertFalse(self.desktop.inputs.held)
+            self.assertEqual(release.call_count, 2)
 
     def test_window_binding_rejects_moves_and_identity_reuse(self):
         display = self.desktop._window_display(self.window)
@@ -180,6 +220,61 @@ class Helpers(unittest.TestCase):
                 record(request, lambda: (_ for _ in ()).throw(RuntimeError("capture failed")))
             self.assertFalse(output.exists())
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_recording_cleanup_preserves_published_file_and_original_failure(self):
+        from computer_recording import record
+
+        class Stream:
+            def encode(self, frame=None):
+                return [b"frame" if frame is not None else b"flush"]
+
+        class Container:
+            def __init__(self, path): self.path = path
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def add_stream(self, *_args, **_kwargs): return Stream()
+            def mux(self, packet):
+                with open(self.path, "ab") as target:
+                    target.write(packet)
+
+        fake_av = types.ModuleType("av")
+        fake_av.open = lambda target, **_kwargs: Container(target)
+        fake_av.VideoFrame = types.SimpleNamespace(from_image=lambda _image: types.SimpleNamespace(pts=None))
+        fake_pil = types.ModuleType("PIL")
+        fake_pil.ImageOps = types.SimpleNamespace(pad=lambda image, _size: image)
+        cleanup_error = OSError("temporary unlink failed")
+        original_unlink = os.unlink
+
+        def fail_cleanup(target, *args, **kwargs):
+            if Path(target).name.startswith(".velaros-record-"):
+                raise cleanup_error
+            return original_unlink(target, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            sys.modules, {"av": fake_av, "PIL": fake_pil}
+        ):
+            output = Path(directory) / "published.mp4"
+            request = {"path": str(output), "durationMs": 100, "fps": 10}
+            with patch("computer_recording.os.unlink", side_effect=fail_cleanup):
+                with self.assertRaises(ComputerHelperError) as failure:
+                    record(request, lambda: types.SimpleNamespace(size=(4, 2)))
+            self.assertEqual(output.read_bytes(), b"frameflush")
+            self.assertEqual(failure.exception.code, "UNAVAILABLE")
+            self.assertIs(failure.exception.__cause__, cleanup_error)
+            self.assertIn("录像已保存", str(failure.exception))
+            self.assertIn(str(output), str(failure.exception))
+            self.assertIn(str(cleanup_error), str(failure.exception))
+
+            failed_output = Path(directory) / "failed.mp4"
+            capture_error = RuntimeError("capture primary failed")
+            with patch("computer_recording.os.unlink", side_effect=fail_cleanup):
+                with self.assertRaises(ComputerHelperError) as failure:
+                    record({**request, "path": str(failed_output)}, lambda: (_ for _ in ()).throw(capture_error))
+            self.assertFalse(failed_output.exists())
+            self.assertIs(failure.exception.__cause__, capture_error)
+            self.assertIn(str(capture_error), str(failure.exception))
+            self.assertIn(str(cleanup_error), str(failure.exception))
+            self.assertNotIn("录像已保存", str(failure.exception))
 
 
 if __name__ == "__main__":

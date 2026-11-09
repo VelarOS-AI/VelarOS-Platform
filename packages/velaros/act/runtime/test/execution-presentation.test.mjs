@@ -80,7 +80,11 @@ test('trace and paginated trace share the total body budget including execution 
   t.after(() => storage.close())
   const context = createContextRuntime({ sessionId: 's', storage })
   const executionId = crypto.randomUUID()
-  const source = await context.append({ kind: 'audit', title: 'source', body: 'source' })
+  const source = await context.append({
+    kind: 'audit',
+    title: 'source',
+    body: JSON.stringify({ source: 'source' }),
+  })
   const result = await context.append({
     kind: 'audit',
     title: `script:${executionId}:result`,
@@ -88,6 +92,18 @@ test('trace and paginated trace share the total body budget including execution 
     sources: [source.ref],
   })
   for (let turn = 0; turn < 2; turn++) {
+    const frameId = crypto.randomUUID()
+    const frame = await context.append({
+      kind: 'audit',
+      title: `context:frame:${frameId}`,
+      body: JSON.stringify({
+        frameId,
+        input: { after: 0, through: 0 },
+        observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
+        entries: [],
+      }),
+      sources: [source.ref, result.ref],
+    })
     const request = await context.append({
       kind: 'audit',
       title: 'model-request',
@@ -95,21 +111,9 @@ test('trace and paginated trace share the total body budget including execution 
         runId: 'run',
         turn,
         repair: 0,
-        request: {
-          materials: [
-            {
-              origin: 'runtime-view',
-              text: JSON.stringify({
-                partitions: {
-                  task: { goals: [] },
-                  observation: { sourceRef: source.ref.id, resultRef: result.ref.id },
-                  recent: { results: [] },
-                },
-              }),
-            },
-          ],
-        },
+        frameRef: frame.ref,
       }),
+      sources: [frame.ref],
     })
     const response = await context.append({
       kind: 'assistant',

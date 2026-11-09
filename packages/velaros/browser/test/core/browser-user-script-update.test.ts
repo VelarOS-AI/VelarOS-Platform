@@ -7,6 +7,7 @@ import { describe, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { BrowserUserScriptLimits } from '../../contract/constants.js'
 import { BrowserUserScriptManager } from '../../impl/workspace/BrowserUserScriptManager.js'
 import type { BrowserSiteContext } from '../../types/browser.js'
 
@@ -124,6 +125,210 @@ void describe('用户脚本的修改事务', () => {
       /磁盘只读/u
     )
     assert.equal(files.get(created.script.relativePath), 'console.log("v1")\n')
+  })
+
+  void test('旧代码不可读时在覆盖前拒绝，不留下新代码与旧启用索引', async () => {
+    const { files, access } = createMemoryAccess()
+    const manager = new BrowserUserScriptManager(access as never)
+    const created = await manager.createScript(
+      context,
+      { name: 'demo', code: 'console.log("v1")', match: ['https://example.test/*'] },
+      { source: 'user', enabled: true }
+    )
+    const index = files.get('scripts/index.json')
+    const readFile = access.readFile
+    access.readFile = async (path) => {
+      if (path === created.script.relativePath) throw new AppError('PERMISSION', '旧代码不可读。')
+      return readFile(path)
+    }
+    await assert.rejects(
+      manager.updateScript(
+        context,
+        created.script.id,
+        { code: 'alert("unconfirmed")' },
+        { disableAfterExecutionChange: true }
+      ),
+      /旧代码不可读/u
+    )
+    assert.equal(files.get(created.script.relativePath), 'console.log("v1")\n')
+    assert.equal(files.get('scripts/index.json'), index)
+  })
+
+  void test('INV-34 预停用失败时不改代码，也不掩盖原错误', async () => {
+    const { files, access } = createMemoryAccess()
+    const manager = new BrowserUserScriptManager(access as never)
+    const created = await manager.createScript(
+      context,
+      { name: 'demo', code: 'console.log("v1")', match: ['https://example.test/*'] },
+      { source: 'user', enabled: true }
+    )
+    const index = files.get('scripts/index.json')
+    const writeFile = access.writeFile
+    let codeWrites = 0
+    access.writeFile = async (path, content) => {
+      if (path === 'scripts/index.json') throw new AppError('PERMISSION', '预停用索引不可写。')
+      codeWrites++
+      return writeFile(path, content)
+    }
+    await assert.rejects(
+      manager.updateScript(context, created.script.id, { code: 'console.log("v2")' }, {}),
+      /预停用索引不可写/u
+    )
+    assert.equal(codeWrites, 0)
+    assert.equal(files.get(created.script.relativePath), 'console.log("v1")\n')
+    assert.equal(files.get('scripts/index.json'), index)
+  })
+
+  void test('INV-34 索引提交与代码回滚同时失败也不留下可自动执行的新代码', async () => {
+    const { files, access } = createMemoryAccess()
+    const manager = new BrowserUserScriptManager(access as never)
+    const created = await manager.createScript(
+      context,
+      { name: 'demo', code: 'console.log("v1")', match: ['https://example.test/*'] },
+      { source: 'user', enabled: true }
+    )
+    const writeFile = access.writeFile
+    let indexWrites = 0
+    access.writeFile = async (path, content) => {
+      if (path === 'scripts/index.json' && ++indexWrites === 2)
+        throw new AppError('PERMISSION', '新版索引提交失败。')
+      if (path === created.script.relativePath && content === 'console.log("v1")\n')
+        throw new AppError('PERMISSION', '旧代码回滚失败。')
+      return writeFile(path, content)
+    }
+    await assert.rejects(
+      manager.updateScript(
+        context,
+        created.script.id,
+        { code: 'console.log("v2")' },
+        { disableAfterExecutionChange: true }
+      ),
+      /新版索引提交失败/u
+    )
+    assert.equal(files.get(created.script.relativePath), 'console.log("v2")\n')
+    assert.equal((await manager.getOverview(context)).scripts[0]?.enabled, false)
+    assert.deepEqual(await manager.listRunnable(context.url), [])
+  })
+
+  void test('INV-34 执行面未变时不预停用，成功更新仍服从宿主启用策略', async () => {
+    const { access } = createMemoryAccess()
+    const manager = new BrowserUserScriptManager(access as never)
+    const created = await manager.createScript(
+      context,
+      { name: 'demo', code: 'console.log("v1")', match: ['https://example.test/*'] },
+      { source: 'user', enabled: true }
+    )
+    const enabledWrites: boolean[] = []
+    let codeWrites = 0
+    const writeFile = access.writeFile
+    access.writeFile = async (path, content) => {
+      if (path === 'scripts/index.json') {
+        const stored = JSON.parse(content) as { scripts: Array<{ enabled: boolean }> }
+        enabledWrites.push(stored.scripts[0]!.enabled)
+      } else codeWrites++
+      return writeFile(path, content)
+    }
+    const unchanged = await manager.updateScript(
+      context,
+      created.script.id,
+      {
+        code: 'console.log("v1")',
+        match: ['https://example.test/*'],
+        runAt: 'document-end',
+        world: 'isolated',
+      },
+      { disableAfterExecutionChange: true }
+    )
+    assert.equal(unchanged.refreshRequired, false)
+    assert.equal(unchanged.script.enabled, true)
+    assert.equal(unchanged.script.revision, 1)
+    assert.equal(codeWrites, 0)
+    assert.deepEqual(enabledWrites, [true])
+    enabledWrites.length = 0
+    const updated = await manager.updateScript(
+      context,
+      created.script.id,
+      { code: 'console.log("v2")' },
+      {}
+    )
+    assert.equal(updated.script.enabled, true)
+    assert.deepEqual(enabledWrites, [false, true])
+  })
+
+  void test('脚本字节预算包含规范化补上的换行', async () => {
+    const { files, manager } = createManager()
+    await assert.rejects(
+      manager.createScript(
+        context,
+        {
+          name: 'too-large-after-normalization',
+          code: 'x'.repeat(BrowserUserScriptLimits.codeBytes),
+          match: ['https://example.test/*'],
+        },
+        { source: 'agent', enabled: false }
+      ),
+      /不能超过 1 MB/u
+    )
+    assert.equal(files.size, 0)
+    const code = `${'x'.repeat(BrowserUserScriptLimits.codeBytes - 1)}\n`
+    const created = await manager.createScript(
+      context,
+      { name: 'exact-budget', code, match: ['https://example.test/*'] },
+      { source: 'agent', enabled: false }
+    )
+    assert.equal((await manager.readScript(context, created.script.id)).code, code)
+  })
+
+  void test('自动注入与读取等待修改结算，不能看到新代码与旧启用索引', async () => {
+    const { files, access } = createMemoryAccess()
+    const manager = new BrowserUserScriptManager(access as never)
+    const created = await manager.createScript(
+      context,
+      { name: 'demo', code: 'console.log("v1")', match: ['https://example.test/*'] },
+      { source: 'user', enabled: true }
+    )
+    let release!: () => void
+    let written!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const codeWritten = new Promise<void>((resolve) => {
+      written = resolve
+    })
+    const writeFile = access.writeFile
+    access.writeFile = async (path, content) => {
+      const result = await writeFile(path, content)
+      if (path === created.script.relativePath) {
+        written()
+        await held
+      }
+      return result
+    }
+    const update = manager.updateScript(
+      context,
+      created.script.id,
+      { code: 'console.log("v2")' },
+      { disableAfterExecutionChange: true }
+    )
+    await codeWritten
+    let settled = false
+    const runnable = manager.listRunnable(context.url).then((result) => {
+      settled = true
+      return result
+    })
+    const read = manager.readScript(context, created.script.id)
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      assert.equal(settled, false)
+    } finally {
+      release()
+      await update
+    }
+    assert.deepEqual(await runnable, [])
+    const current = await read
+    assert.equal(current.script.enabled, false)
+    assert.equal(current.code, 'console.log("v2")\n')
+    assert.equal(files.get(created.script.relativePath), current.code)
   })
 
   void test('并发修改不丢更新', async () => {

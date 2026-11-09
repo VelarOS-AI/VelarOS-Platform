@@ -4,8 +4,10 @@
  * 这里只测对外承诺的行为，不测实现细节；记忆库落在系统临时目录下的真磁盘上，每个用例一个根目录。
  */
 
+import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { mkdir, readdir, readFile, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { VelarMemoryModule } from '../contract/surface'
 import type { MemorySaveInput } from '../index'
 import { createMemoryStore, MemoryLimits, memoryOperations, MemoryTypes } from '../index'
-import { MemoryTuning } from '../utils/tuning'
 
 import {
   failureOf,
@@ -67,7 +68,6 @@ describe('作用域', () => {
     const store = createMemoryStore({ root })
     const project = store.scope('project:/Srv/Repos/VelarOS Platform')
     expect(await project.list()).toEqual([])
-    expect(await project.renderIndex()).toBe('## 记忆\n还没有记忆。')
     expect(await readdir(root)).toEqual([])
     await project.save(entry('first'))
     const [directory] = await readdir(root)
@@ -184,10 +184,10 @@ describe('读写', () => {
     const file = await readFile(join(root, directory!, 'reply-style.md'), 'utf8')
     expect(file.split('\n').slice(0, 7)).toEqual([
       '---',
-      'title: 回复风格（改）',
-      'description: 描述 reply-style',
+      'title: "回复风格（改）"',
+      'description: "描述 reply-style"',
       'type: work',
-      'tags: 汇报, lang',
+      'tags: ["汇报","lang"]',
       `updated: ${listed[0]!.updatedAt}`,
       '---',
     ])
@@ -196,9 +196,17 @@ describe('读写', () => {
 
   test('INV-4 会被读歪的值写出去之后照样读得回来', async () => {
     const scope = createMemoryStore({ root }).scope('system')
-    const tricky = { title: "'开头是引号", description: '中间有: 冒号 #井号' }
+    const tricky = {
+      title: "'开头是引号",
+      description: '中间有: 冒号 #井号',
+      tags: [' [] ', '[Release]', "'单引号'", '"Double"', '[]', '非ASCII'],
+      content: '# 正文\n\n包含 "双引号"、\'单引号\' 和 [链接](https://example.com)',
+    }
     await scope.save(entry('tricky', tricky))
-    expect((await scope.list())[0]).toMatchObject(tricky)
+    const normalized = { ...tricky, tags: ['[]', '[release]', "'单引号'", '"double"', '非ascii'] }
+    expect((await scope.list())[0]).toMatchObject(normalized)
+    await scope.save(entry('tricky', { ...tricky, tags: undefined }))
+    expect((await scope.list())[0]).toMatchObject(normalized)
   })
 
   test('INV-13 改一条时 tags 不给就沿用原来的，给 [] 才清空，给了就整组换掉；新建时不给就是没有', async () => {
@@ -220,11 +228,11 @@ describe('读写', () => {
     await scope.save(entry('tagged', { tags: [] }))
     expect(await tagsOf('tagged')).toEqual([])
 
-    // 人手改过的文件也一样：头部里手写的标签，模型改正文时没给 tags，照样留着
+    // 当前格式允许人手修改：标签只做同一套 trim/lowercase/dedupe。
     const [directory] = await readdir(root)
     await writeFile(
       join(root, directory!, 'hand-written.md'),
-      '---\ntitle: 手写\ntags: [Release, 发版]\n---\n正文'
+      '---\ntitle: "手写"\ndescription: "手写的描述"\ntype: work\ntags: ["Release","发版"]\nupdated: 2026-01-02T03:04:05.000Z\n---\n\n正文\n'
     )
     await scope.save(entry('hand-written', { content: '模型改过的正文' }))
     expect(await tagsOf('hand-written')).toEqual(['release', '发版'])
@@ -256,6 +264,7 @@ describe('读写', () => {
       ['save', { ...entry('a'), tags: '发版' }],
       ['save', { ...entry('a'), tags: ['发版,提交'] }],
       ['save', { ...entry('a'), tags: ['x'.repeat(MemoryLimits.tagChars + 1)] }],
+      ['save', { ...entry('a'), tags: ['İ'.repeat(Math.floor(MemoryLimits.tagChars / 2) + 1)] }],
       ['save', { ...entry('a'), tags: tooManyTags }],
       ['remove', {}],
       ['remove', { id: 42 }],
@@ -267,6 +276,48 @@ describe('读写', () => {
       ).toBe('VALIDATION')
     }
     expect(await readdir(root)).toEqual([])
+    const tags = [
+      'x'.repeat(MemoryLimits.tagChars),
+      'İ'.repeat(Math.floor(MemoryLimits.tagChars / 2)),
+    ]
+    const normalizedTags = tags.map((tag) => tag.toLowerCase())
+    await space.call('save', entry('tag-boundary', { tags }))
+    expect((await space.call('list'))[0].tags).toEqual(normalizedTags)
+    await space.call('save', entry('tag-boundary'))
+    expect((await space.call('list'))[0].tags).toEqual(normalizedTags)
+  })
+
+  test('INV-6 prepareRemove 在宿主写屏障前同步核对唯一删除规范，返回独立快照但不承诺 CAS', async () => {
+    const store = createMemoryStore({ root })
+    const scope = store.scope('system')
+    const original = { id: 'absent', expectedRevision: null, extra: '忽略' }
+    const prepared = store.prepareRemove(original)
+    expect(prepared).toStrictEqual({ id: 'absent', expectedRevision: null })
+    expect(prepared).not.toBe(original)
+    original.id = 'changed'
+    expect(prepared.id).toBe('absent')
+    expect(store.prepareRemove({ id: 'absent' })).toStrictEqual({ id: 'absent' })
+    const invalid: unknown[] = [
+      null,
+      {},
+      { id: '../escape' },
+      { id: 'con' },
+      { id: 'x'.repeat(MemoryLimits.idChars + 1) },
+      { id: 'safe', expectedRevision: 'invalid' },
+    ]
+    for (const input of invalid) {
+      expect(
+        (await failureOf(Promise.resolve().then(() => store.prepareRemove(input as never)))).code
+      ).toBe('VALIDATION')
+      expect((await failureOf(scope.remove(input as never))).code).toBe('VALIDATION')
+    }
+    expect(await readdir(root)).toEqual([])
+    const first = await scope.save(entry('stale'))
+    const stale = store.prepareRemove({ id: 'stale', expectedRevision: first.revision })
+    await scope.save(entry('stale', { content: '新版本' }))
+    expect(store.prepareRemove(stale)).toStrictEqual(stale)
+    expect((await failureOf(scope.remove(stale))).code).toBe('CONFLICT')
+    expect((await scope.list())[0]!.content).toBe('新版本')
   })
 
   test('INV-6 取消之后三个操作都不碰磁盘', async () => {
@@ -281,130 +332,129 @@ describe('读写', () => {
     expect((await scope.list()).map((memory) => memory.id)).toEqual(['kept'])
   })
 
-  test('INV-7 人手改过的文件照样认；不是 <合法 id>.md 的文件不算记忆', async () => {
+  test('INV-7 当前格式接受 BOM/CRLF，revision 取原始字节；不是 <合法 id>.md 的文件不算记忆', async () => {
     const scope = createMemoryStore({ root }).scope('system')
     await scope.save(entry('seed'))
     const [directory] = await readdir(root)
     const at = (name: string) => join(root, directory!, name)
-    await writeFile(at('plain-note.md'), '# 手写的笔记\r\n\r\n第二段')
-    await writeFile(
-      at('aliased.md'),
-      `${String.fromCharCode(0xfe_ff)}---\r\nname: 别名标题\r\nsummary: "带引号的描述"\r\nkind: Feedback\r\ntags: [发版, Release]\r\n---\r\n正文`
-    )
-    await writeFile(
-      at('odd-type.md'),
-      '---\ntitle: 旧类别\ntype: preference\nupdated: 2026-09-01\n---\n还是旧的写法'
-    )
+    const raw = [
+      '\uFEFF---',
+      'title: "手写标题"',
+      'description: "手写描述"',
+      'type: feedback',
+      `tags: ${JSON.stringify(['[]', "'单引号'", '"Double"', '发版'])}`,
+      'updated: 2026-01-02T03:04:05.000Z',
+      '---',
+      '',
+      '# 手写正文',
+      '',
+      '第二段',
+      '',
+    ].join('\r\n')
+    await writeFile(at('hand-written.md'), raw)
     await writeFile(at('Upper-Case.md'), '不算')
     await writeFile(at('notes.txt'), '不算')
-    const modified = new Date('2026-01-02T03:04:05.000Z')
-    await utimes(at('plain-note.md'), modified, modified)
-
     const byId = new Map((await scope.list()).map((memory) => [memory.id, memory]))
-    expect([...byId.keys()].sort()).toEqual(['aliased', 'odd-type', 'plain-note', 'seed'])
-    expect(byId.get('plain-note')).toEqual({
-      id: 'plain-note',
-      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
-      type: 'work',
-      title: 'plain-note',
-      description: '手写的笔记',
-      tags: [],
-      content: '# 手写的笔记\n\n第二段',
-      updatedAt: modified.toISOString(),
-    })
-    expect(byId.get('aliased')).toMatchObject({
-      title: '别名标题',
-      description: '带引号的描述',
+    expect([...byId.keys()].sort()).toEqual(['hand-written', 'seed'])
+    expect(byId.get('hand-written')).toEqual({
+      id: 'hand-written',
+      revision: createHash('sha256')
+        .update(await readFile(at('hand-written.md')))
+        .digest('hex'),
+      title: '手写标题',
+      description: '手写描述',
       type: 'feedback',
-      tags: ['发版', 'release'],
-      content: '正文',
+      tags: ['[]', "'单引号'", '"double"', '发版'],
+      content: '# 手写正文\n\n第二段',
+      updatedAt: '2026-01-02T03:04:05.000Z',
     })
-    expect(byId.get('odd-type')).toMatchObject({
-      type: 'work',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-    })
-  })
-})
-
-describe('开场索引', () => {
-  test('INV-8 按类别分组、一行一条，条目后面一行数出现有标签', async () => {
-    const scope = createMemoryStore({ root }).scope('system')
-    await scope.save(
-      entry('ref', {
-        type: 'reference',
-        title: '发版流水线',
-        description: '发版进度看 release 工作流',
-        tags: ['发版'],
-      })
-    )
-    await scope.save(
-      entry('rule', {
-        type: 'feedback',
-        title: '提交前先看暂存区',
-        description: '提交前跑 git diff --cached',
-        tags: ['提交', '发版'],
-      })
-    )
-    await scope.save(
-      entry('who', { type: 'user', title: '汇报用中文', description: '写给用户的文字都用中文' })
-    )
-    await scope.save(
-      entry('plan', {
-        type: 'work',
-        title: '发版顺序',
-        description: 'Platform → 产品 → Cloud',
-        tags: ['发版'],
-      })
-    )
-    expect(await scope.renderIndex()).toBe(
-      [
-        '## 记忆（共 4 条，括号里是 id）',
-        '### 用户',
-        '- [汇报用中文](who) — 写给用户的文字都用中文',
-        '### 反馈',
-        '- [提交前先看暂存区](rule) — 提交前跑 git diff --cached',
-        '### 工作',
-        '- [发版顺序](plan) — Platform → 产品 → Cloud',
-        '### 参考',
-        '- [发版流水线](ref) — 发版进度看 release 工作流',
-        '现有标签：发版 3 · 提交 1',
-      ].join('\n')
-    )
+    expect(await readFile(at('hand-written.md'), 'utf8')).toBe(raw)
   })
 
-  test('INV-8 放不下时先保用户与反馈，再按更新时间放，条数与字数都有上限，剩下的只报条数', async () => {
+  test('INV-7 INV-14 非法 UTF-8 不得与真实替换字符共用 revision 或被覆盖，合法 U+FFFD 正常往返', async () => {
     const scope = createMemoryStore({ root }).scope('system')
-    await scope.save(entry('old-feedback', { type: 'feedback' }))
-    const works = MemoryTuning.index.maxEntries + 20
-    for (let index = 0; index < works; index += 1)
-      await scope.save(entry(`work-${String(index).padStart(3, '0')}`))
-
-    const byCount = await scope.renderIndex()
-    const listedByCount = [...byCount.matchAll(/\]\(([a-z0-9-]+)\)/gu)].map((match) => match[1])
-    const newestWorks = (await scope.list())
-      .filter((memory) => memory.type === 'work')
-      .map((memory) => memory.id)
-    expect(listedByCount).toEqual([
-      'old-feedback',
-      ...newestWorks.slice(0, MemoryTuning.index.maxEntries - 1),
-    ])
-    expect(byCount).toContain(
-      `另有 ${works + 1 - MemoryTuning.index.maxEntries} 条没列出，用 list() 看全部`
+    const content = 'before\uFFFDafter'
+    const saved = await scope.save(entry('seed', { content }))
+    const [directory] = await readdir(root)
+    const path = join(root, directory!, 'seed.md')
+    const valid = await readFile(path)
+    const replacement = Buffer.from('\uFFFD')
+    const at = valid.indexOf(replacement)
+    expect(at).toBeGreaterThan(0)
+    expect(saved.revision).toBe(createHash('sha256').update(valid).digest('hex'))
+    for (const byte of [0xff, 0xfe]) {
+      const invalid = Buffer.concat([
+        valid.subarray(0, at),
+        Buffer.from([byte]),
+        valid.subarray(at + replacement.length),
+      ])
+      expect(invalid.toString('utf8')).toBe(valid.toString('utf8'))
+      await writeFile(path, invalid)
+      expect((await failureOf(scope.list())).code).toBe('VALIDATION')
+      for (const tags of [undefined, []]) {
+        expect((await failureOf(scope.save(entry('seed', { content: '覆盖', tags })))).code).toBe(
+          'VALIDATION'
+        )
+        expect(await readFile(path)).toEqual(invalid)
+      }
+      expect(
+        (await failureOf(scope.save(entry('seed', { expectedRevision: saved.revision })))).code
+      ).toBe('VALIDATION')
+      expect(
+        (await failureOf(scope.remove({ id: 'seed', expectedRevision: saved.revision }))).code
+      ).toBe('VALIDATION')
+      expect(await readFile(path)).toEqual(invalid)
+      expect((await readdir(join(root, directory!))).sort()).toEqual(['.scope', 'seed.md'])
+    }
+    await writeFile(path, valid)
+    expect((await scope.list())[0]).toMatchObject({ content, revision: saved.revision })
+    const updated = await scope.save(
+      entry('seed', { content: '真实替换字符：\uFFFD', expectedRevision: saved.revision })
     )
-
-    const long = 'x'.repeat(MemoryLimits.descriptionChars)
-    for (let index = 0; index < works; index += 1)
-      await scope.save(entry(`work-${String(index).padStart(3, '0')}`, { description: long }))
-    const byChars = await scope.renderIndex()
-    const listedByChars = [...byChars.matchAll(/\]\(([a-z0-9-]+)\)/gu)].map((match) => match[1])
-    expect(listedByChars.length).toBeLessThan(MemoryTuning.index.maxEntries)
-    expect(listedByChars[0]).toBe('old-feedback')
-    const entryLines = byChars.split('\n').filter((line) => line.startsWith('- ['))
-    expect(entryLines.reduce((sum, line) => sum + line.length + 1, 0)).toBeLessThanOrEqual(
-      MemoryTuning.index.maxChars
+    expect((await scope.list())[0]).toMatchObject({
+      content: '真实替换字符：\uFFFD',
+      revision: updated.revision,
+    })
+    expect(updated.revision).toBe(
+      createHash('sha256')
+        .update(await readFile(path))
+        .digest('hex')
     )
-    expect(byChars).toContain(`另有 ${works + 1 - listedByChars.length} 条没列出`)
-  }, 60_000)
+  })
+
+  test('INV-7 旧头部、未知字段或类别与损坏格式明确 VALIDATION，list 不跳过、save 不覆盖原件', async () => {
+    const scope = createMemoryStore({ root }).scope('system')
+    await scope.save(entry('seed'))
+    const [directory] = await readdir(root)
+    const path = join(root, directory!, 'seed.md')
+    const valid = await readFile(path, 'utf8')
+    const invalid = [
+      '# 没有头部',
+      valid.replace('title:', 'name:'),
+      valid.replace('description:', 'summary:'),
+      valid.replace('type:', 'kind:'),
+      valid.replace('updated:', 'modified:'),
+      valid.replace('type: work', 'type: preference'),
+      valid.replace('type: work', 'type: Work'),
+      valid.replace('tags: []', 'tags: [Release, 发版]'),
+      valid.replace('tags: []', 'tags: null'),
+      valid.replace('tags: []', 'tags: [42]'),
+      valid.replace('description: "描述 seed"', 'title: "重复标题"'),
+      valid.replace('---\n\n', 'extra: "未知字段"\n---\n\n'),
+      valid.replace(/updated: [^\n]+\n/u, ''),
+      valid.replace(/updated: [^\n]+/u, 'updated: 2026-01-02'),
+      valid.replace('---\n\n', '----\n\n'),
+    ]
+    for (const raw of invalid) {
+      await writeFile(path, raw)
+      expect((await failureOf(scope.list())).code).toBe('VALIDATION')
+      for (const tags of [undefined, []]) {
+        expect((await failureOf(scope.save(entry('seed', { tags })))).code).toBe('VALIDATION')
+        expect(await readFile(path, 'utf8')).toBe(raw)
+      }
+      expect((await readdir(join(root, directory!))).sort()).toEqual(['.scope', 'seed.md'])
+    }
+  })
 })
 
 describe('模型面', () => {
@@ -454,8 +504,8 @@ export const removed = await remove({ id: 'reply-style' })`
       'MemoryOperationContext',
       'MemoryStore',
       'MemoryScopeSummary',
-      'renderIndex',
       'listScopes',
+      'prepareRemove',
       'abortSignal',
       'AbortSignal',
     ]

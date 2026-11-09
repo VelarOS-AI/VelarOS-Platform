@@ -150,4 +150,22 @@ describe('built-in detectors', () => {
       )
     }
   })
+
+  test('references the actual retry episode that reached the reported maximum', () => {
+    const detector = builtins({ retryWarn: 2 }).find(
+      (item) => item.definition.id === 'tool-retry-loop'
+    )!
+    const long = Array.from({ length: 3 }, (_, index) =>
+      call(`long-${index}`, 'read', { path: '/a' })
+    )
+    const input = withCalls([
+      ...long,
+      call('separator', 'write', { path: '/b' }),
+      call('short', 'read', { path: '/a' }),
+    ])
+    const findings = detector.detect(input, context)
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.evidence.count).toBe(3)
+    expect(findings[0]?.references[0]?.id).toBe('long-2')
+  })
 })

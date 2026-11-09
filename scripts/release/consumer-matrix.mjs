@@ -3,6 +3,8 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { platformDistributions } from './platform-distributions.mjs'
+
 const configPath = path.join(import.meta.dirname, 'platform-consumers.json')
 const config = JSON.parse(await readFile(configPath, 'utf8'))
 
@@ -25,6 +27,14 @@ for (const consumer of config.consumers) {
   }
   if (typeof consumer.verifyCommand !== 'string') {
     throw new Error(`verifyCommand must be a string for ${consumer.id}`)
+  }
+  if (
+    consumer.distributions &&
+    (!Array.isArray(consumer.distributions) ||
+      consumer.distributions.length === 0 ||
+      consumer.distributions.some((id) => !Object.hasOwn(platformDistributions, id)))
+  ) {
+    throw new Error(`Invalid distribution selection for ${consumer.id}`)
   }
 }
 

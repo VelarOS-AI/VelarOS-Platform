@@ -105,11 +105,14 @@ test('task projection: SQLite frame, recall, reopen and Node serialization prese
     unresolved: [],
   })
   const text = 'Historical failure remains unverified. '.repeat(20)
-  const narrative = await f.context.append({
-    kind: 'checkpoint',
-    title: 'context:volume-narrative',
-    body: JSON.stringify({ volume: first.ref, negativeAttempts: [], unresolved: [text] }),
-  })
+  const volume = await f.recent.seal(0, first.sequence, signal())
+  const narrativeBody = {
+    summary: 'Investigated the initial failure.',
+    evidence: [first.ref],
+    negativeAttempts: [],
+    unresolved: [text],
+  }
+  const narrative = await f.recent.narrate(volume, narrativeBody, signal())
   const next = await f.context.append({
     kind: 'user',
     body: 'Continue investigating the same failure.',
@@ -136,11 +139,8 @@ test('task projection: SQLite frame, recall, reopen and Node serialization prese
   )
   assert.deepEqual(task.historicalInterpretation.pendingInputs, [first.ref, next.ref])
   assert.deepEqual(task.active.pendingInputs, [latest.ref])
-  assert.deepEqual(task.historicalInterpretation.items[0].sources, [narrative.ref])
-  assert.equal(
-    (await f.context.read(narrative.ref)).text,
-    JSON.stringify({ volume: first.ref, negativeAttempts: [], unresolved: [text] })
-  )
+  assert.deepEqual(task.historicalInterpretation.items[0].sources, [narrative])
+  assert.equal((await f.context.read(narrative)).text, JSON.stringify({ volume, ...narrativeBody }))
   assert.deepEqual(await active.read(signal()), before)
   frame.presentation = 'node'
   frame.memoryStatus.maintenance = { unresolved: [text] }

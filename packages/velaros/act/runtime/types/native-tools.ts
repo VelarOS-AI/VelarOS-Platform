@@ -1,3 +1,4 @@
+import type { ObservationHistoryRequest } from './observation.js'
 import type { ScriptRetention } from './results.js'
 import type { ScriptObservationEdit, ScriptSnapshotObservation } from './runtime.js'
 
@@ -24,8 +25,10 @@ export interface NativeExecutionOptions extends NativeProgramOptions {
   readonly retain?: ScriptRetention
 }
 
-/** 持续观察独有的刷新、快照与清除选项。 */
+/** 持续观察的控制选项；history 只选择下一帧的局部历史，不替换当前观察。 */
 export interface NativeObservationOptions extends NativeProgramOptions {
+  /** 空 code，且只提供 history；结果仅进入下一帧 dynamic，不进入普通结果增量。 */
+  readonly history?: ObservationHistoryRequest
   readonly snapshot?: ScriptSnapshotObservation['snapshot']
   readonly refresh?: boolean
   readonly clear?: true
@@ -42,6 +45,12 @@ export interface NativeExecutionInput {
 export interface NativeObservationInput {
   readonly code: string
   readonly options?: NativeObservationOptions
+}
+
+/** 程序观察后端不可用时仍可选择局部历史或退订，不接受程序源码。 */
+export interface NativeObservationControlInput {
+  readonly code: ''
+  readonly options: { readonly history: ObservationHistoryRequest } | { readonly clear: true }
 }
 
 /** 同一完整响应内供程序读取的原文绑定。 */

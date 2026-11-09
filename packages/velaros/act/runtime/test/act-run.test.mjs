@@ -5,13 +5,10 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { AppError } from '@velaros-ai/core/error'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker, turn } from './support/model-turn.mjs'
+import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const finish = { type: 'finish', reason: 'stop' }
 const block = (request, source) => `${marker(request)} execute\n${source}\n${marker(request)}\n`
@@ -20,7 +17,6 @@ async function setup(t, stream, extra = {}) {
   const path = join(root, 'state.sqlite')
   const config = {
     storage: localContextStorage({ path }),
-    runner: nodeSubprocessCodeRunner,
     modules: [],
     model: {
       id: 'test',
@@ -209,130 +205,144 @@ test('run state and event cursor survive reopening the same storage', async (t) 
   }
 })
 
-test('trace connects actual compiled requests, edited observer, write receipts, leases and the next v2 frame', async (t) => {
-  let world = 'v1'
-  let writes = 0
-  let calls = 0
-  const sent = []
-  const module = {
-    binding: { moduleId: 'test:trace', instanceId: 'fixture', generation: 1, schemaRevision: '1' },
-    summary: 'trace fixture',
-    operations: {
-      read: {
-        summary: 'read',
-        input: { type: 'null' },
-        output: { type: 'string' },
-        effects: 'none',
-        run: () => world,
+test(
+  'trace connects actual compiled requests, edited observer, write receipts, leases and the next v2 frame',
+  {
+    skip:
+      process.platform !== 'darwin' && process.platform !== 'linux'
+        ? 'Successful observer receipts require the default read-only process backend.'
+        : false,
+  },
+  async (t) => {
+    let world = 'v1'
+    let writes = 0
+    let calls = 0
+    const sent = []
+    const module = {
+      binding: {
+        moduleId: 'test:trace',
+        instanceId: 'fixture',
+        generation: 1,
+        schemaRevision: '1',
       },
-      write: {
-        summary: 'write',
-        input: { type: 'string' },
-        output: { type: 'string' },
-        effects: 'write',
-        run: (input, call) => {
-          writes++
-          world = input
-          call.recordEffect('committed')
-          return world
+      summary: 'trace fixture',
+      operations: {
+        read: {
+          summary: 'read',
+          input: { type: 'null' },
+          output: { type: 'string' },
+          effects: 'none',
+          run: () => world,
+        },
+        write: {
+          summary: 'write',
+          input: { type: 'string' },
+          output: { type: 'string' },
+          effects: 'write',
+          run: (input, call) => {
+            writes++
+            world = input
+            call.recordEffect('committed')
+            return world
+          },
         },
       },
-    },
-  }
-  const source =
-    "import {read} from 'test:trace';import {output} from 'velaros';output({version:await read(),label:'before'});"
-  const f = await setup(
-    t,
-    async function* (request) {
-      sent.push(structuredClone(request))
-      calls++
-      if (calls === 1) {
-        yield turn(request, {
-          observe: { edits: [{ oldText: "label:'before'", newText: "label:'after'" }] },
-          execute: {
-            source:
-              "import {write} from 'test:trace';import {output} from 'velaros';output(await write('v2'));",
-            retainTurns: 1,
-          },
-        })
-        yield finish
-      } else yield* done(request, 'verified v2')
-    },
-    { modules: [module] }
-  )
-  await f.session.observe({ source })
-  const events = []
-  for await (const event of f.session.submit('Read v1, write v2 and verify')) events.push(event)
-  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  assert.equal(writes, 1)
-  const turns = events.filter((event) => event.type === 'turn')
-  const first = await f.session.trace(turns[0].turnId)
-  const second = await f.session.trace(turns[1].turnId)
-  assert.deepEqual(JSON.parse(first.request.body).request, JSON.parse(JSON.stringify(sent[0])))
-  assert.deepEqual(JSON.parse(second.request.body).request, JSON.parse(JSON.stringify(sent[1])))
-  assert.deepEqual(first.gaps, [])
-  assert.equal(first.nextTurnId, second.turnId)
-  assert.equal(JSON.parse(first.decision.body).status, 'accepted')
-  assert.match(first.response.body, /write\('v2'\)/)
-  const operations = first.invocations.map((item) => JSON.parse(item.body))
-  assert(
-    operations.some(
-      (item) => item.prepared.operation === 'write' && item.receipt.effect === 'committed'
+    }
+    const source =
+      "import {read} from 'test:trace';import {output} from 'velaros';output({version:await read(),label:'before'});"
+    const f = await setup(
+      t,
+      async function* (request) {
+        sent.push(structuredClone(request))
+        calls++
+        if (calls === 1) {
+          yield turn(request, {
+            observe: { edits: [{ oldText: "label:'before'", newText: "label:'after'" }] },
+            execute: {
+              source:
+                "import {write} from 'test:trace';import {output} from 'velaros';output(await write('v2'));",
+              retainTurns: 1,
+            },
+          })
+          yield finish
+        } else yield* done(request, 'verified v2')
+      },
+      { modules: [module] }
     )
-  )
-  assert(first.records.some((item) => item.title.startsWith('script:version:')))
-  assert(
-    first.records.some(
-      (item) => item.title === 'script:lease-state' && JSON.parse(item.body).leases.length
-    )
-  )
-  const nextFrame = runtimeFrame(JSON.parse(second.request.body).request.materials.at(-1).text)
-  assert.match(nextFrame.observation.text, /v2/)
-  assert.match(nextFrame.observation.text, /after/)
-  assert.equal(nextFrame.results[0].remainingTurns, 1)
-  const bounded = await f.session.trace(turns[0].turnId, 31)
-  // 执行/观察/子任务摘要也与请求和调用共用正文预算（INV-45/46），优先结果后合计仍正好用满。
-  assert.equal(
-    [
-      bounded.request,
-      bounded.response,
-      bounded.decision,
-      ...bounded.records,
-      ...bounded.invocations,
-    ].reduce((n, item) => n + (item?.body?.length ?? 0), 0) +
-      bounded.requestSummary.system.length +
-      bounded.requestSummary.messages.length +
-      bounded.invocations.reduce(
-        (n, item) => n + item.summary.input.length + item.summary.output.length,
-        0
-      ) +
-      bounded.executions.reduce(
-        (n, item) => n + item.source.length + (item.processOutput?.length ?? 0),
-        0
-      ) +
-      (bounded.observation.registration?.source.length ?? 0) +
-      (bounded.observation.run?.source.length ?? 0) +
-      bounded.agents.reduce((n, item) => n + item.task.length + item.answer.length, 0),
-    31
-  )
-  assert(bounded.request.truncated)
-  const other = await f.runtime.openSession('other')
-  await assert.rejects(other.trace(first.turnId), /当前会话/)
-  await f.runtime.close()
-  const runtime = await createRuntime({
-    ...f.config,
-    storage: localContextStorage({ path: f.path }),
-  })
-  try {
-    const session = await runtime.openSession('main')
-    const restored = await session.trace(first.turnId)
-    assert.equal(restored.response.body, first.response.body)
-    assert.deepEqual(restored.invocations, first.invocations)
+    await f.session.observe({ source })
+    const events = []
+    for await (const event of f.session.submit('Read v1, write v2 and verify')) events.push(event)
+    assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
     assert.equal(writes, 1)
-  } finally {
-    await runtime.close()
+    const turns = events.filter((event) => event.type === 'turn')
+    const first = await f.session.trace(turns[0].turnId)
+    const second = await f.session.trace(turns[1].turnId)
+    assert.equal(first.requestSummary.model, 'test')
+    assert.notEqual(first.requestSummary.fingerprint, second.requestSummary.fingerprint)
+    assert(!Object.hasOwn(JSON.parse(first.request.body), 'request'))
+    assert(!Object.hasOwn(JSON.parse(second.request.body), 'request'))
+    assert.deepEqual(first.gaps, [])
+    assert.equal(first.nextTurnId, second.turnId)
+    assert.equal(JSON.parse(first.decision.body).status, 'accepted')
+    assert.match(first.response.body, /write\('v2'\)/)
+    const operations = first.invocations.map((item) => JSON.parse(item.body))
+    assert(
+      operations.some(
+        (item) => item.prepared.operation === 'write' && item.receipt.effect === 'committed'
+      )
+    )
+    assert(first.records.some((item) => item.title.startsWith('script:version:')))
+    assert(
+      first.records.some(
+        (item) => item.title === 'script:lease-state' && JSON.parse(item.body).leases.length
+      )
+    )
+    const nextFrame = runtimeFrame(sent[1])
+    assert.match(nextFrame.observation.text, /v2/)
+    assert.match(nextFrame.observation.text, /after/)
+    assert.equal(nextFrame.results[0].remainingTurns, 1)
+    const bounded = await f.session.trace(turns[0].turnId, 31)
+    // 执行/观察/子任务摘要也与请求和调用共用正文预算（INV-45/46），优先结果后合计仍正好用满。
+    assert.equal(
+      [
+        bounded.request,
+        bounded.response,
+        bounded.decision,
+        ...bounded.records,
+        ...bounded.invocations,
+      ].reduce((n, item) => n + (item?.body?.length ?? 0), 0) +
+        bounded.invocations.reduce(
+          (n, item) => n + item.summary.input.length + item.summary.output.length,
+          0
+        ) +
+        bounded.executions.reduce(
+          (n, item) => n + item.source.length + (item.processOutput?.length ?? 0),
+          0
+        ) +
+        (bounded.observation.registration?.source.length ?? 0) +
+        (bounded.observation.run?.source.length ?? 0) +
+        bounded.agents.reduce((n, item) => n + item.task.length + item.answer.length, 0),
+      31
+    )
+    assert(bounded.request.truncated)
+    const other = await f.runtime.openSession('other')
+    await assert.rejects(other.trace(first.turnId), /当前会话/)
+    await f.runtime.close()
+    const runtime = await createRuntime({
+      ...f.config,
+      storage: localContextStorage({ path: f.path }),
+    })
+    try {
+      const session = await runtime.openSession('main')
+      const restored = await session.trace(first.turnId)
+      assert.equal(restored.response.body, first.response.body)
+      assert.deepEqual(restored.invocations, first.invocations)
+      assert.equal(writes, 1)
+    } finally {
+      await runtime.close()
+    }
   }
-})
+)
 
 test('rejected protocol and truncated provider responses retain raw text without dispatch', async (t) => {
   let calls = 0
@@ -396,10 +406,18 @@ test('runtime shutdown attempts kernel and storage cleanup even when a session c
     closed = true
     await close()
   }
+  const failure = Error('session close fault')
   f.session.close = async () => {
-    throw Error('session close fault')
+    throw failure
   }
-  await assert.rejects(f.runtime.close(), AggregateError)
+  await assert.rejects(f.runtime.close(), (error) => {
+    assert(error instanceof AppError)
+    assert.equal(error.code, 'UNAVAILABLE')
+    assert.deepEqual(error.errors, [failure])
+    assert.equal(error.errors[0], failure)
+    assert.equal(error.cause, undefined)
+    return true
+  })
   assert.equal(closed, true)
   assert.equal(disposed, true)
   assert.equal(f.runtime.getSession('main'), undefined)
@@ -690,7 +708,7 @@ test('INV-51 a run without progress reflects, then pauses for the user, and the 
   const f = await setup(t, async function* (request) {
     calls++
     stalls.push(request.contextStatus.stall?.repeatedSteps ?? 0)
-    if (request.compiledPrompt.includes('反思轮')) reflected = true
+    if (request.protocol.includes('反思轮')) reflected = true
     // 安全阀：暂停失效时让测试失败而不是一直跑
     if (calls > 40) {
       yield* done(request)

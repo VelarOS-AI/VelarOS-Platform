@@ -80,7 +80,8 @@ export async function appendWordDocumentBuffer(
   fragmentBuffer: Buffer,
   signal?: AbortSignal
 ): Promise<OfficeWritten> {
-  const existingZip = await JSZip.loadAsync(await readFile(prepared.path))
+  const originalBytes = await readFile(prepared.target)
+  const existingZip = await JSZip.loadAsync(originalBytes)
   const fragmentZip = await JSZip.loadAsync(fragmentBuffer)
   const existingDocumentFile = existingZip.file(WordDocumentXmlPath)
   const fragmentDocumentFile = fragmentZip.file(WordDocumentXmlPath)
@@ -143,7 +144,7 @@ export async function appendWordDocumentBuffer(
   )
   existingZip.file(WordDocumentRelsPath, relationshipsXml)
   const mergedBuffer = await existingZip.generateAsync({ type: 'nodebuffer' })
-  return writeOfficeFile(prepared, mergedBuffer, signal)
+  return writeOfficeFile(prepared, mergedBuffer, signal, { exists: true, bytes: originalBytes })
 }
 
 /** 提取 document.xml body 中除 sectPr 外的内容。 */

@@ -1,23 +1,23 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.114",
+  "version": "0.7.5",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.22.0"
   },
   "type": "module",
-  "packageManager": "bun@1.3.13",
+  "packageManager": "bun@1.4.3",
   "workspaces": [
     "packages/*"
   ],
   "velaros": {
-    "trainVersion": "0.8.0",
+    "trainVersion": "0.9.4",
     "trainNote": "根 version 是火车版本号,只用来给整列发车的 tag 命名;各包版本独立走 semver,见 README「版本方案」。",
     "//platform": "平台代:同一代内各包互相兼容,跨代才是整体破坏性升级。每个包在自己的 velaros.platform 里声明同一个值,随包发布,消费者装完也读得到;releaseTopology 的不变量④机械核对一致性。",
     "//domainPackages": "各域的包目录单源。域架构门(check:*-arch)据此把「包集合冻结」收敛到本域,新增包必须同时登记此处与该域的 owners 表。",
-    "platform": "0.6",
+    "platform": "0.7",
     "domainPackages": {
       "kernel": [
         "kernel"
@@ -51,7 +51,7 @@
     "//package-pack": "临时 tarball 核验必须走安全入口；它按包目录切换 cwd，并限制目标目录、运行时长与子进程组。",
     "check:package-pack": "node scripts/release/check-package-pack.mjs",
     "check:package-pack-boundary": "node scripts/release/check-package-pack-boundary.mjs",
-    "check:package-pack-safety": "bun run check:package-pack-boundary && node --test scripts/release/safe-package-pack.test.mjs",
+    "check:package-pack-safety": "bun run check:package-pack-boundary && node --test scripts/release/safe-package-pack.test.mjs scripts/build/buildPackageTopology.test.mjs",
     "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test && bun run test:act-eval",
@@ -84,7 +84,7 @@
     "check:dependency-security": "node --test scripts/security/dependency-probes.test.mjs && node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w5hq-g745-h8pq --ignore GHSA-vfj7-8cjw-p6xm --ignore GHSA-g3hv-75wg-m249",
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:readme-examples": "node scripts/ownership/check-readme-examples.mjs",
-    "check:error-construction": "node scripts/quality/check-error-construction.mjs",
+    "check:error-construction": "node --test scripts/quality/check-error-construction.test.mjs && node scripts/quality/check-error-construction.mjs",
     "check:public-readiness": "node --test scripts/quality/check-public-readiness.test.mjs && node scripts/quality/check-public-readiness.mjs",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
     "check:gates": "bun run check:lockfile-consistency && bun run check:project-arch && bun run check:platform-generation && bun run check:package-catalog && bun run check:gates:remaining",
