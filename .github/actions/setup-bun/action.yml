@@ -1,0 +1,26 @@
+name: Set up declared Bun
+description: Install the packageManager version from the official GitHub release asset API.
+runs:
+  using: composite
+  steps:
+    - name: Install declared Bun from its official release asset
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        bun_version="$(node -p "const value = require('./package.json').packageManager; if (!/^bun@[0-9]+\\.[0-9]+\\.[0-9]+$/.test(value)) throw new Error('Expected an exact Bun packageManager'); value.slice(4)")"
+        read -r asset_id asset_digest <<< "$(gh api "repos/oven-sh/bun/releases/tags/bun-v${bun_version}" --jq '.assets[] | select(.name == "bun-linux-x64.zip") | [.id, .digest] | @tsv')"
+        [[ "$asset_id" =~ ^[0-9]+$ ]]
+        [[ "$asset_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+        install_dir="$(mktemp -d "$RUNNER_TEMP/velaros-bun.XXXXXX")"
+        curl --fail --location --max-time 60 \
+          --header 'Accept: application/octet-stream' \
+          --header 'X-GitHub-Api-Version: 2022-11-28' \
+          --header "Authorization: Bearer $GH_TOKEN" \
+          --output "$install_dir/bun.zip" \
+          "https://api.github.com/repos/oven-sh/bun/releases/assets/$asset_id"
+        printf '%s  %s\n' "${asset_digest#sha256:}" "$install_dir/bun.zip" | sha256sum --check --status
+        unzip -q "$install_dir/bun.zip" -d "$install_dir"
+        test "$("$install_dir/bun-linux-x64/bun" --version)" = "$bun_version"
+        echo "$install_dir/bun-linux-x64" >> "$GITHUB_PATH"
