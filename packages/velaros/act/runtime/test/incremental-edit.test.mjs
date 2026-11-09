@@ -9,10 +9,9 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { createKernelScriptSession } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const observed = "import {output} from 'velaros'; const count = 1; output(count);"
 const write = "import {write} from 'test:world'; await write(1);"

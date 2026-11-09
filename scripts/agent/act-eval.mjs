@@ -14,7 +14,9 @@ import {
 import { evaluationScenario } from './act-scenarios.mjs'
 import { workflowMetrics } from './workflow-metrics.mjs'
 import { createEvidenceCheckpoints } from './evidence-checkpoints.mjs'
-import { createRuntime } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
+import * as projectPackage from '@velaros-ai/velaros/project'
+import { evaluationCapabilities } from './harbor/evaluation-runtime.mjs'
 import { observedFiles, traceBody as body } from './act-trace.mjs'
 
 const prompt =
@@ -144,17 +146,30 @@ export async function runActEvaluation({
     item.maxMs = Math.max(item.maxMs, metric.durationMs)
     metrics.set(key, item)
   }
-  const runtime = await createRuntime({
+  const capabilityOptions = await evaluationCapabilities({
+    projectPackage,
+    root,
+    stateDirectory: join(directory, 'state'),
+    model,
+    project: true,
+    agents: Boolean(workload?.modelTools),
+    search: Boolean(workload?.modelTools),
+  })
+  const runtime = await createNodeRuntime({
     onMetric,
-    workspace: root,
-    dataDir: join(directory, 'state'),
+    cwd: root,
+    binding: {
+      executionIdentity: `act-evaluation:${scenario}`,
+      authorizationScope: 'isolated-evaluation-host',
+    },
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
+    stateDirectory: join(directory, 'state'),
     model,
     // 该工作负载显式验收持续观察，按宿主合同开放观察声明。
     protocol: { allowed: ['observe', 'blobs', 'execute', 'done'] },
-    agents: workload?.modelTools ?? false,
-    search: workload?.modelTools ?? false,
+    ...capabilityOptions,
     context: {
-      sources: [],
+      ...capabilityOptions.context,
       limits: { modelCalls: turns * 3, modelTokens: turns * 3 * model.limits.contextTokens },
     },
     limits: { turns, timeoutMs, outputTokens: model.limits.outputTokens, safetyTokens: 1024 },

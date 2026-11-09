@@ -3,9 +3,8 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
 import { done, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 function worldModule(world) {
   return {

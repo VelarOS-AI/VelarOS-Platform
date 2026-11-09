@@ -530,6 +530,7 @@ export async function runGuardedCommand({
 
 export async function safePackPackage({
   packageDirectory,
+  distribution = 'velaros',
   destination,
   filename,
   bunCommand = 'bun',
@@ -548,7 +549,11 @@ export async function safePackPackage({
     packageDirectory: resolvedPackageDirectory,
   })
 
-  const unified = await stageUnifiedPlatformPackage(resolvedPackageDirectory, manifest)
+  const unified = await stageUnifiedPlatformPackage(
+    resolvedPackageDirectory,
+    manifest,
+    distribution
+  )
   let staged
   try {
     staged = await stageBundledPackage(

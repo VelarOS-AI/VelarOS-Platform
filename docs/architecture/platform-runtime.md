@@ -1,10 +1,10 @@
 # Platform 运行主链
 
-宿主从 `@velaros-ai/velaros` 导入 `createRuntime`，打开会话后用 `session.submit` 提交当前用户输入，消费运行事件。可直接使用的装配示例和完整注入面见 [Runtime README](../../packages/velaros/act/runtime/README.md)。
+宿主显式注入端口时从 `@velaros-ai/velaros` 导入 `createRuntime`；普通 Node 从 `@velaros-ai/velaros/node` 导入 `createNodeRuntime`。打开会话后用 `session.submit` 提交当前用户输入，消费运行事件。可直接使用的装配示例和完整注入面见 [Runtime README](../../packages/velaros/act/runtime/README.md)。
 
 ## 执行与协议
 
-标准 Node 环境由 `createNodeExecutionEnvironment` 装配，宿主提供工作目录、进程资源和授权策略。普通代码使用 Node.js ESM、标准库、工作区依赖和环境中安装的 npm 包；应用能力从 `$VELAROS_HOST_DIR/index.json` 发现，通过包名与按操作生成的声明使用。
+标准 Node 环境从 `/node` 的 `createNodeExecutionEnvironment` 装配，宿主提供工作目录、进程资源和授权策略。普通代码使用 Node.js ESM、标准库、工作区依赖和环境中安装的 npm 包；应用能力从 `$VELAROS_HOST_DIR/index.json` 发现，通过包名与按操作生成的声明使用。
 
 `protocol.transport` 支持 `tools` 与 `text`，默认值为公开常量 `DefaultScriptProtocolTransport`，当前为 `tools`。默认选择遇到不支持工具的驱动时使用文本；显式要求工具而驱动不支持时返回错误。两种传输共用程序检查、参数绑定、观察、结果租约、异步调度和完成判定。
 
@@ -45,3 +45,5 @@
 ## 验证入口
 
 `bun run eval:act --model-config /absolute/model.json --output /absolute/results` 通过 Agent Lab 驱动正式 Runtime，保存原始回合并独立核验文件和操作回执。模型配置使用环境变量引用凭据。方法与运行入口见 [评测规范](../engineering/scriptact-acceptance-criteria.md)。
+
+运行与专项发行边界、确切删除项、会话恢复和资源所有权见 [ADR 0028](../decisions/0028-runtime-foundation-and-capability-distributions.md)。

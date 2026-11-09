@@ -1,25 +1,12 @@
 import { writeFile } from 'node:fs/promises'
 
-import {
-  createContextInvocationJournal,
-  createContextRuntime,
-  createContextView,
-} from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { createOperationRuntime } from '@velaros-ai/kernel'
+
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 const storage = localContextStorage({ path: process.argv[2] })
-const context = createContextRuntime({ sessionId: 'crashed', storage })
-const view = createContextView({
-  sessionId: 'crashed',
+const runtime = await createRuntime({
   storage,
-  context,
-  sources: [],
-  limits: { leaseMs: 500 },
-})
-await view.begin((await context.append({ kind: 'user', body: 'Send exactly once' })).ref)
-await view.startStep('crash-step')
-const runtime = createOperationRuntime({
-  journal: createContextInvocationJournal(storage),
+  context: { maintenance: false, limits: { leaseMs: 500 } },
   modules: [
     {
       binding: { moduleId: 'test:crash', instanceId: 'one', generation: 1, schemaRevision: '1' },
@@ -39,11 +26,6 @@ const runtime = createOperationRuntime({
     },
   ],
 })
-await runtime.invoke({
-  id: 'external-write',
-  sessionId: 'crashed',
-  executionId: 'crash-step',
-  binding: runtime.bind('crashed', 'test:crash'),
-  operation: 'send',
-  input: null,
-})
+const session = await runtime.openSession('crashed')
+await session.context.append({ kind: 'user', body: 'Send exactly once' })
+await session.execute({ source: "import {send} from 'test:crash';await send();" })

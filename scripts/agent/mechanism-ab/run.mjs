@@ -28,9 +28,7 @@ assert(['development', 'validation'].includes(split))
 const snapshot = await realpath(resolve(snapshotArg)),
   output = resolve(outputArg)
 const imported = (path) => import(pathToFileURL(join(snapshot, 'packages', path)).href)
-const { createRuntime, createNodeExecutionEnvironment } = await imported(
-  'velaros/dist/act/runtime/index.js'
-)
+const { createNodeRuntime } = await imported('velaros/dist/act/runtime/node.js')
 const { createLocalShellHost } = await imported('velaros/dist/execution/local.js')
 const modelPackage = await imported('model/dist/index.js')
 const credentials = JSON.parse(await readFile(credentialsPath, 'utf8')).chat
@@ -227,7 +225,10 @@ async function attempt(item, arm, repeat) {
     },
   }
   const driver = actionAdapter(audited, arm.action)
-  const host = createLocalShellHost({ cwd: workspace })
+  const host = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'danger-full-access' },
+  })
   let runtime,
     status = 'starting',
     failure = null,
@@ -239,16 +240,16 @@ async function attempt(item, arm, repeat) {
       await mkdir(dirname(join(workspace, path)), { recursive: true })
       await writeFile(join(workspace, path), content)
     }
-    runtime = await createRuntime({
-      workspace,
-      dataDir: join(root, 'state'),
-      node: createNodeExecutionEnvironment({ cwd: workspace, directory: join(root, 'node'), host }),
+    runtime = await createNodeRuntime({
+      cwd: workspace,
+      stateDirectory: join(root, 'state'),
+      host,
+      binding: {
+        executionIdentity: 'mechanism-ab',
+        authorizationScope: 'isolated-evaluation-host',
+      },
       model: driver,
       protocol: { transport: 'tools', allowed: ['execute', 'done'] },
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
       context: {
         ...(arm.maintenance ? {} : { maintenance: false }),
         policy: { windowTokens: config.inputWindowTokens },

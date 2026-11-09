@@ -2,7 +2,7 @@
   "name": "@velaros-ai/script",
   "version": "0.4.1",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "Native Node.js execution with core command, search, file discovery and diff libraries, on-demand capabilities and host-owned process permissions.",
   "license": "Apache-2.0",

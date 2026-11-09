@@ -8,10 +8,9 @@ import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const observe =
   "import {output} from 'velaros'; import {read} from 'test:world'; output({value:await read()});"

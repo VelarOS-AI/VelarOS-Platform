@@ -6,11 +6,8 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker, turn } from './support/model-turn.mjs'
+import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const finish = { type: 'finish', reason: 'stop' }
 const block = (request, source) => `${marker(request)} execute\n${source}\n${marker(request)}\n`

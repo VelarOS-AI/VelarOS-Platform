@@ -12,7 +12,7 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { SessionGoal } from '../../../dist/act/runtime/impl/SessionGoal.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import {
   memoryCommittedGroups,
   memoryOutput,
@@ -30,6 +30,7 @@ import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemo
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 import { baseNotes, baseText, done, historyEntries, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'

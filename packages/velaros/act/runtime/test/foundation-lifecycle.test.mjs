@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 async function observedSqliteStorage(t) {
   const temporary = await realpath(tmpdir())
@@ -71,9 +71,19 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
   const entered = deferred()
   const release = deferred()
   let disposed = false
+  let resourcesClosed = 0
   let writes = 0
   const runtime = await createRuntime({
     storage,
+    resources: [
+      {
+        close: () => {
+          assert.equal(disposed, true)
+          assert.equal(writes, 1)
+          resourcesClosed++
+        },
+      },
+    ],
     context: { maintenance: false },
     modules: [
       {
@@ -110,6 +120,7 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
     await boundedClose(runtime)
     assert.equal(backend.closes, 0)
     assert.equal(disposed, false)
+    assert.equal(resourcesClosed, 0)
     assert.equal(writes, 0)
     assert.equal(
       runtime.pending().some((item) => item.moduleId === 'test:slow' && item.cancelRequested),
@@ -127,6 +138,7 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
     await runtime.close()
   }
   assert.equal(disposed, true)
+  assert.equal(resourcesClosed, 1)
   assert.equal(backend.closes, 1)
   assert.equal(writes, 1)
   assert.deepEqual(runtime.pending(), [])
@@ -135,14 +147,58 @@ test('INV-47 full runtime close preserves noncooperative writes, real effects an
   )
   assert.equal(final.receipt.effect, 'committed')
   assert.ok(final.receipt.lifecycle.startedAt)
+  let callerResourceClosed = false
+  const rejectedStorage = await backend.open()
+  const callerResource = {
+    close: () => {
+      callerResourceClosed = true
+    },
+  }
+  try {
+    await assert.rejects(
+      createRuntime({
+        storage: rejectedStorage,
+        resources: [callerResource],
+        modules: [
+          {
+            binding: {
+              moduleId: 'velaros:program',
+              instanceId: 'reserved',
+              generation: 1,
+              schemaRevision: '1',
+            },
+            summary: 'invalid reserved binding',
+            operations: {},
+          },
+        ],
+      }),
+      { code: 'VALIDATION' }
+    )
+    assert.equal(
+      callerResourceClosed,
+      false,
+      'Failed initialization leaves injected resources with the caller'
+    )
+  } finally {
+    await rejectedStorage.close()
+    callerResource.close()
+  }
 })
 
 test('INV-47 close deadline covers session shutdown before Kernel disposal', async (t) => {
   const backend = await observedSqliteStorage(t)
   const entered = deferred()
   const release = deferred()
+  let resourceClosed = false
   const runtime = await createRuntime({
     storage: await backend.open(),
+    resources: [
+      {
+        close: () => {
+          resourceClosed = true
+        },
+      },
+    ],
     modules: [],
     context: { maintenance: false },
     runner: {
@@ -160,6 +216,7 @@ test('INV-47 close deadline covers session shutdown before Kernel disposal', asy
     await entered.promise
     await boundedClose(runtime)
     assert.equal(backend.closes, 0)
+    assert.equal(resourceClosed, false)
     await assert.rejects(runtime.openSession('new'), { code: 'CLOSED' })
   } finally {
     release.resolve()
@@ -167,6 +224,7 @@ test('INV-47 close deadline covers session shutdown before Kernel disposal', asy
     await runtime.close()
   }
   assert.equal(backend.closes, 1)
+  assert.equal(resourceClosed, true)
 })
 
 test('INV-47 caller cancellation keeps the actual write lock until the handler exits', async (t) => {

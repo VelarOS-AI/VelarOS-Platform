@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { BudgetLedger, budgetServer } from '../harbor/budget-proxy.mjs'
 import { attemptCredential } from '../harbor/request-identity.mjs'
 import { createTraceExporter, snapshot } from '../harbor/trace-export.mjs'
+import { evaluationCapabilities } from '../harbor/evaluation-runtime.mjs'
 import { readTraceArtifact } from '../harbor/trace-artifact.mjs'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
@@ -29,7 +30,7 @@ import {
 } from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
 import {
-  runtimeCapabilityOptions,
+  runtimeCapabilityPlan,
   runtimeContextPolicy,
   runtimeSubmissionOptions,
 } from './runtime-capabilities.mjs'
@@ -79,7 +80,7 @@ if (manifest.commandEnvironment) {
       'Frozen toolchain versions changed'
     )
 }
-const capabilities = runtimeCapabilityOptions(manifest.scriptactCapabilities)
+const capabilities = runtimeCapabilityPlan(manifest.scriptactCapabilities)
 const submission = runtimeSubmissionOptions(manifest.scriptactTaskMode, manifest.task.prompt)
 const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
@@ -102,11 +103,10 @@ const recovery =
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const candidate = manifest.candidate
 const importAt = (file) => import(pathToFileURL(join(candidate, 'packages', file)))
-const { createRuntime, createNodeExecutionEnvironment } = await importAt(
-  'velaros/dist/act/runtime/index.js'
-)
+const { createNodeRuntime } = await importAt('velaros/dist/act/runtime/node.js')
 const { createLocalShellHost } = await importAt('velaros/dist/execution/local.js')
 const modelPackage = await importAt('model/dist/index.js')
+const projectPackage = await importAt('velaros/dist/project/index.js')
 const credentials = JSON.parse(await readFile(manifest.credentials, 'utf8')).chat
 const redact = (error) => String(error).replaceAll(credentials.apiKey, '[redacted]')
 const identity = {
@@ -351,7 +351,10 @@ async function scriptAct({
   prompt,
   deadline,
 }) {
-  const host = createLocalShellHost({ cwd: workspace })
+  const host = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'danger-full-access' },
+  })
   let runtime,
     session,
     exporter,
@@ -398,21 +401,30 @@ async function scriptAct({
     },
   }
   try {
-    runtime = await createRuntime({
-      workspace,
-      dataDir: join(output, 'state'),
+    const capabilityOptions = await evaluationCapabilities({
+      projectPackage,
+      root: workspace,
+      stateDirectory: join(output, 'state'),
       model,
-      memory: false,
       ...capabilities,
-      node: createNodeExecutionEnvironment({
-        cwd: workspace,
-        directory: join(output, 'node'),
-        host,
+    })
+    runtime = await createNodeRuntime({
+      cwd: workspace,
+      binding: {
+        executionIdentity: 'long-task-evaluation',
+        authorizationScope: 'isolated-evaluation-host',
+      },
+      stateDirectory: join(output, 'state'),
+      model,
+      ...capabilityOptions,
+      host,
+      execution: {
         executable: manifest.commandEnvironment?.node,
         environment: executionCommandEnvironment(python, manifest.commandEnvironment),
-      }),
+      },
       modelTools: { concurrency: manifest.concurrency },
       context: {
+        ...capabilityOptions.context,
         policy: runtimeContextPolicy(manifest),
       },
       environment: () => ({ cwd: workspace, ...(node ? { node } : { python }) }),

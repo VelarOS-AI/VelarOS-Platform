@@ -6,6 +6,8 @@ import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDeco
 import { nativeProtocolRules } from '../../../dist/act/runtime/utils/native-protocol.js'
 import { protocolConfig } from '../../../dist/act/runtime/utils/script-protocol.js'
 
+import { createTestStorage } from './support/runtime-fixture.mjs'
+
 const marker = '@@sParity'
 const encode = (records) =>
   records
@@ -278,8 +280,8 @@ test(
     const { mkdtemp, mkdir, writeFile, readFile, rm } = await import('node:fs/promises')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
-    const { createRuntime, createNodeExecutionEnvironment } =
-      await import('../../../dist/act/runtime/index.js')
+    const { createTestRuntime: createRuntime } = await import('./support/runtime-fixture.mjs')
+    const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/node.js')
     const { createLocalShellHost } = await import('../../../dist/execution/local.js')
     const { modelText } = await import('./support/model-turn.mjs')
     const root = await mkdtemp(join(tmpdir(), 'protocol-parity-'))
@@ -355,18 +357,16 @@ test(
           yield { type: 'finish', reason: 'stop' }
         },
       }
-      const runtime = await createRuntime({
-        workspace: cwd,
-        dataDir: join(root, 'state'),
-        node,
-        model,
-        protocol: { transport },
-        project: false,
-        memory: false,
-        search: false,
-        agents: false,
-        context: { maintenance: false },
-      })
+      const runtime = await createRuntime(
+        {
+          storage: await createTestStorage(join(root, 'state')),
+          node,
+          model,
+          protocol: { transport },
+          context: { maintenance: false },
+        },
+        { cwd }
+      )
       try {
         const session = await runtime.openSession('same-session')
         const events = []
@@ -387,14 +387,11 @@ test(
 
 test('explicit tools rejects unsupported drivers and omitted transport falls back to text', async (t) => {
   const { localContextStorage } = await import('@velaros-ai/context/node')
-  const { createRuntime } = await import('../../../dist/act/runtime/index.js')
+  const { createTestRuntime: createRuntime } = await import('./support/runtime-fixture.mjs')
   for (const transport of [undefined, 'tools']) {
     const runtime = await createRuntime({
       storage: localContextStorage({ path: ':memory:' }),
-      project: false,
-      memory: false,
-      search: false,
-      agents: false,
+
       context: { maintenance: false },
       ...(transport ? { protocol: { transport } } : {}),
       model: {
@@ -516,68 +513,66 @@ test('actual requests carry only their selected transport syntax with scoped nam
   const { mkdir, mkdtemp, rm } = await import('node:fs/promises')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
-  const { createRuntime } = await import('../../../dist/act/runtime/index.js')
+  const { createTestRuntime: createRuntime } = await import('./support/runtime-fixture.mjs')
   const root = await mkdtemp(join(tmpdir(), 'protocol-prompts-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const workspace = join(root, 'workspace')
   await mkdir(workspace)
   const instructions = new Map()
   for (const transport of ['tools', 'text']) {
-    const runtime = await createRuntime({
-      workspace,
-      dataDir: join(root, transport),
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
-      context: { maintenance: false },
-      protocol: {
-        transport,
-        names: { execute: 'run', observe: 'watch', blobs: 'literal', done: 'finish' },
-      },
-      model: {
-        id: 'protocol-instruction-fixture',
-        nativeTools: true,
-        limits: { contextTokens: 128000, inputTokens: 100000, outputTokens: 4000 },
-        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
-        async *stream(request) {
-          instructions.set(transport, request.instructions)
-          assert.match(request.instructions, /完整响应全部校验后才执行/)
-          if (transport === 'tools') {
-            assert.equal(request.response.type, 'tools')
-            const tool = request.response.tools.find((item) => item.name === 'watch')
-            assert.match(tool.description, /整体替换.*只读观察/)
-            assert.match(
-              request.instructions,
-              /watch 退订参数：\{"code":"","options":\{"clear":true\}\}/
-            )
-            assert.match(request.instructions, /options\.sourceRef/)
-            assert.match(request.instructions, /literal 用 name\/text/)
-            assert.doesNotMatch(
-              request.instructions + request.compiledPrompt,
-              /控制头|源码段|空段|闭合标记|当前帧标记|@@s/
-            )
-            yield {
-              type: 'tool-call',
-              value: { id: 'done', name: 'finish', input: { message: 'Checked' } },
+    const runtime = await createRuntime(
+      {
+        storage: await createTestStorage(join(root, transport)),
+        context: { maintenance: false },
+        protocol: {
+          transport,
+          names: { execute: 'run', observe: 'watch', blobs: 'literal', done: 'finish' },
+        },
+        model: {
+          id: 'protocol-instruction-fixture',
+          nativeTools: true,
+          limits: { contextTokens: 128000, inputTokens: 100000, outputTokens: 4000 },
+          estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+          async *stream(request) {
+            instructions.set(transport, request.instructions)
+            assert.match(request.instructions, /完整响应全部校验后才执行/)
+            if (transport === 'tools') {
+              assert.equal(request.response.type, 'tools')
+              const tool = request.response.tools.find((item) => item.name === 'watch')
+              assert.match(tool.description, /整体替换.*只读观察/)
+              assert.match(
+                request.instructions,
+                /watch 退订参数：\{"code":"","options":\{"clear":true\}\}/
+              )
+              assert.match(request.instructions, /options\.sourceRef/)
+              assert.match(request.instructions, /literal 用 name\/text/)
+              assert.doesNotMatch(
+                request.instructions + request.compiledPrompt,
+                /控制头|源码段|空段|闭合标记|当前帧标记|@@s/
+              )
+              yield {
+                type: 'tool-call',
+                value: { id: 'done', name: 'finish', input: { message: 'Checked' } },
+              }
+            } else {
+              assert.equal(request.response.type, 'text')
+              assert.match(request.instructions, /空段 watch\(\{clear:true\}\) 退订/)
+              assert.match(request.instructions, /literal\("名称"\) 段保留原文/)
+              assert.match(request.instructions, /blobs\["名称"\] 读原文/)
+              assert.doesNotMatch(
+                request.instructions,
+                /JSON Schema|工具 Schema|options\.sourceRef|"code":""/
+              )
+              const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+              assert(request.compiledPrompt.includes(`${tag} run()`))
+              yield { type: 'text', text: `${tag} finish()\nChecked` }
             }
-          } else {
-            assert.equal(request.response.type, 'text')
-            assert.match(request.instructions, /空段 watch\(\{clear:true\}\) 退订/)
-            assert.match(request.instructions, /literal\("名称"\) 段保留原文/)
-            assert.match(request.instructions, /blobs\["名称"\] 读原文/)
-            assert.doesNotMatch(
-              request.instructions,
-              /JSON Schema|工具 Schema|options\.sourceRef|"code":""/
-            )
-            const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
-            assert(request.compiledPrompt.includes(`${tag} run()`))
-            yield { type: 'text', text: `${tag} finish()\nChecked` }
-          }
-          yield { type: 'finish', reason: 'stop' }
+            yield { type: 'finish', reason: 'stop' }
+          },
         },
       },
-    })
+      { cwd: workspace }
+    )
     try {
       const session = await runtime.openSession('s')
       const events = await Array.fromAsync(session.submit('Explain the supported protocol.'))

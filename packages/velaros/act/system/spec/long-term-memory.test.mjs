@@ -8,7 +8,6 @@ import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { codeProgramChecker } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   LongTermMemoryModuleIds,
   PersistentLocalMemoryModuleId,
@@ -16,6 +15,7 @@ import {
 } from '../../../dist/act/system/contract/constants.js'
 import { createMemoryStore } from '../../../dist/memory/index.js'
 import { done, marker, modelText, turn } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 const prelude = "import {memory,modules} from 'velaros:system';import {output} from 'velaros';"
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'

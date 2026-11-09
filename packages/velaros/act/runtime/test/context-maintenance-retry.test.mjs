@@ -6,7 +6,8 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { ContextMaintenance } from '../../../dist/act/runtime/impl/ContextMaintenance.js'
 import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntime.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 const narrative = {

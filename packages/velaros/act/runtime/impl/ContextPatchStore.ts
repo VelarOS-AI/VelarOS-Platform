@@ -153,7 +153,7 @@ export class ContextPatchStore implements ContextPatchStoreApi {
     this.check(sessionId)
     return this.storage.put(sessionId, text)
   }
-  public async get(sessionId: string, objectId: string) {
+  public async get(sessionId: string, objectId: string): Promise<Nullable<string>> {
     this.check(sessionId)
     return this.storage.get(sessionId, objectId)
   }

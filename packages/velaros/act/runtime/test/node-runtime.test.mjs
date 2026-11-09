@@ -19,10 +19,11 @@ import {
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { executionPolicy } from '../../../dist/act/runtime/utils/execution-policy.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
+import { skillCapabilityModules } from '../../../dist/skills/index.js'
 import {
   builtinSkillDirectories,
   BuiltinSkillNames,
@@ -30,6 +31,13 @@ import {
   createSkillSession,
   skillComposition,
 } from '../../../dist/skills/index.js'
+
+import { withProjectFixture } from './support/project-fixture.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
+import { withSkillFixture } from './support/skill-fixture.mjs'
 
 const fixtureRoots = new Set()
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
@@ -110,10 +118,7 @@ for (const explicit of [false, true])
     let turn = 0
     const runtime = await createRuntime({
       node: f.node,
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
+
       context: {
         maintenance: false,
         policy: {
@@ -262,10 +267,7 @@ for (const explicit of [true, false])
     const runtime = await createRuntime({
       node: f.node,
       model,
-      project: false,
-      search: false,
-      agents: false,
-      memory: false,
+
       context: { maintenance: false },
       storage: localContextStorage({ path: join(f.root, 'prompt-cache.sqlite') }),
       environment: () => ({ changingState: `revision-${++revision}` }),
@@ -409,10 +411,7 @@ test('provider code-only stream failures retry through the real SDK without repe
   })
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'provider-retry.sqlite') }),
     model,
@@ -442,10 +441,7 @@ for (const reportUsage of [false, true])
     let calls = 0
     const runtime = await createRuntime({
       node: f.node,
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
+
       context: { maintenance: false },
       storage: localContextStorage({ path: join(f.root, 'resume.sqlite') }),
       model: {
@@ -502,10 +498,7 @@ test('native Node calls preserve a restricted runner and expose only the allowed
   const runtime = await createRuntime({
     runner,
     protocol: { allowed: ['blobs', 'execute', 'done'], defaultRetain: 'task' },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'restricted.sqlite') }),
     model: {
@@ -619,10 +612,7 @@ test('INV-10 native result leases survive their configured scope without re-exec
       const runtime = await createRuntime({
         node: f.node,
         protocol: duration === undefined ? {} : { defaultRetain: duration },
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage,
         model: {
@@ -706,10 +696,7 @@ test('fresh native output shares unused result capacity and reaches the next req
   let turn = 0
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     limits: { projectionChars: 26000 },
     storage: localContextStorage({ path: join(f.root, 'output.sqlite') }),
@@ -801,10 +788,7 @@ test('native Execa/Node calls execute after acceptance and recover matched histo
   const options = {
     node: f.node,
     model,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'native.sqlite') }),
     context: { maintenance: false },
     limits: { turns: 6, outputTokens: 4000, timeoutMs: 20000 },
@@ -860,10 +844,7 @@ test('native independent calls retain a failed command and execute the remaining
       const requests = []
       const runtime = await createRuntime({
         node: f.node,
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage: localContextStorage({ path: join(f.root, 'independent.sqlite') }),
         model: {
@@ -959,10 +940,7 @@ test('native abnormal process termination stops later calls', async (t) => {
             return { exitCode: 7, signal: null, stdout: '', stderr: 'host termination', ...flags }
           },
         },
-        project: false,
-        agents: false,
-        search: false,
-        memory: false,
+
         context: { maintenance: false },
         storage: localContextStorage({ path: join(f.root, 'abnormal.sqlite') }),
         model: {
@@ -1015,10 +993,7 @@ test('cancelling a native batch during its first process prevents later calls', 
           signal
         ),
     },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'cancel-batch.sqlite') }),
     model: {
@@ -1054,10 +1029,7 @@ test('native response with a later invalid tool input performs no earlier write'
   let turn = 0
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'invalid-native.sqlite') }),
     context: { maintenance: false },
     model: {
@@ -1101,10 +1073,7 @@ test('cancelling a later native model turn preserves the completed call and neve
   const requests = []
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'cancel-native.sqlite') }),
     context: { maintenance: false },
     model: {
@@ -1255,10 +1224,7 @@ test('explicit runtime deadlines reach Node and source reuse restores the defaul
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'deadline.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1348,10 +1314,7 @@ test('runtime delivers native output to the next model turn with a small standar
   const requests = []
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'state.sqlite') }),
     model: {
       id: 'standard-node-test',
@@ -1690,10 +1653,7 @@ test('native runtime archives long output and bounds escaped preview JSON, inclu
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'large.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1713,10 +1673,7 @@ test('native syntax errors do not execute an earlier file mutation', async (t) =
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'syntax.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1763,9 +1720,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   }
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'child.sqlite') }),
     model: driver(
@@ -1840,10 +1795,7 @@ test('Execa command source persists and is reusable by sourceRef', async (t) => 
   const f = await fixture(t)
   const runtime = await createRuntime({
     node: f.node,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'shell.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -1970,10 +1922,7 @@ test('runtime observation uses real Node and retains structured input and output
     node: f.node,
     model,
     context: { maintenance: false },
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     storage: localContextStorage({ path: join(f.root, 'observe.sqlite') }),
   })
   t.after(() => runtime.close())
@@ -2570,17 +2519,15 @@ test('workspace npm packages take precedence and broken workspace packages repor
   assert.equal(privateSubpath.error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
 })
 
-test('only project workspaces receive project transaction capabilities', async (t) => {
+test('only explicit Project modules receive project transaction capabilities', async (t) => {
   const f = await fixture(t)
   for (const project of [false, true]) {
-    const runtime = await createRuntime({
-      node: f.node,
-      ...(project ? { workspace: f.cwd } : {}),
-      dataDir: join(f.root, `scope-${project}`),
-      agents: false,
-      search: false,
-      memory: false,
-    })
+    const runtime = await createRuntime(
+      await withProjectFixture(
+        { node: f.node, storage: await createTestStorage(join(f.root, `scope-${project}`)) },
+        { root: f.cwd, enabled: project }
+      )
+    )
     try {
       const session = await runtime.openSession('scope')
       await session.context.append({
@@ -2602,10 +2549,10 @@ test('only project workspaces receive project transaction capabilities', async (
 
 test('host project bindings compose independently with selected Skills', async (t) => {
   for (const { names, project } of [
-    { names: [], project: false },
+    { names: [] },
     { names: [], project: true },
-    { names: [BuiltinSkillNames.browser], project: false },
-    { names: [BuiltinSkillNames.jsts], project: false },
+    { names: [BuiltinSkillNames.browser] },
+    { names: [BuiltinSkillNames.jsts] },
     { names: [BuiltinSkillNames.jsts], project: true },
     { names: [BuiltinSkillNames.jsts, BuiltinSkillNames.browser], project: true },
   ]) {
@@ -2617,49 +2564,51 @@ test('host project bindings compose independently with selected Skills', async (
     )
     await writeFile(join(f.cwd, 'tiny.png'), png)
     await writeFile(join(f.root, 'outside.png'), png)
-    const runtime = await createRuntime({
-      workspace: f.cwd,
-      node: f.node,
-      project: project
-        ? {
+    const selectedSkillOptions1 = {
+      registry: f.registry,
+      lease: f.lease,
+      hostModules: Object.fromEntries(
+        ['velaros:browser', 'velaros:devtools', 'velaros:cdp'].map((name) => [
+          name,
+          {
+            binding: {
+              moduleId: name,
+              instanceId: 'bound-page',
+              generation: 1,
+              schemaRevision: '1',
+            },
+            summary: 'bound fixture',
+            operations: {
+              identity: {
+                summary: 'current binding',
+                input: { type: 'object' },
+                output: { type: 'string' },
+                effects: 'none',
+                run: async () => 'bound-page',
+              },
+            },
+          },
+        ])
+      ),
+    }
+    const runtime = await createRuntime(
+      await withSkillFixture(
+        await withProjectFixture(
+          { node: f.node, storage: await createTestStorage(join(f.root, 'state')) },
+          {
+            root: f.cwd,
+            enabled: project,
             images: true,
-            code: {
+            codeIndex: {
               isAvailable: () => true,
               query: async (input) => ({ action: input.action, revision: 'bound-code-index' }),
             },
+            skills: selectedSkillOptions1,
           }
-        : false,
-      dataDir: join(f.root, 'state'),
-      skills: {
-        registry: f.registry,
-        lease: f.lease,
-        hostModules: Object.fromEntries(
-          ['velaros:browser', 'velaros:devtools', 'velaros:cdp'].map((name) => [
-            name,
-            {
-              binding: {
-                moduleId: name,
-                instanceId: 'bound-page',
-                generation: 1,
-                schemaRevision: '1',
-              },
-              summary: 'bound fixture',
-              operations: {
-                identity: {
-                  summary: 'current binding',
-                  input: { type: 'object' },
-                  output: { type: 'string' },
-                  effects: 'none',
-                  run: async () => 'bound-page',
-                },
-              },
-            },
-          ])
         ),
-      },
-      agents: false,
-      search: false,
-    })
+        selectedSkillOptions1
+      )
+    )
     t.after(() => runtime.close())
     const modules = runtime.modules().items.map((item) => item.binding.moduleId)
     assert.equal(modules.includes('velaros:project'), project)
@@ -2725,13 +2674,9 @@ test('host project bindings compose independently with selected Skills', async (
     }
   }
   const f = await fixture(t, { selectedSkills: [BuiltinSkillNames.browser] })
+  const selectedSkillOptions2 = { registry: f.registry, lease: f.lease }
   await assert.rejects(
-    createRuntime({
-      node: f.node,
-      project: false,
-      dataDir: join(f.root, 'state'),
-      skills: { registry: f.registry, lease: f.lease },
-    }),
+    skillCapabilityModules.create({ ...selectedSkillOptions2, node: f.node }),
     /未绑定/
   )
 })
@@ -2765,33 +2710,39 @@ async function languageOwnerFixture(t, owners) {
   const queries = []
   let runtime
   try {
-    runtime = await createRuntime({
-      workspace: f.cwd,
-      node: {
-        cwd: f.node.cwd,
-        directory: f.node.directory,
-        authorize: f.node.authorize,
-        execute: f.node.execute.bind(f.node),
-        runtime: skills.environment,
-        acquireRuntime: (signal) => skills.acquireRuntime(signal),
-      },
-      project: {
-        code: {
-          isAvailable: () => true,
-          query: async (input, context) => {
-            queries.push(context)
-            assert.equal(context.project.getRootPath(), await realpath(f.cwd))
-            assert.equal(context.sessionId, 'language-owners')
-            assert.equal(context.abortSignal.aborted, false)
-            return { action: input.action, revision: 'language-owner-fixture' }
+    const selectedSkillOptions3 = { registry, lease: skills, session: skills }
+    runtime = await createRuntime(
+      await withSkillFixture(
+        await withProjectFixture(
+          {
+            node: {
+              cwd: f.node.cwd,
+              directory: f.node.directory,
+              authorize: f.node.authorize,
+              execute: f.node.execute.bind(f.node),
+              runtime: skills.environment,
+              acquireRuntime: (signal) => skills.acquireRuntime(signal),
+            },
+            storage: await createTestStorage(join(f.root, 'state')),
           },
-        },
-      },
-      dataDir: join(f.root, 'state'),
-      skills: { registry, lease: skills, session: skills },
-      agents: false,
-      search: false,
-    })
+          {
+            root: f.cwd,
+            codeIndex: {
+              isAvailable: () => true,
+              query: async (input, context) => {
+                queries.push(context)
+                assert.equal(context.project.getRootPath(), await realpath(f.cwd))
+                assert.equal(context.sessionId, 'language-owners')
+                assert.equal(context.abortSignal.aborted, false)
+                return { action: input.action, revision: 'language-owner-fixture' }
+              },
+            },
+            skills: selectedSkillOptions3,
+          }
+        ),
+        selectedSkillOptions3
+      )
+    )
   } catch (error) {
     await skills.release()
     throw error

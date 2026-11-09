@@ -13,7 +13,11 @@
  * 这里的每个接口都必须从根入口导出。
  */
 
-import type { ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velaros/images'
+import type {
+  ImageResizeRequest,
+  ImageResizeResult,
+  ImageSpacePort,
+} from '@velaros-ai/velaros/images'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/velaros/sandbox'
 
 import type {
@@ -52,6 +56,7 @@ import type {
   ReadInput,
   SearchInput,
 } from '../types/io.js'
+import type { ProjectLanguageSkillOwner } from '../types/language-skills.js'
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
 import type { CorePolicy } from '../types/policy.js'
@@ -419,6 +424,24 @@ export interface ProjectSpacePort {
   queryCode: (input: ProjectCodeQuery, context: ProjectOperationContext) => Promise<unknown>
 }
 
+/** 项目文件操作的显式模块装配，读取版本与写事务共享宿主已绑定的项目内核。 */
+export interface ProjectCapabilityModuleOptions {
+  /** 当前项目实例身份。 */
+  readonly instanceId: string
+  /** 实例重建时推进的代次。 */
+  readonly generation?: number
+  /** 宿主已限制范围的项目端口。 */
+  readonly project: ProjectSpacePort
+  /** 每次调用重新核对目标真实根及读写授权；同根授权后复用 currentProject。 */
+  readonly resolveProject?: ProjectOperationContext['resolveProject']
+}
+
+/** 显式绑定项目范围的看图模块；与项目文件模块共享同一资源身份。 */
+export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptions {
+  /** 宿主可选的缩图与裁图端口；未提供时超过上限的图片明确拒绝。 */
+  readonly resizeImage?: ImageSpacePort['resizeImage']
+}
+
 /**
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
@@ -530,4 +553,27 @@ export interface LocalFileSearchOptions {
   platform?: NodeJS.Platform
   /** 当前用户家目录。 */
   homeDir?: string
+}
+
+/** 项目语言服务借用的已授权 Skill 目录与激活口；不负责发现、选择或安装 Skill。 */
+export interface ProjectLanguageSkillHost {
+  /** 每次调用重新核对固定代际的真实授权。 */
+  readonly registry: {
+    /** 无授权、撤销或内容换代时拒绝。 */
+    assertGranted(name: string, generation: string, grant: string): Promise<void>
+  }
+  /** 宿主显式选择并持有的环境租约。 */
+  readonly lease: {
+    /** 租约中已经激活的固定身份。 */
+    readonly skills: readonly ProjectLanguageSkillOwner[]
+  }
+  /** 可选的同一会话按需激活端口；省略时只使用固定租约。 */
+  readonly session?: {
+    /** 宿主已审核的候选目录。 */
+    readonly catalog: readonly ProjectLanguageSkillOwner[]
+    /** 当前会话已经激活的 Skill。 */
+    readonly skills: readonly ProjectLanguageSkillOwner[]
+    /** 激活同一候选，不改变授权与代际。 */
+    activate(name: string, signal: AbortSignal): Promise<unknown>
+  }
 }

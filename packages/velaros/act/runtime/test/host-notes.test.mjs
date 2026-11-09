@@ -4,22 +4,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
 import { baseNotes, baseText, done } from './support/model-turn.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'host-notes-'))
   const frames = []
-  const options = {
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+  const options = async () => ({
+    storage: await createTestStorage(dataDir),
     context: { maintenance: false },
-  }
+  })
   const runtime = await createRuntime({
-    ...options,
+    ...(await options()),
     model: {
       id: 'notes-test',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -82,7 +81,7 @@ test('INV-47 host archive/restore uses the model note version and changes the ne
   assert.doesNotMatch(baseText(f.frames.at(-1)), /HOST-NOTE-CONTENT-UNIQUE/)
   assert(!baseNotes(f.frames.at(-1)).some((note) => note.key === 'plan'))
   await f.runtime.close()
-  const runtime = await createRuntime(f.options)
+  const runtime = await createRuntime(await f.options())
   try {
     const session = await runtime.openSession('notes')
     assert.equal((await session.listNotes()).items[0].resident, false)

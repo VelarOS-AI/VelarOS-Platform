@@ -53,6 +53,7 @@ import {
 } from './releaseTopology.mjs'
 import { safePackPackage } from './safe-package-pack.mjs'
 import { normalizeTarEntryPaths } from './tar-entry-paths.mjs'
+import { platformModules } from './platform-distributions.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const { dryRun, skipBuild, githubRelease, localTag, onlySelectors } = parseReleaseArguments(
@@ -108,6 +109,8 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
         if (packedManifest[field]?.[dependency])
           throw new Error(`Unified Platform still depends on ${dependency}`)
         const moduleName = dependency.replace('@velaros-ai/', '')
+        // 源码包仍可构建全部能力；迁出的 Skill 不属于基础归档的安装合同。
+        if (!platformModules.includes(moduleName)) continue
         if (
           !Object.keys(packedManifest.exports ?? {}).some(
             (key) => key === `./${moduleName}` || key.startsWith(`./${moduleName}/`)
@@ -150,7 +153,9 @@ const selected = selectReleasedPackages(
   ordered,
   // dry-run 沿用当前根版本的完整火车作为模拟身份；真实发布必须显式给出 --local-tag。
   requestedTag,
-  onlySelectors.length === 0 && tagSelection.kind === 'train' ? ['velaros'] : onlySelectors
+  onlySelectors.length === 0 && tagSelection.kind === 'train'
+    ? ['velaros', 'capabilities']
+    : onlySelectors
 ).packages
 const releaseTag = tagSelection.tag
 
@@ -262,6 +267,7 @@ for (const item of selected) {
     await safePackPackage({
       destination: packDirectory,
       packageDirectory: item.directory,
+      distribution: item.distribution,
       stdio: 'inherit',
     })
     const tarballs = (await readdir(packDirectory)).filter((file) => file.endsWith('.tgz'))

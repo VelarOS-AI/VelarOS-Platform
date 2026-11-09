@@ -1,8 +1,8 @@
 {
   "name": "@velaros-ai/velaros",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
   "license": "Apache-2.0",
@@ -19,7 +19,7 @@
   "type": "module",
   "sideEffects": false,
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.22.0"
   },
   "exports": {
     "./features": {
@@ -177,6 +177,10 @@
     "./act/bridge/contracts": {
       "types": "./dist/act/bridge/contracts.d.ts",
       "import": "./dist/act/bridge/contracts.js"
+    },
+    "./node": {
+      "types": "./dist/act/runtime/node.d.ts",
+      "import": "./dist/act/runtime/node.js"
     }
   },
   "imports": {

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { fork } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,10 +8,16 @@ import { fileURLToPath } from 'node:url'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeRuntime } from '../../../dist/act/runtime/node.js'
 import { createProjectKernel } from '../../../dist/project/index.js'
 
 import { done, turn } from './support/model-turn.mjs'
+import { projectFixture } from './support/project-fixture.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+  testBinding,
+} from './support/runtime-fixture.mjs'
 
 test('INV-37 injected storage runs the real runtime when SQLite is disabled', async () => {
   const fixture = fileURLToPath(new URL('./support/no-sqlite.fixture.mjs', import.meta.url))
@@ -249,13 +254,20 @@ test('INV-3 基础契约放不进窗口时明确阻塞；截断响应不执行�
   }
 })
 
-test('INV-30 正式入口从 workspace/dataDir 建立唯一主干；关闭重开保留源码和状态', async (t) => {
+test('INV-30 显式 Node 与 Project 组合共享主干；关闭重开保留源码和状态', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'act-bootstrap-'))
   const workspace = join(root, 'project')
   const dataDir = join(root, 'state')
   await mkdir(workspace)
   await writeFile(join(workspace, 'a.txt'), 'one\n')
-  const runtime = await createRuntime({ workspace, dataDir })
+  const durablePath = join(dataDir, 'project-transactions.json')
+  const runtime = await createNodeRuntime({
+    cwd: workspace,
+    stateDirectory: dataDir,
+    binding: testBinding,
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
+    ...(await projectFixture({ root: workspace, transactionStatePath: durablePath })),
+  })
   t.after(async () => {
     await runtime.close()
     await rm(root, { recursive: true, force: true })
@@ -272,14 +284,6 @@ test('INV-30 正式入口从 workspace/dataDir 建立唯一主干；关闭重开
   })
   assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
   assert.equal(await readFile(join(workspace, 'a.txt'), 'utf8'), 'two\n')
-  const durablePath = join(
-    dataDir,
-    'projects',
-    createHash('sha256')
-      .update(await realpath(workspace))
-      .digest('hex'),
-    'transactions.json'
-  )
   const durable = JSON.parse(await readFile(durablePath, 'utf8'))
   assert.match(JSON.stringify(durable), /applied/)
   const recovered = await createProjectKernel({
@@ -301,10 +305,10 @@ test('INV-30 正式入口从 workspace/dataDir 建立唯一主干；关闭重开
   await assert.rejects(runtime.openSession('store-material:forged'), /身份无效/)
 })
 
-test('工作区预设的搜索与 worker 可发现；profile 来自实际配置且可显式关闭', async (t) => {
+test('执行目录与模型不推导业务能力；worker 按显式 profile 挂载', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'act-profiles-'))
-  const workspace = join(root, 'project')
-  await mkdir(workspace)
+  const cwd = join(root, 'execution')
+  await mkdir(cwd)
   const model = {
     id: 'deterministic',
     limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -313,13 +317,21 @@ test('工作区预设的搜索与 worker 可发现；profile 来自实际配置�
       yield* done(request)
     },
   }
-  const runtime = await createRuntime({ workspace, dataDir: join(root, 'state'), model })
-  const limited = await createRuntime({
-    workspace,
-    dataDir: join(root, 'limited'),
+  const options = {
+    cwd,
+    binding: testBinding,
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
     model,
-    agents: false,
-    search: false,
+  }
+  const limited = await createNodeRuntime({ ...options, stateDirectory: join(root, 'limited') })
+  const runtime = await createNodeRuntime({
+    ...options,
+    stateDirectory: join(root, 'state'),
+    agents: {
+      profiles: { worker: { model, node: true, modules: [] } },
+      concurrency: 1,
+      maxChildren: 4,
+    },
   })
   t.after(async () => {
     await runtime.close()
@@ -330,54 +342,33 @@ test('工作区预设的搜索与 worker 可发现；profile 来自实际配置�
   await session.context.append({ kind: 'user', body: 'Inspect available profiles' })
   const response = await session.execute({
     source:
-      "import {profiles} from 'velaros:agents';import {output} from 'velaros';const p=await profiles();output(p);if(p[0]?.name!=='worker'||!p[0].modules.includes('velaros:project'))throw Error('invalid profile');",
+      "import {profiles} from 'velaros:agents';import {output} from 'velaros';const p=await profiles();output(p);if(p[0]?.name!=='worker'||p[0].modules.length)throw Error('invalid profile');",
   })
   assert.equal(response.result.failed, undefined, JSON.stringify(response))
-  const search = await session.execute({
-    source:
-      "import {profiles} from 'velaros:search';import {output} from 'velaros';const p=await profiles();output(p);if(!p.some(item=>item.name==='standard'&&item.default))throw Error('missing standard profile');",
-  })
-  assert.equal(search.result.failed, undefined, JSON.stringify(search))
-  assert.throws(() => limited.describe('velaros:agents'), /未挂载/)
-  assert.throws(() => limited.describe('velaros:search'), /未挂载/)
+  for (const module of ['velaros:project', 'velaros:images', 'velaros:agents', 'velaros:search'])
+    assert.throws(() => limited.describe(module), /未挂载/)
 })
 
-test('默认入口在建立状态存储前核验路径、重复挂载和配置', async (t) => {
+test('Node 装配在获取资源前核验路径、宿主所有权和模型配置', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'act-bootstrap-invalid-'))
-  const workspace = join(root, 'project')
-  await mkdir(workspace)
-  await symlink(workspace, join(root, 'alias'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  for (const dataDir of [
-    workspace,
-    join(workspace, 'state'),
-    join(workspace, '..hidden'),
-    join(root, 'alias'),
-  ])
-    await assert.rejects(createRuntime({ workspace, dataDir }), /工作区/)
+  const cwd = join(root, 'execution')
+  await mkdir(cwd)
+  const options = {
+    cwd,
+    stateDirectory: join(root, 'state'),
+    binding: testBinding,
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
+  }
+  await assert.rejects(createNodeRuntime({ ...options, cwd: 'relative' }), { code: 'VALIDATION' })
+  await assert.rejects(createNodeRuntime({ ...options, stateDirectory: 'relative' }), {
+    code: 'VALIDATION',
+  })
+  await assert.rejects(createNodeRuntime({ ...options, host: {} }), { code: 'VALIDATION' })
+  await assert.rejects(createNodeRuntime({ ...options, localHost: {} }), { code: 'VALIDATION' })
   await assert.rejects(
-    createRuntime({
-      workspace,
-      modules: [{ binding: { moduleId: 'velaros:project' }, operations: {} }],
-    }),
-    /重复/
-  )
-  await assert.rejects(
-    createRuntime({
-      workspace,
-      model: {
-        provider: 'openai',
-        model: 'test',
-        apiKey: 'test',
-        baseURL: 'https://example.invalid/?credential=test',
-      },
-    }),
-    /dataDir/
-  )
-  await assert.rejects(
-    createRuntime({
-      workspace,
-      dataDir: join(root, 'state'),
+    createNodeRuntime({
+      ...options,
       model: {
         provider: 'openai',
         model: 'test',
@@ -495,9 +486,9 @@ test(
       },
     }
     const runtime = await createRuntime({
-      dataDir: root,
+      storage: await createTestStorage(root),
       model: driver,
-      memory: false,
+
       context: { maintenance: false },
       limits: { turns: 100, timeoutMs: 180000, projectionChars: frameChars },
     })
@@ -558,91 +549,94 @@ test(
   }
 )
 
-test('INV-39 durable session workspace binding survives reopen, aliases and pure-chat capability changes', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-binding-'))
+test('INV-39 durable execution identity, authorization and capability bindings survive reopen', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-binding-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const workspace = join(root, 'one')
-  const other = join(root, 'two')
-  const alias = join(root, 'alias')
-  const dataDir = join(root, 'state')
-  await mkdir(workspace)
-  await mkdir(other)
-  await symlink(workspace, alias)
-  const first = await createRuntime({ workspace, dataDir })
+  const module = {
+    binding: {
+      moduleId: 'fixture:resource',
+      instanceId: 'one',
+      generation: 1,
+      schemaRevision: '1',
+    },
+    summary: 'binding fixture',
+    operations: {},
+  }
+  const open = async (binding = testBinding, modules = [module]) =>
+    createRuntime({ storage: await createTestStorage(root), binding, modules })
+  const first = await open()
   await first.openSession('main')
   await first.close()
-  const pure = await createRuntime({ workspace: alias, dataDir, project: false })
-  assert(!pure.modules().items.some((item) => item.binding.moduleId === 'velaros:project'))
-  await pure.openSession('main')
-  await pure.close()
-  await rm(alias)
-  await symlink(other, alias)
-  for (const requested of [other, alias, undefined]) {
-    const changed = await createRuntime({ workspace: requested, dataDir, project: false })
+  const same = await open()
+  await same.openSession('main')
+  await same.close()
+  for (const [binding, modules] of [
+    [{ ...testBinding, executionIdentity: 'other-user' }, [module]],
+    [{ ...testBinding, authorizationScope: 'other-grant' }, [module]],
+    [testBinding, [{ ...module, binding: { ...module.binding, instanceId: 'two' } }]],
+    [testBinding, [{ ...module, binding: { ...module.binding, generation: 2 } }]],
+    [testBinding, []],
+  ]) {
+    const changed = await open(binding, modules)
     try {
-      await assert.rejects(changed.openSession('main'), { code: 'WORKSPACE_BINDING_MISMATCH' })
+      await assert.rejects(changed.openSession('main'), { code: 'CONFLICT' })
     } finally {
       await changed.close()
     }
   }
-  const restored = await createRuntime({ workspace, dataDir })
+  const restored = await open()
   await restored.openSession('main')
   await restored.close()
 })
 
-test('competing runtime instances atomically bind a new session to only one workspace', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-race-'))
+test('competing runtimes atomically bind a session to one execution authority', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-binding-race-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const one = join(root, 'one')
-  const two = join(root, 'two')
-  const dataDir = join(root, 'state')
-  await mkdir(one)
-  await mkdir(two)
   const runtimes = await Promise.all(
-    [one, two].map((workspace) => createRuntime({ workspace, dataDir, project: false }))
+    ['one', 'two'].map(async (executionIdentity) =>
+      createRuntime({
+        storage: await createTestStorage(root),
+        binding: { ...testBinding, executionIdentity },
+      })
+    )
   )
   try {
     const results = await Promise.allSettled(runtimes.map((runtime) => runtime.openSession('main')))
     assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1)
-    const rejected = results.find((result) => result.status === 'rejected')
-    assert.equal(rejected.reason.code, 'WORKSPACE_BINDING_MISMATCH')
+    assert.equal(results.find((result) => result.status === 'rejected').reason.code, 'CONFLICT')
     const winner = results.findIndex((result) => result.status === 'fulfilled')
     await runtimes[winner].openSession('main')
-    // 不同产品会话仍可在同一存储中拥有自己的工作区。
     await runtimes[1 - winner].openSession('separate')
   } finally {
     await Promise.all(runtimes.map((runtime) => runtime.close()))
   }
 })
 
-test('INV-39 corrupted or duplicated ContextStorage bindings reject session activation', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-corrupt-'))
+test('INV-39 corrupted, duplicated and retired product bindings reject activation', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-binding-corrupt-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const workspace = join(root, 'one')
-  const dataDir = join(root, 'state')
-  await mkdir(workspace)
-  await mkdir(dataDir)
-  const initial = await createRuntime({ workspace, dataDir, project: false })
-  for (const id of ['corrupted', 'duplicated']) await initial.openSession(id)
+  const initial = await createRuntime({ storage: await createTestStorage(root) })
+  for (const id of ['corrupted', 'duplicated', 'retired']) await initial.openSession(id)
   await initial.close()
-  const storage = localContextStorage({ path: join(dataDir, 'context.sqlite') })
+  const storage = await createTestStorage(root)
   try {
-    for (const id of ['corrupted', 'duplicated']) {
+    for (const id of ['corrupted', 'duplicated', 'retired']) {
       const state = await storage.load(id)
-      const binding = state.records.find((record) => record.title === 'runtime:workspace')
+      const binding = state.records.find((record) => record.title === 'runtime:binding')
       assert(binding)
       const records = [...state.records]
       if (id === 'corrupted') {
         const body = '{broken'
         const objectId = await storage.put(id, body)
         records[records.indexOf(binding)] = { ...binding, objectId, chars: body.length }
-      } else {
+      } else if (id === 'retired')
+        records[records.indexOf(binding)] = { ...binding, title: 'runtime:workspace' }
+      else
         records.push({
           ...binding,
           ref: { sessionId: id, id: crypto.randomUUID() },
           sequence: records.at(-1).sequence + 1,
         })
-      }
       assert(
         await storage.compareAndSwap(id, state.version, {
           ...state,
@@ -654,28 +648,41 @@ test('INV-39 corrupted or duplicated ContextStorage bindings reject session acti
   } finally {
     await storage.close()
   }
-  const runtime = await createRuntime({ workspace, dataDir, project: false })
+  const runtime = await createRuntime({ storage: await createTestStorage(root) })
   try {
-    for (const id of ['corrupted', 'duplicated'])
-      await assert.rejects(runtime.openSession(id), { code: 'WORKSPACE_BINDING_MISMATCH' })
+    for (const id of ['corrupted', 'duplicated', 'retired'])
+      await assert.rejects(runtime.openSession(id), { code: 'CONFLICT' })
   } finally {
     await runtime.close()
   }
 })
 
-test('workspace-free sessions cannot acquire a workspace by reopening with a different capability scope', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-none-'))
+test('Node canonical execution directory remains fixed across restore', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-node-binding-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const dataDir = join(root, 'state')
-  const workspace = join(root, 'project')
-  await mkdir(workspace)
-  const pure = await createRuntime({ dataDir, project: false })
-  await pure.openSession('main')
-  await pure.close()
-  const withWorkspace = await createRuntime({ workspace, dataDir })
+  const one = join(root, 'one')
+  const two = join(root, 'two')
+  const alias = join(root, 'alias')
+  await mkdir(one)
+  await mkdir(two)
+  await symlink(one, alias)
+  const options = {
+    stateDirectory: join(root, 'state'),
+    binding: testBinding,
+    localHost: { processConfinement: { mode: 'danger-full-access' } },
+  }
+  const first = await createNodeRuntime({ ...options, cwd: one })
+  await first.openSession('main')
+  await first.close()
+  const same = await createNodeRuntime({ ...options, cwd: alias })
+  await same.openSession('main')
+  await same.close()
+  await rm(alias)
+  await symlink(two, alias)
+  const changed = await createNodeRuntime({ ...options, cwd: alias })
   try {
-    await assert.rejects(withWorkspace.openSession('main'), { code: 'WORKSPACE_BINDING_MISMATCH' })
+    await assert.rejects(changed.openSession('main'), { code: 'CONFLICT' })
   } finally {
-    await withWorkspace.close()
+    await changed.close()
   }
 })

@@ -16,11 +16,8 @@ import type { CodeProgramRequest, CodeRunnerApi, NodeCodeRunnerOptions } from '@
 import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
-import type { ShellHostPort } from '@velaros-ai/velaros/execution'
-import type { ImageSpacePort } from '@velaros-ai/velaros/images'
+import type { LocalShellHostOptions, ShellHostPort } from '@velaros-ai/velaros/execution'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
-import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
-import type { SkillCapabilityModuleOptions } from '@velaros-ai/velaros/skills'
 
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
 import type { VelarosSession } from '../impl/RuntimeSession.js'
@@ -39,26 +36,6 @@ export type CapabilityContext<T extends object> = {
       : never
     : never
 }[keyof T]
-
-/** 项目文件操作的标准装配；读取版本与写事务共享原项目内核。 */
-export interface ProjectCapabilityModuleOptions {
-  /** 当前项目实例身份。 */
-  readonly instanceId: string
-  /** 实例重建时推进的代次。 */
-  readonly generation?: number
-  /** 宿主已限制范围的项目端口。 */
-  readonly project: ProjectSpacePort
-  /** 可选跨项目授权口；每次调用核对宿主授权真实根及读写模式，未配置时拒绝 projectRoot。 */
-  readonly resolveProject?: (
-    root: string,
-    options: {
-      write: boolean
-      signal: AbortSignal
-      /** 当前运行时共享端口；同根仍需授权，授权后复用它或受限包装。不可由回调销毁。 */
-      currentProject: ProjectSpacePort
-    }
-  ) => Promise<ProjectSpacePort>
-}
 
 /** 将已有领域操作接到统一 Kernel；模型合同由同一份领域接口生成。 */
 export interface CapabilityModuleOptions<T extends object> {
@@ -92,7 +69,7 @@ export interface CapabilityModuleOptions<T extends object> {
 /** 宿主只选择实例资源，公共机制由 Velaros 统一装配。 */
 /** 任务事实与只读证据源的配置，宿主装配领域只读源。 */
 export interface VelarosContextOptions {
-  /** 领域拥有的纯快照目录；逐轮真实捕获，只复用相同完整值的固定派生。工作区默认装配 Project files。 */
+  /** 领域拥有的纯快照目录；逐轮真实捕获，只复用相同完整值的固定派生。宿主显式装配。 */
   readonly snapshots?: readonly SnapshotObservationProvider[]
   /** 仅对宿主预登记、完整覆盖依赖的观察启用可靠代次复用；省略时每个业务轮实际采集。 */
   readonly observation?: ObservationReuseOptions
@@ -182,25 +159,6 @@ export interface ContextMaintenanceOptions {
   readonly profile?: Partial<ContextMaintenanceProfile>
 }
 
-/** 项目上的看图模块：项目端口之外，可选宿主的裁图缩图（macOS 上是系统自带的 sips）。 */
-export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptions {
-  /** 看超过上限的图、只看一块区域时用；不给时 view 遇到这种图会明说做不了。 */
-  readonly resizeImage?: ImageSpacePort['resizeImage']
-}
-
-/** 工作区项目上另挂的能力：都用运行时自己的那个项目内核，钳在项目根里。 */
-export interface VelarosProjectOptions {
-  /** 可选跨项目授权解析器；每次操作核对权限，返回目标真实根端口；同根复用 currentProject，异根按真实根缓存内核，不改变进程 confinement。 */
-  readonly resolveProject?: ProjectCapabilityModuleOptions['resolveProject']
-  /**
-   * 挂 velaros:code：内置的 JS/TS、Python 语言服务答大纲、定义、引用、诊断与波及面；
-   * 给了代码图谱后端时调用关系与四类分析也能答，不给时它们报 UNAVAILABLE。
-   */
-  readonly code?: boolean | ProjectCodeIndexApi
-  /** 宿主直接挂通用 velaros:images 并绑定项目路径，独立于 Skill 选择；macOS 上用 sips 缩图和裁图。 */
-  readonly images?: boolean
-}
-
 /** 正式 Runtime 的单一装配入口。 */
 export interface VelarosRuntimeOptions {
   /** 用户选择的执行深度；省略为 medium，独立于供应商推理参数回退，业务子任务继承。 */
@@ -224,25 +182,18 @@ export interface VelarosRuntimeOptions {
    * 在帧尾，不影响前缀缓存。读取失败的那一帧只给时间。
    */
   readonly environment?: () => Readonly<Record<string, string>>
-  /** 常规本地工作区；框架装配已有 Project 内核与只读证据来源。 */
-  readonly workspace?: string
-  /**
-   * 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。
-   * 给对象时照样挂这两项，另按项挂上同一个项目内核上的能力（见 VelarosProjectOptions）。
-   */
-  readonly project?: boolean | VelarosProjectOptions
-  /** 当前轮次固定的 Skill 组合；Skill 声明的宿主能力经授权桥装配。 */
-  readonly skills?: Omit<SkillCapabilityModuleOptions, 'node'>
-  /** 框架状态目录，放在业务工作区之外；未注入 storage 时必填。 */
-  readonly dataDir?: string
+  /** 恢复时固定的执行身份和授权范围；由宿主从已授权资源派生，不能取模型输入。 */
+  readonly binding: RuntimeSessionBinding
+  /** 成功创建后移交的资源；等待会话及能力完全收束后关闭，初始化失败仍归调用者。 */
+  readonly resources?: readonly RuntimeResource[]
   /** 固定主会话存储边界、创建权限和已授予空间；返回 undefined 关闭。 */
   stores?(sessionId: string): Optional<StoreConfiguration>
   /** 为每个主会话固定长期记忆作用域；复用 createMemoryStore().scope()，搜索、整理和子任务不继承。 */
-  readonly memory?: false | ((sessionId: string) => MemoryScopePort)
+  readonly memory?: (sessionId: string) => MemoryScopePort
   /** 主线、搜索和业务支线共享的树形调度上限。 */
   readonly modelTools?: ModelToolPolicy
-  /** 同一 Act 工厂上的通用子任务；工作区预设默认提供 worker，false 可关闭。 */
-  readonly agents?: boolean | VelarosAgentsOptions
+  /** 同一 Act 工厂上的通用子任务；仅显式配置时挂载。 */
+  readonly agents?: VelarosAgentsOptions
   /** 宿主能在对话里显示小部件时给：模型用 velaros:widget 的 show 交来 HTML 或 SVG，宿主负责显示；不给就不挂这个模块。 */
   readonly widgets?: WidgetHost
   /** 每次派发前的宿主权限检查，拒绝时尚未执行。 */
@@ -255,26 +206,28 @@ export interface VelarosRuntimeOptions {
   effectResources?(invocation: PreparedInvocation): readonly string[] | undefined
   /** 接收无正文的阶段计量；回调应快速返回，异常与异步拒绝不改变业务结果。宿主决定保留和聚合，不向模型授予能力。 */
   onMetric?(metric: RuntimeMetric): void | Promise<void>
-  /** 有界高级搜索的模型与预算；工作区预设默认开启，false 可关闭。 */
-  readonly search?: boolean | VelarosSearchOptions
+  /** 有界高级搜索的模型与预算；仅显式配置时挂载。 */
+  readonly search?: VelarosSearchOptions
   /** 本运行时固定的文本协议配置，与主循环共用同一解析器。 */
   readonly protocol?: ScriptProtocolOptions
   /** 每帧按会话读取宿主参数；解析器立即冻结数据快照。 */
   inputs?(sessionId: string): Readonly<Record<string, unknown>>
   /** 任务事实与领域适配器；省略时使用用户目标、脚本观察和执行材料。 */
   readonly context?: VelarosContextOptions
-  /** 数据库无关的 ContextStorage；省略时由 dataDir 创建 SQLite。创建成功后 Runtime 持有并关闭此连接，多个实例使用各自的连接或池租约；初始化失败时注入连接仍由调用方持有。 */
-  readonly storage?: ContextStorage
+  /** 数据库无关的 ContextStorage；由宿主显式建立。创建成功后 Runtime 持有并关闭此连接，多个实例使用各自的连接或池租约；初始化失败时注入连接仍由调用方持有。 */
+  readonly storage: ContextStorage
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
   /** Node 执行环境；内部观察和维护复用该环境的只读进程口。 */
   readonly node?: RuntimeNodeOptions
-  /** agent 的持久 npm 环境；默认使用 dataDir/environments/default 与 node.npm，false 关闭。 */
-  readonly packageEnvironment?: EnvironmentRegistryApi | false
+  /** agent 的持久 npm 环境；宿主显式建立；省略时不提供包管理。 */
+  readonly packageEnvironment?: EnvironmentRegistryApi
   /** 宿主挂载的领域模块；标准模块由运行时提供。 */
   readonly modules?: readonly OperationModuleDefinition[]
+  /** 宿主对已挂载模块的会话可见性；发现与派发使用同一检查，不会扩大实际装配。 */
+  moduleAccess?(sessionId: string, moduleId: string): boolean
   /** 使用共享驱动接入模型；纯脚本宿主可以不给。 */
-  readonly model?: ModelDriver | RuntimeModelConfiguration
+  readonly model?: ModelDriver
   /** 覆盖明确的回合和上下文预算。 */
   readonly limits?: Partial<ActRunLimits>
 }
@@ -453,4 +406,39 @@ export interface MemoryConsolidationOptions {
   readonly memory: MemoryScopePort
   /** 宿主退出或取消信号。 */
   readonly signal: AbortSignal
+}
+
+/** 与产品导航无关的会话执行边界；模块实例及代际另由真实装配派生。 */
+export interface RuntimeSessionBinding {
+  /** 已解析的执行主体、环境或远端节点身份；改变主体必须创建新会话。 */
+  readonly executionIdentity: string
+  /** 已核验的授权范围及策略代际；不能用展示路径代替权限证明。 */
+  readonly authorizationScope: string
+}
+
+/** 移交给 Runtime 的单一生命周期资源。 */
+export interface RuntimeResource {
+  /** 仅在执行及能力完全收束后调用；允许幂等关闭。 */
+  close(): void | Promise<void>
+}
+
+/** 普通 Node 环境装配；不根据路径或模型推导领域能力。 */
+export interface NodeRuntimeOptions extends Omit<
+  VelarosRuntimeOptions,
+  'storage' | 'runner' | 'node' | 'model'
+> {
+  /** 真实 Node 进程的绝对工作目录，不代表产品项目。 */
+  readonly cwd: string
+  /** 运行事实和进程档案的绝对目录，必须位于执行目录之外。 */
+  readonly stateDirectory: string
+  /** 显式持有的本机或远端执行口；生命周期仍归产品。 */
+  readonly host?: ShellHostPort
+  /** 由此装配器持有的本机 Host 配置；与 host 互斥，必须明确 processConfinement。 */
+  readonly localHost?: Omit<LocalShellHostOptions, 'cwd'>
+  /** 覆盖默认 SQLite；成功创建后由 Runtime 关闭，失败仍归调用方。 */
+  readonly storage?: ContextStorage
+  /** Node 可执行文件、依赖环境和审批；不能改变 cwd、日志目录或另造 Host。 */
+  readonly execution?: Omit<NodeExecutionEnvironmentOptions, 'cwd' | 'directory' | 'host'>
+  /** 已解析模型或明确的 Provider 配置。 */
+  readonly model?: ModelDriver | RuntimeModelConfiguration
 }

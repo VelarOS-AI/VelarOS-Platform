@@ -3,9 +3,9 @@ import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { assertInstalledDependencyRepairs } from './dependency-probes.mjs'
-import { createRuntime } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
 import { createMemoryStore, memoryOperations } from '@velaros-ai/velaros/memory'
-import { createProjectKernel, createProjectCodeQuery, createExternalLanguageService, languageQueries, typeScriptProjects } from '@velaros-ai/velaros/project'
+import { createProjectKernel, createProjectCodeQuery, createExternalLanguageService, languageQueries, typeScriptProjects } from '@velaros-ai/capabilities/project'
 
 assertInstalledDependencyRepairs([new URL('./package.json', import.meta.url)])
 
@@ -20,11 +20,11 @@ async function probeRuntime(){
   const marker=request.compiledPrompt.match(/当前帧标记：(@@\w+)。/u)[1]
   yield {type:'text',text:`packed complete\n${marker} done`};yield {type:'finish',reason:'stop'}
  }}
- const runtime=await createRuntime({workspace,dataDir:join(root,'data'),model,agents:false,search:false})
+ const runtime=await createNodeRuntime({cwd:workspace,stateDirectory:join(root,'data'),binding:{executionIdentity:'packed-consumer',authorizationScope:'packed-consumer-policy-v1'},localHost:{processConfinement:{mode:'danger-full-access'}},protocol:{transport:'text'},stores:sessionId=>({scope:'session:'+sessionId}),model})
  try{
   const session=await runtime.openSession('packed')
   await session.context.append({kind:'user',body:'Probe durable state'})
-  const defaults=await session.execute({source: `import {execa} from 'execa';import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {diffLines} from 'diff';import {parse,stringify} from 'yaml';import {createNode} from 'yaml/util';import {writeFile} from 'node:fs/promises';await writeFile('probe.yml',stringify({answer:42}));if((await globby('*.yml')).length!==1||!diffLines('a','b').length||parse('answer: 42').answer!==42||typeof createNode!=='function')throw Error('default package failed');console.log((await execa(rgPath,['42','probe.yml'])).stdout);`})
+  const defaults=await session.execute({source: `import {execa} from 'execa';import {rgPath} from '@vscode/ripgrep';import {globby} from 'globby';import {diffLines} from 'diff';import {writeFile} from 'node:fs/promises';await writeFile('probe.yml','answer: 42');if((await globby('*.yml')).length!==1||!diffLines('a','b').length)throw Error('default package failed');console.log((await execa(rgPath,['42','probe.yml'])).stdout);`})
   assert.equal(defaults.result.failed,undefined,JSON.stringify(defaults));assert.match(defaults.result.process.stdout,/answer: 42/)
 
   const saved=await session.execute({source:"import {output} from 'velaros';import {store} from 'velaros:system';const space=await store.create({name:'packed',description:'Published package probe'});output(await store.set({store:space.id,key:'ready',baseRevision:0,value:true}));"})

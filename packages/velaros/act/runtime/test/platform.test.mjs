@@ -9,14 +9,11 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
 
-import {
-  createCapabilityModule,
-  createNodeExecutionEnvironment,
-  createProjectCapabilityModule,
-  createRuntime,
-} from '../../../dist/act/runtime/index.js'
+import { createCapabilityModule } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
+  createProjectCapabilityModule,
   createProjectContextSource,
   createProjectKernel,
   projectFileOperations,
@@ -24,6 +21,8 @@ import {
 } from '../../../dist/project/index.js'
 
 import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { unavailableCodeIndex, withProjectFixture } from './support/project-fixture.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 async function storageFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'platform-integration-'))
@@ -361,7 +360,10 @@ test('INV-56 Python editing, idempotent retry, inspection and undo run through t
   const original =
     'class Cache:\r\n    def load(self, key):\r\n        return "原文🙂"\r\n\r\n# 尾部保留\r\n'
   await writeFile(join(workspace, 'cache.py'), original)
-  const runtime = await createRuntime({ storage: f.storage, workspace })
+  const runtime = await createRuntime(
+    await withProjectFixture({ storage: f.storage }, { root: workspace }),
+    { cwd: workspace }
+  )
   f.cleanup.push(() => runtime.close())
   const session = await open(runtime)
   const receipt = await session.execute({
@@ -526,11 +528,13 @@ test('INV-56 a workspace project can also mount velaros:code and velaros:images 
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII='
   await writeFile(join(workspace, 'tiny.png'), Buffer.from(png, 'base64'))
   await writeFile(join(f.root, 'outside.png'), Buffer.from(png, 'base64'))
-  const runtime = await createRuntime({
-    storage: f.storage,
-    workspace,
-    project: { code: true, images: true },
-  })
+  const runtime = await createRuntime(
+    await withProjectFixture(
+      { storage: f.storage },
+      { root: workspace, codeIndex: unavailableCodeIndex, images: true }
+    ),
+    { cwd: workspace }
+  )
   f.cleanup.push(() => runtime.close())
   const s = await open(runtime)
   const receipt = await s.execute({
@@ -552,10 +556,10 @@ test('INV-56 a workspace project can also mount velaros:code and velaros:images 
 
   // 不给这两项就不挂
   const plainStorage = localContextStorage({ path: join(f.root, 'plain.sqlite') })
-  const plain = await createRuntime({
-    storage: plainStorage,
-    workspace,
-  })
+  const plain = await createRuntime(
+    await withProjectFixture({ storage: plainStorage }, { root: workspace }),
+    { cwd: workspace }
+  )
   f.cleanup.push(async () => {
     await plain.close()
     await plainStorage.close()
@@ -873,24 +877,24 @@ test('runtime project resolver authorizes cross-root transactions through the ge
   await writeFile(join(target, 'a.txt'), 'before')
   const kernel = await createProjectKernel({ root: target })
   const modes = []
-  const runtime = await createRuntime({
-    storage: f.storage,
-    workspace,
-    agents: false,
-    search: false,
-    memory: false,
-    project: {
-      resolveProject: async (root, options) => {
-        assert.equal(root, target)
-        modes.push(options.write)
-        return {
-          getRootPath: () => target,
-          kernel: async () => kernel,
-          queryCode: async () => ({}),
-        }
-      },
-    },
-  })
+  const runtime = await createRuntime(
+    await withProjectFixture(
+      { storage: f.storage },
+      {
+        root: workspace,
+        resolveProject: async (root, options) => {
+          assert.equal(root, target)
+          modes.push(options.write)
+          return {
+            getRootPath: () => target,
+            kernel: async () => kernel,
+            queryCode: async () => ({}),
+          }
+        },
+      }
+    ),
+    { cwd: workspace }
+  )
   f.cleanup.push(() => runtime.close())
   const session = await open(runtime)
   const executed = await session.execute({

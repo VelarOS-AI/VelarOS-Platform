@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { nodeRuntimePackages } from '@velaros-ai/script'
 
-import { createCapabilityModule, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createCapabilityModule } from '../../../dist/act/runtime/index.js'
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
 import { boundedInventory } from '../../../dist/act/runtime/utils/inventory.js'
 import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instructions.js'
@@ -17,6 +17,11 @@ import { VelarFeaturesModule } from '../../../dist/features/contract/surface.js'
 import { VelarOfficeModule } from '../../../dist/office/contract/surface.js'
 
 import { done, modelText, turn } from './support/model-turn.mjs'
+import { unavailableCodeIndex, withProjectFixture } from './support/project-fixture.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
 const driver = (stream) => ({
   id: 'instructions-test',
@@ -73,16 +78,17 @@ test('调查停止与调整以证据为准，假设不冒充根因', async () =>
   assert.equal(executionPolicy('high', 'auxiliary'), '')
 })
 
-async function fixture(t, options) {
+async function fixture(t, options, execution = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-instructions-'))
-  const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
-    context: { maintenance: false },
-    ...options,
-  })
+  const runtime = await createRuntime(
+    {
+      storage: await createTestStorage(dataDir),
+
+      ...options,
+      context: { maintenance: false, ...options?.context },
+    },
+    execution
+  )
   t.after(async () => {
     await runtime.close()
     await rm(dataDir, { recursive: true, force: true })
@@ -207,14 +213,20 @@ test('INV-57 首帧直接交付真实领域能力用途和已安装 npm，详细
   )
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-primer-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
-  const f = await fixture(t, {
-    workspace,
-    modules,
-    model: driver(async function* (request) {
-      frames.push(request)
-      yield* done(request)
-    }),
-  })
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        modules,
+        model: driver(async function* (request) {
+          frames.push(request)
+          yield* done(request)
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   for await (const event of f.session.submit('What can this environment do?'))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   const first = inventory(frames[0])
@@ -257,21 +269,27 @@ test('INV-57 首帧后备包版本与执行进程实际工作区解析身份分�
   )
   await writeFile(join(directory, 'index.cjs'), 'module.exports = () => "workspace-export";')
   const frames = []
-  const f = await fixture(t, {
-    workspace,
-    model: driver(async function* (request) {
-      frames.push(request)
-      if (frames.length === 1) {
-        yield turn(request, {
-          execute: {
-            source:
-              'import execa from "execa"; import {execa as hostExeca} from "velaros:npm/execa"; import {readFile} from "node:fs/promises"; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+"/index.json","utf8")); const pkg=catalog.packages.find(p=>p.name==="execa"); console.log(JSON.stringify({value:execa(),hostExeca:typeof hostExeca,source:pkg.source,version:pkg.version,runtimeImport:pkg.runtimeImport,runtimeVersion:pkg.runtimeVersion}));',
-          },
-        })
-        yield { type: 'finish', reason: 'stop' }
-      } else yield* done(request)
-    }),
-  })
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        model: driver(async function* (request) {
+          frames.push(request)
+          if (frames.length === 1) {
+            yield turn(request, {
+              execute: {
+                source:
+                  'import execa from "execa"; import {execa as hostExeca} from "velaros:npm/execa"; import {readFile} from "node:fs/promises"; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+"/index.json","utf8")); const pkg=catalog.packages.find(p=>p.name==="execa"); console.log(JSON.stringify({value:execa(),hostExeca:typeof hostExeca,source:pkg.source,version:pkg.version,runtimeImport:pkg.runtimeImport,runtimeVersion:pkg.runtimeVersion}));',
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+          } else yield* done(request)
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   for await (const event of f.session.submit('Inspect the workspace package identity'))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   const hint = inventory(frames[0]).packages.find((item) => item.name === 'execa')
@@ -307,7 +325,6 @@ test('INV-57 环境引子读取所选 Skill 和损坏包的实际状态，元数
   let released = 0
   const frames = []
   const f = await fixture(t, {
-    packageEnvironment: false,
     node: {
       cwd: directory,
       directory: join(directory, 'runs'),
@@ -364,7 +381,6 @@ test('INV-57 环境引子读取所选 Skill 和损坏包的实际状态，元数
 test('INV-57 环境清单读取失败仍交付能力和诊断，不阻断模型请求', async (t) => {
   const frames = []
   const f = await fixture(t, {
-    packageEnvironment: false,
     node: {
       cwd: process.cwd(),
       directory: join(tmpdir(), 'unused-primer-runs'),
@@ -413,14 +429,19 @@ test('base instructions stay small while authorized packages are discoverable on
   t.after(() => rm(workspace, { recursive: true, force: true }))
   for (const project of [false, true]) {
     let instructions
-    const f = await fixture(t, {
-      workspace,
-      project,
-      model: driver(async function* (request) {
-        instructions = request.instructions
-        yield* done(request)
-      }),
-    })
+    const f = await fixture(
+      t,
+      await withProjectFixture(
+        {
+          model: driver(async function* (request) {
+            instructions = request.instructions
+            yield* done(request)
+          }),
+        },
+        { root: workspace, enabled: project }
+      ),
+      { cwd: workspace }
+    )
     for await (const event of f.session.submit('Translate 今天晴天.'))
       assert.notEqual(event.type, 'error')
     assert.match(instructions, /Node.js/)
@@ -483,16 +504,21 @@ test('Node hints expose only available collaboration and search capabilities wit
   for (const agents of [false, true]) {
     for (const search of [false, true]) {
       let instructions
-      const f = await fixture(t, {
-        workspace,
-        project: { code: true },
-        agents,
-        search,
-        model: driver(async function* (request) {
-          instructions = request.instructions
-          yield* done(request)
-        }),
-      })
+      const f = await fixture(
+        t,
+        await withProjectFixture(
+          {
+            agents,
+            search,
+            model: driver(async function* (request) {
+              instructions = request.instructions
+              yield* done(request)
+            }),
+          },
+          { root: workspace, codeIndex: unavailableCodeIndex }
+        ),
+        { cwd: workspace }
+      )
       for await (const event of f.session.submit('Explain the current task.'))
         assert.notEqual(event.type, 'error')
       assert.equal(instructions.includes('velaros:agents'), agents)
@@ -532,25 +558,31 @@ test('project batch transformations reuse actual read targets and preserve sourc
   for (const [name, text] of originals) await writeFile(join(workspace, name), text)
   const paths = [...originals.keys()]
   const frames = []
-  const f = await fixture(t, {
-    workspace,
-    residentModules: [{ module: 'velaros:project', exports: ['inspect', 'commit'] }],
-    model: driver(async function* (request) {
-      frames.push(request)
-      if (frames.length === 1) {
-        yield turn(request, {
-          execute: {
-            source: `import {commit} from 'velaros:project';import {readFile} from 'node:fs/promises';import {output} from 'velaros';
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        residentModules: [{ module: 'velaros:project', exports: ['inspect', 'commit'] }],
+        model: driver(async function* (request) {
+          frames.push(request)
+          if (frames.length === 1) {
+            yield turn(request, {
+              execute: {
+                source: `import {commit} from 'velaros:project';import {readFile} from 'node:fs/promises';import {output} from 'velaros';
 const changes=await Promise.all(${JSON.stringify(paths)}.map(async path=>{const before=await readFile(path);return {path,before,after:before.toString('utf8').replaceAll('pending','ready')};}));
 const change=await commit({changes});
 if(change.status!=='applied')throw Error(JSON.stringify(change));
 output({status:change.status,changeRef:change.changeRef,files:change.changedFiles});`,
-          },
-        })
-        yield { type: 'finish', reason: 'stop' }
-      } else yield* done(request)
-    }),
-  })
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+          } else yield* done(request)
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   for await (const event of f.session.submit('Update the six related status files atomically.'))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   assert.equal(frames.length, 2)
@@ -588,12 +620,10 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   assert.equal(JSON.parse(manifests[0].body).text, frames[0].instructions)
   await f.runtime.close()
   const reopened = await createRuntime({
-    dataDir: f.dataDir,
+    storage: await createTestStorage(f.dataDir),
     model,
     instructions: 'host-language-second',
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
   })
   try {
@@ -663,11 +693,17 @@ test('legacy resident hints leave complete contracts in the on-demand directory'
     frames.push(request)
     yield* done(request)
   })
-  const f = await fixture(t, {
-    model,
-    workspace,
-    residentModules: [{ module: 'velaros:project' }, { module: 'velaros:not-mounted' }],
-  })
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        model,
+        residentModules: [{ module: 'velaros:project' }, { module: 'velaros:not-mounted' }],
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   for await (const event of f.session.submit('read the readme'))
     assert.notEqual(event.type, 'error')
   const declarations = f.runtime.describe('velaros:project').declarations
@@ -682,44 +718,50 @@ test('INV-85 packages execute by name and templates remain discoverable with a s
   await writeFile(join(workspace, 'sample.txt'), 'before\n')
   const frames = []
   const widgets = []
-  const f = await fixture(t, {
-    workspace,
-    widgets: { show: async (widget) => widgets.push(widget) },
-    residentModules: [{ module: 'velaros:project' }, { module: 'velaros:widget' }],
-    model: driver(async function* (request) {
-      frames.push(request)
-      for (const module of ['velaros:project', 'velaros:widget']) {
-        const description = f.runtime.describe(module)
-        assert(!request.instructions.includes(description.declarations))
-        assert(!request.instructions.includes(description.template))
-      }
-      if (frames.length === 1) {
-        yield turn(request, {
-          execute: {
-            source: `import {inspect,commit} from 'velaros:project';import {show} from 'velaros:widget';import {output} from 'velaros';
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        widgets: { show: async (widget) => widgets.push(widget) },
+        residentModules: [{ module: 'velaros:project' }, { module: 'velaros:widget' }],
+        model: driver(async function* (request) {
+          frames.push(request)
+          for (const module of ['velaros:project', 'velaros:widget']) {
+            const description = f.runtime.describe(module)
+            assert(!request.instructions.includes(description.declarations))
+            assert(!request.instructions.includes(description.template))
+          }
+          if (frames.length === 1) {
+            yield turn(request, {
+              execute: {
+                source: `import {inspect,commit} from 'velaros:project';import {show} from 'velaros:widget';import {output} from 'velaros';
 output(await commit({changes:[{path:'sample.txt',oldText:'before',newText:'after'}]}));
 output(await inspect({}));
 await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>after</text></svg>'});`,
-          },
-        })
-        yield { type: 'finish', reason: 'stop' }
-      } else if (frames.length === 2) {
-        assert.match(modelText(request), /after/)
-        assert.equal(widgets.length, 1)
-        yield turn(request, {
-          execute: {
-            source:
-              "import {modules} from 'velaros:system';import {output} from 'velaros';output((await modules.describe({module:'velaros:project',exports:['commit'],template:true})).template,{type:'code'});",
-          },
-        })
-        yield { type: 'finish', reason: 'stop' }
-      } else {
-        assert.equal(frames.length, 3)
-        assert(modelText(request).includes(f.runtime.describe('velaros:project').template))
-        yield* done(request)
-      }
-    }),
-  })
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+          } else if (frames.length === 2) {
+            assert.match(modelText(request), /after/)
+            assert.equal(widgets.length, 1)
+            yield turn(request, {
+              execute: {
+                source:
+                  "import {modules} from 'velaros:system';import {output} from 'velaros';output((await modules.describe({module:'velaros:project',exports:['commit'],template:true})).template,{type:'code'});",
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+          } else {
+            assert.equal(frames.length, 3)
+            assert(modelText(request).includes(f.runtime.describe('velaros:project').template))
+            yield* done(request)
+          }
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   const events = []
   for await (const event of f.session.submit(
     'Change before to after, show it, then read the edit example'
@@ -753,14 +795,20 @@ test('INV-85 template hints keep instructions small for whole and selected packa
     [{ module: 'velaros:project', exports: ['commit'], template: true }],
   ]) {
     let instructions
-    const f = await fixture(t, {
-      workspace,
-      residentModules,
-      model: driver(async function* (request) {
-        instructions = request.instructions
-        yield* done(request)
-      }),
-    })
+    const f = await fixture(
+      t,
+      await withProjectFixture(
+        {
+          residentModules,
+          model: driver(async function* (request) {
+            instructions = request.instructions
+            yield* done(request)
+          }),
+        },
+        { root: workspace }
+      ),
+      { cwd: workspace }
+    )
     for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
     const template = f.runtime.describe('velaros:project').template
     assert.equal(instructions.split(template).length - 1, 0)
@@ -778,7 +826,14 @@ test('INV-85 resident template flags reject nonboolean configuration before acti
 test('INV-57 the on-demand catalog contains every authorized package and complete declarations', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-importable-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
-  const f = await fixture(t, { workspace, project: { code: true, images: true } })
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {},
+      { root: workspace, codeIndex: unavailableCodeIndex, images: true }
+    ),
+    { cwd: workspace }
+  )
   await f.session.context.append({ kind: 'user', body: 'Inspect authorized packages' })
   const result = await f.session.execute({
     source: `
@@ -802,7 +857,10 @@ test('resident modules must be a list of module names', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-resident-invalid-'))
   try {
     await assert.rejects(
-      createRuntime({ dataDir, residentModules: 'velaros:project', agents: false, search: false }),
+      createRuntime({
+        storage: await createTestStorage(dataDir),
+        residentModules: 'velaros:project',
+      }),
       { code: 'VALIDATION' }
     )
   } finally {
@@ -815,28 +873,34 @@ test('INV-67 selected package hints allow execution on the first response withou
   t.after(() => rm(workspace, { recursive: true, force: true }))
   await writeFile(join(workspace, 'sample.txt'), 'before\n')
   const frames = []
-  const f = await fixture(t, {
-    workspace,
-    residentModules: [
-      { module: 'velaros:project', exports: ['inspect'] },
-      { module: 'velaros:project', exports: ['commit'] },
-      { module: 'velaros:project', exports: ['commit'] },
-      { module: 'velaros:not-mounted', exports: ['anything'] },
-    ],
-    model: driver(async function* (request) {
-      frames.push(request)
-      if (frames.length === 1) {
-        yield turn(request, {
-          execute: {
-            source: `import {inspect,commit} from 'velaros:project';import {output} from 'velaros';
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        residentModules: [
+          { module: 'velaros:project', exports: ['inspect'] },
+          { module: 'velaros:project', exports: ['commit'] },
+          { module: 'velaros:project', exports: ['commit'] },
+          { module: 'velaros:not-mounted', exports: ['anything'] },
+        ],
+        model: driver(async function* (request) {
+          frames.push(request)
+          if (frames.length === 1) {
+            yield turn(request, {
+              execute: {
+                source: `import {inspect,commit} from 'velaros:project';import {output} from 'velaros';
 const change=await commit({changes:[{path:'sample.txt',oldText:'before',newText:'after'}]});
 output(change);output(await inspect({}));`,
-          },
-        })
-        yield { type: 'finish', reason: 'stop' }
-      } else yield* done(request)
-    }),
-  })
+              },
+            })
+            yield { type: 'finish', reason: 'stop' }
+          } else yield* done(request)
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   const events = []
   for await (const event of f.session.submit('Change before to after and read the result'))
     events.push(event)
@@ -853,35 +917,42 @@ test('INV-67 duplicate legacy package hints do not duplicate instructions or res
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-whole-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const frames = []
-  const f = await fixture(t, {
-    workspace,
-    residentModules: [
-      { module: 'velaros:project', exports: ['commit'] },
-      { module: 'velaros:project' },
-      { module: 'velaros:project' },
-    ],
-    model: driver(async function* (request) {
-      frames.push(request)
-      yield* done(request)
-    }),
-  })
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        residentModules: [
+          { module: 'velaros:project', exports: ['commit'] },
+          { module: 'velaros:project' },
+          { module: 'velaros:project' },
+        ],
+        model: driver(async function* (request) {
+          frames.push(request)
+          yield* done(request)
+        }),
+      },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
   assert.equal(frames[0].instructions.split('常驻模块 velaros:project 的声明').length - 1, 0)
   assert.doesNotMatch(frames[0].instructions, /常驻导出 velaros:project/)
-  const invalid = await createRuntime({
-    dataDir: join(f.dataDir, 'invalid'),
-    workspace,
-    agents: false,
-    search: false,
-    memory: false,
-    residentModules: [
-      { module: 'velaros:project' },
-      { module: 'velaros:project', exports: ['nonexistent'] },
-    ],
-    model: driver(async function* (request) {
-      yield* done(request)
-    }),
-  })
+  const invalid = await createRuntime(
+    await withProjectFixture(
+      {
+        storage: await createTestStorage(join(f.dataDir, 'invalid')),
+        residentModules: [
+          { module: 'velaros:project' },
+          { module: 'velaros:project', exports: ['nonexistent'] },
+        ],
+        model: driver(async function* (request) {
+          yield* done(request)
+        }),
+      },
+      { root: workspace }
+    )
+  )
   try {
     const session = await invalid.openSession('invalid')
     await session.context.append({ kind: 'user', body: 'Check invalid package export' })
@@ -923,24 +994,30 @@ test('INV-67 on-demand package declarations leave the default request capacity a
   t.after(() => rm(workspace, { recursive: true, force: true }))
   let calls = 0
   const estimates = []
-  const f = await fixture(t, {
-    workspace,
-    residentModules: [{ module: 'velaros:project', exports: ['commit'] }],
-    model: {
-      ...driver(async function* (request) {
-        calls++
-        yield* done(request)
-      }),
-      estimate: async (request) => {
-        estimates.push(request.instructions)
-        return {
-          tokens: request.instructions.includes('export function commit(') ? 200000 : 1000,
-          precision: 'exact',
-          basis: 'resident-sensitive',
-        }
+  const f = await fixture(
+    t,
+    await withProjectFixture(
+      {
+        residentModules: [{ module: 'velaros:project', exports: ['commit'] }],
+        model: {
+          ...driver(async function* (request) {
+            calls++
+            yield* done(request)
+          }),
+          estimate: async (request) => {
+            estimates.push(request.instructions)
+            return {
+              tokens: request.instructions.includes('export function commit(') ? 200000 : 1000,
+              precision: 'exact',
+              basis: 'resident-sensitive',
+            }
+          },
+        },
       },
-    },
-  })
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   const events = []
   for await (const event of f.session.submit('small user input')) events.push(event)
   assert.equal(calls, 1)
@@ -990,7 +1067,7 @@ test('environment must be a function returning host entries', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-environment-invalid-'))
   try {
     await assert.rejects(
-      createRuntime({ dataDir, environment: { os: 'macOS' }, agents: false, search: false }),
+      createRuntime({ storage: await createTestStorage(dataDir), environment: { os: 'macOS' } }),
       { code: 'VALIDATION' }
     )
   } finally {

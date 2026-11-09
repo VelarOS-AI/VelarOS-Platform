@@ -4,13 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import {
-  createRuntime,
-  createNodeExecutionEnvironment,
-} from '../../../packages/velaros/dist/act/runtime/index.js'
+import { createNodeRuntime } from '../../../packages/velaros/dist/act/runtime/node.js'
+import * as projectPackage from '../../../packages/velaros/dist/project/index.js'
+import { evaluationCapabilities } from '../harbor/evaluation-runtime.mjs'
 import { createLocalShellHost } from '../../../packages/velaros/dist/execution/local.js'
 import {
-  runtimeCapabilityOptions,
+  runtimeCapabilityPlan,
   runtimeContextPolicy,
   runtimeEditingPrompt,
   runtimeSubmissionOptions,
@@ -35,7 +34,10 @@ for (const mode of ['on-demand', 'node', 'project'])
       const root = await mkdtemp(join(tmpdir(), 'velaros-capability-mode-'))
       const cwd = join(root, 'workspace')
       await mkdir(cwd)
-      const shell = createLocalShellHost({ cwd })
+      const shell = createLocalShellHost({
+        cwd,
+        processConfinement: { mode: 'danger-full-access' },
+      })
       let runtime
       t.after(async () => {
         await runtime?.close()
@@ -43,42 +45,53 @@ for (const mode of ['on-demand', 'node', 'project'])
         await rm(root, { recursive: true, force: true })
       })
       const requests = []
-      runtime = await createRuntime({
-        workspace: cwd,
-        dataDir: join(root, 'data'),
-        memory: false,
-        ...runtimeCapabilityOptions(mode),
-        node: createNodeExecutionEnvironment({ cwd, directory: join(root, 'runs'), host: shell }),
-        model: {
-          id: 'offline-capability-check',
-          nativeTools: true,
-          limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 12000 },
-          estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
-          async *stream(request) {
-            requests.push(request)
-            if (taskMode === 'goal' && requests.length === 2)
-              yield {
-                type: 'tool-call',
-                value: {
-                  id: 'goal-completion',
-                  name: 'exec',
-                  input: {
-                    code: "import {goal} from 'velaros:system'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'已验证测试夹具'});",
-                  },
+      const model = {
+        id: 'offline-capability-check',
+        nativeTools: true,
+        limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 12000 },
+        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+        async *stream(request) {
+          requests.push(request)
+          if (taskMode === 'goal' && requests.length === 2)
+            yield {
+              type: 'tool-call',
+              value: {
+                id: 'goal-completion',
+                name: 'exec',
+                input: {
+                  code: "import {goal} from 'velaros:system'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'已验证测试夹具'});",
                 },
-              }
-            else
-              yield {
-                type: 'tool-call',
-                value: {
-                  id: `done-${requests.length}`,
-                  name: 'done',
-                  input: { message: 'Completed the fixture.' },
-                },
-              }
-            yield { type: 'finish', reason: 'stop' }
-          },
+              },
+            }
+          else
+            yield {
+              type: 'tool-call',
+              value: {
+                id: `done-${requests.length}`,
+                name: 'done',
+                input: { message: 'Completed the fixture.' },
+              },
+            }
+          yield { type: 'finish', reason: 'stop' }
         },
+      }
+      const capabilityOptions = await evaluationCapabilities({
+        projectPackage,
+        root: cwd,
+        stateDirectory: join(root, 'data'),
+        model,
+        ...runtimeCapabilityPlan(mode),
+      })
+      runtime = await createNodeRuntime({
+        cwd,
+        stateDirectory: join(root, 'data'),
+        binding: {
+          executionIdentity: 'capability-mode-fixture',
+          authorizationScope: 'isolated-evaluation-host',
+        },
+        host: shell,
+        ...capabilityOptions,
+        model,
       })
       const session = await runtime.openSession('capability-check')
       await session.context.append({ kind: 'user', body: 'Check the available capabilities.' })

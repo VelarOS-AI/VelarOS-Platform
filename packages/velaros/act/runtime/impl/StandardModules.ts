@@ -1,6 +1,6 @@
 import type { AgentSupervisorApi } from '@velaros-ai/agent'
 import type { ContextViewApi } from '@velaros-ai/context'
-import { isEmpty, isPlainObject } from '@velaros-ai/core'
+import { isPlainObject } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
@@ -11,12 +11,6 @@ import type {
   OperationSchema,
 } from '@velaros-ai/kernel'
 
-import { VelarImagesModule } from '../../../images/contract/surface.js'
-import { imageOperations } from '../../../images/impl/ImageOperations.js'
-import { VelarCodeModule, VelarProjectModule } from '../../../project/contract/surface.js'
-import { projectCapabilityPorts } from '../../../project/impl/operations/ProjectCapabilityPorts.js'
-import { projectCodeOperations } from '../../../project/impl/operations/ProjectCodeOperations.js'
-import { projectFileOperations } from '../../../project/impl/operations/ProjectFileOperations.js'
 import type { AgentsHost, WidgetHost } from '../../agents/contract/requires.js'
 import { agentsModule, interactionModule, widgetModule } from '../../agents/index.js'
 import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
@@ -30,17 +24,12 @@ import type {
   StoreHost,
 } from '../../system/contract/requires.js'
 import { systemModules } from '../../system/index.js'
-import type {
-  McpModuleOptions,
-  ProjectCapabilityModuleOptions,
-  ProjectImagesModuleOptions,
-} from '../contract/requires.js'
+import type { McpModuleOptions } from '../contract/requires.js'
 import type { ScriptSubmission } from '../types/session.js'
 import { scriptInputCopy } from '../utils/program-context.js'
 import { normalizeCapabilityValue } from '../utils/results.js'
 import { checkScriptSubmission } from '../utils/script-submission.js'
 
-import { capabilityModules } from './CapabilityModules.js'
 import type { RuntimeSessionAccess } from './RuntimeSession.js'
 
 /** 标准模块的受控依赖。 */
@@ -107,91 +96,6 @@ class StandardModules implements StandardModuleFactory {
 
 /** 标准工具装配保持单一入口，模型看见的说明和执行使用同一份定义。 */
 export const standardModules: StandardModuleFactory = new StandardModules()
-
-/** 项目上的 velaros:project：读、列、搜与按路径改，都经同一个项目内核。 */
-export function createProjectCapabilityModule(
-  options: ProjectCapabilityModuleOptions
-): OperationModuleDefinition {
-  return capabilityModules.create({
-    surface: VelarProjectModule,
-    implementation: projectFileOperations,
-    instanceId: options.instanceId,
-    generation: options.generation,
-    context: (call) => ({
-      project: options.project,
-      resolveProject: options.resolveProject,
-      invocationId: call.invocation.id,
-      sessionId: call.invocation.sessionId,
-      abortSignal: call.signal,
-      recordProjectCommit: (fact) => {
-        const bounded = {
-          ...fact,
-          fileStats: { ...fact.fileStats },
-          changedFiles: [...fact.changedFiles],
-          omittedFiles: 0,
-        }
-        while (JSON.stringify(bounded).length > 2048 && !isEmpty(bounded.changedFiles)) {
-          const path = bounded.changedFiles.pop()!
-          delete bounded.fileStats[path]
-          bounded.omittedFiles += 1
-        }
-        call.recordEffect('committed')
-        call.recordDiagnostic?.({
-          code: 'PROJECT_TRANSACTION_COMMITTED',
-          message: JSON.stringify(bounded),
-        })
-      },
-      recordWriteOutcome: (outcome) =>
-        call.recordEffect(outcome === 'applied' ? 'committed' : 'none'),
-      recordSnapshotCompletion: () => {
-        if (call.invocation.mode === 'observe')
-          call.recordObservation?.({ completed: true, protection: 'full' })
-      },
-      recordSnapshotMetrics: (metrics) =>
-        call.recordDiagnostic?.({
-          code: 'PROJECT_SNAPSHOT_COST',
-          message: JSON.stringify(metrics),
-        }),
-    }),
-  })
-}
-
-/** 项目上的 velaros:code：语言查询只借项目内核的只读端口；图谱类查询经项目端口的 queryCode。 */
-export function createProjectCodeModule(
-  options: ProjectCapabilityModuleOptions
-): OperationModuleDefinition {
-  return capabilityModules.create({
-    surface: VelarCodeModule,
-    implementation: projectCodeOperations,
-    instanceId: options.instanceId,
-    generation: options.generation,
-    context: (call) => ({
-      project: options.project,
-      resolveProject: options.resolveProject,
-      sessionId: call.invocation.sessionId,
-      abortSignal: call.signal,
-    }),
-  })
-}
-
-/** 项目上的 velaros:images：只看项目里的图，图经代码面的图片通道跟在结果后面交给模型。 */
-export function createProjectImagesModule(
-  options: ProjectImagesModuleOptions
-): OperationModuleDefinition {
-  const project = { ...options.project, resizeImage: options.resizeImage }
-  const images = projectCapabilityPorts.images(project)
-  return capabilityModules.create({
-    surface: VelarImagesModule,
-    implementation: imageOperations,
-    instanceId: options.instanceId,
-    generation: options.generation,
-    context: (call) => ({
-      abortSignal: call.signal,
-      images,
-      attachImage: (image) => call.attach({ type: 'image-data', ...image }),
-    }),
-  })
-}
 
 /** 将 MCP 固定目录装配到唯一 Kernel，远端提示不自动获得观察权限。 */
 export function createMcpModule(options: McpModuleOptions): OperationModuleDefinition {

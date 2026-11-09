@@ -9,8 +9,10 @@ import { AppError } from '@velaros-ai/core/error'
 import { codeProgramChecker, createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
+
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const request = (operation, input, caught = false) => ({
   source: caught
@@ -66,9 +68,6 @@ async function fixture(t) {
       runner,
       modules: f.modules,
       context: { maintenance: false },
-      agents: false,
-      search: false,
-      memory: false,
     })
     f.session = await f.runtime.openSession('s')
     if (!(await f.storage.load('s'))?.records.some((record) => record.kind === 'user'))

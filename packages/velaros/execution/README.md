@@ -5,15 +5,16 @@
 ## 用法
 
 ```ts
-import { createNodeExecutionEnvironment, createRuntime } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 
 const cwd = '/absolute/workspace'
 const host = createLocalShellHost({cwd, processConfinement: {mode:'workspace-write', workspaceRoot:cwd}})
-const runtime = await createRuntime({
-  workspace:cwd,
-  dataDir:'/absolute/state',
-  node:createNodeExecutionEnvironment({cwd,directory:'/absolute/state/node',host}),
+const runtime = await createNodeRuntime({
+  cwd,
+  stateDirectory: '/absolute/state',
+  binding: { executionIdentity: 'local-user', authorizationScope: 'approved-workspace-v1' },
+  host,
 })
 try {
   const session = await runtime.openSession('example')

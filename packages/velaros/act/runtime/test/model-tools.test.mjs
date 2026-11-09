@@ -6,9 +6,9 @@ import { localContextStorage } from '@velaros-ai/context/node'
 
 import { BudgetedModelDriver } from '../../../dist/act/runtime/impl/BudgetedModelDriver.js'
 import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntime.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const model = (stream) => ({
   id: 'model-tool-fixture',

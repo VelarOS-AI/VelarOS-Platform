@@ -32,7 +32,7 @@
 | INV-28 | 完成拒绝按恢复类别有界推进；效果不明的操作（包括子任务的）不挡写入、完成与任务切换；上次中断的执行在下一轮开始前自动按日志收拾，不重跑脚本                                                                                                   | 测试     | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs`                                                        |
 | INV-29 | 搜索、子任务、整理使用统一交付清单；共享材料保留原始指纹，Node 子任务派发正文携带共享预算内的父输入原文摘录，按输入顺序保留补充，标明缺口并保持 Unicode 完整，全文与附件按普通文件读取；续跑更新且收束清理；源码复用经过调用者自身校验与权限 | 测试     | `test/advanced-search.test.mjs`、`test/model-tools.test.mjs`、`test/context-maintenance.test.mjs`、`test/child-task-materials.test.mjs`             |
 
-| INV-30 | 声明式入口复用唯一主干；路径与重复挂载在执行前校验；关闭重开与初始化重试恢复持久状态 | 测试 | `test/runtime.test.mjs` |
+| INV-30 | 显式 Runtime 与 Node 环境复用唯一主干；路径与单一资源 owner 在执行前校验；关闭重开与初始化重试恢复持久状态 | 测试 | `test/runtime.test.mjs` |
 | INV-31 | 支线关闭后仍可分页读取真实请求及回执；跨根归属拒绝，正文截断明确 | 测试 | `test/act-children.test.mjs` |
 | INV-32 | 连续 80 次真实状态推进与 82 次模型回合保持观察正确、请求有界、磁盘可恢复 | 测试 | `test/runtime.test.mjs` |
 | INV-33 | 搜索已读证据目录不依赖执行结果租约；遵守预算并在新请求前移除失效版本 | 测试 | `test/advanced-search.test.mjs` |
@@ -44,7 +44,7 @@
 
 | INV-38 | 实时与持久事件共用正文投影；接纳按回合去重，拒绝、错误、终态及交付结束清除预览，迟到文本不能复活正文候选 | 测试 | `test/act-children.test.mjs` |
 
-| INV-39 | 会话工作区在 ContextStorage 中原子固定，重开与并发绑定核对真实路径；能力开关保持绑定，绑定记录损坏或范围变化拒绝激活 | 测试 | `test/runtime.test.mjs` |
+| INV-39 | 宿主执行身份、授权范围与真实模块绑定在 ContextStorage 中原子固定，重开与并发绑定核对同一边界；绑定记录损坏、旧产品绑定或范围变化拒绝激活 | 测试 | `test/runtime.test.mjs` |
 
 | INV-40 | 宿主事件先持久化再按序交付，写入可合批；收尾等待全部在途写入，失败停止后续交付并向调用者保留首个错误 | 测试 | `test/event-delivery.test.mjs` |
 | INV-41 | 默认效果串行；宿主声明的完整资源集合仅在互不冲突时并行，未知范围形成全局屏障；取消等待者不释放活动效果 | 测试 | `test/effect-scheduler.test.mjs`、`test/text-runtime.test.mjs` |
@@ -210,7 +210,7 @@ Node 的模型展示省略空运行时分区与内部统计，完整帧继续用
 
 验证：`test/protocol-parity.test.mjs` 对同一含转义、Unicode、原文、宿主参数、引用编辑、快照、清除、异步、租约与完成声明进行双路增量解码，并在真实 Node 会话中配对混合回执、观察更新、切换协议；提示中的观察 JSON 示例经解码验证，自定义名称的实际 Runtime 请求核对两路说明与工具定义。`test/node-runtime.test.mjs` 的 Node/Execa、跨存储重开、完整响应拒绝与取消恢复；Model `test/native-tools.test.ts` 的 Responses/Chat 往返、调用回执拒绝、截断与工具指纹。
 
-标准 Node 环境与 dataDir 默认装配持久 npm 管理。`packageEnvironment` 固定宿主作用域，模型写入经过 Kernel 授权；当前已打开会话每次执行获取环境快照并复用原宿主进程端口，静态 Skill 依赖与动态 npm 包名冲突显式报错。模型说明给出发现、安装和验证路径。验证：`../system/spec/environment.test.mjs`。
+持久 npm 环境仅由宿主显式装配，Node 环境和状态目录不会自动授予包管理。`packageEnvironment` 固定宿主作用域，模型写入经过 Kernel 授权；当前已打开会话每次执行获取环境快照并复用原宿主进程端口，静态 Skill 依赖与动态 npm 包名冲突显式报错。模型说明给出发现、安装和验证路径。验证：`../system/spec/environment.test.mjs`。
 
 ## INV-91 前台等待由事件唤醒且不重启程序
 

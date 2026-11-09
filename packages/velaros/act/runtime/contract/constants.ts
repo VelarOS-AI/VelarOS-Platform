@@ -133,34 +133,6 @@ export const RuntimeModelLimits = Object.freeze({
   /** 每轮输出预留。 */
   outputTokens: 12_000,
 })
-/** 常规项目搜索的有界档位，预留最终交付空间。 */
-export const RuntimeSearchProfile = Object.freeze({
-  /** 含最终交付轮的请求上限。 */
-  modelCalls: 24,
-  /** 累计 token 预算。 */
-  modelTokens: 1_000_000,
-  /** 预留最终交付额度。 */
-  finalizationTokens: 65_536,
-  /** 活动总毫秒上限。 */
-  timeoutMs: 1_200_000,
-  /** 单次请求毫秒上限。 */
-  callTimeoutMs: 120_000,
-  /** 最后交付轮预留毫秒。 */
-  finalizationMs: 90_000,
-  /** 单次输出 token 上限。 */
-  outputTokens: 8_192,
-  /** 搜索活动投影的字符上限。 */
-  projectionChars: 48_000,
-  /** 来源查询次数上限。 */
-  sourceQueries: 128,
-  /** 候选目标数量上限。 */
-  candidates: 256,
-  /** 真实证据读取次数上限。 */
-  reads: 128,
-  /** 真实证据读取字节上限。 */
-  readBytes: 2_000_000,
-})
-
 /** 执行观测的存储、读取与控制通道边界。 */
 export const ExecutionObservabilityLimits = Object.freeze({
   /** 每次读取默认字符数。 */

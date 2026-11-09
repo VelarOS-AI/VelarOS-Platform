@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "sideEffects": false,
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "engines": {
     "node": ">=22.13.0"

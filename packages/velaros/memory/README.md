@@ -5,7 +5,9 @@
 ## 用法
 
 ```ts
-import { createRuntime } from '@velaros-ai/velaros'
+import { createRuntime, type VelarosRuntimeOptions } from '@velaros-ai/velaros'
+import type { ContextStorage } from '@velaros-ai/context'
+import type { CodeRunnerApi } from '@velaros-ai/script'
 import { createMemoryStore, memoryOperations, type MemoryOperationContext } from '@velaros-ai/velaros/memory'
 
 // 根目录与作用域都由产品定：作用域是任意非空字符串，按字符串逐字隔离
@@ -30,8 +32,10 @@ const removal = store.prepareRemove({ id: 'release-flow' })
 // 在宿主写屏障内：await scope.remove(removal)
 
 // 接进 Act 运行时：每个主会话固定一个作用域，模型经 velaros:system 的 memory 读写
-declare const dataDir: string
-export const runtime = await createRuntime({ dataDir, memory: (sessionId) => store.scope(scopeOfSession(sessionId)) })
+declare const storage: ContextStorage
+declare const runner: CodeRunnerApi
+declare const binding: VelarosRuntimeOptions['binding']
+export const runtime = await createRuntime({ storage, runner, binding, memory: (sessionId) => store.scope(scopeOfSession(sessionId)) })
 ```
 
 ## 入口

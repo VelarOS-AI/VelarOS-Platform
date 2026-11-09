@@ -10,11 +10,9 @@ import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { baseText, modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker } from './support/model-turn.mjs'
+import { baseText, done, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 

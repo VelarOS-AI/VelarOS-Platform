@@ -9,9 +9,12 @@ import { localContextStorage } from '@velaros-ai/context/node'
 
 import { RuntimeDiagnostics } from '../../../dist/act/runtime/impl/RuntimeDiagnostics.js'
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker } from './support/model-turn.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
 test('bounded request metadata leaves the body budget for execution output and call previews', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
@@ -305,10 +308,8 @@ test('execution summaries follow the declarations of their own turn and say why 
       .join('\n'),
   })
   const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+    storage: await createTestStorage(dataDir),
+
     context: { maintenance: false },
     model: {
       id: 'trace-executions',
@@ -365,10 +366,8 @@ test('observation summaries say what a turn registered and which run fed its req
     text: `${marker(request)} observe\n${source}\n${marker(request)}`,
   })
   const runtime = await createRuntime({
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+    storage: await createTestStorage(dataDir),
+
     context: { maintenance: false },
     protocol: { allowed: ['execute', 'observe', 'done'] },
     model: {
@@ -443,12 +442,8 @@ test('observation infrastructure failure has one structured result in the frame,
   const frames = []
   let runs = 0
   runtime = await createRuntime({
-    dataDir,
     storage,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     runner: {
       environment: 'node',
       cwd: dataDir,
@@ -588,10 +583,8 @@ for (const invalidAt of [0, 1, 'observe']) {
     const sources = [0, 1].map((i) => (i === invalidAt ? typo : `${ok}\n// position ${i}`))
     let calls = 0
     const runtime = await createRuntime({
-      dataDir,
-      agents: false,
-      search: false,
-      memory: false,
+      storage: await createTestStorage(dataDir),
+
       context: { maintenance: false },
       protocol: { allowed: ['execute', 'observe', 'done'] },
       model: {

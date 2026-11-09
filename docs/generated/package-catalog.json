@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "platformGeneration": "0.6",
+  "platformGeneration": "0.7",
   "packages": [
     {
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "10.0.0",
+      "version": "10.1.0",
       "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -117,8 +117,10 @@
         "./images/local",
         "./memory",
         "./memory/contracts",
+        "./node",
         "./office",
         "./office/contracts",
+        "./office/locator",
         "./office/renderer",
         "./project",
         "./project/contracts",

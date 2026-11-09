@@ -31,7 +31,7 @@ import {
 } from './resource-lifecycle.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
 import {
-  runtimeCapabilityOptions,
+  runtimeCapabilityPlan,
   runtimeContextPolicy,
   runtimeEditingPrompt,
   runtimeSubmissionOptions,
@@ -84,7 +84,7 @@ const candidateName = process.argv[4] ?? 'candidate-v1'
 const participants = process.argv[5] === 'scriptact' ? ['scriptact'] : ['scriptact', 'codex']
 const taskFile = process.argv[6] ?? 'rich-ascii-task.json'
 const scriptactCapabilities = process.argv[8] ?? 'on-demand'
-runtimeCapabilityOptions(scriptactCapabilities)
+runtimeCapabilityPlan(scriptactCapabilities)
 const scriptactTaskMode = process.argv[9] ?? 'request'
 const scriptactEditingStrategy = process.argv[10] ?? 'adaptive'
 runtimeEditingPrompt(scriptactCapabilities, scriptactEditingStrategy, '')

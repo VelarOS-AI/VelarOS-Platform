@@ -26,9 +26,9 @@ import {
   normalizeInteractionAnswer,
 } from '../../../dist/act/agents/utils/answers.js'
 import { checkInteractionRequest } from '../../../dist/act/agents/utils/requests.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 test('INV-1 agents 的实际操作与模板一致', () =>
   verifyModule(agentsModule, new URL('../template.js', import.meta.url)))

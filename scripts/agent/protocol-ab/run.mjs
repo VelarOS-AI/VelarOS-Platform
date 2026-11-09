@@ -32,9 +32,7 @@ const credentials = JSON.parse(await readFile(credentialsPath, 'utf8')).chat
 assert(credentials.apiKey && credentials.baseURL)
 const redact = (value) => String(value).replaceAll(credentials.apiKey, '[redacted]')
 const imported = (path) => import(pathToFileURL(join(snapshot, 'packages', path)).href)
-const { createRuntime, createNodeExecutionEnvironment } = await imported(
-  'velaros/dist/act/runtime/index.js'
-)
+const { createNodeRuntime } = await imported('velaros/dist/act/runtime/node.js')
 const { createLocalShellHost } = await imported('velaros/dist/execution/local.js')
 const { createModelRuntimeComposition, createAiSdkModelDriver } =
   await imported('model/dist/index.js')
@@ -107,7 +105,10 @@ async function attempt(item, transport, repeat) {
     await mkdir(resolve(workspace, path, '..'), { recursive: true })
     await writeFile(join(workspace, path), content)
   }
-  const host = createLocalShellHost({ cwd: workspace })
+  const host = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'danger-full-access' },
+  })
   const driver = createAiSdkModelDriver({
     id: modelId,
     model: provider(modelId),
@@ -135,14 +136,11 @@ async function attempt(item, transport, repeat) {
   }
   const startedAt = Date.now()
   try {
-    runtime = await createRuntime({
-      workspace,
-      dataDir: join(directory, 'state'),
-      node: createNodeExecutionEnvironment({
-        cwd: workspace,
-        directory: join(directory, 'node'),
-        host,
-      }),
+    runtime = await createNodeRuntime({
+      cwd: workspace,
+      stateDirectory: join(directory, 'state'),
+      host,
+      binding: { executionIdentity: 'protocol-ab', authorizationScope: 'isolated-evaluation-host' },
       model: {
         id: driver.id,
         nativeTools: driver.nativeTools,
@@ -170,10 +168,6 @@ async function attempt(item, transport, repeat) {
         },
       },
       protocol: { transport },
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
       context: { maintenance: false, policy: { windowTokens: manifest.inputWindowTokens } },
       limits: {
         turns: manifest.maxRequests,

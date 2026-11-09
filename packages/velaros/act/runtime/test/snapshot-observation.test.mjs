@@ -12,18 +12,16 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDecoder.js'
-import {
-  createNodeExecutionEnvironment,
-  createProjectCapabilityModule,
-  createRuntime,
-} from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
+  createProjectCapabilityModule,
   createProjectKernel,
   createProjectObservationProvider,
 } from '../../../dist/project/index.js'
 
 import { done, marker, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const stop = { type: 'finish', reason: 'stop' }
 const noop = "import {output} from 'velaros'; output('continue');"
@@ -130,30 +128,19 @@ async function fixture(t, stream, options = {}) {
     }
     await install()
     f.replaceKernel = install
-  }
+  } else kernel = await createProjectKernel({ root: workspace })
   const project = {
     getRootPath: () => workspace,
     kernel: async () => kernel,
     queryCode: async () => ({}),
   }
   const runtimeOptions = {
-    workspace,
     storage: undefined,
     runner,
     model,
-    agents: false,
-    search: false,
-    memory: false,
-    ...(options.custom
-      ? {
-          project: false,
-          modules: [createProjectCapabilityModule({ instanceId: workspace, project })],
-        }
-      : {}),
-    context: {
-      maintenance: false,
-      ...(options.custom ? { snapshots: [createProjectObservationProvider()] } : {}),
-    },
+
+    modules: [createProjectCapabilityModule({ instanceId: workspace, project })],
+    context: { maintenance: false, snapshots: [createProjectObservationProvider()] },
     async authorize(invocation) {
       if (
         invocation.binding.moduleId === 'velaros:project' &&

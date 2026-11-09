@@ -7,11 +7,9 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
-import { done, marker } from './support/model-turn.mjs'
+import { done, historyEntries, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const block = (request, head, source = '') =>
   `${marker(request)} ${head}\n${source}${source ? '\n' : ''}${marker(request)}\n`

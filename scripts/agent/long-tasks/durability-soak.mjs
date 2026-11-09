@@ -146,6 +146,7 @@ async function worker(root, phase, mode) {
   const contender = mode === '--contender'
   const { createRuntime } = await import('../../../packages/velaros/dist/act/runtime/index.js')
   const { nodeSubprocessCodeRunner } = await import('@velaros-ai/script')
+  const { localContextStorage } = await import('@velaros-ai/context/node')
   const { turn, done } =
     await import('../../../packages/velaros/act/runtime/test/support/model-turn.mjs')
   const marker = join(root, 'effects.jsonl')
@@ -162,12 +163,11 @@ async function worker(root, phase, mode) {
       .split('\n')
       .filter(Boolean).length
   let modelCalls = 0
+  await mkdir(join(root, 'state'), { recursive: true })
   const runtime = await createRuntime({
-    dataDir: join(root, 'state'),
+    binding: { executionIdentity: 'durability-soak', authorizationScope: root },
+    storage: localContextStorage({ path: join(root, 'state', 'context.sqlite') }),
     runner: nodeSubprocessCodeRunner,
-    agents: false,
-    search: false,
-    memory: false,
     context: {
       maintenance: false,
       completion: {

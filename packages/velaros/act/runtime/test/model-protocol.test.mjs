@@ -7,9 +7,9 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const write = { execute: { source: "import {write} from 'test:world';await write();" } }
 const finish = { type: 'finish', reason: 'stop' }

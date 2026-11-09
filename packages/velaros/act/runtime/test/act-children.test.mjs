@@ -6,12 +6,12 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createMcpModule, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createMcpModule } from '../../../dist/act/runtime/index.js'
 import { createActEventProjector } from '../../../dist/act/runtime/renderer.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, marker, turn } from './support/model-turn.mjs'
+import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+
 const model = (stream) => ({
   id: 'fixture',
   limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },

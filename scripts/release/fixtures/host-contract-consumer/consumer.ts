@@ -1,8 +1,9 @@
 import { createActRunService,type ActRunEvent,type ActRunServiceOptions } from '@velaros-ai/velaros/agent'
 import type { ApprovalPort } from '@velaros-ai/velaros/kernel'
 import { createModelRequestClient } from '@velaros-ai/velaros/model'
-import { createNodeExecutionEnvironment,createRuntime,type VelarosRuntimeOptions } from '@velaros-ai/velaros'
-import { ComputerInputLimits,type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
+import { createRuntime,type VelarosRuntimeOptions } from '@velaros-ai/velaros'
+import { createNodeExecutionEnvironment } from '@velaros-ai/velaros/node'
+import { ComputerInputLimits,type ComputerPoint } from '@velaros-ai/capabilities/computer/contracts'
 import { shellCommandPolicy,type LocalShellHostApi } from '@velaros-ai/velaros/execution'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import {
@@ -12,13 +13,13 @@ type MemoryOperationContext,
 type MemoryScopeApi,
 type MemoryStoreApi,
 } from '@velaros-ai/velaros/memory'
-import { officeOperations,type OfficeOperationContext } from '@velaros-ai/velaros/office'
-import type { OfficeEnvironmentInspection,OfficeWritten } from '@velaros-ai/velaros/office/contracts'
-import { languageQueries,projectCapabilityPorts,type LanguageReadPort,type LanguageToolContext,type ProjectHostPort } from '@velaros-ai/velaros/project'
-import { sessionsOperations,type SessionsOperationContext,type SessionsSpacePort } from '@velaros-ai/velaros/sessions'
-import type { SessionAnswer,SessionPeer,SessionTold } from '@velaros-ai/velaros/sessions/contracts'
-import { webOperations,type WebOperationContext,type WebPage,type WebSpacePort } from '@velaros-ai/velaros/web'
-import type { WebPageText,WebSearchResults } from '@velaros-ai/velaros/web/contracts'
+import { officeOperations,type OfficeOperationContext } from '@velaros-ai/capabilities/office'
+import type { OfficeEnvironmentInspection,OfficeWritten } from '@velaros-ai/capabilities/office/contracts'
+import { languageQueries,projectCapabilityPorts,type LanguageReadPort,type LanguageToolContext,type ProjectHostPort } from '@velaros-ai/capabilities/project'
+import { sessionsOperations,type SessionsOperationContext,type SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
+import type { SessionAnswer,SessionPeer,SessionTold } from '@velaros-ai/capabilities/sessions/contracts'
+import { webOperations,type WebOperationContext,type WebPage,type WebSpacePort } from '@velaros-ai/capabilities/web'
+import type { WebPageText,WebSearchResults } from '@velaros-ai/capabilities/web/contracts'
 
 // 空间由宿主自己装：共用能力的项目端口从 projectCapabilityPorts 取，本机实现从各单元的 `./local` 入口取，再接成代码面的能力端口。
 declare const projectHost: ProjectHostPort

@@ -7,6 +7,11 @@ import path from 'node:path'
 import { CodeSurfaces } from '../script/surfaces.mjs'
 
 import { runGuardedCommand, safePackPackage } from './safe-package-pack.mjs'
+import {
+  distributionForVelarosPath,
+  platformDistributions,
+  sharedDeclarationSupport,
+} from './platform-distributions.mjs'
 
 const repositoryRoot = path.resolve(import.meta.dirname, '../..')
 const selector = process.argv[2]
@@ -21,8 +26,14 @@ if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(directoryName)) {
   throw new Error(`Invalid package directory selector: ${selector}`)
 }
 
-const packageDirectory = path.join(repositoryRoot, 'packages', directoryName)
+const distribution = Object.hasOwn(platformDistributions, directoryName) ? directoryName : undefined
+const packageDirectory = path.join(
+  repositoryRoot,
+  'packages',
+  distribution ? 'velaros' : directoryName
+)
 const manifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'))
+if (distribution) manifest.name = platformDistributions[distribution].name
 const destination = await mkdtemp(path.join(tmpdir(), 'velaros-package-pack-check-'))
 const skillResources = path.join(repositoryRoot, 'packages/velaros/skills/resources')
 const skillResourceFiles = (
@@ -39,10 +50,28 @@ const requiredPackageFiles = new Map([
   [
     'velaros',
     [
+      ...new Set(
+        CodeSurfaces.filter(
+          (surface) =>
+            surface.directory === 'velaros' &&
+            surface.unit.startsWith('act/') &&
+            distributionForVelarosPath(surface.unit) === 'velaros'
+        ).flatMap((surface) =>
+          [surface.templates].flat().map((file) => `package/dist/${surface.unit}/${file}`)
+        )
+      ),
+    ],
+  ],
+  [
+    'capabilities',
+    [
       'package/office/vendor/pptxgenjs/pptxgen.es.js',
       ...new Set(
         CodeSurfaces.filter(
-          (surface) => surface.directory === 'velaros' && surface.unit.startsWith('act/')
+          (surface) =>
+            surface.directory === 'velaros' &&
+            surface.unit.startsWith('act/') &&
+            distributionForVelarosPath(surface.unit) === 'capabilities'
         ).flatMap((surface) =>
           [surface.templates].flat().map((file) => `package/dist/${surface.unit}/${file}`)
         )
@@ -55,7 +84,7 @@ const requiredPackageFiles = new Map([
 ])
 
 try {
-  await safePackPackage({ destination, packageDirectory })
+  await safePackPackage({ destination, packageDirectory, distribution })
   const tarballs = (await readdir(destination)).filter((file) => file.endsWith('.tgz'))
   if (tarballs.length !== 1) {
     throw new Error(`${manifest.name ?? directoryName} produced ${tarballs.length} tarballs`)
@@ -68,6 +97,16 @@ try {
     operation: `List ${manifest.name ?? directoryName} package tarball`,
   })
   const entries = new Set(stdout.split('\n').filter(Boolean))
+  if (distribution) {
+    for (const entry of entries) {
+      const relative = entry.replace(/^package\//u, '')
+      if (relative.startsWith('dist/')) {
+        if (sharedDeclarationSupport.includes(relative)) continue
+        if (distributionForVelarosPath(relative) !== distribution)
+          throw new Error(`${manifest.name} includes another distribution's source: ${entry}`)
+      }
+    }
+  }
   for (const requiredFile of [
     'package/package.json',
     'package/README.md',

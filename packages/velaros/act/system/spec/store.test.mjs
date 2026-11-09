@@ -12,7 +12,6 @@ import {
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { storeModule } from '../../../dist/act/system/impl/StoreModule.js'
 import { StoreSession } from '../../../dist/act/system/impl/StoreSession.js'
 import {
@@ -22,6 +21,7 @@ import {
   runtimeFrame,
   turn,
 } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 const prelude =
   "import {output} from 'velaros';import {store,modules} from 'velaros:system';const currentStore=(await store.list({})).items[0]?.id;"
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'

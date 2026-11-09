@@ -8,11 +8,11 @@ import { createAiSdkModelDriver } from '@velaros-ai/model'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/surface.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { baseText, done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'

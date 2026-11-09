@@ -5,7 +5,11 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 
-import { createRuntime, createNodeExecutionEnvironment } from '@velaros-ai/velaros'
+import { createNodeRuntime } from '@velaros-ai/velaros/node'
+import * as projectPackage from '@velaros-ai/velaros/project'
+import * as imagePackage from '@velaros-ai/velaros/images/local'
+import * as modelPackage from '@velaros-ai/model'
+import { evaluationCapabilities, evaluationModel } from './evaluation-runtime.mjs'
 import { createLocalShellHost } from '@velaros-ai/velaros/execution/local'
 import { createTraceExporter, snapshot } from './trace-export.mjs'
 import { discoverProjectCommands } from './tool-discovery.mjs'
@@ -26,7 +30,10 @@ export async function runTask({
   isolatedContainer = false,
 }) {
   await mkdir(output, { recursive: true })
-  const host = createLocalShellHost({ cwd: workspace })
+  const host = createLocalShellHost({
+    cwd: workspace,
+    processConfinement: { mode: 'danger-full-access' },
+  })
   const denied = async () => {
     throw new Error('Interactive approval is unavailable in this benchmark run')
   }
@@ -49,25 +56,50 @@ export async function runTask({
     cancellation.signal.throwIfAborted()
     const shellInspection = await host.inspectEnvironment(discovery.commands)
     cancellation.signal.throwIfAborted()
-    runtime = await createRuntime({
-      workspace,
-      dataDir: join(output, 'state'),
-      model,
-      project: identity?.runtimeOptions?.project,
-      node: createNodeExecutionEnvironment({
-        cwd: workspace,
-        directory: join(output, 'node'),
-        host,
-        authorize: isolatedContainer ? async () => {} : denied,
-      }),
+    const resolvedModel = evaluationModel(model, modelPackage)
+    const capabilityOptions = await evaluationCapabilities({
+      projectPackage,
+      imagePackage,
+      root: workspace,
+      stateDirectory: join(output, 'state'),
+      model: resolvedModel,
+      project: identity?.runtimeOptions?.project !== false,
+      code: identity?.runtimeOptions?.project?.code ?? false,
+      images: Boolean(identity?.runtimeOptions?.project?.images),
+      agents: true,
+      search: identity?.runtimeOptions?.project !== false,
+    })
+    cancellation.signal.throwIfAborted()
+    runtime = await createNodeRuntime({
+      cwd: workspace,
+      binding: {
+        executionIdentity: 'harbor-evaluation',
+        authorizationScope: isolatedContainer
+          ? 'isolated-container-unattended'
+          : 'interactive-approval-required',
+      },
+      stateDirectory: join(output, 'state'),
+      model: resolvedModel,
+      ...capabilityOptions,
+      host,
+      execution: { authorize: isolatedContainer ? async () => {} : denied },
       residentModules: identity?.runtimeOptions?.residentModules ?? [
         { module: 'velaros:project' },
         ...(identity?.runtimeOptions?.project?.images ? [{ module: 'velaros:images' }] : []),
       ],
-      memory: false,
       modelTools: { concurrency: 1 },
       protocol: identity?.runtimeOptions?.protocol,
-      context: identity?.runtimeOptions?.context,
+      context: {
+        ...identity?.runtimeOptions?.context,
+        sources: [
+          ...(identity?.runtimeOptions?.context?.sources ?? []),
+          ...capabilityOptions.context.sources,
+        ],
+        snapshots: [
+          ...(identity?.runtimeOptions?.context?.snapshots ?? []),
+          ...capabilityOptions.context.snapshots,
+        ],
+      },
       environment: () => ({
         os: `${platform()} ${arch()}`,
         workspace,

@@ -7,9 +7,11 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
 import { done, frameText, marker, turn } from './support/model-turn.mjs'
+import {
+  createTestRuntime as createRuntime,
+  createTestStorage,
+} from './support/runtime-fixture.mjs'
 
 const limits = { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 }
 const estimate = async () => ({ tokens: 1000, precision: 'exact', basis: 'goal-fixture' })
@@ -29,9 +31,7 @@ async function completionFixture(t, stream) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     model: {
       id: 'goal-completion',
@@ -52,14 +52,11 @@ async function completionFixture(t, stream) {
 
 async function fixture(t, model) {
   const dataDir = await mkdtemp(join(tmpdir(), 'session-goal-'))
-  const options = {
-    dataDir,
-    agents: false,
-    search: false,
-    memory: false,
+  const options = async () => ({
+    storage: await createTestStorage(dataDir),
     context: { maintenance: false },
-  }
-  const runtime = await createRuntime({ ...options, model })
+  })
+  const runtime = await createRuntime({ ...(await options()), model })
   t.after(async () => {
     await runtime.close()
     await rm(dataDir, { recursive: true, force: true })
@@ -92,7 +89,7 @@ test('INV-48 goal CAS, pause, removal tombstones and restart share the same immu
     { code: 'GOAL_INPUT' }
   )
   await runtime.close()
-  const reopened = await createRuntime(options)
+  const reopened = await createRuntime(await options())
   try {
     const next = await reopened.openSession('goal')
     assert.deepEqual(await next.getGoal(), current)
@@ -328,7 +325,7 @@ test('INV-48 host goal retains its full Unicode objective across first frame, co
   assert(read.checked && !read.result.failed, JSON.stringify(read))
   assert.equal(read.rawValue.objective, objective)
   await runtime.close()
-  const reopened = await createRuntime(options)
+  const reopened = await createRuntime(await options())
   try {
     assert.deepEqual(await (await reopened.openSession('goal')).getGoal(), completed)
   } finally {

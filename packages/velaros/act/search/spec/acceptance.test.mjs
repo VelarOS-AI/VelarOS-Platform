@@ -14,7 +14,7 @@ import {
 } from '@velaros-ai/script'
 
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { SearchLimits } from '../../../dist/act/search/contract/constants.js'
 import {
   VelarEvidenceModule,

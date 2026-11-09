@@ -4,12 +4,21 @@
     {
       "id": "desktop",
       "repository": "VelarOS-AI/VelarOS-Desktop",
+      "distributions": ["velaros", "capabilities"],
       "lockfile": "bun",
       "verifyCommand": "bun run typecheck"
     },
     {
       "id": "workbench",
       "repository": "VelarOS-AI/VelarOS-Workbench",
+      "distributions": ["velaros", "capabilities"],
+      "lockfile": "bun",
+      "verifyCommand": "bun run typecheck"
+    },
+    {
+      "id": "server",
+      "repository": "VelarOS-AI/VelarOS-Server",
+      "distributions": ["velaros"],
       "lockfile": "bun",
       "verifyCommand": "bun run typecheck"
     },

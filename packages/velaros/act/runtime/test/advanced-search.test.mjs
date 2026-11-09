@@ -16,13 +16,11 @@ import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { BudgetedModelDriver } from '../../../dist/act/runtime/impl/BudgetedModelDriver.js'
 import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntime.js'
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { AdvancedSearch } from '../../../dist/act/search/impl/AdvancedSearch.js'
 import { SearchActivation } from '../../../dist/act/search/impl/SearchActivation.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
-import { done, marker } from './support/model-turn.mjs'
+import { done, historyEntries, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const block = (request, head, source) =>
   `${marker(request)} ${head}\n${source}\n${marker(request)}\n`

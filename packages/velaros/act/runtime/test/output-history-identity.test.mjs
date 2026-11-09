@@ -7,10 +7,10 @@ import { scriptOutputs } from '@velaros-ai/script'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { materialHistoryDelta, projectMaterial } from '../../../dist/act/runtime/utils/materials.js'
 
 import { historyEntries } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 

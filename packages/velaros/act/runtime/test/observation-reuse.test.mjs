@@ -13,9 +13,9 @@ import { scriptOutputs } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDecoder.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, marker, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const source =
   "import {read} from 'test:observation';import {output} from 'velaros';output(await read());"
@@ -564,7 +564,7 @@ test('max age expiry forces real collection', nativeObservation, async (t) => {
 })
 
 test(
-  'full Runtime and storage restart with a new module binding starts with real collection',
+  'Runtime restore rejects a changed module binding before collecting old-session evidence',
   nativeObservation,
   async (t) => {
     const controller = new AbortController()
@@ -578,12 +578,8 @@ test(
     })
     assert.equal((await collect(f, 'Read', controller.signal)).at(-1).status, 'cancelled')
     assert.equal(f.reads, 1)
-    await f.reopen(2)
-    completed(await collect(f, 'Continue after restart'))
-    assert.equal(f.reads, 2)
-    assert.equal(f.frames.at(-1).observation.freshness.status, 'collected')
-    assert.equal(f.frames.at(-1).observation.freshness.reason, 'no-current-process-baseline')
-    assert.notEqual(f.probes[0].scopeFingerprint, f.probes.at(-1).scopeFingerprint)
+    await assert.rejects(f.reopen(2), { code: 'CONFLICT' })
+    assert.equal(f.reads, 1, 'Changed authority cannot read or execute in the restored session')
   }
 )
 

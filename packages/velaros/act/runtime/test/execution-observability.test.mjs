@@ -7,10 +7,11 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createNodeExecutionEnvironment, createRuntime } from '../../../dist/act/runtime/index.js'
+import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 
 import { marker, runtimeFrame } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const terminal = ['succeeded', 'failed', 'cancelled', 'unknown']
@@ -44,10 +45,7 @@ async function fixture(t, transport, onRequest, config = {}, extra = {}) {
   f.runtime = await createRuntime({
     node,
     storage,
-    project: false,
-    agents: false,
-    search: false,
-    memory: false,
+
     protocol: { transport, yieldAfterMs: 40, ...config },
     context: { maintenance: false },
     ...extra,

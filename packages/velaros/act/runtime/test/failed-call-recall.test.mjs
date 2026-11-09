@@ -7,9 +7,9 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 test('INV-70 failed script exposes a journal recall route in the actual next request without repeating IO', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })

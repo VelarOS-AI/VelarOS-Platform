@@ -6,10 +6,10 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { summarizeModelRequest } from '../../../dist/act/runtime/utils/tracePresentation.js'
 
 import { done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const requestAudit = {
   schemaVersion: 3,
@@ -61,9 +61,7 @@ test('SQLite request audits grow linearly while live history grows; model-free r
   )
   const runtime = await createRuntime({
     storage,
-    agents: false,
-    search: false,
-    memory: false,
+
     context: { maintenance: false },
     model: {
       id: 'request-audit',
@@ -148,9 +146,6 @@ test('SQLite request audits grow linearly while live history grows; model-free r
   const reopened = localContextStorage({ path })
   const reader = await createRuntime({
     storage: reopened,
-    agents: false,
-    search: false,
-    memory: false,
   })
   try {
     const page = await reader.trace('s', { limit: 32, fullContent: true })

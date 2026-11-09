@@ -45,7 +45,8 @@
       "@velaros-ai/velaros/act/search": ["packages/velaros/act/search/index.ts"],
       "@velaros-ai/velaros/act/agents": ["packages/velaros/act/agents/index.ts"],
       "@velaros-ai/velaros/skills": ["packages/velaros/skills/index.ts"],
-      "@velaros-ai/velaros/skills/contracts": ["packages/velaros/skills/contracts.ts"]
+      "@velaros-ai/velaros/skills/contracts": ["packages/velaros/skills/contracts.ts"],
+      "@velaros-ai/velaros/node": ["packages/velaros/act/runtime/node.ts"]
     }
   },
   "include": [

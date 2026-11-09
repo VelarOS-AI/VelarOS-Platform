@@ -5,12 +5,17 @@
 ## 用法
 
 ```ts
-import { createRuntime } from '@velaros-ai/velaros'
+import { createRuntime, type VelarosRuntimeOptions } from '@velaros-ai/velaros'
+import type { ContextStorage } from '@velaros-ai/context'
+import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { ModelDriver } from '@velaros-ai/model'
 import { systemModules, type StoreConfiguration } from '@velaros-ai/velaros/act/system'
 import { createMemoryStore } from '@velaros-ai/velaros/memory'
 
-// 宿主给：模型、状态目录（绝对路径）、当前用户，以及别人建好并授权给他的空间
+// 宿主给：存储、执行口与已核验的执行授权身份，模型、记忆根目录、当前用户及获准访问的共享空间
+declare const storage: ContextStorage
+declare const runner: CodeRunnerApi
+declare const binding: VelarosRuntimeOptions['binding']
 declare const model: ModelDriver
 declare const stateDir: string
 declare const userId: string
@@ -20,7 +25,7 @@ declare const teamStore: string
 const memories = createMemoryStore({ root: `${stateDir}/memory` })
 
 const runtime = await createRuntime({
-  dataDir: stateDir,
+  storage, runner, binding,
   model,
   // 主会话打开时固定作用域，模型经 memory.recall、save、remove 用它
   memory: () => memories.scope(`user:${userId}`),
@@ -73,7 +78,7 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 脚本失败后，`runtime.progress.feedback.recovery.index` 给出该结果的调用索引入口。先 `memory.read(index)`，按索引的 `id` 调用 `memory.read({ref: index.ref, invocation: id})`，即可在同一次 execute 中收集已落定的原始调用回执；大索引与回执均按 offset/limit 分页。`pointer` 此时相对回执根，含 `outcome`、`effect`、`value`、`error`，失败或未知状态保持原样。调用召回不会重新执行，不签发必需输出块的 delivery；未落定回执返回明确不可用。release 和封段不删除召回权，任务授权重置及跨会话限制沿用原文规则。
 
 
-`createRuntime` 在提供 `dataDir` 和带 npm 客户端的 Node 执行口时，默认绑定 `dataDir/environments/default`。`createNodeExecutionEnvironment` 自动提供共用宿主策略的 npm 客户端；`npmCli` 可指定随产品分发的 CLI。自定义运行器通过 `packageEnvironment` 注入 `createEnvironmentRegistry` 创建的环境，使用稳定目录区分 agent；`packageEnvironment: false` 关闭。环境目录必须在业务工作区之外，受约束宿主须把安装根和 npm 缓存加入已授权写根。
+持久 npm 管理由宿主显式选择。宿主从 `@velaros-ai/velaros/node` 创建 Node 执行口，确认同一执行口的 npm 客户端可用后交给 `createEnvironmentRegistry({ directory, npm: node.npm })`，通过 Runtime 的 `packageEnvironment` 注入；省略时不挂载 `environment`，不接受布尔开关。`npmCli` 可指定随产品分发的 CLI。环境目录由产品选择，受约束宿主须把安装根和 npm 缓存纳入已授权写根。
 
 模型从 `velaros:system` 导入 `environment`，用 `list/search/describe` 查询，再用 `apply({baseRevision,install,remove,allowScripts})` 一次变更依赖。同名包指定新版本即升级或降级；安装和删除可同时完成替换。支持 registry 版本范围、标签和 npm alias；锁文件与安装收据保留具体版本。生命周期脚本默认关闭，需要时可显式开启并沿用宿主权限。
 

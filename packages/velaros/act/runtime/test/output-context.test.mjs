@@ -8,7 +8,6 @@ import { scriptOutputs } from '@velaros-ai/script'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   executionMaterial,
   projectMaterial,
@@ -17,6 +16,7 @@ import {
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
 const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'

@@ -26,6 +26,8 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import * as TypeScriptModule from 'typescript'
 
+import { capabilityDistributionItem } from './platform-distributions.mjs'
+
 export const ReleaseRegistry = 'https://npm.pkg.github.com'
 
 // 所有第一方包均按公开包发布；显式声明可防止新增包意外回退为受限可见性。
@@ -119,7 +121,7 @@ const orderByDependencies = (packages) => {
  * 读仓根 manifest + bun.lock,核对发布集合与版本,返回按依赖拓扑排好序的待发布包。
  * 任何不变量不成立都抛错——调用方不需要再自己校验。
  */
-export async function collectReleasePackages(root) {
+export async function collectReleasePackages(root, { includeDistributions = true } = {}) {
   const rootManifest = await readJson(path.join(root, 'package.json'))
   const platformGeneration = rootManifest.velaros?.platform
   if (!platformGeneration) {
@@ -221,6 +223,8 @@ export async function collectReleasePackages(root) {
     }
   }
 
+  const velaros = packages.find((item) => item.manifest.name === '@velaros-ai/velaros')
+  if (velaros && includeDistributions) packages.push(capabilityDistributionItem(velaros))
   return { rootManifest, platformGeneration, ordered: orderByDependencies(packages) }
 }
 

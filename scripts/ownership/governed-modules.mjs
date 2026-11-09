@@ -127,7 +127,8 @@ export const GovernedModules = [
         'StandardModules.ts',
         'NodeExecutionEnvironment.ts',
         'RuntimeBootstrap.ts',
-        'RuntimeWorkspaceBinding.ts',
+        'SessionExecutionBinding.ts',
+        'NodeRuntime.ts',
         'ChildTaskMaterials.ts',
         'EventDelivery.ts',
         'EffectScheduler.ts',
@@ -445,6 +446,7 @@ export const GovernedModules = [
       ['plugins/'],
       ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
       // 语言查询与外部语言服务；只借内核的类型与只读端口。
+      ['language/SkillProjectCodeQuery.ts'],
       ['language/ProjectCodeQuery.ts', 'language/ExternalLanguageService.ts'],
       ['language/LanguageQueries.ts', 'language/ExternalLanguageServerClient.ts'],
       ['language/LanguageServiceRegistry.ts'],

@@ -2,7 +2,7 @@
   "name": "@velaros-ai/model",
   "version": "0.10.5",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
   "license": "Apache-2.0",

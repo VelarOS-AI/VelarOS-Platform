@@ -56,9 +56,10 @@ export function createLocalShellHost() {
     async dispose() { await step('host.dispose'); },
   };
 }
-export function createNodeExecutionEnvironment() { return {}; }
-export async function createRuntime(options) {
-  await step('createRuntime');
+export function evaluationModel(model) { return model; }
+export async function evaluationCapabilities() { return { context: { sources: [], snapshots: [] } }; }
+export async function createNodeRuntime(options) {
+  await step('createNodeRuntime');
   return {
     async openSession() {
       await step('openSession');
@@ -88,7 +89,7 @@ export async function snapshot(_path, value) { snapshots.push(value); await step
     new URL(loader),
     `
 const runner = ${JSON.stringify(runner)}, ports = ${JSON.stringify(ports)};
-const dependencies = new Set(['@velaros-ai/velaros', '@velaros-ai/velaros/execution/local', './tool-discovery.mjs', './trace-export.mjs']);
+const dependencies = new Set(['@velaros-ai/velaros/node', '@velaros-ai/velaros/project', '@velaros-ai/velaros/images/local', '@velaros-ai/model', '@velaros-ai/velaros/execution/local', './tool-discovery.mjs', './trace-export.mjs', './evaluation-runtime.mjs']);
 export function resolve(specifier, context, next) {
   return context.parentURL === runner && dependencies.has(specifier)
     ? { url: ports, shortCircuit: true } : next(specifier, context);
@@ -124,7 +125,7 @@ process.stdout.write(JSON.stringify({ ...outcome, calls, snapshots, before, afte
   return JSON.parse(result.stdout)
 }
 
-for (const cancelAt of ['discover', 'inspect', 'createRuntime', 'openSession'])
+for (const cancelAt of ['discover', 'inspect', 'createNodeRuntime', 'openSession'])
   for (const signal of ['SIGTERM', 'SIGINT'])
     test(`startup ${signal} during ${cancelAt} cannot submit a model request`, async (t) => {
       const observed = await taskLifecycle(t, { cancelAt, signal })
@@ -135,7 +136,7 @@ for (const cancelAt of ['discover', 'inspect', 'createRuntime', 'openSession'])
       assert.equal(observed.calls.filter((call) => call === 'host.dispose').length, 1)
       assert.equal(
         observed.calls.includes('runtime.close'),
-        ['createRuntime', 'openSession'].includes(cancelAt)
+        ['createNodeRuntime', 'openSession'].includes(cancelAt)
       )
       assert.equal(observed.calls.includes('session.close'), cancelAt === 'openSession')
       assert.equal(observed.snapshots.at(-1).status, 'failed')
@@ -204,7 +205,7 @@ test('startup and status snapshot failures cannot bypass the host cleanup', asyn
     stages
   )
   assert(observed.error.errors.every(({ original }) => original))
-  assert(!observed.calls.includes('createRuntime'))
+  assert(!observed.calls.includes('createNodeRuntime'))
   assert.deepEqual(observed.after, observed.before)
 })
 

@@ -21,11 +21,11 @@ import {
   VelarContextMaterialsModule,
   VelarExecutionsModule,
   VelarModulesModule,
+  VelarProgramsModule,
   VelarSystemGoalModule,
   VelarSystemMemoryPersistentModule,
   VelarSystemStoreModule,
 } from '../../../dist/act/system/contract/surface.js'
-import { VelarProgramsModule } from '../../../dist/act/system/contract/surface.js'
 import { contextModule } from '../../../dist/act/system/impl/ContextModule.js'
 import {
   memoryModule,

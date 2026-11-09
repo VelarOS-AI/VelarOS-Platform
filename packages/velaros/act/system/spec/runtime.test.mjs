@@ -13,12 +13,12 @@ import {
   scriptPackageCompiler,
 } from '@velaros-ai/script'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 import { memoryModule } from '../../../dist/act/system/impl/MemoryModule.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
 import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from '../../runtime/test/support/runtime-fixture.mjs'
 
 const model = (stream) => ({
   id: 'system-test',
@@ -862,7 +862,7 @@ for (const inputText of ['preserve '.repeat(160), '中文 "quoted" \\ path\n'.re
 
 test('memory.updateActive: real Node import, discovery, effect, versioned update and execute-only contract', async (t) => {
   // 显式的测试宿主授权，不放宽产品默认进程策略；临时目录只用于本测试。
-  const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/index.js')
+  const { createNodeExecutionEnvironment } = await import('../../../dist/act/runtime/node.js')
   const { createLocalShellHost } = await import('../../../dist/execution/local.js')
   const root = await mkdtemp(join(tmpdir(), 'active-question-node-'))
   const host = createLocalShellHost({
@@ -874,7 +874,7 @@ test('memory.updateActive: real Node import, discovery, effect, versioned update
     await rm(root, { recursive: true, force: true })
   })
   const node = createNodeExecutionEnvironment({ cwd: root, directory: join(root, 'runs'), host })
-  const f = await fixture(t, { runner: undefined, node, packageEnvironment: false })
+  const f = await fixture(t, { node })
   const { ActiveContext } = await import('../../../dist/act/runtime/impl/ActiveContext.js')
   await submit(f.session)
   const goal = { ref: (await f.storage.loadMetadata('s')).task.goals.at(-1) }

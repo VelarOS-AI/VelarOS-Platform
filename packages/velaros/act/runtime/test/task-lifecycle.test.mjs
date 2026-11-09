@@ -6,9 +6,8 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
-
 import { done } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 async function submit(session, input) {
   const events = []
@@ -278,8 +277,7 @@ test('completed task snapshot keeps accepted turns and a fixed archive boundary'
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({
     storage,
-    agents: false,
-    search: false,
+
     context: { maintenance: false },
     model: {
       id: 'snapshot',

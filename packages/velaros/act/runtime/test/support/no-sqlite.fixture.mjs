@@ -6,9 +6,9 @@ import { getBuiltinModule } from 'node:process'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../../dist/act/runtime/index.js'
-
 import { done, modelText, turn } from './model-turn.mjs'
+import { withProjectFixture } from './project-fixture.mjs'
+import { createTestRuntime as createRuntime } from './runtime-fixture.mjs'
 
 assert.equal(getBuiltinModule('node:sqlite'), undefined, 'SQLite must actually be disabled')
 assert.throws(() => localContextStorage({ path: ':memory:' }), { code: 'STORAGE_UNAVAILABLE' })
@@ -101,17 +101,13 @@ try {
       }
     },
   }
-  runtime = await createRuntime({
-    workspace,
-    dataDir,
-    packageEnvironment: false,
-    storage: await backend.open(),
-    model,
-    agents: false,
-    search: false,
-    memory: false,
-    context: { maintenance: false },
-  })
+  runtime = await createRuntime(
+    await withProjectFixture(
+      { storage: await backend.open(), model, context: { maintenance: false } },
+      { root: workspace }
+    ),
+    { cwd: workspace }
+  )
   const session = await runtime.openSession('main')
   const events = []
   for await (const event of session.submit('Change one to two, then observe the current file.'))
@@ -129,14 +125,8 @@ try {
   const storage = await backend.open()
   const persisted = await storage.load('main')
   assert(persisted.records.some((record) => record.kind === 'user'))
-  runtime = await createRuntime({
-    workspace,
-    dataDir,
-    packageEnvironment: false,
-    storage,
-    memory: false,
-    agents: false,
-    search: false,
+  runtime = await createRuntime(await withProjectFixture({ storage }, { root: workspace }), {
+    cwd: workspace,
   })
   const restored = await runtime.openSession('main')
   assert.equal((await restored.view.inspect()).view.progress.step, state.view.progress.step)

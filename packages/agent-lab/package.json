@@ -2,7 +2,7 @@
   "name": "@velaros-ai/agent-lab",
   "version": "0.2.0",
   "velaros": {
-    "platform": "0.6"
+    "platform": "0.7"
   },
   "description": "可复现的连续旅程评测：诊断、统计与认证，连同 velaros-agent-lab 命令行；不认宿主。",
   "license": "Apache-2.0",

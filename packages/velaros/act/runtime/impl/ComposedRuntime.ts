@@ -61,7 +61,7 @@ import { RuntimeDiagnostics } from './RuntimeDiagnostics.js'
 import type { RuntimeSessionAccess, VelarosSession } from './RuntimeSession.js'
 import { RuntimeSession } from './RuntimeSession.js'
 import { RuntimeTrace } from './RuntimeTrace.js'
-import { RuntimeWorkspaceBinding } from './RuntimeWorkspaceBinding.js'
+import { SessionExecutionBinding } from './SessionExecutionBinding.js'
 import { standardModules } from './StandardModules.js'
 
 /** 一份由共享主干装配好的运行时。 */
@@ -72,7 +72,7 @@ export interface VelarosRuntime {
   traceBranches(rootSessionId: string): Promise<ActTracePage['branches']>
   /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
   getSession(id: string): Optional<VelarosSession>
-  /** 打开或恢复持久会话，先原子核对工作区绑定；同一实例内相同 id 复用句柄。 */
+  /** 打开或恢复持久会话，先原子核对执行、授权与能力绑定；同一实例内相同 id 复用句柄。 */
   openSession(id: string): Promise<VelarosSession>
   /** 查询实际挂载的模块目录。 */
   modules(query?: ModuleQuery): ModulePage
@@ -86,7 +86,8 @@ export interface VelarosRuntime {
 
 class ComposedRuntime implements VelarosRuntime {
   private static readonly closeTimeoutMs = 5_000
-  private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'storage' | 'closed' = 'openings'
+  private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'resources' | 'storage' | 'closed' =
+    'openings'
   private readonly maintenance?: ContextMaintenance
   private readonly taskModels = new Map<string, ModelDriver>()
   private readonly search?: AdvancedSearchApi
@@ -110,6 +111,7 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly stores = new Map<string, StoreSessionApi>()
   private readonly openings = new Map<string, Promise<VelarosSession>>()
 
+  private readonly binding: SessionExecutionBinding
   private readonly options: RuntimeBootstrapOptions
   public constructor(input: RuntimeBootstrapOptions) {
     this.diagnostics = new RuntimeDiagnostics(input.storage, input.onMetric)
@@ -401,6 +403,14 @@ class ComposedRuntime implements VelarosRuntime {
         ...options.modules,
       ].map((module) => this.scheduleEffects(module)),
     })
+    const bindings = []
+    let offset: Nullable<number> = 0
+    while (!isNull(offset)) {
+      const page = this.kernel.list({ offset })
+      bindings.push(...page.items.map((item) => item.binding))
+      offset = page.nextOffset
+    }
+    this.binding = new SessionExecutionBinding(input.storage, input.binding, bindings)
   }
 
   private systemPackage(id: string): ScriptPackageDefinition {
@@ -426,20 +436,9 @@ class ComposedRuntime implements VelarosRuntime {
     return ids
   }
 
-  private isInactiveSkillModule(module: string): boolean {
-    // 已安装只表示可发现；默认/显式选择或 load 后，扩展能力才进入当前会话。
-    const skills = this.options.skills
-    const catalog = skills?.session?.catalog ?? skills?.lease.skills ?? []
-    const active = skills?.session?.skills ?? skills?.lease.skills ?? []
-    return (
-      catalog.some((skill) => skill.grants.includes(module)) &&
-      !active.some((skill) => skill.grants.includes(module))
-    )
-  }
-
   private allows(id: string, module: string): boolean {
     const scope = this.scopes.get(id)
-    if (!scope || this.isInactiveSkillModule(module)) return false
+    if (!scope || this.options.moduleAccess?.(id, module) === false) return false
     if (module === ExecutionsModuleId) return true
     if (module === GoalModuleId) return scope.kind === 'main'
     if (module === ContextMaterialsModuleId)
@@ -500,7 +499,9 @@ class ComposedRuntime implements VelarosRuntime {
       ...profile.limits,
     }
     const modules = profile.modules.filter(
-      (module) => module !== 'velaros:agents' && !this.isInactiveSkillModule(module)
+      (module) =>
+        module !== 'velaros:agents' &&
+        this.options.moduleAccess?.(job.parentSessionId, module) !== false
     )
     for (const module of modules)
       if (!this.allows(job.parentSessionId, module))
@@ -800,7 +801,7 @@ class ComposedRuntime implements VelarosRuntime {
       id.startsWith('store-material:')
     )
       throw new AppError('CLOSED', '运行时已关闭或会话身份无效')
-    await new RuntimeWorkspaceBinding(this.options.storage, this.options.workspace).bind(id)
+    await this.binding.bind(id)
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     await this.kernel.start()
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
@@ -946,6 +947,14 @@ class ComposedRuntime implements VelarosRuntime {
       Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
       failures.push(error)
     }
+    this.shutdownPhase = 'resources'
+    for (const resource of [...(this.options.resources ?? [])].reverse()) {
+      try {
+        await resource.close()
+      } catch (error) {
+        failures.push(error)
+      }
+    }
     try {
       this.shutdownPhase = 'storage'
       await this.options.storage.close()
@@ -968,14 +977,5 @@ class ComposedRuntime implements VelarosRuntime {
 /** 宿主提供模型周边资源，一份实例图统一维护模块、脚本与上下文。 */
 export async function createRuntime(options: VelarosRuntimeOptions): Promise<VelarosRuntime> {
   const configured = await runtimeBootstrap.prepare(options)
-  try {
-    return new ComposedRuntime(configured)
-  } catch (error) {
-    try {
-      if (!options.storage) await configured.storage.close()
-    } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Runtime 初始化及存储清理失败')
-    }
-    throw error
-  }
+  return new ComposedRuntime(configured)
 }

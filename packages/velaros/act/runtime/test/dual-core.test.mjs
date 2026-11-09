@@ -7,12 +7,10 @@ import { fileURLToPath } from 'node:url'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 
-import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { createProjectContextSource, createProjectKernel } from '../../../dist/project/index.js'
 
-import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
-import { done, turn } from './support/model-turn.mjs'
+import { done, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
+import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const object = (properties) => ({
   type: 'object',
