@@ -239,3 +239,50 @@ test('control rejects unsafe recovery and leaves missing sessions empty while cl
   const verify = f.open()
   assert.equal(await verify.storage.loadMetadata('missing'), null)
 })
+
+test('storage-only control registers accepted reads before a storage callback reenters close', async (t) => {
+  const f = await fixture(t)
+  const current = f.open()
+  const lease = await openSessionControl({
+    sessionId: 'missing',
+    storage: current.storage,
+    binding: testBinding,
+  })
+  f.own(() => lease.close())
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  const order = []
+  let closing
+  let reads = 0
+  const selectSnapshot = current.storage.selectSnapshot.bind(current.storage)
+  current.storage.selectSnapshot = async (...args) => {
+    reads++
+    closing = lease.close()
+    void closing.catch(() => {})
+    entered.resolve()
+    await release.promise
+    assert.equal(current.closed, false, 'Storage must outlive the accepted read')
+    order.push('read-resumed')
+    return selectSnapshot(...args)
+  }
+  const close = current.storage.close.bind(current.storage)
+  current.storage.close = async () => {
+    order.push('storage-close')
+    await close()
+  }
+  const reading = lease.getGoal()
+  void reading.catch(() => {})
+  try {
+    await entered.promise
+    await setImmediate()
+    assert.equal(current.closeCalls, 0, 'Reentrant close must observe the accepted operation')
+    await assert.rejects(lease.getGoal(), { code: 'CLOSED' })
+    assert.equal(reads, 1, 'Closed admission must not call the storage port')
+  } finally {
+    release.resolve()
+  }
+  assert.equal(await reading, null)
+  await closing
+  assert.equal(current.closeCalls, 1)
+  assert.deepEqual(order, ['read-resumed', 'storage-close'])
+})

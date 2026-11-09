@@ -120,7 +120,8 @@ class SessionControl implements SessionControlLease {
 
   private async perform<T>(operation: () => Promise<T>): Promise<T> {
     if (this.closing) throw new AppError('CLOSED', '会话控制 lease 已关闭')
-    const running = operation()
+    // 先登记已受理操作，再调用可同步重入 close 的宿主存储端口。
+    const running = Promise.resolve().then(operation)
     this.pending.add(running)
     try {
       return await running

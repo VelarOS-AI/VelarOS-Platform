@@ -30,6 +30,6 @@ Agent 旧实现的 start/resume 返回初始 job，后续交互、回答和终�
 | 独立批次 | 提交 | 定向场景 |
 | --- | --- | --- |
 | R2 owner 纠正 | `3529a98e` | 9 |
-| A1 元数据 | 本批 `fix(agent): isolate scheduler and interaction identity views` | 5 |
-| S1 控制准入 | 待提交 | 2 |
+| A1 元数据 | `accd6231` | 5 |
+| S1 控制准入 | 本批 `fix(runtime): register control reads before invoking storage` | 2 |
 | C1 恢复释放 | 待提交 | 3 |
