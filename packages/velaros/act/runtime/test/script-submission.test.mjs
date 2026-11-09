@@ -102,6 +102,216 @@ async function fixture(
   return f
 }
 
+function holdMetadataRead(storage) {
+  const original = storage.loadMetadata.bind(storage)
+  let release
+  let notify
+  const gate = new Promise((resolve) => (release = resolve))
+  const entered = new Promise((resolve) => (notify = resolve))
+  let held = false
+  storage.loadMetadata = async (id) => {
+    const metadata = await original(id)
+    if (id === 's' && !held) {
+      held = true
+      notify()
+      await gate
+    }
+    return metadata
+  }
+  return { entered, release }
+}
+
+test('model admission owns recovery before another model or host script can enter', async (t) => {
+  const f = await fixture(t, async function* (request, frames) {
+    if (frames.length === 1) {
+      yield turn(request, { execute: { source: execute } })
+      yield { type: 'finish', reason: 'stop' }
+    } else yield* done(request)
+  })
+  const gate = holdMetadataRead(f.storage)
+  const first = f.submit()
+  const competing = f.session.submit('Competing input')[Symbol.asyncIterator]()
+  try {
+    await gate.entered
+    assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+    assert.equal(f.frames.length, 0)
+    await assert.rejects(competing.next(), { code: 'CONFLICT' })
+    await assert.rejects(f.session.script({ execute: { source: execute } }), { code: 'CLOSED' })
+    assert.equal(f.world.writes, 0)
+  } finally {
+    gate.release()
+    await competing.return()
+    await first
+  }
+  assert.equal(f.world.writes, 1)
+  assert.equal(f.frames.length, 2)
+  await f.submit()
+  assert.equal(f.frames.length, 3)
+  assert.equal(f.world.writes, 1)
+})
+
+test('host admission owns recovery while duplicates share the same actual execution', async (t) => {
+  const f = await fixture(t)
+  const gate = holdMetadataRead(f.storage)
+  const input = { execute: { source: execute } }
+  const options = { callId: 'recovery-owner' }
+  const first = f.session.script(input, undefined, options)
+  const competing = f.session.submit('Competing input')[Symbol.asyncIterator]()
+  try {
+    await gate.entered
+    assert.equal(f.frames.length, 0)
+    await assert.rejects(competing.next(), { code: 'CLOSED' })
+    await assert.rejects(f.session.script(input, undefined, { callId: 'different-owner' }), {
+      code: 'SCRIPT_BUSY',
+    })
+    await assert.rejects(
+      f.session.script(
+        { execute: { source: `${execute}\n// different payload` } },
+        undefined,
+        options
+      ),
+      { code: 'SCRIPT_CALL_CONFLICT' }
+    )
+    const duplicate = f.session.script(input, undefined, options)
+    gate.release()
+    const [a, b] = await Promise.all([first, duplicate])
+    assert.deepEqual(a, b)
+    assert.equal(a.executed, true)
+    assert.equal(f.world.writes, 1)
+  } finally {
+    gate.release()
+    await competing.return()
+    await first
+  }
+  await f.submit()
+  assert.equal(f.frames.length, 1)
+  assert.equal(f.world.writes, 1)
+})
+
+test('a host script awaiting its baseline cannot enter a newly admitted model run', async (t) => {
+  let releaseModel
+  let notifyModel
+  const modelGate = new Promise((resolve) => (releaseModel = resolve))
+  const modelEntered = new Promise((resolve) => (notifyModel = resolve))
+  const f = await fixture(t, async function* (request) {
+    notifyModel()
+    await modelGate
+    yield* done(request)
+  })
+  const original = f.storage.selectSnapshot.bind(f.storage)
+  let releaseBaseline
+  let notifyBaseline
+  const baselineGate = new Promise((resolve) => (releaseBaseline = resolve))
+  const baselineEntered = new Promise((resolve) => (notifyBaseline = resolve))
+  let held = false
+  f.storage.selectSnapshot = async (id, selections) => {
+    const snapshot = await original(id, selections)
+    if (!held && selections.some((item) => item.title === 'script:lease-state')) {
+      held = true
+      notifyBaseline()
+      await baselineGate
+    }
+    return snapshot
+  }
+  const rejected = assert.rejects(f.session.script({ execute: { source: execute } }), {
+    code: 'SCRIPT_BUSY',
+  })
+  let running
+  try {
+    await baselineEntered
+    running = f.submit()
+    await modelEntered
+    releaseBaseline()
+    await rejected
+    assert.equal(f.world.writes, 0)
+  } finally {
+    releaseBaseline()
+    releaseModel()
+    await Promise.all([rejected, running])
+  }
+  assert.equal(f.frames.length, 1)
+  const accepted = await f.session.script({ execute: { source: execute } })
+  assert.equal(accepted.executed, true)
+  assert.equal(f.world.writes, 1)
+})
+
+test('a recovery storage failure releases model admission without accepting the input', async (t) => {
+  const f = await fixture(t)
+  const original = f.storage.loadMetadata.bind(f.storage)
+  const failure = new Error('recovery metadata unavailable')
+  let injected = false
+  f.storage.loadMetadata = async (id) => {
+    const metadata = await original(id)
+    if (!injected) {
+      injected = true
+      throw failure
+    }
+    return metadata
+  }
+  await assert.rejects(f.submit(), (error) => error === failure)
+  assert.equal(f.frames.length, 0)
+  assert.equal(f.world.writes, 0)
+  assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+  await f.submit()
+  assert.equal(f.frames.length, 1)
+})
+
+for (const cancel of ['source', 'session']) {
+  test(`${cancel} cancellation during recovery releases admission without starting the model`, async (t) => {
+    const f = await fixture(t)
+    const gate = holdMetadataRead(f.storage)
+    const source = new AbortController()
+    const failure = new Error('cancel before model admission completes')
+    const rejected = assert.rejects(
+      async () => {
+        for await (const event of f.session.submit('Cancelled input', source.signal)) {
+          assert.fail(`recovery cancellation cannot emit ${event.type}`)
+        }
+      },
+      (error) => (cancel === 'source' ? error === failure : error.name === 'AbortError')
+    )
+    try {
+      await gate.entered
+      if (cancel === 'source') source.abort(failure)
+      else f.session.cancel()
+    } finally {
+      gate.release()
+      await rejected
+    }
+    assert.equal(f.frames.length, 0)
+    assert.equal(f.world.writes, 0)
+    assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+    await f.submit()
+    assert.equal(f.frames.length, 1)
+  })
+}
+
+test('close drains a blocked recovery read and never starts its admitted model afterward', async (t) => {
+  const f = await fixture(t)
+  const gate = holdMetadataRead(f.storage)
+  const rejected = assert.rejects(f.submit(), { code: 'CLOSED' })
+  let closed = false
+  let closing
+  try {
+    await gate.entered
+    closing = f.session.close().then(() => {
+      closed = true
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(closed, false, 'close must drain the actual outstanding storage read')
+    assert.equal(f.frames.length, 0)
+  } finally {
+    gate.release()
+    await Promise.all([rejected, closing])
+  }
+  assert.equal(closed, true)
+  assert.equal(f.frames.length, 0)
+  assert.equal(f.world.writes, 0)
+  assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
+  await assert.rejects(f.submit(), { code: 'CLOSED' })
+  await assert.rejects(f.session.script({ execute: { source: execute } }), { code: 'CLOSED' })
+})
+
 test('one model call publishes observer, executes once and sends fresh context with a leased result', async (t) => {
   const f = await fixture(t, async function* (request, frames) {
     if (frames.length === 1) {

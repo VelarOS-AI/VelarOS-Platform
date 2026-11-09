@@ -1256,16 +1256,17 @@ export class RuntimeSession implements VelarosSession {
     }
     if (!isString(input) && input.task === 'new' && this.dependencies.agents?.pending(this.id))
       throw new AppError('CONFLICT', '子任务仍在运行，不能切换逻辑任务')
-    await this.recoverInterrupted(signal)
-    this.modelRunning = true
-    this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
-    this.submissionDeadline = options.deadline
-    this.runController = new AbortController()
-    this.runInputs.clear()
-    this.goalSeed = options.goal?.trim() || undefined
+    const controller = new AbortController()
+    const combined = AbortSignal.any([
+      controller.signal,
+      this.lifetime.signal,
+      ...(signal ? [signal] : []),
+    ])
     const timers = new TimerScope({ name: 'RuntimeSession.submit' })
+    this.modelRunning = true
+    this.submissionDeadline = options.deadline
+    this.runController = controller
     try {
-      const controller = this.runController
       const expire = () => {
         if (controller.signal.aborted || isUndefined(this.submissionDeadline)) return
         const remaining = this.submissionDeadline - Date.now()
@@ -1277,25 +1278,29 @@ export class RuntimeSession implements VelarosSession {
           })
       }
       expire()
-      for await (const event of this.agent.submit(
-        input,
-        AbortSignal.any([this.runController.signal, ...(signal ? [signal] : [])])
-      )) {
-        if (event.type === 'input') this.runInputs.add(event.ref.id)
-        yield event
+      combined.throwIfAborted()
+      await this.trackHostOperation(this.recoverInterrupted(combined))
+      combined.throwIfAborted()
+      this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
+      this.runInputs.clear()
+      this.goalSeed = options.goal?.trim() || undefined
+      try {
+        for await (const event of this.agent.submit(input, combined)) {
+          if (event.type === 'input') this.runInputs.add(event.ref.id)
+          yield event
+        }
+      } finally {
+        controller.abort()
+        await this.dependencies.agents?.cancelParent(this.id)
       }
     } finally {
       timers.dispose()
-      this.runController.abort()
-      try {
-        await this.dependencies.agents?.cancelParent(this.id)
-      } finally {
-        this.modelRunning = false
-        this.runDeadline = undefined
-        this.submissionDeadline = undefined
-        this.runController = undefined
-        this.goalSeed = undefined
-      }
+      controller.abort()
+      this.modelRunning = false
+      this.runDeadline = undefined
+      this.submissionDeadline = undefined
+      this.runController = undefined
+      this.goalSeed = undefined
     }
   }
 
@@ -1387,13 +1392,11 @@ export class RuntimeSession implements VelarosSession {
     options?: ScriptControlOptions
   ): Promise<ScriptSubmissionReceipt> {
     if (this.closed || this.modelRunning) throw new AppError('CLOSED', '会话已关闭或正在运行模型')
-    await this.recoverInterrupted(signal)
     return this.control(
       input,
       signal,
       options,
-      toNullable((await this.programs.state()).observation),
-      true
+      toNullable((await this.programs.state()).observation)
     )
   }
 
@@ -1432,8 +1435,7 @@ export class RuntimeSession implements VelarosSession {
     input: unknown,
     signal: AbortSignal,
     options: Optional<ScriptControlOptions>,
-    expectedObservation: Nullable<string>,
-    host = false
+    expectedObservation: Nullable<string>
   ): Promise<ScriptSubmissionReceipt> {
     signal.throwIfAborted()
     const request = standardModules.parseScript(input)
@@ -1452,13 +1454,13 @@ export class RuntimeSession implements VelarosSession {
         throw new AppError('SCRIPT_CALL_CONFLICT', '同一调用身份不能用于另一份输入')
       return running.pending
     }
-    if (this.closed || this.active.size || this.controls.size)
-      throw new AppError('SCRIPT_BUSY', '会话已关闭或已有活动脚本提交')
+    if (this.closed || this.modelRunning || this.active.size || this.controls.size)
+      throw new AppError('SCRIPT_BUSY', '会话已关闭或已有活动运行')
     const controller = new AbortController()
     const cancel = (): void => controller.abort(signal.reason)
     this.controlController = controller
     signal.addEventListener('abort', cancel, { once: true })
-    const pending = this.dispatchSubmission(request, control, controller.signal, host)
+    const pending = this.dispatchSubmission(request, control, controller.signal)
     this.controls.set(control.id, { fingerprint: control.fingerprint, pending })
     try {
       return await pending
@@ -1472,9 +1474,10 @@ export class RuntimeSession implements VelarosSession {
   private async dispatchSubmission(
     request: ScriptSubmission,
     control: ScriptControlIdentity,
-    signal: AbortSignal,
-    host: boolean
+    signal: AbortSignal
   ): Promise<ScriptSubmissionReceipt> {
+    await this.recoverInterrupted(signal)
+    signal.throwIfAborted()
     const saved = await this.programs.receipt(control)
     if (saved) return recoverScriptSubmission(saved, control)
     const observe = request.observe
@@ -1514,8 +1517,8 @@ export class RuntimeSession implements VelarosSession {
         ).receipt,
         control
       )
-    const existingLease = host ? (await this.view.inspect())?.lease : undefined
-    if (host && execute) await this.ensureView(signal)
+    const existingLease = (await this.view.inspect())?.lease
+    if (execute) await this.ensureView(signal)
     try {
       const receipt: ScriptSubmissionReceipt = {
         status: execute ? 'prepared' : 'completed',
@@ -1583,14 +1586,13 @@ export class RuntimeSession implements VelarosSession {
         executed: true,
         execute: outcome,
       })
-      if (host)
-        await this.view.build({
-          maxChars: this.dependencies.limits.projectionChars,
-          visibleExecutionIds: (await this.programs.state()).leases.map((item) => item.executionId),
-        })
+      await this.view.build({
+        maxChars: this.dependencies.limits.projectionChars,
+        visibleExecutionIds: (await this.programs.state()).leases.map((item) => item.executionId),
+      })
       return completed
     } finally {
-      if (host && execute && !existingLease) await this.view.end()
+      if (execute && !existingLease) await this.view.end()
     }
   }
 
@@ -3246,11 +3248,8 @@ export class RuntimeSession implements VelarosSession {
    * 中断的脚本记成失败、没重跑，调用的效果照日志记（领域能核实的就核实；取消之后才落定的照实补记），
    * 没跑完的子任务记成中断。效果仍然不明的照实留在结算事实里给模型看，不挡下一步。
    */
-  private async recoverInterrupted(
-    signal: AbortSignal = new AbortController().signal
-  ): Promise<void> {
-    // 本进程里还有东西在跑时，眼前的执行态是它的，不是上次留下的
-    if (this.active.size || this.modelRunning || this.controls.size) return
+  private async recoverInterrupted(signal: AbortSignal): Promise<void> {
+    // 调用方已占有模型或宿主控制准入，但尚未派发；本次 owner 不属于待恢复的旧执行。
     const task = await this.view.inspect()
     const children = this.dependencies.agents?.pending(this.id)
       ? []
