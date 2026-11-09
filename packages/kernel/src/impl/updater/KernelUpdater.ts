@@ -325,10 +325,7 @@ export class KernelUpdater implements KernelUpdaterApi {
         ? { version, path: destination, installed: false, record: existing }
         : undefined
     if (isNotUndefined(reusable)) return reusable
-    if (
-      isNotUndefined(existing) &&
-      (await readKernelActivePointer(this.layout.pointerPath))?.version === version
-    ) {
+    if ((await readKernelActivePointer(this.layout.pointerPath))?.version === version) {
       throw new KernelUpdaterError(
         'INSTALL_FAILED',
         `内核版本 "${version}" 正在使用中，不能原地重装`,

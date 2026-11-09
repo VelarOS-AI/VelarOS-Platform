@@ -1,10 +1,11 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import type { KernelArtifactExtractor } from '../../../src/contract/requires'
 import { KernelUpdater } from '../../../src/impl/updater/KernelUpdater'
+import { PassthroughKernelArtifactExtractor } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
 import type { KernelUpdaterOptions } from '../../../src/types/updater'
 import { KernelUpdaterError } from '../../../src/utils/errors'
 import { readKernelActivePointer } from '../../../src/utils/updater/pointer'
@@ -59,6 +60,35 @@ function createUpdater(
 
 async function payloadOf(root: string, version: string): Promise<string> {
   return readFile(join(root, 'versions', version, `kernel-${version}.bin`), 'utf8')
+}
+
+function observeInstallation(root: string) {
+  const requested: string[] = []
+  const extracted: string[] = []
+  const extractor = new PassthroughKernelArtifactExtractor()
+  const updater = createUpdater(
+    root,
+    {
+      extractor: {
+        async extract(context) {
+          extracted.push(context.version)
+          await extractor.extract(context)
+        },
+      },
+    },
+    { onRequest: (url) => requested.push(url) }
+  )
+  return { updater, requested, extracted }
+}
+
+async function replaceInstallRecord(
+  root: string,
+  version: string,
+  contents: string | undefined
+): Promise<void> {
+  const path = join(root, 'versions', version, '.kernel-install.json')
+  if (contents === undefined) await rm(path)
+  else await writeFile(path, contents, 'utf8')
 }
 
 describe('Kernel side-by-side installation', () => {
@@ -197,13 +227,154 @@ describe('Kernel side-by-side installation', () => {
     const updater = createUpdater(root)
     await updater.ensureInstalled('1.0.0')
     await updater.activateVersion('1.0.0')
+    const pointerBefore = await readFile(join(root, 'current.json'))
+    const recordPath = join(root, 'versions', '1.0.0', '.kernel-install.json')
+    const recordBefore = await readFile(recordPath)
+    const observed = observeInstallation(root)
 
-    await expect(updater.ensureInstalled('1.0.0', { force: true })).rejects.toMatchObject({
+    await expect(observed.updater.ensureInstalled('1.0.0', { force: true })).rejects.toMatchObject({
       code: 'INSTALL_FAILED',
       details: { version: '1.0.0' },
     })
     expect(await payloadOf(root, '1.0.0')).toBe('kernel-1.0.0')
+    expect(await readFile(join(root, 'current.json'))).toEqual(pointerBefore)
+    expect(await readFile(recordPath)).toEqual(recordBefore)
+    expect(observed.requested).toEqual([])
+    expect(observed.extracted).toEqual([])
+    expect(await readdir(join(root, '.staging'))).toEqual([])
+    await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
+
+  for (const pointerState of ['valid', 'malformed JSON']) {
+    test(`reuses a complete installation with a ${pointerState} pointer without writing`, async () => {
+      const root = await directories.create()
+      const updater = createUpdater(root)
+      const installed = await updater.ensureInstalled('1.0.0')
+      await updater.activateVersion('1.0.0')
+      if (pointerState === 'malformed JSON') {
+        await writeFile(join(root, 'current.json'), '{"schemaVersion":', 'utf8')
+      }
+      const pointerBefore = await readFile(join(root, 'current.json'))
+      const recordPath = join(root, 'versions', '1.0.0', '.kernel-install.json')
+      const recordBefore = await readFile(recordPath)
+      const observed = observeInstallation(root)
+
+      const repeated = await observed.updater.ensureInstalled('1.0.0')
+
+      expect(repeated).toEqual({ ...installed, installed: false })
+      expect(await payloadOf(root, '1.0.0')).toBe('kernel-1.0.0')
+      expect(await readFile(join(root, 'current.json'))).toEqual(pointerBefore)
+      expect(await readFile(recordPath)).toEqual(recordBefore)
+      expect(observed.requested).toEqual([])
+      expect(observed.extracted).toEqual([])
+      expect(await readdir(join(root, '.staging'))).toEqual([])
+      await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+  }
+
+  for (const { state, contents } of [
+    { state: 'missing', contents: undefined },
+    { state: 'malformed JSON', contents: '{"schemaVersion":' },
+    { state: 'invalid schema', contents: '{"schemaVersion":2}' },
+  ]) {
+    for (const force of [false, true]) {
+      test(`protects the active version with a ${state} record (force=${force})`, async () => {
+        const root = await directories.create()
+        const updater = createUpdater(root)
+        await updater.ensureInstalled('1.0.0')
+        await updater.activateVersion('1.0.0')
+        const pointerBefore = await readFile(join(root, 'current.json'))
+        const payloadPath = join(root, 'versions', '1.0.0', 'kernel-1.0.0.bin')
+        const payloadBefore = await readFile(payloadPath)
+        await replaceInstallRecord(root, '1.0.0', contents)
+        const orphan = join(root, '.staging', 'protected-orphan')
+        await mkdir(orphan)
+        await writeFile(join(orphan, 'partial'), 'preserve staging', 'utf8')
+        const observed = observeInstallation(root)
+
+        await expect(observed.updater.ensureInstalled('1.0.0', { force })).rejects.toMatchObject({
+          code: 'INSTALL_FAILED',
+          details: { version: '1.0.0', path: join(root, 'versions', '1.0.0') },
+        })
+
+        expect(await readFile(payloadPath)).toEqual(payloadBefore)
+        expect(await readFile(join(root, 'current.json'))).toEqual(pointerBefore)
+        const recordPath = join(root, 'versions', '1.0.0', '.kernel-install.json')
+        if (contents === undefined) {
+          await expect(stat(recordPath)).rejects.toMatchObject({ code: 'ENOENT' })
+        } else {
+          expect(await readFile(recordPath, 'utf8')).toBe(contents)
+        }
+        expect(observed.requested).toEqual([])
+        expect(observed.extracted).toEqual([])
+        expect(await readdir(join(root, '.staging'))).toEqual(['protected-orphan'])
+        expect(await readFile(join(orphan, 'partial'), 'utf8')).toBe('preserve staging')
+        await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
+      })
+    }
+
+    test(`repairs an inactive installation with a ${state} record`, async () => {
+      const root = await directories.create()
+      const updater = createUpdater(root)
+      await updater.ensureInstalled('1.0.0')
+      await updater.ensureInstalled('1.1.0')
+      await updater.activateVersion('1.1.0')
+      const pointerBefore = await readFile(join(root, 'current.json'))
+      const activePayloadPath = join(root, 'versions', '1.1.0', 'kernel-1.1.0.bin')
+      const activePayloadBefore = await readFile(activePayloadPath)
+      await replaceInstallRecord(root, '1.0.0', contents)
+      await writeFile(join(root, 'versions', '1.0.0', 'kernel-1.0.0.bin'), 'incomplete', 'utf8')
+      const observed = observeInstallation(root)
+
+      const repaired = await observed.updater.ensureInstalled('1.0.0')
+
+      expect(repaired).toMatchObject({ installed: true, record: { version: '1.0.0' } })
+      expect(await payloadOf(root, '1.0.0')).toBe('kernel-1.0.0')
+      expect(
+        JSON.parse(await readFile(join(root, 'versions', '1.0.0', '.kernel-install.json'), 'utf8'))
+      ).toEqual(repaired.record)
+      expect(await readFile(activePayloadPath)).toEqual(activePayloadBefore)
+      expect(await readFile(join(root, 'current.json'))).toEqual(pointerBefore)
+      expect(observed.requested).toEqual([ManifestUrl, first.descriptor.url])
+      expect(observed.extracted).toEqual(['1.0.0'])
+      expect(await readdir(join(root, '.staging'))).toEqual([])
+      await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+  }
+
+  for (const { state, contents } of [
+    { state: 'malformed JSON', contents: '{"schemaVersion":' },
+    { state: 'invalid schema', contents: '{"schemaVersion":2}' },
+  ]) {
+    test(`refuses to repair an installation when the active pointer has ${state}`, async () => {
+      const root = await directories.create()
+      const updater = createUpdater(root)
+      await updater.ensureInstalled('1.0.0')
+      const payloadPath = join(root, 'versions', '1.0.0', 'kernel-1.0.0.bin')
+      const payloadBefore = await readFile(payloadPath)
+      await replaceInstallRecord(root, '1.0.0', undefined)
+      await writeFile(join(root, 'current.json'), contents, 'utf8')
+      const orphan = join(root, '.staging', 'protected-orphan')
+      await mkdir(orphan)
+      await writeFile(join(orphan, 'partial'), 'preserve staging', 'utf8')
+      const observed = observeInstallation(root)
+
+      await expect(observed.updater.ensureInstalled('1.0.0')).rejects.toMatchObject({
+        code: 'INVALID_POINTER',
+      })
+
+      expect(await readFile(payloadPath)).toEqual(payloadBefore)
+      expect(await readFile(join(root, 'current.json'), 'utf8')).toBe(contents)
+      await expect(
+        stat(join(root, 'versions', '1.0.0', '.kernel-install.json'))
+      ).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(observed.requested).toEqual([])
+      expect(observed.extracted).toEqual([])
+      expect(await readdir(join(root, '.staging'))).toEqual(['protected-orphan'])
+      expect(await readFile(join(orphan, 'partial'), 'utf8')).toBe('preserve staging')
+      await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+  }
 
   test('rejects an unsigned artifact when signatures are required', async () => {
     const root = await directories.create()
