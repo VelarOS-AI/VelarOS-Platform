@@ -371,38 +371,47 @@ export interface VelarosSession {
 
 export class RuntimeSession implements VelarosSession {
   public async completedTask(): Promise<Nullable<RuntimeCompletedTask>> {
-    const state = await this.dependencies.storage.load(this.id)
-    const task = state?.task
-    if (!state || task?.status !== 'completed' || !task.id) return null
-    const after = task.startedSequence ?? 0
-    const lease = state.records.findLast(
-      (record) => record.title === 'script:lease-state' && record.sequence > after
+    this.lifetime.signal.throwIfAborted()
+    return this.trackHostOperation(
+      this.dependencies.storage.load(this.id).then(async (state) => {
+        const task = state?.task
+        if (!state || task?.status !== 'completed' || !task.id) return null
+        const after = task.startedSequence ?? 0
+        const lease = state.records.findLast(
+          (record) => record.title === 'script:lease-state' && record.sequence > after
+        )
+        const body = lease ? await this.dependencies.storage.get(this.id, lease.objectId) : null
+        const completedTurns: unknown = body ? JSON.parse(body).completedTurns : 0
+        if (
+          !isNumber(completedTurns) ||
+          !Number.isSafeInteger(completedTurns) ||
+          completedTurns < 0
+        )
+          throw new AppError('VALIDATION', '任务轮次记录无效')
+        return {
+          sessionId: this.id,
+          taskId: task.id,
+          after,
+          through: state.records.at(-1)?.sequence ?? after,
+          completedTurns,
+          inputs: task.goals,
+        }
+      })
     )
-    const body = lease ? await this.dependencies.storage.get(this.id, lease.objectId) : null
-    const completedTurns: unknown = body ? JSON.parse(body).completedTurns : 0
-    if (!isNumber(completedTurns) || !Number.isSafeInteger(completedTurns) || completedTurns < 0)
-      throw new AppError('VALIDATION', '任务轮次记录无效')
-    return {
-      sessionId: this.id,
-      taskId: task.id,
-      after,
-      through: state.records.at(-1)?.sequence ?? after,
-      completedTurns,
-      inputs: task.goals,
-    }
   }
 
   public async taskMaterials(
     task: RuntimeCompletedTask,
     after = task.after
   ): Promise<readonly ContextRecord[]> {
+    this.lifetime.signal.throwIfAborted()
     if (task.sessionId !== this.id) throw new AppError('VALIDATION', '任务不属于当前会话')
-    const storage = this.dependencies.storage
     const cursor = Math.max(after, task.after)
-    const records = (
-      await storage.records(this.id, { after: cursor, limit: TaskMaterialLimits.pageItems })
-    ).items
-    return records.filter((record) => record.sequence <= task.through)
+    return this.trackHostOperation(
+      this.dependencies.storage
+        .records(this.id, { after: cursor, limit: TaskMaterialLimits.pageItems })
+        .then(({ items }) => items.filter((record) => record.sequence <= task.through))
+    )
   }
 
   public async readTaskMaterial(
@@ -411,15 +420,19 @@ export class RuntimeSession implements VelarosSession {
     offset = 0,
     limit = TaskMaterialLimits.pageChars
   ): Promise<ContextContent> {
+    this.lifetime.signal.throwIfAborted()
     if (task.sessionId !== this.id || ref.sessionId !== this.id)
       throw new AppError('VALIDATION', '材料不属于当前会话')
-    const page = await this.context.read(ref, { offset, limit })
-    if (
-      page.record.sequence > task.through ||
-      (page.record.sequence <= task.after && !task.inputs.some((input) => input.id === ref.id))
+    return this.trackHostOperation(
+      this.context.read(ref, { offset, limit }).then((page) => {
+        if (
+          page.record.sequence > task.through ||
+          (page.record.sequence <= task.after && !task.inputs.some((input) => input.id === ref.id))
+        )
+          throw new AppError('VALIDATION', '材料不属于指定任务范围')
+        return page.record.kind === 'user' ? this.context.readInput(ref, { offset, limit }) : page
+      })
     )
-      throw new AppError('VALIDATION', '材料不属于指定任务范围')
-    return page.record.kind === 'user' ? this.context.readInput(ref, { offset, limit }) : page
   }
 
   private readonly instructionAssembly: RuntimeInstructionManifest
@@ -1637,9 +1650,12 @@ export class RuntimeSession implements VelarosSession {
     return this.agent.events(after, limit)
   }
   public async trace(turnId: string, maxChars?: number) {
-    return new RuntimeTrace(this.id, this.dependencies.storage, this.dependencies.journal).read(
-      turnId,
-      maxChars
+    this.lifetime.signal.throwIfAborted()
+    return this.trackHostOperation(
+      new RuntimeTrace(this.id, this.dependencies.storage, this.dependencies.journal).read(
+        turnId,
+        maxChars
+      )
     )
   }
   public cancel() {

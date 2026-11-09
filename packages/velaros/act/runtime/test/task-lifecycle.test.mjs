@@ -314,6 +314,110 @@ test('completed task snapshot keeps accepted turns and a fixed archive boundary'
   assert.equal(first.completedTurns, 1)
 })
 
+for (const [name, barrierMethod] of [
+  ['completedTask', 'load'],
+  ['taskMaterials', 'records'],
+  ['readTaskMaterial', 'get'],
+  ['trace', 'load'],
+  ['runtime.trace', 'load'],
+  ['runtime.traceBranches', 'selectSnapshot'],
+])
+  test(`host material reads drain before storage closes and reject new admission (${name})`, async (t) => {
+    const storage = localContextStorage({ path: ':memory:' })
+    const entered = Promise.withResolvers()
+    const release = Promise.withResolvers()
+    const order = []
+    let armed = false
+    let closed = false
+    let reads = 0
+    for (const method of ['load', 'records', 'get', 'selectSnapshot']) {
+      const read = storage[method].bind(storage)
+      storage[method] = async (...args) => {
+        reads++
+        if (armed && method === barrierMethod) {
+          armed = false
+          entered.resolve()
+          await release.promise
+          order.push('read-resumed')
+        }
+        assert.equal(closed, false, 'accepted reads retain the live storage owner')
+        return read(...args)
+      }
+    }
+    const close = storage.close.bind(storage)
+    storage.close = async () => {
+      order.push('storage-close')
+      closed = true
+      await close()
+    }
+    // eslint-disable-next-line prefer-const -- 初始化前登记清理；初始化拒绝时也必须关闭存储。
+    let runtime
+    t.after(async () => {
+      release.resolve()
+      await runtime?.close()
+      if (!closed) await storage.close()
+    })
+    runtime = await createRuntime({
+      storage,
+      runner: { run: async () => assert.fail('host material reads must not execute programs') },
+      context: { maintenance: false },
+      model: {
+        id: 'material-read-lifecycle',
+        limits,
+        estimate,
+        async *stream(request) {
+          yield* done(request)
+        },
+      },
+    })
+    const session = await runtime.openSession('material-read')
+    await submit(session, 'completed source task')
+    const task = await session.completedTask()
+    assert.ok(task)
+    const state = await storage.load(session.id)
+    const turn = state.records.find((record) => record.title === 'model-request').ref.id
+    if (name.startsWith('runtime.')) {
+      await session.close()
+      assert.equal(runtime.getSession(session.id), undefined, 'runtime trace stays a cold read')
+    }
+    const lookups = {
+      completedTask: () => session.completedTask(),
+      taskMaterials: () => session.taskMaterials(task),
+      readTaskMaterial: () => session.readTaskMaterial(task, task.inputs[0]),
+      trace: () => session.trace(turn),
+      'runtime.trace': () => runtime.trace(session.id, { limit: 1 }),
+      'runtime.traceBranches': () => runtime.traceBranches(session.id),
+    }
+    armed = true
+    const pending = lookups[name]()
+    try {
+      await entered.promise
+      await assert.rejects(runtime.close({ timeoutMs: 20 }), {
+        code: 'TIMEOUT',
+        phase: 'sessions',
+      })
+      assert.equal(closed, false)
+      const before = reads
+      for (const lookup of Object.values(lookups)) await assert.rejects(lookup, { code: 'CLOSED' })
+      assert.equal(reads, before, 'closed admission must not reach the storage port')
+      release.resolve()
+      const value = await pending
+      if (name === 'completedTask') assert.equal(value.taskId, task.taskId)
+      else if (name === 'taskMaterials')
+        assert.ok(value.length && value.every((record) => record.sequence <= task.through))
+      else if (name === 'readTaskMaterial') assert.equal(value.text, 'completed source task')
+      else if (name === 'trace') assert.equal(value.turnId, turn)
+      else if (name === 'runtime.trace') assert.equal(value.turns[0].turnId, turn)
+      else assert.deepEqual(value, [])
+    } finally {
+      release.resolve()
+      await Promise.allSettled([pending])
+      await runtime.close()
+    }
+    assert.equal(closed, true)
+    assert.deepEqual(order, ['read-resumed', 'storage-close'])
+  })
+
 test('memory consolidation reads materials over multiple rounds and stages knowledge without writing', async () => {
   const { createMemoryConsolidation } = await import('../../../dist/act/runtime/index.js')
   let calls = 0

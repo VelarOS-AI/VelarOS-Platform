@@ -110,6 +110,7 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly memories = new Map<string, MemoryScopePort>()
   private readonly stores = new Map<string, StoreSessionApi>()
   private readonly openings = new Map<string, Promise<VelarosSession>>()
+  private readonly traceReads = new Set<Promise<unknown>>()
 
   private readonly binding: SessionExecutionBinding
   private readonly options: RuntimeBootstrapOptions
@@ -887,12 +888,25 @@ class ComposedRuntime implements VelarosRuntime {
 
   public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
-    return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
+    return this.trackTraceRead(
+      new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
+    )
   }
 
   public async traceBranches(rootSessionId: string): Promise<ActTracePage['branches']> {
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
-    return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).branches()
+    return this.trackTraceRead(
+      new RuntimeTrace(rootSessionId, this.options.storage, this.journal).branches()
+    )
+  }
+
+  private async trackTraceRead<T>(read: Promise<T>): Promise<T> {
+    this.traceReads.add(read)
+    try {
+      return await read
+    } finally {
+      this.traceReads.delete(read)
+    }
   }
 
   public getSession(id: string) {
@@ -945,6 +959,7 @@ class ComposedRuntime implements VelarosRuntime {
     this.shutdownPhase = 'sessions'
     for (const result of await sessions)
       if (result.status === 'rejected') failures.push(result.reason)
+    await Promise.allSettled([...this.traceReads])
     try {
       this.shutdownPhase = 'modules'
       await this.kernel.drain()

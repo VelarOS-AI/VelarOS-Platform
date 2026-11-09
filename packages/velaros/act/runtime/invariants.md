@@ -88,9 +88,9 @@
 
 ## INV-47 有界关闭保留真实收束与存储
 
-Runtime.close 的等待期限覆盖 openings、会话关闭、模块和存储。超时返回 TIMEOUT 与 pending/phase，继续拒绝新会话；后台只在真实处理器与 journal 收束后关闭存储。取消观察者不能释放仍在执行的写操作锁，迟到提交必须保留 committed。
+Runtime.close 的等待期限覆盖 openings、会话关闭、模块和存储。超时返回 TIMEOUT 与 pending/phase，继续拒绝新会话；后台只在真实处理器、journal 及已受理的任务材料/trace 读取收束后关闭存储。会话关闭拒绝新材料读取，活动 Runtime 仍可冷读已关闭会话；Runtime 关闭拒绝新 trace。取消观察者不能释放仍在执行的写操作锁，迟到提交必须保留 committed。
 
-验证：`test/foundation-lifecycle.test.mjs`，包括会话在 Kernel.dispose 前挂起的反例；`test/effect-scheduler.test.mjs` 覆盖排队取消与独立资源。
+验证：`test/foundation-lifecycle.test.mjs`，包括会话在 Kernel.dispose 前挂起的反例；`test/effect-scheduler.test.mjs` 覆盖排队取消与独立资源；`test/task-lifecycle.test.mjs` 的 host material reads 覆盖六条只读入口、关闭准入与存储排空顺序。
 
 ## INV-71 当前历史里的跨载体原文覆盖与紧凑召回
 
