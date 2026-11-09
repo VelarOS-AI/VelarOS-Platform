@@ -1,6 +1,10 @@
+import { isTrue } from '@velaros-ai/core'
+import { AppError, createAbortError } from '@velaros-ai/core/error'
+
 import type { KernelEventSubscription, KernelRegistration } from '../../contract/provides'
 import type { KernelClientEventHandler, KernelClientTransport } from '../../contract/requires'
 import type { KernelServiceHealth } from '../../types/kernel.js'
+import { inProcessTransportClosedFailure } from '../../utils/errors'
 import type {
   CapabilityCallRequest,
   CapabilityCallResponse,
@@ -80,102 +84,195 @@ export interface InProcessKernelTransportApi extends KernelClientTransport {
   ): Promise<ModsInstallFromDirectoryResponse>
   /** 订阅一类内核事件，返回退订句柄。 */
   subscribe(eventType: string, handler: KernelClientEventHandler): Promise<KernelEventSubscription>
-  /** 回收这条传输：清掉本连接上的全部会话。 */
+  /** 关闭本连接的准入、会话、订阅和请求观察；已进入 Service 的工作仍按真实 Promise 收尾。 */
   dispose(): void
 }
 
 /** 进程内传输：同一进程里把客户端接到服务面上，语义与走 socket 的那一跳一致。 */
 export class InProcessKernelTransport implements InProcessKernelTransportApi {
   private readonly sessions = new CapabilitySessionLedger()
+  /** 每个 controller 是独立请求身份；真实工作完成前不因观察取消而删除。 */
+  private readonly requests = new Set<AbortController>()
+  private readonly subscriptions = new Set<KernelRegistration>()
+  private disposed = false
 
   public constructor(private readonly service: InProcessKernelTransportService) {}
 
   public handshake(): Promise<KernelHandshake> {
-    return Promise.resolve(this.service.handshake())
+    return this.request(() => this.service.handshake())
   }
 
   public health(): Promise<KernelServiceHealth> {
-    return this.service.health()
+    return this.request(() => this.service.health())
   }
 
-  public async openCapabilitySession(
+  public openCapabilitySession(
     request: CapabilitySessionOpenRequest
   ): Promise<CapabilitySessionOpenResponse> {
-    const evaluated = await this.service.evaluateCapabilitySessionOpen(request)
-    if (evaluated.status === 'error') return evaluated
-    const session = this.sessions.open(evaluated.request.requires)
-    return {
-      protocolVersion: KernelProtocolVersion,
-      status: 'ok',
-      sessionId: session.sessionId,
-      requires: evaluated.request.requires,
-    }
+    return this.request<CapabilitySessionOpenResponse>(async () => {
+      const evaluated = await this.service.evaluateCapabilitySessionOpen(request)
+      this.assertOpen()
+      if (evaluated.status === 'error') return evaluated
+      const session = this.sessions.open(evaluated.request.requires)
+      return {
+        protocolVersion: KernelProtocolVersion,
+        status: 'ok',
+        sessionId: session.sessionId,
+        requires: evaluated.request.requires,
+      }
+    })
   }
 
   public closeCapabilitySession(
     request: CapabilitySessionCloseRequest
   ): Promise<CapabilitySessionCloseResponse> {
-    return Promise.resolve({
+    return this.request(() => ({
       protocolVersion: KernelProtocolVersion,
       closed: this.sessions.close(request.sessionId),
-    })
+    }))
   }
 
-  public async call(
+  public call(
     request: CapabilityCallRequest,
     signal?: AbortSignal
   ): Promise<CapabilityCallResponse> {
-    if (!this.sessions.covers(request))
-      return {
-        protocolVersion: KernelProtocolVersion,
-        callId: request.callId,
-        status: 'error',
-        error: {
-          code: 'CAPABILITY_NOT_GRANTED',
-          message: `能力 "${request.capabilityId}" 没有绑定在会话 "${request.sessionId}" 上`,
-          retryable: false,
-          details: null,
-        },
-      }
-    return this.service.handleCapabilityCall(request, signal)
+    return this.request<CapabilityCallResponse>((requestSignal) => {
+      if (!this.sessions.covers(request))
+        return {
+          protocolVersion: KernelProtocolVersion,
+          callId: request.callId,
+          status: 'error',
+          error: {
+            code: 'CAPABILITY_NOT_GRANTED',
+            message: `能力 "${request.capabilityId}" 没有绑定在会话 "${request.sessionId}" 上`,
+            retryable: false,
+            details: null,
+          },
+        }
+      return this.service.handleCapabilityCall(request, requestSignal)
+    }, signal)
   }
 
-  public async listMods(request: ModsListRequest): Promise<ModsListResponse> {
+  public listMods(request: ModsListRequest): Promise<ModsListResponse> {
     void request
-    return {
+    return this.request(() => ({
       protocolVersion: KernelProtocolVersion,
       packs: [...this.service.listMods()],
-    }
+    }))
   }
 
-  public async setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse> {
-    const result = await this.service.setModEnabled(request.id, request.enabled)
-    return {
-      protocolVersion: KernelProtocolVersion,
-      ok: result.ok,
-      reloadRequired: result.reloadRequired,
-    }
+  public setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse> {
+    return this.request(async () => {
+      const result = await this.service.setModEnabled(request.id, request.enabled)
+      return {
+        protocolVersion: KernelProtocolVersion,
+        ok: result.ok,
+        reloadRequired: result.reloadRequired,
+      }
+    })
   }
 
-  public async installModFromDirectory(
+  public installModFromDirectory(
     request: ModsInstallFromDirectoryRequest
   ): Promise<ModsInstallFromDirectoryResponse> {
-    const result = await this.service.installModFromDirectory(request.directory)
-    return {
-      protocolVersion: KernelProtocolVersion,
-      pack: result.pack,
-      reloadRequired: result.reloadRequired,
-    }
+    return this.request(async () => {
+      const result = await this.service.installModFromDirectory(request.directory)
+      return {
+        protocolVersion: KernelProtocolVersion,
+        pack: result.pack,
+        reloadRequired: result.reloadRequired,
+      }
+    })
   }
 
   public subscribe(
     eventType: string,
     handler: KernelClientEventHandler
   ): Promise<KernelEventSubscription> {
-    return Promise.resolve(this.service.subscribe(eventType, handler))
+    return this.request(() => {
+      let stopped = false
+      const registration = this.service.subscribe(eventType, (event) => {
+        if (this.disposed || stopped) return
+        return handler(event)
+      })
+      const subscription: KernelRegistration = {
+        dispose: () => {
+          stopped = true
+          if (!this.subscriptions.has(subscription)) return
+          registration.dispose()
+          this.subscriptions.delete(subscription)
+        },
+      }
+      this.subscriptions.add(subscription)
+      return subscription
+    })
   }
 
   public dispose(): void {
-    this.sessions.clear()
+    if (!this.disposed) {
+      this.disposed = true
+      this.sessions.clear()
+      for (const controller of this.requests) controller.abort(inProcessTransportClosedFailure())
+    }
+    const errors: unknown[] = []
+    for (const subscription of [...this.subscriptions]) {
+      try {
+        subscription.dispose()
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+    if (errors.length === 1) throw errors[0]
+    if (errors.length > 1)
+      throw AppError.withFields('CLOSED', '进程内传输的订阅回收失败', { errors })
+  }
+
+  /** 关闭观察和真实完成分开：只有 Service Promise 实际收束才交还请求身份。 */
+  private request<T>(
+    execute: (signal: AbortSignal) => T | PromiseLike<T>,
+    signal?: AbortSignal
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.assertOpen()
+      if (isTrue(signal?.aborted)) throw createAbortError('Kernel 请求已中止')
+      const controller = new AbortController()
+      this.requests.add(controller)
+      const onCallerAbort = () => controller.abort(createAbortError('Kernel 请求已中止'))
+      const onAbort = () => {
+        cleanup()
+        reject(controller.signal.reason)
+      }
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onCallerAbort)
+        controller.signal.removeEventListener('abort', onAbort)
+      }
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+      signal?.addEventListener('abort', onCallerAbort, { once: true })
+      let work: Promise<T>
+      try {
+        work = Promise.resolve(execute(controller.signal))
+      } catch (error) {
+        this.requests.delete(controller)
+        cleanup()
+        reject(error)
+        return
+      }
+      void work.then(
+        (result) => {
+          this.requests.delete(controller)
+          cleanup()
+          resolve(result)
+        },
+        (error: unknown) => {
+          this.requests.delete(controller)
+          cleanup()
+          reject(error)
+        }
+      )
+    })
+  }
+
+  private assertOpen(): void {
+    if (this.disposed) throw inProcessTransportClosedFailure()
   }
 }
