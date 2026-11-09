@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { NodeCommandProvider } from '../impl/kernel/NodeCommandProvider'
 import { createProjectKernel, type EditIntent, type ProjectKernel } from '../index'
-import type { CommandRunResult } from '../types/provider'
+import type { CommandRunInput, CommandRunResult, ProjectRuntimeProviders } from '../types/provider'
 
 type Operation = EditIntent['operation']
 
@@ -68,16 +68,23 @@ interface RecordingKernel {
 }
 
 // 删除、重命名文本文件都能完整回滚，不需要宿主审批，所以不装审批通道；只记下每次 git 调用。
-async function kernelAt(root: string): Promise<RecordingKernel> {
+async function kernelAt(
+  root: string,
+  intercept?: (
+    input: CommandRunInput
+  ) => Promise<CommandRunResult | undefined> | CommandRunResult | undefined,
+  logger?: ProjectRuntimeProviders['logger']
+): Promise<RecordingKernel> {
   const gitCalls: string[][] = []
   const node = new NodeCommandProvider()
   const project = await createProjectKernel({
     root,
     providers: {
+      logger,
       command: {
         async run(input): Promise<CommandRunResult> {
           if (input.command === 'git') gitCalls.push([...(input.args ?? [])])
-          return node.run(input)
+          return (await intercept?.(input)) ?? node.run(input)
         },
       },
     },
@@ -145,6 +152,155 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
     expect(statusLines()).toEqual([' D committed.txt', 'AD kept.txt'])
     expect(indexEntry('kept.txt')).toBe(stagedKept)
     expect(indexEntry('committed.txt')).toBe(committed)
+  })
+
+  test('回滚新建只撤当前 ITA，保留用户普通暂存、空文件暂存和已提交条目', async () => {
+    await initRepository({ committed: { 'README.md': 'baseline\n' } })
+    const { project } = await kernelAt(repository)
+    const created = await applyOperations(
+      project,
+      ...[
+        ['owned.txt', 'task\n'],
+        ['owned-empty.txt', ''],
+        ['staged.txt', 'user\n'],
+        ['staged-empty.txt', ''],
+        ['committed.txt', 'committed\n'],
+      ].map(([path, content]): Operation => ({
+        type: 'create_file',
+        path: path!,
+        content: content!,
+      }))
+    )
+    git('add', '--', 'staged.txt', 'staged-empty.txt')
+    // 空 ITA 与正常暂存空文件的 blob 相同；撤索引必须核 ITA 身份。
+    expect(indexEntry('owned-empty.txt').split(' ')[1]).toBe(
+      indexEntry('staged-empty.txt').split(' ')[1]
+    )
+    git(
+      '-c',
+      'user.name=VelarOS',
+      '-c',
+      'user.email=velaros@example.com',
+      '-c',
+      'commit.gpgsign=false',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '-q',
+      '-m',
+      'user commit',
+      '--only',
+      '--',
+      'committed.txt'
+    )
+    const saved = new Map(
+      ['staged.txt', 'staged-empty.txt', 'committed.txt'].map((path) => [path, indexEntry(path)])
+    )
+
+    const rolledBack = await project.rollback({ transactionId: created.transactionId })
+    expect(rolledBack.gitUntrackedFiles).toEqual(['owned.txt', 'owned-empty.txt'])
+    expect(indexEntry('owned.txt')).toBe('')
+    expect(indexEntry('owned-empty.txt')).toBe('')
+    for (const [path, entry] of saved) expect(indexEntry(path)).toBe(entry)
+  })
+
+  test('ITA 判定到发布持有 canonical 索引锁，竞争暂存和他人锁都不被覆盖', async () => {
+    await initRepository()
+    let raced = false
+    const lockPath = join(repository, '.git', 'index.lock')
+    const { project } = await kernelAt(repository, async (input) => {
+      if (!raced && input.args?.includes('--ita-invisible-in-index')) {
+        raced = true
+        await writeFile(join(repository, 'user-race.txt'), 'user work\n')
+        const competing = spawnSync('git', ['add', '--', 'user-race.txt'], {
+          cwd: repository,
+          encoding: 'utf8',
+          timeout: 5_000,
+          windowsHide: true,
+        })
+        expect(competing.error).toBeUndefined()
+        expect(competing.status).not.toBe(0)
+        expect(competing.stderr).toContain('index.lock')
+      }
+      return undefined
+    })
+    const created = await applyOperations(project, {
+      type: 'create_file',
+      path: 'race.txt',
+      content: 'task\n',
+    })
+    const rolledBack = await project.rollback({ transactionId: created.transactionId })
+    expect(raced).toBe(true)
+    expect(rolledBack.gitUntrackedFiles).toEqual(['race.txt'])
+    expect(existsSync(lockPath)).toBe(false)
+    // 释放锁后用户能正常暂存，文件内容仍是自己的原文。
+    git('add', '--', 'user-race.txt')
+    expect(git('show', ':user-race.txt')).toBe('user work\n')
+
+    const blocked = await applyOperations(project, {
+      type: 'create_file',
+      path: 'blocked.txt',
+      content: 'task\n',
+    })
+    const before = indexEntry('blocked.txt')
+    await writeFile(lockPath, 'another owner', { flag: 'wx' })
+    try {
+      expect(
+        (await project.rollback({ transactionId: blocked.transactionId })).gitUntrackedFiles
+      ).toBeUndefined()
+      expect(await readFile(lockPath, 'utf8')).toBe('another owner')
+      expect(indexEntry('blocked.txt')).toBe(before)
+    } finally {
+      await unlink(lockPath)
+    }
+  })
+
+  test('私有 env 被忽略或执行超时都不发布索引，超时私有文件保留诊断', async () => {
+    await initRepository()
+    for (const mode of ['ignored-env', 'timeout', 'timeout-logger-throws'] as const) {
+      let privateIndex = ''
+      const warnings: string[] = []
+      const { project } = await kernelAt(
+        repository,
+        (input) => {
+          if (input.env?.GIT_INDEX_FILE) {
+            privateIndex = input.env.GIT_INDEX_FILE
+            if (mode === 'ignored-env') delete input.env
+            else return { exitCode: 0, stdout: '', stderr: 'fixture timeout', timedOut: true }
+          }
+          return undefined
+        },
+        mode === 'timeout-logger-throws'
+          ? {
+              warn(event) {
+                warnings.push(event)
+                throw new Error('fixture logger failure')
+              },
+            }
+          : undefined
+      )
+      const path = `${mode}.txt`
+      const created = await applyOperations(project, {
+        type: 'create_file',
+        path,
+        content: 'task\n',
+      })
+      const before = indexEntry(path)
+      expect(
+        (await project.rollback({ transactionId: created.transactionId })).gitUntrackedFiles
+      ).toBeUndefined()
+      expect(indexEntry(path)).toBe(before)
+      expect(existsSync(join(repository, '.git', 'index.lock'))).toBe(false)
+      expect(privateIndex).not.toBe('')
+      expect(existsSync(privateIndex)).toBe(mode !== 'ignored-env')
+      expect(existsSync(`${privateIndex}.diagnostic.json`)).toBe(mode !== 'ignored-env')
+      if (mode === 'timeout-logger-throws') {
+        expect(warnings).toContain('project.git.untrackCreatedFiles.failed')
+        expect(warnings).toContain('project.git.privateIndex.retained')
+        const diagnostic = JSON.parse(await readFile(`${privateIndex}.diagnostic.json`, 'utf8'))
+        expect(diagnostic.error).toContain('fixture timeout')
+      }
+    }
   })
 
   test('rename_file：新路径挂上 intent-to-add，旧路径只在是 intent-to-add 时撤掉', async () => {

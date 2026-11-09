@@ -86,6 +86,86 @@ describe('statistics and certification', () => {
     expect(labStatistics.checkComparability([archive(), drifted]).comparable).toBeFalse()
   })
 
+  test('rejects duplicate run ids before statistics or certification counts and preserves distinct reruns', () => {
+    const original = archive()
+    const copied = labWire.parseRunArchive(JSON.parse(JSON.stringify(original)))
+    const policy = {
+      id: 'unique-evidence',
+      version: 1,
+      requiredJourneyIds: ['journey-a'],
+      minimumReplicatesPerJourney: 2,
+      minimumReliability: 0,
+      maximumAttritionRate: 0,
+      requiredObservationCoverage: {},
+      requireSeparateVerifier: true,
+      requireNativeExecution: true,
+      requireBaseline: false,
+      maximumBaselineRegression: 0,
+    }
+    const certification = {
+      subject: { kind: 'agent' as const, id: 'a', version: '1', digest: 'digest' },
+      policy,
+      subjectExecutorId: 'executor-a',
+      now: () => 1,
+    }
+    for (const duplicate of [original, copied]) {
+      const archives = [original, duplicate]
+      const message = `重复的 runId: ${original.manifest.runId}`
+      expect(() => labStatistics.estimateReliability(archives)).toThrow(message)
+      expect(() => labStatistics.failureDistribution(archives)).toThrow(message)
+      expect(() => labStatistics.checkComparability(archives)).toThrow(message)
+      expect(() => labStatistics.compareExecutors(archives, 'executor-a', 'executor-b')).toThrow(
+        message
+      )
+      expect(() => labCertification.certify({ ...certification, archives })).toThrow(message)
+      expect(() =>
+        labCertification.certify({
+          ...certification,
+          archives: [original],
+          baselineArchives: [duplicate],
+        })
+      ).toThrow(message)
+    }
+    const reruns = [original, archive({ runId: 'independent-rerun' })]
+    expect(labStatistics.estimateReliability(reruns)).toMatchObject({ attempts: 2, successes: 2 })
+    expect(labCertification.certify({ ...certification, archives: reruns }).status).toBe(
+      'certified'
+    )
+  })
+
+  test('reports ambiguous executor pair keys as not comparable without selecting the last run', () => {
+    const a = archive({ executorId: 'a', score: 1 })
+    const b = archive({ executorId: 'b', score: 0 })
+    for (const executorId of ['a', 'b']) {
+      const rerun = archive({ executorId, runId: `${executorId}-rerun`, score: 0.5 })
+      for (const archives of [
+        [a, b, rerun],
+        [rerun, b, a],
+      ]) {
+        const comparison = labStatistics.compareExecutors(archives, 'a', 'b')
+        expect(comparison.decision).toBe('not-comparable')
+        expect(comparison.comparability.reasons).toContain(
+          `${executorId}: 同一配对键对应多次运行，无法唯一配对`
+        )
+        expect(comparison.matchedPairs).toBe(0)
+        expect(comparison.completionDifference.estimate).toBeNull()
+      }
+    }
+    const replicated = labStatistics.compareExecutors(
+      [
+        a,
+        b,
+        archive({ executorId: 'a', replicateIndex: 2, score: 1 }),
+        archive({ executorId: 'b', replicateIndex: 2, score: 0 }),
+      ],
+      'a',
+      'b'
+    )
+    expect(replicated.comparability.comparable).toBe(true)
+    expect(replicated.matchedPairs).toBe(2)
+    expect(replicated.completionDifference.estimate).toBe(1)
+  })
+
   test('requires complete unique declared leg coverage before reporting or counting a journey pass', () => {
     const definition = journey('journey-a', 2)
     const base = archive({ executorId: 'a' })

@@ -9,6 +9,7 @@ import type {
   TurnContextLedgerAppendInput,
   TurnContextLedgerPeekResult,
 } from '../types/activity.js'
+import { snapshotTurnContextDelta } from '../utils/activity.js'
 
 /** 会话活动记录的唯一访问接口。 */
 export interface TurnContextLedgerApi {
@@ -64,7 +65,7 @@ export class TurnContextLedger implements TurnContextLedgerApi {
       occurredAt: input.occurredAt ?? Date.now(),
       label: input.label,
       summaryText: input.summaryText,
-      inspect: input.inspect,
+      inspect: input.inspect && { ...input.inspect },
     }
 
     this.items.push(delta)
@@ -73,7 +74,7 @@ export class TurnContextLedger implements TurnContextLedgerApi {
       this.droppedBeforeSeq = this.items[0]!.seq
     }
 
-    return delta
+    return snapshotTurnContextDelta(delta)
   }
 
   /**
@@ -111,7 +112,7 @@ export class TurnContextLedger implements TurnContextLedgerApi {
       }
 
     const afterSeq = Math.max(0, input.afterSeq)
-    const deltas = this.items.filter((item) => item.seq > afterSeq)
+    const deltas = this.items.filter((item) => item.seq > afterSeq).map(snapshotTurnContextDelta)
     const hasGap = isNotNull(this.droppedBeforeSeq) && afterSeq + 1 < this.droppedBeforeSeq
 
     return {

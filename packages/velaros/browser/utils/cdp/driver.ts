@@ -10,6 +10,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { BrowserFetchLimits } from '../../contract/constants.js'
 import type { BrowserFrameInfo } from '../../types/browser.js'
 import type { BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
 import type { CdpPageFrame, CdpPageFrameTree } from '../../types/cdp.js'
@@ -122,22 +123,52 @@ export function readNodeId(value: unknown): Nullable<number> {
   return Math.round(value)
 }
 
-/** 拼一段在页面里带 cookie 抓资源的脚本。 */
-export function buildFetchResourceScript(options: BrowserPageDriverFetchResourceOptions): string {
+/** 本次调用的远端对象持有 controller 与 reader；函数经 callFunctionOn 绑定到该对象。 */
+export function buildFetchResourceFunction(options: BrowserPageDriverFetchResourceOptions): string {
   const url = JSON.stringify(options.url)
   const referer = JSON.stringify(options.referer?.trim() || null)
 
-  return `;(async () => {
+  return `async function () {
 const resourceUrl = ${url};
 const referer = ${referer};
+const controller = this.controller;
 const fetchOptions = {
   credentials: 'include',
   cache: 'no-store',
+  signal: controller.signal,
 };
 if (referer) fetchOptions.referrer = referer;
-const response = await fetch(resourceUrl, fetchOptions);
-const buffer = await response.arrayBuffer();
-const bytes = new Uint8Array(buffer);
+const limit = ${BrowserFetchLimits.fileBytes};
+let reader = null;
+let streamEnded = false;
+const chunks = [];
+let totalBytes = 0;
+try {
+  controller.signal.throwIfAborted();
+  const response = await fetch(resourceUrl, fetchOptions);
+  controller.signal.throwIfAborted();
+  reader = response.body?.getReader();
+  this.reader = reader;
+  if (!reader) streamEnded = true;
+  if (reader) {
+    for (;;) {
+      controller.signal.throwIfAborted();
+      const { done, value } = await reader.read();
+      controller.signal.throwIfAborted();
+      if (done) { streamEnded = true; break; }
+      totalBytes += value.byteLength;
+      if (totalBytes > limit) {
+        return { limitExceededBytes: totalBytes };
+      }
+      chunks.push(value);
+    }
+  }
+const bytes = new Uint8Array(totalBytes);
+let offset = 0;
+for (const chunk of chunks) {
+  bytes.set(chunk, offset);
+  offset += chunk.byteLength;
+}
 let binary = '';
 const chunkSize = 0x8000;
 for (let index = 0; index < bytes.length; index += chunkSize) {
@@ -150,7 +181,16 @@ return {
   contentLength: Number(response.headers.get('content-length') || bytes.byteLength),
   data: btoa(binary),
 };
-})()`
+} finally {
+  if (!streamEnded) {
+    controller.abort();
+    // arch-guard:silent-catch-ok 取消已发起，清理失败不能掩盖超限或原始传输错误。
+    void reader?.cancel().catch(() => {});
+  }
+  this.reader = null;
+  reader?.releaseLock();
+}
+}`
 }
 
 /** 把鼠标键名翻成 CDP 认的取值。 */

@@ -26,7 +26,7 @@ export class PollingDriver implements LabDriver {
   /** 调用方中断时报出去的说明。 */
   private static readonly InterruptedDetail = '运行被中断信号终止'
 
-  /** 每个会话上一次收敛时看到的原生栅栏，用来判断这一段有没有推进。 */
+  /** 每个会话当前段发送前的原生栅栏，用来判断这一段有没有推进。 */
   private readonly fences = new Map<string, string | null>()
 
   constructor(
@@ -73,8 +73,10 @@ export class PollingDriver implements LabDriver {
     return this.adapter.prepare(session, setup)
   }
 
-  public send(session: SessionHandle, leg: LegSpec): Promise<void> {
-    return this.adapter.send(session, leg)
+  public async send(session: SessionHandle, leg: LegSpec): Promise<void> {
+    const before = await this.adapter.readState(session)
+    this.fences.set(session.id, before.revision)
+    await this.adapter.send(session, leg)
   }
 
   public collect(session: SessionHandle, phase: ObservationPhase): Promise<Observation> {

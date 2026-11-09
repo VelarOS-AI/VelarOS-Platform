@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 
 import { done, marker, modelText, runtimeFrame, turn } from './support/model-turn.mjs'
 import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
@@ -405,10 +406,18 @@ test('runtime shutdown attempts kernel and storage cleanup even when a session c
     closed = true
     await close()
   }
+  const failure = Error('session close fault')
   f.session.close = async () => {
-    throw Error('session close fault')
+    throw failure
   }
-  await assert.rejects(f.runtime.close(), AggregateError)
+  await assert.rejects(f.runtime.close(), (error) => {
+    assert(error instanceof AppError)
+    assert.equal(error.code, 'UNAVAILABLE')
+    assert.deepEqual(error.errors, [failure])
+    assert.equal(error.errors[0], failure)
+    assert.equal(error.cause, undefined)
+    return true
+  })
   assert.equal(closed, true)
   assert.equal(disposed, true)
   assert.equal(f.runtime.getSession('main'), undefined)

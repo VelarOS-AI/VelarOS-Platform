@@ -14,18 +14,19 @@ import { ProjectTuning } from './tuning.js'
 
 /**
  * 整次扫描必须在一段受时限保护的脚本里跑完：`Script.runInContext` 的 timeout 只覆盖这一次调用，
- * 把扫描循环留在宿主里逐次调用 vm 就没有保护。空匹配按码点前进，与 `nextCodePointOffset` 同口径。
+ * 把扫描循环留在宿主里逐次调用 vm 就没有保护。默认空匹配按码点前进，逐行搜索可保留 UTF-16 单元前进。
  */
 const scanScript = new Script(
   `(function () {
-  const regex = new RegExp(pattern, flags)
+  const regex = cachedRegex ?? (cachedRegex = new RegExp(pattern, flags))
+  regex.lastIndex = 0
   const matches = []
   let match
   while (matches.length < limit * 2 && (match = regex.exec(content)) !== null) {
     matches.push(match.index, match[0].length)
     if (match[0].length === 0) {
       const codePoint = content.codePointAt(regex.lastIndex)
-      regex.lastIndex += codePoint !== undefined && codePoint > 0xffff ? 2 : 1
+      regex.lastIndex += emptyMatchAdvance === 'code-point' && codePoint !== undefined && codePoint > 0xffff ? 2 : 1
     }
   }
   return matches
@@ -69,20 +70,42 @@ export function execGuardedRegex(
   limit: number
 ): GuardedRegexMatch[] {
   if (limit <= 0) return []
+  return createGuardedRegexMatcher(pattern, flags)(content, limit)
+}
+
+/** 本次匹配持有独立上下文与编译后的正则；每次扫描仍整体受时限保护，结果最多取剩余额度。 */
+export function createGuardedRegexMatcher(
+  pattern: string,
+  flags: string,
+  emptyMatchAdvance: 'code-point' | 'code-unit' = 'code-point'
+): (content: string, limit: number) => GuardedRegexMatch[] {
   const timeoutMs = ProjectTuning.regex.executionTimeoutMs
-  let flat: number[]
-  try {
-    flat = scanScript.runInContext(createContext({ pattern, flags, content, limit }), {
-      timeout: timeoutMs,
-    }) as number[]
-  } catch (error) {
-    throw isSyntaxError(error)
-      ? invalidPattern(pattern, AppError.getMessage(error))
-      : patternTimedOut(pattern, timeoutMs)
+  const context = createContext({
+    pattern,
+    flags,
+    emptyMatchAdvance,
+    cachedRegex: null,
+    content: '',
+    limit: 0,
+  })
+  return (content, limit) => {
+    if (limit <= 0) return []
+    context.content = content
+    context.limit = limit
+    let flat: number[]
+    try {
+      flat = scanScript.runInContext(context, { timeout: timeoutMs }) as number[]
+    } catch (error) {
+      throw isSyntaxError(error)
+        ? invalidPattern(pattern, AppError.getMessage(error))
+        : patternTimedOut(pattern, timeoutMs)
+    } finally {
+      context.content = ''
+    }
+    const matches: GuardedRegexMatch[] = []
+    for (let index = 0; index + 1 < flat.length; index += 2) {
+      matches.push({ index: flat[index]!, length: flat[index + 1]! })
+    }
+    return matches
   }
-  const matches: GuardedRegexMatch[] = []
-  for (let index = 0; index + 1 < flat.length; index += 2) {
-    matches.push({ index: flat[index]!, length: flat[index + 1]! })
-  }
-  return matches
 }

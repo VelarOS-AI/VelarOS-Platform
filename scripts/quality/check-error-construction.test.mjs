@@ -47,18 +47,42 @@ function fixture(t) {
 test('tracked and untracked Unicode names and spaces retain their actual Git path', (t) => {
   const f = fixture(t)
   const tracked = ['packages/example/引擎.ts', 'packages/example/with space.ts']
-  for (const path of tracked) f.write(path, 'export const failure = new Error("actual error")')
+  const names = [
+    'Error',
+    'AggregateError',
+    'TypeError',
+    'RangeError',
+    'SyntaxError',
+    'EvalError',
+    'URIError',
+  ]
+  const source = (prefix) =>
+    names
+      .map(
+        (name, index) =>
+          `export const failure${index} = ${prefix}${name}(${name === 'AggregateError' ? '[], ' : ''}"actual error")`
+      )
+      .join('\n')
+  f.write(tracked[0], source('new '))
+  f.write(tracked[1], source(''))
   f.git('add', '--', '.')
   const untracked = 'packages/example/待检.ts'
-  f.write(untracked, 'export const failure = Error("actual call")')
+  f.write(
+    untracked,
+    `${source('new globalThis.')}\n${source('globalThis.').replaceAll('failure', 'called')}\nexport const bracket = new (globalThis['RangeError'])("actual error")\nexport const receiver = new (globalThis).RangeError("actual error")\nexport const indexedReceiver = (globalThis)['TypeError']("actual error")`
+  )
   const result = f.run()
   assert.equal(result.error, undefined)
   assert.equal(result.status, 1, result.stdout + result.stderr)
-  assert.match(result.stderr, /失败：3 处/)
+  assert.match(result.stderr, /失败：31 处/)
+  for (const name of names) assert.ok(result.stderr.includes(name), result.stderr)
   for (const path of [...tracked, untracked])
     assert.ok(result.stderr.includes(`${path}:1:`), result.stderr)
   for (const path of [...tracked, untracked])
-    f.write(path, 'export const text = "new Error(does not execute)" // Error("comment")')
+    f.write(
+      path,
+      `export const text = ${JSON.stringify(source('new globalThis.'))} // new AggregateError([]) / TypeError("comment")`
+    )
   const clean = f.run()
   assert.equal(clean.error, undefined)
   assert.equal(clean.status, 0, clean.stdout + clean.stderr)

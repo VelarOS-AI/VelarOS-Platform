@@ -19,7 +19,7 @@ function createMemorySource(label: string): string {
     label: '${label}',
     description: '内存注册的探针 provider',
     defaultModel: 'probe-model',
-    models: [{ id: 'probe-model', label: 'Probe Model' }]
+    models: [{ id: 'probe-model', label: 'Probe Model', inputModalities: ['text'] }]
   },
   createLanguageModelFactory() {
     return function createLanguageModel() {
@@ -34,6 +34,39 @@ function createRegistry(): ProviderScriptRegistry {
 }
 
 describe('内存 provider script', () => {
+  test('公开描述符是同代稳定的纯数据快照，清单读取不能改写执行状态', () => {
+    const registry = createRegistry()
+    registry.registerSource({
+      source: createMemorySource('Probe'),
+      scriptPath: MemoryScriptPath,
+    })
+    const descriptor = registry.getProviderScript(MemoryProviderId)
+    if (!descriptor) throw new Error('fixture provider was not registered')
+
+    expect(Object.keys(descriptor)).toEqual(['manifest'])
+    expect(structuredClone(descriptor)).toEqual(descriptor)
+    expect(registry.getProviderScript(MemoryProviderId)).toBe(descriptor)
+    expect(Reflect.set(descriptor.manifest, 'label', 'changed')).toBe(false)
+    expect(Reflect.set(descriptor.manifest.models, '0', { id: 'changed' })).toBe(false)
+    expect(Reflect.set(descriptor.manifest.models[0], 'id', 'changed')).toBe(false)
+    expect(Reflect.set(descriptor.manifest.models[0].inputModalities!, '0', 'image')).toBe(false)
+
+    const manifests = registry.listProviderManifests()
+    manifests[0].label = 'changed'
+    manifests[0].models[0].inputModalities = ['image']
+    const loaded = registry.requireProviderScript(MemoryProviderId)
+    expect(loaded.manifest.label).toBe('Probe')
+    expect(loaded.manifest.models[0].inputModalities).toEqual(['text'])
+    expect(registry.getProviderScript(MemoryProviderId)).toBe(descriptor)
+
+    registry.registerSource({
+      source: createMemorySource('Probe'),
+      scriptPath: MemoryScriptPath,
+    })
+    expect(registry.getProviderScript(MemoryProviderId)).toEqual(descriptor)
+    expect(registry.getProviderScript(MemoryProviderId)).not.toBe(descriptor)
+  })
+
   test('重配宿主、重配来源与重载之后仍然在', () => {
     const registry = createRegistry()
     const providerId = registry.registerSource({

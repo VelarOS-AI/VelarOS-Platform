@@ -274,13 +274,40 @@ test('trace pages use one metadata snapshot and query only associated execution 
       return storage.load(id)
     },
     get: (...args) => storage.get(...args),
+    has: (...args) => storage.has(...args),
   }
+  const diff = '+ visible project change\n'.repeat(225)
   const journal = {
     list: async (sessionId, id) => {
       assert.equal(sessionId, 's')
       assert.equal(id, executionId)
       lookups.push(id)
-      return []
+      return [
+        {
+          prepared: {
+            id: 'project-call',
+            executionId,
+            binding: { moduleId: 'velaros:project' },
+            operation: 'commit',
+            input: {},
+          },
+          receipt: {
+            outcome: 'succeeded',
+            effect: 'committed',
+            value: { diff },
+            diagnostic: {
+              code: 'PROJECT_TRANSACTION_COMMITTED',
+              message: JSON.stringify({
+                root: 'project',
+                transactionId: 'transaction',
+                lifecycle: 'applied',
+                changedFiles: ['file.txt'],
+                omittedFiles: 0,
+              }),
+            },
+          },
+        },
+      ]
     },
   }
   const page = await new RuntimeTrace('s', port, journal).page({ limit: 3 })
@@ -292,6 +319,50 @@ test('trace pages use one metadata snapshot and query only associated execution 
   assert(page.turns.every((turn) => Object.values(turn.timing).every((value) => value === null)))
   assert.equal(page.nextAfter, null)
   assert.equal(page.turns[0].nextTurnId, requests[1].ref.id)
+  const maxChars = 16_384
+  const seen = []
+  let after = 0
+  for (;;) {
+    const bounded = await new RuntimeTrace('s', port, journal).page({ after, limit: 3, maxChars })
+    let total = 0
+    for (const turn of bounded.turns) {
+      total += [
+        turn.request,
+        turn.response,
+        turn.decision,
+        ...turn.records,
+        ...turn.invocations,
+      ].reduce((sum, record) => sum + (record?.body?.length ?? 0), 0)
+      total += turn.invocations.reduce(
+        (sum, call) =>
+          sum +
+          call.summary.input.length +
+          call.summary.output.length +
+          (call.summary.projectChange?.diff.length ?? 0),
+        0
+      )
+      total += turn.executions.reduce(
+        (sum, execution) => sum + execution.source.length + (execution.processOutput?.length ?? 0),
+        0
+      )
+      total +=
+        (turn.observation.registration?.source.length ?? 0) +
+        (turn.observation.run?.source.length ?? 0)
+      assert.equal(turn.invocations[0].summary.projectChange.diff, diff)
+      assert(turn.records.some((record) => record.ref.id === source.ref.id))
+      assert(turn.records.some((record) => record.ref.id === result.ref.id))
+      seen.push(turn.turnId)
+    }
+    assert(total <= maxChars, 'project diffs share the body budget across turns')
+    assert(seen.length <= requests.length)
+    if (bounded.nextAfter === null) break
+    assert(bounded.nextAfter > after, 'the next page advances without losing request references')
+    after = bounded.nextAfter
+  }
+  assert.deepEqual(
+    seen,
+    requests.map((request) => request.ref.id)
+  )
 })
 
 test('execution summaries follow the declarations of their own turn and say why a script failed', async (t) => {

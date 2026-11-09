@@ -132,7 +132,7 @@ declare module 'velaros:browser' {
    */
   export function handleDialog(input: BrowserDialogInput): Promise<BrowserHandleDialogResult>
 
-  /** 保存或取消一次下载。
+  /** 接受保存或取消一次下载。返回 handled 与 accepted 只表示决策已处理、保存请求已受理，不代表文件已保存。
    */
   export function handleDownload(input: BrowserDownloadDecisionInput): Promise<BrowserHandleDownloadResult>
 
@@ -539,7 +539,7 @@ declare module 'velaros:browser' {
     cancel?: boolean
   }
 
-  /** 下载处理的结果：savePath 是存到的位置，state 是下载的最终状态。 */
+  /** 下载决策的处理结果：handled 表示决策已处理，state 为 accepted 表示接受保存请求，savePath 是请求的目标路径；这些字段均不代表文件已保存。 */
   interface BrowserHandleDownloadResult {
     handled: boolean
     eventId: string

@@ -149,7 +149,7 @@ export interface DevtoolsOperationsApi {
     input: DevtoolsCreateUserScriptInput,
     ctx: BrowserOperationContext
   ): Promise<BrowserUserScriptMutationResult>
-  /** @AgentView 改一个用户脚本。
+  /** @AgentView 改一个用户脚本。已启用脚本的执行面确有变化时先停用；停用成功后的更新失败可能保持停用，先用 userScripts 核对状态，重新启用仍须用户明确同意。
    * @OperationEffect write
    */
   updateUserScript(

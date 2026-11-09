@@ -51,6 +51,7 @@ import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 import type { BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import type { BrowserInteractionEngine } from './BrowserInteractionEngine'
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
+import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 
 type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
   session?: Electron.Session
@@ -127,7 +128,9 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     private readonly pageWaiter: BrowserPageWaiter,
     private readonly diagnosticsRecorder: BrowserDiagnosticsRecorder,
     targetRefs: BrowserTargetRefStore,
-    private readonly interaction: BrowserInteractionEngine
+    private readonly interaction: BrowserInteractionEngine,
+    private readonly fetchResponse: typeof electron.net.fetch = (url, options) =>
+      electron.net.fetch(url, options)
   ) {
     super(electronKernel, targetRefs, diagnosticsRecorder)
   }
@@ -221,11 +224,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     abortSignal?.throwIfAborted()
     const externalSession = this.kernel.getExternalPageSession(sessionId)
     const targetUrl = normalizeFetchResourceUrl(options.url)
-    const artifactPath = await resolveWorkspaceFilePath(
-      context.workspaceRoot,
-      options.savePath,
-      'savePath'
-    )
+    await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath')
     if (externalSession) return super.fetchResource(sessionId, context, options, abortSignal)
 
     const session = await this.electronKernel.getLivePageSession(sessionId, abortSignal)
@@ -236,23 +235,24 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
 
     const fetchOptions: ElectronNetFetchOptions = {
       session: session.webContents.session,
+      ...(abortSignal ? { signal: abortSignal } : {}),
       headers: {
         Referer: referer,
       },
     }
-    const response = await electron.net.fetch(targetUrl, fetchOptions)
+    const response = await this.fetchResponse(targetUrl, fetchOptions)
 
     const status = response.status
-    if (!response.ok) {
-      throw new AppError('VALIDATION', `资源下载失败：HTTP ${status}`, undefined, {
-        url: targetUrl,
-        status,
-      })
-    }
-
-    const contentLengthHeader = response.headers.get('content-length')
-    if (contentLengthHeader) {
-      const contentLength = Number(contentLengthHeader)
+    let bytes: Buffer
+    try {
+      abortSignal?.throwIfAborted()
+      if (!response.ok) {
+        throw new AppError('VALIDATION', `资源下载失败：HTTP ${status}`, undefined, {
+          url: targetUrl,
+          status,
+        })
+      }
+      const contentLength = Number(response.headers.get('content-length'))
       if (Number.isFinite(contentLength) && contentLength > BrowserFetchLimits.fileBytes) {
         throw new AppError(
           'VALIDATION',
@@ -261,25 +261,69 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
           { url: targetUrl, bytes: contentLength }
         )
       }
+      const chunks: Buffer[] = []
+      let receivedBytes = 0
+      const reader = response.body?.getReader()
+      if (reader) {
+        const cancelReader = (): void => {
+          void reader.cancel(abortSignal?.reason).catch((error) => {
+            this.log.debug('取消资源读取未完成', { error: AppError.from(error).message })
+          })
+        }
+        abortSignal?.addEventListener('abort', cancelReader, { once: true })
+        try {
+          if (abortSignal?.aborted) cancelReader()
+          while (true) {
+            abortSignal?.throwIfAborted()
+            const chunk = await reader.read()
+            abortSignal?.throwIfAborted()
+            if (chunk.done) break
+            receivedBytes += chunk.value.byteLength
+            if (receivedBytes > BrowserFetchLimits.fileBytes) {
+              throw new AppError(
+                'VALIDATION',
+                `资源过大（至少 ${receivedBytes} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
+                undefined,
+                { url: targetUrl, bytes: receivedBytes }
+              )
+            }
+            chunks.push(Buffer.from(chunk.value))
+          }
+        } finally {
+          abortSignal?.removeEventListener('abort', cancelReader)
+          reader.releaseLock()
+        }
+      }
+      bytes = Buffer.concat(chunks, receivedBytes)
+    } catch (error) {
+      try {
+        await response.body?.cancel()
+      } catch (cleanupError) {
+        this.log.debug('停止资源下载未完成', { error: AppError.from(cleanupError).message })
+      }
+      throw error
     }
 
-    const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.byteLength > BrowserFetchLimits.fileBytes) {
-      throw new AppError(
-        'VALIDATION',
-        `资源过大（${bytes.byteLength} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
-        undefined,
-        { url: targetUrl, bytes: bytes.byteLength }
-      )
-    }
-
+    abortSignal?.throwIfAborted()
+    const artifactPath = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
+    abortSignal?.throwIfAborted()
     await mkdir(dirname(artifactPath.path), { recursive: true })
-    await writeFile(artifactPath.path, bytes)
+    const destination = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
+    abortSignal?.throwIfAborted()
+    await writeFile(destination.path, bytes)
 
     return {
       url: targetUrl,
-      path: artifactPath.path,
-      relativePath: artifactPath.relativePath,
+      path: destination.path,
+      relativePath: destination.relativePath,
       mimeType: response.headers.get('content-type'),
       bytes: bytes.byteLength,
       status,
@@ -397,7 +441,12 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
         files: [absolutePath],
       })
     } finally {
-      if (!wasAttached && webContents.debugger.isAttached()) {
+      if (
+        !wasAttached &&
+        !webContents.isDestroyed() &&
+        !electronDebuggerHolds.hasPersistentHold(webContents) &&
+        webContents.debugger.isAttached()
+      ) {
         try {
           webContents.debugger.detach()
         } catch (error) {

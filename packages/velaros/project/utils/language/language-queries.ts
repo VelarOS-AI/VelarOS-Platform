@@ -118,6 +118,7 @@ export async function analyzeImpactWithService(
     ),
   ]
   const importerRecords: LanguageImportRecord[] = []
+  let importersTruncated = false
   for (const targetPath of targetPaths.slice(0, DevelopmentTuning.impact.maxDeclarationTargets)) {
     const importers = await service.findImporters(ctx, {
       targetPath,
@@ -128,6 +129,7 @@ export async function analyzeImpactWithService(
       limit,
     })
     importerRecords.push(...importers.importers)
+    importersTruncated ||= importers.truncated || importers.fileListTruncated
   }
   const seenImporters = new Set<string>()
   const importers = importerRecords.filter((record) => {
@@ -160,6 +162,7 @@ export async function analyzeImpactWithService(
       definitions.truncated ||
       references.truncated ||
       definitions.fileListTruncated ||
+      importersTruncated ||
       importers.length > limit,
   }
 }

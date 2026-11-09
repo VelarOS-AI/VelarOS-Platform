@@ -69,6 +69,28 @@ void describe('键位表', () => {
     assert.deepEqual([chinese.code, chinese.windowsVirtualKeyCode, chinese.text], ['', 0, '中'])
   })
 
+  void test('Shift 的数字和标点使用同一键位的上档字符，抬键保留相同 key', () => {
+    for (const [plain, shifted] of [
+      ['1', '!'],
+      ['0', ')'],
+      ['/', '?'],
+      ['[', '{'],
+      ['=', '+'],
+      [';', ':'],
+    ] as const) {
+      const definition = key(plain)
+      const down = buildKeyDownEvent(definition, new Set(['Shift']), false)
+      const up = buildKeyUpEvent(definition, new Set(['Shift']))
+      assert.equal(down.key, shifted)
+      assert.equal(down.text, shifted)
+      assert.equal(down.unmodifiedText, plain)
+      assert.equal(up.key, shifted)
+      assert.equal(down.code, up.code)
+      assert.equal(down.modifiers, 8)
+    }
+    assert.equal(buildKeyDownEvent(key('?'), new Set(), false).text, '?')
+  })
+
   void test('修饰键抬起的事件按左边的键位；认不出的键名与组合键里的主键一起核对', () => {
     const shiftUp = buildKeyUpEvent(key('Shift'), new Set())
     assert.deepEqual([shiftUp.type, shiftUp.code, shiftUp.location], ['keyUp', 'ShiftLeft', 1])

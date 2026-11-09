@@ -57,7 +57,7 @@ declare module 'velaros:office-documents' {
   }
 
   /**
-   * 生成 PowerPoint（.pptx）：outputPath 必填（没写扩展名补 .pptx）；给 content（Markdown 或纯文本：# 标题开新页、--- 分页，自动排版）
+   * 生成 PowerPoint（.pptx）：outputPath 必填（没写扩展名补 .pptx）；给 content（Markdown 或纯文本：# 标题开新页、--- 分页，自动排版最多 200 页，单页标题最多 200 字符、正文最多 2800 字符，超限写前拒绝，正文不会静默裁掉）
    * 或 slides（结构化页面，最多 200 页，每页最多 200 个元素），只给一样。template 选自动排版的风格（缺省 modern），
    * layout 选页面比例（缺省 LAYOUT_WIDE，13.333×7.5 英寸），theme 改标题与正文字体（PptxGenJS 的 headFontFace、bodyFontFace）。
    * title 最多 200 个字符，author 最多 120 个字符，不给就留空；rtlMode 是从右往左排版。文件已在时要 overwrite: true 才覆盖。

@@ -66,7 +66,7 @@ export type BrowserSearchEngineId = 'google' | 'bing'
 export interface BrowserActionPolicyConfig {
   /** 没有命中 allow/deny 时的默认策略。 */
   default?: LooseOptional<'allow' | 'deny'>
-  /** 允许的动作类别。非空时未列入动作默认拒绝，除非 default=allow。 */
+  /** 允许的动作类别。非空时只放行列入的动作；default 只在允许表为空时参与判定。 */
   allow?: LooseOptional<string[]>
   /** 拒绝的动作类别；优先级高于 allow。 */
   deny?: LooseOptional<string[]>
@@ -739,7 +739,7 @@ export interface BrowserHandleDownloadOptions {
   savePath?: string
 }
 
-/** @AgentView 下载处理的结果：savePath 是存到的位置，state 是下载的最终状态。 */
+/** @AgentView 下载决策的处理结果：handled 表示决策已处理，state 为 accepted 表示接受保存请求，savePath 是请求的目标路径；这些字段均不代表文件已保存。 */
 export interface BrowserHandleDownloadResult {
   handled: boolean
   eventId: string

@@ -102,10 +102,10 @@ async function readFrame(urlPart = 'checkout') {
   return evaluate({ script: 'document.body.innerText.slice(0, 2000)', frame: frame.id })
 }
 
-// 点下载链接，等下载事件出来，存进站点工作区。
+// 点下载链接，等下载事件出来，接受保存到站点工作区的请求；返回 accepted 不代表文件已保存。
 async function saveDownload(linkText = '下载报告', savePath = 'downloads/report.pdf') {
   await click({ target: { text: linkText } })
   const event = await waitForEvent({ kind: 'download', timeoutMs: 10000 })
   const handled = await handleDownload({ eventId: event.id, savePath })
-  return { saved: handled.handled, path: handled.savePath }
+  return { accepted: handled.handled && handled.state === 'accepted', path: handled.savePath }
 }

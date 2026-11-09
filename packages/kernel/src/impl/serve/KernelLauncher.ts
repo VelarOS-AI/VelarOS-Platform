@@ -122,11 +122,17 @@ export class KernelLauncher implements KernelLauncherApi {
   public async ensureRunning(): Promise<KernelLauncherResult> {
     this.assertUsable()
     const existing = await this.tryConnect()
+    if (this.disposed && isNotUndefined(existing)) await existing.client.dispose()
+    this.assertUsable()
     if (isNotUndefined(existing)) return { ...existing, started: false }
 
     const target = await this.options.resolver.resolveActiveVersion()
+    this.assertUsable()
     const child = this.spawnKernel(target)
     this.child = child
+    // 注入的 spawn 也可能同步触发宿主关闭；迟到进程仍交回同一停止路径。
+    if (this.disposed) await this.stop()
+    this.assertUsable()
 
     let exitFailure: KernelClientError | undefined
     child.once('exit', (code, signal) => {
@@ -140,6 +146,7 @@ export class KernelLauncher implements KernelLauncherApi {
 
     const deadline = this.now() + this.startTimeoutMs
     while (this.now() < deadline) {
+      this.assertUsable()
       // 子进程可能在监听器挂载前退出，因此循环内也要检查退出状态。
       if (isUndefined(exitFailure) && hasChildProcessExited(child)) {
         exitFailure = new KernelClientError({
@@ -151,10 +158,13 @@ export class KernelLauncher implements KernelLauncherApi {
       }
       if (isNotUndefined(exitFailure)) throw exitFailure
       const connected = await this.tryConnect()
+      if (this.disposed && isNotUndefined(connected)) await connected.client.dispose()
+      this.assertUsable()
       if (isNotUndefined(connected)) return { ...connected, process: child, started: true }
       await this.sleep(this.pollIntervalMs)
     }
 
+    this.assertUsable()
     await this.stop()
     throw new KernelClientError({
       code: KernelClientErrorCodes.kernelStartTimeout,

@@ -333,22 +333,11 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
    * 视口空间，与页面内 getBoundingClientRect/elementFromPoint 同一坐标系。
    * 持久 attach、不主动 detach（与 emulation/network hold 的语义一致）。
    */
-  private async dispatchCdpMouseEvents(events: Array<Record<string, unknown>>): Promise<boolean> {
-    if (this.webContents.isDestroyed()) return false
-
-    try {
-      if (!this.webContents.debugger.isAttached()) {
-        this.webContents.debugger.attach('1.3')
-      }
-      for (const event of events) {
-        await this.debuggerSend('Input.dispatchMouseEvent', event)
-      }
-      return true
-    } catch (error) {
-      embeddedDriverLog.debug('CDP 鼠标事件派发失败，回退 sendInputEvent', {
-        error: AppError.from(error).message,
-      })
-      return false
+  private async dispatchCdpMouseEvents(events: Array<Record<string, unknown>>): Promise<void> {
+    this.ensureInputDebugger()
+    // 任一事件都可能已经生效；失败后不能换坐标系重放整段输入。
+    for (const event of events) {
+      await this.debuggerSend('Input.dispatchMouseEvent', event)
     }
   }
 
@@ -361,34 +350,11 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     this.webContents.focus()
 
     const buttons = cdpMouseButtonsMask(button)
-    const dispatched = await this.dispatchCdpMouseEvents([
+    await this.dispatchCdpMouseEvents([
       { type: 'mouseMoved', x, y, button: 'none', buttons: 0, modifiers },
       { type: 'mousePressed', x, y, button, buttons, clickCount, modifiers },
       { type: 'mouseReleased', x, y, button, buttons: 0, clickCount, modifiers },
     ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x,
-        y,
-        button,
-        clickCount,
-      })
-    }
 
     options.onPointerEvent?.({ x, y, phase: 'down', button })
     options.onPointerEvent?.({ x, y, phase: 'up', button })
@@ -399,18 +365,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     const y = Math.round(options.y)
     this.webContents.focus()
 
-    const dispatched = await this.dispatchCdpMouseEvents([
-      { type: 'mouseMoved', x, y, button: 'none', buttons: 0 },
-    ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x,
-        y,
-        button: 'left',
-        clickCount: 1,
-      })
-    }
+    await this.dispatchCdpMouseEvents([{ type: 'mouseMoved', x, y, button: 'none', buttons: 0 }])
 
     options.onPointerEvent?.({ x, y, phase: 'move' })
   }
@@ -433,7 +388,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
 
     const modifiers = options.modifiers ?? 0
     this.webContents.focus()
-    const dispatched = await this.dispatchCdpMouseEvents([
+    await this.dispatchCdpMouseEvents([
       { type: 'mouseMoved', x: startX, y: startY, button: 'none', buttons: 0, modifiers },
       {
         type: 'mousePressed',
@@ -462,38 +417,6 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
         modifiers,
       },
     ])
-    if (!dispatched) {
-      this.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: startX,
-        y: startY,
-        button: 'left',
-        clickCount: 1,
-      })
-      this.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x: startX,
-        y: startY,
-        button: 'left',
-        clickCount: 1,
-      })
-      for (const point of path) {
-        this.webContents.sendInputEvent({
-          type: 'mouseMove',
-          x: point.x,
-          y: point.y,
-          button: 'left',
-          clickCount: 1,
-        })
-      }
-      this.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x: endX,
-        y: endY,
-        button: 'left',
-        clickCount: 1,
-      })
-    }
 
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'move' })
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'down', button: 'left' })

@@ -640,39 +640,23 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         failureReason: 'not-interactable',
       }
 
-    try {
-      if (input.externalSession) {
-        await this.tryMoveSystemPointer(
-          input.driver,
-          clickPoint,
-          input.externalSession.visible,
-          220
-        )
-      }
-      await input.driver.clickCoordinates({
-        x: clickPoint.x,
-        y: clickPoint.y,
-        button: input.options.button ?? 'left',
-        clickCount: input.options.clickCount ?? 1,
-        modifiers: this.heldModifiers(input.sessionId),
-        waitForNavigation: false,
-        onPointerEvent: input.externalSession
-          ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'click')
-          : undefined,
-      })
-      this.rememberPointer(input.sessionId, clickPoint)
-
-      return input.result
-    } catch (error) {
-      this.log.debug('坐标目标点击失败，回退 DOM click', {
-        error: AppError.from(error).message,
-      })
-
-      return input.driver.executeJavaScript<BrowserTargetActionResult>(
-        buildTargetActionScript(input.options, { clickMode: 'dom' }),
-        true
-      )
+    if (input.externalSession) {
+      await this.tryMoveSystemPointer(input.driver, clickPoint, input.externalSession.visible, 220)
     }
+    // 能力选择已在页面脚本运行前完成；派发后的失败可能已有真实输入，不能再 DOM click。
+    await input.driver.clickCoordinates({
+      x: clickPoint.x,
+      y: clickPoint.y,
+      button: input.options.button ?? 'left',
+      clickCount: input.options.clickCount ?? 1,
+      modifiers: this.heldModifiers(input.sessionId),
+      waitForNavigation: false,
+      onPointerEvent: input.externalSession
+        ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'click')
+        : undefined,
+    })
+    this.rememberPointer(input.sessionId, clickPoint)
+    return input.result
   }
 
   private async dispatchCoordinateTargetHoverIfNeeded(input: {

@@ -740,35 +740,39 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       failedAt: number
     }>
   }> {
-    return this.actionQueue.runReadOnly(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession) {
-        const state = await this.refreshExternalPageState(sessionId, externalSession)
-        return {
-          url: state.url || context.url,
-          title: state.title,
-          loadState: state.url ? 'loaded' : 'unknown',
-          viewport: toNullable(externalSession.viewport),
-          lastNavigationError: null,
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (externalSession) {
+          const state = await this.refreshExternalPageState(sessionId, externalSession)
+          return {
+            url: state.url || context.url,
+            title: state.title,
+            loadState: state.url ? 'loaded' : 'unknown',
+            viewport: toNullable(externalSession.viewport),
+            lastNavigationError: null,
+          }
         }
-      }
 
-      // 和别的读操作一样等页面挂上：界面没挂着网页时宿主会给后台页面，没有才报视图没接入。
-      const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      const wc = session.webContents
-      // getPageState 不注入脚本，只读取 WebContents 已知状态。
-      const url = this.getLoadedPageUrl(session) ?? session.url ?? ''
-      const title = wc.getTitle() || ''
-      const loadState = session.lastNavigationError ? 'error' : url ? 'loaded' : 'unknown'
-      return {
-        url,
-        title,
-        loadState,
-        viewport: toNullable(session.viewport),
-        lastNavigationError: toNullable(session.lastNavigationError),
-      }
-    })
+        // 和别的读操作一样等页面挂上：界面没挂着网页时宿主会给后台页面，没有才报视图没接入。
+        const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        const wc = session.webContents
+        // getPageState 不注入脚本，只读取 WebContents 已知状态。
+        const url = this.getLoadedPageUrl(session) ?? session.url ?? ''
+        const title = wc.getTitle() || ''
+        const loadState = session.lastNavigationError ? 'error' : url ? 'loaded' : 'unknown'
+        return {
+          url,
+          title,
+          loadState,
+          viewport: toNullable(session.viewport),
+          lastNavigationError: toNullable(session.lastNavigationError),
+        }
+      },
+      { signal: abortSignal, label: 'getPageState' }
+    )
   }
 
   /**
@@ -833,37 +837,41 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageTargetsResult> {
-    return this.actionQueue.runReadOnly(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession) {
-        const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
-        const driverTargets = externalSession.driver.listPageTargets
-          ? await externalSession.driver.listPageTargets()
-          : []
-        const targets = driverTargets.at(0)
-          ? driverTargets
-          : [buildExternalCurrentPageTarget(externalSession, state)]
-        const activeTargetId = toNullable(targets.find((target) => target.active)?.id)
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (externalSession) {
+          const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+          const driverTargets = externalSession.driver.listPageTargets
+            ? await externalSession.driver.listPageTargets()
+            : []
+          const targets = driverTargets.at(0)
+            ? driverTargets
+            : [buildExternalCurrentPageTarget(externalSession, state)]
+          const activeTargetId = toNullable(targets.find((target) => target.active)?.id)
+
+          return {
+            driverKind: 'external',
+            activeTargetId,
+            targets,
+            capturedAt: Date.now(),
+          }
+        }
+
+        const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        const target = this.buildWebviewCurrentPageTarget(session, context.url)
 
         return {
-          driverKind: 'external',
-          activeTargetId,
-          targets,
+          driverKind: 'webview',
+          activeTargetId: target.id,
+          targets: [target],
           capturedAt: Date.now(),
         }
-      }
-
-      const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      const target = this.buildWebviewCurrentPageTarget(session, context.url)
-
-      return {
-        driverKind: 'webview',
-        activeTargetId: target.id,
-        targets: [target],
-        capturedAt: Date.now(),
-      }
-    })
+      },
+      { signal: abortSignal, label: 'listPageTargets' }
+    )
   }
 
   /** 切换当前受控的外部 CDP page target。 */
@@ -873,53 +881,60 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserSwitchPageTargetOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserSwitchPageTargetResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const targetId = options.targetId.trim()
-      if (!targetId) throw new AppError('VALIDATION', '浏览器 page target id 不能为空。')
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const targetId = options.targetId.trim()
+        if (!targetId) throw new AppError('VALIDATION', '浏览器 page target id 不能为空。')
 
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (!externalSession) {
-        throw new AppError('VALIDATION', '当前受控浏览器不是外部 CDP 页面，无法切换 page target。')
-      }
-      if (!externalSession.driver.switchPageTarget) {
-        throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持 page target 切换。')
-      }
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (!externalSession) {
+          throw new AppError(
+            'VALIDATION',
+            '当前受控浏览器不是外部 CDP 页面，无法切换 page target。'
+          )
+        }
+        if (!externalSession.driver.switchPageTarget) {
+          throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持 page target 切换。')
+        }
 
-      // 模型那条 CDP 会话连的是切走的那一页：断开，下次用到时连新的这一页。
-      await this.protocolSessions.close(sessionId)
-      const nextDriver = await externalSession.driver.switchPageTarget({ targetId })
-      this.attachExternalPageDriver(sessionId, nextDriver, {
-        disposeHost: externalSession.disposeHost,
-        disposePreviousHost: false,
-      })
-      const nextSession = this.getExternalPageSession(sessionId)
-      if (!nextSession) {
-        throw new AppError('EXECUTION_FAILED', '外部浏览器 page target 切换后无法挂接。')
-      }
+        // 模型那条 CDP 会话连的是切走的那一页：断开，下次用到时连新的这一页。
+        await this.protocolSessions.close(sessionId)
+        const nextDriver = await externalSession.driver.switchPageTarget({ targetId })
+        this.attachExternalPageDriver(sessionId, nextDriver, {
+          disposeHost: externalSession.disposeHost,
+          disposePreviousHost: false,
+        })
+        const nextSession = this.getExternalPageSession(sessionId)
+        if (!nextSession) {
+          throw new AppError('EXECUTION_FAILED', '外部浏览器 page target 切换后无法挂接。')
+        }
 
-      await nextSession.driver.bringToFront()
-      nextSession.visible = true
-      const state = await this.refreshExternalPageState(sessionId, nextSession, context.url)
-      const targets = nextSession.driver.listPageTargets
-        ? await nextSession.driver.listPageTargets()
-        : [buildExternalCurrentPageTarget(nextSession, state)]
-      const activeTarget =
-        targets.find((target) => target.active) ??
-        targets.find((target) => target.id === targetId) ??
-        buildExternalCurrentPageTarget(nextSession, state)
-      const capturedAt = Date.now()
+        await nextSession.driver.bringToFront()
+        nextSession.visible = true
+        const state = await this.refreshExternalPageState(sessionId, nextSession, context.url)
+        const targets = nextSession.driver.listPageTargets
+          ? await nextSession.driver.listPageTargets()
+          : [buildExternalCurrentPageTarget(nextSession, state)]
+        const activeTarget =
+          targets.find((target) => target.active) ??
+          targets.find((target) => target.id === targetId) ??
+          buildExternalCurrentPageTarget(nextSession, state)
+        const capturedAt = Date.now()
 
-      return {
-        driverKind: 'external',
-        activeTargetId: toNullable(activeTarget.id),
-        target: activeTarget,
-        targets,
-        url: state.url || activeTarget.url || context.url,
-        title: toNullable(state.title || activeTarget.title),
-        capturedAt,
-      }
-    })
+        return {
+          driverKind: 'external',
+          activeTargetId: toNullable(activeTarget.id),
+          target: activeTarget,
+          targets,
+          url: state.url || activeTarget.url || context.url,
+          title: toNullable(state.title || activeTarget.title),
+          capturedAt,
+        }
+      },
+      { signal: abortSignal, label: 'switchPageTarget' }
+    )
   }
 
   /** 确保浏览器会话打开到 context.url。 */
@@ -1000,7 +1015,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
           throw new AppError('VALIDATION', '内嵌浏览器页面不可用，无法接管页面会话。')
         }
 
-        const session = this.sessionManager.attachWebContents(sessionId, embeddedWebContents)
+        const session = await this.attachEmbeddedPageSession(sessionId, embeddedWebContents)
         session.visible = true
 
         // attach 只负责展示，绝不按 context.url 反向纠偏活页面：attach 请求在 IPC 到达时
@@ -1063,47 +1078,51 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     behavior: { activate: boolean; visible: boolean },
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const launchUrl = options.url?.trim() || context.url
-      const launchSession = await launcher.launch({
-        ...options,
-        url: launchUrl,
-      })
-      try {
-        this.actionQueue.assertAvailable(sessionId)
-      } catch (error) {
-        launchSession.dispose()
-        throw error
-      }
-      if (abortSignal?.aborted) {
-        // 标签页已经开了：中止了就关掉它再抛，不留一个没人管的标签页。
-        launchSession.dispose()
-        abortSignal.throwIfAborted()
-      }
-      const externalSession = this.attachExternalPageDriver(sessionId, launchSession.driver, {
-        disposeHost: launchSession.dispose,
-      })
-      if (externalSession.driver.isDestroyed()) {
-        disposeExternalPageSession(externalSession)
-        this.externalPageSessions.delete(sessionId)
-        throw new AppError('EXECUTION_FAILED', '外部浏览器页面启动后无法挂接。')
-      }
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const launchUrl = options.url?.trim() || context.url
+        const launchSession = await launcher.launch({
+          ...options,
+          url: launchUrl,
+        })
+        try {
+          this.actionQueue.assertAvailable(sessionId)
+        } catch (error) {
+          launchSession.dispose()
+          throw error
+        }
+        if (abortSignal?.aborted) {
+          // 标签页已经开了：中止了就关掉它再抛，不留一个没人管的标签页。
+          launchSession.dispose()
+          abortSignal.throwIfAborted()
+        }
+        const externalSession = this.attachExternalPageDriver(sessionId, launchSession.driver, {
+          disposeHost: launchSession.dispose,
+        })
+        if (externalSession.driver.isDestroyed()) {
+          disposeExternalPageSession(externalSession)
+          this.externalPageSessions.delete(sessionId)
+          throw new AppError('EXECUTION_FAILED', '外部浏览器页面启动后无法挂接。')
+        }
 
-      await this.ensureExternalContextPageUnlocked(sessionId, externalSession, {
-        ...context,
-        url: launchUrl,
-      })
-      this.sessionManager.notifyPageReady(
-        sessionId,
-        externalSession.url || externalSession.driver.getURL() || launchUrl
-      )
-      if (behavior.activate) {
-        await externalSession.driver.bringToFront()
-      }
-      externalSession.visible = behavior.visible
-      return buildExternalWindowState(externalSession)
-    })
+        await this.ensureExternalContextPageUnlocked(sessionId, externalSession, {
+          ...context,
+          url: launchUrl,
+        })
+        this.sessionManager.notifyPageReady(
+          sessionId,
+          externalSession.url || externalSession.driver.getURL() || launchUrl
+        )
+        if (behavior.activate) {
+          await externalSession.driver.bringToFront()
+        }
+        externalSession.visible = behavior.visible
+        return buildExternalWindowState(externalSession)
+      },
+      { signal: abortSignal, label: 'launchBrowserPageWithLauncher' }
+    )
   }
 
   /** 这个会话眼下有没有活着的外部浏览器页面：不进动作队列、不抛；驱动已经作废的顺手收掉。 */
@@ -1134,12 +1153,12 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       if (options.disposeHost) previous.disposeHost = options.disposeHost
       return previous
     }
-    if (previous || this.sessionManager.getSession(sessionId)) {
-      void this.screenshot.closeSession(sessionId)
-      void this.performance.closeSession(sessionId)
-      this.targetRefs.clear(sessionId)
-      this.interaction.clearInputState(sessionId)
-    }
+    void this.clearPageBindings(sessionId).catch((error: unknown) => {
+      this.log.warn('旧浏览器页面绑定未完全收束', {
+        sessionId,
+        error: AppError.getMessage(error),
+      })
+    })
     if (previous?.driver !== driver) {
       disposeExternalPageSession(previous, {
         disposeHost: options.disposePreviousHost ?? true,
@@ -1280,6 +1299,41 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     })
   }
 
+  /** 换页面先撤销旧页面的模型通道、观察引用与输入/采集租约。 */
+  private async clearPageBindings(sessionId: string): Promise<void> {
+    this.targetRefs.clear(sessionId)
+    this.interaction.clearInputState(sessionId)
+    this.sessionManager.getPendingEventsBroker().clearSession(sessionId)
+    const previous = this.sessionManager.getSession(sessionId)
+    if (previous) this.interaction.clearPointerState(previous.webContents.id)
+    await Promise.all([
+      this.protocolSessions.close(sessionId),
+      this.screenshot.closeSession(sessionId),
+      this.performance.closeSession(sessionId),
+    ])
+  }
+
+  private async attachEmbeddedPageSession(
+    sessionId: string,
+    webContents: electron.WebContents
+  ): Promise<BrowserSession> {
+    const previous = this.sessionManager.getSession(sessionId)
+    // 外部页仍受控时，renderer 自己重挂 webview 不应撤销外部页的模型通道。
+    const replacesControlledPage =
+      previous?.webContents !== webContents && !this.getExternalPageSession(sessionId)
+    if (previous && previous.webContents !== webContents)
+      this.interaction.clearPointerState(previous.webContents.id)
+    // 先换掉事件租约，避免等待旧采集停止时旧页面又登记新的阻塞事件。
+    const session = this.sessionManager.attachWebContents(sessionId, webContents)
+    if (replacesControlledPage) {
+      await this.clearPageBindings(sessionId)
+      this.actionQueue.assertAvailable(sessionId)
+      if (this.sessionManager.getSession(sessionId) !== session)
+        throw new AppError('CLOSED', '浏览器页面在换绑期间已关闭或改变。')
+    }
+    return session
+  }
+
   private async getLivePageDriverSessionUnlocked(
     sessionId: string,
     abortSignal?: AbortSignal
@@ -1332,8 +1386,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: { maxWidth?: number; quality?: number } = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPagePreviewFrame> {
-    return this.actionQueue.run(sessionId, () =>
-      this.screenshot.capturePreviewFrame(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.screenshot.capturePreviewFrame(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'capturePreviewFrame' }
     )
   }
 
@@ -1365,8 +1421,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserTargetActionOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserTargetActionResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.performTargetAction(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.performTargetAction(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'performTargetAction' }
     )
   }
 
@@ -1376,8 +1434,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserInsertTextOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserInsertTextResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.insertText(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.insertText(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'insertText' }
     )
   }
 
@@ -1387,8 +1447,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserKeyInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.keyDown(sessionId, context, input, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.keyDown(sessionId, context, input, abortSignal),
+      { signal: abortSignal, label: 'keyDown' }
     )
   }
 
@@ -1398,8 +1460,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserKeyInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.keyUp(sessionId, context, input, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.keyUp(sessionId, context, input, abortSignal),
+      { signal: abortSignal, label: 'keyUp' }
     )
   }
 
@@ -1409,8 +1473,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserMouseButtonInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.mouseDown(sessionId, context, input, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.mouseDown(sessionId, context, input, abortSignal),
+      { signal: abortSignal, label: 'mouseDown' }
     )
   }
 
@@ -1420,8 +1486,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserMouseButtonInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.mouseUp(sessionId, context, input, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.mouseUp(sessionId, context, input, abortSignal),
+      { signal: abortSignal, label: 'mouseUp' }
     )
   }
 
@@ -1431,8 +1499,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserWheelInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.mouseWheel(sessionId, context, input, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.mouseWheel(sessionId, context, input, abortSignal),
+      { signal: abortSignal, label: 'mouseWheel' }
     )
   }
 
@@ -1442,8 +1512,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPressKeyOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPressKeyResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.pressKey(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.pressKey(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'pressKey' }
     )
   }
 
@@ -1453,8 +1525,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserClickCoordinatesOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserClickCoordinatesResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.clickCoordinates(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.clickCoordinates(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'clickCoordinates' }
     )
   }
 
@@ -1464,8 +1538,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserDragOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserDragResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.dragTargets(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.dragTargets(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'dragTargets' }
     )
   }
 
@@ -1475,8 +1551,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserMoveMouseOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.moveMouse(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.moveMouse(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'moveMouse' }
     )
   }
 
@@ -1486,8 +1564,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserViewportOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserViewportResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.applyViewport(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.applyViewport(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'setViewport' }
     )
   }
 
@@ -1521,8 +1601,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageZoomOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageZoomResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.setPageZoom(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.interaction.setPageZoom(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'setPageZoom' }
     )
   }
 
@@ -1533,8 +1615,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserPageInspection> {
     // inspectPage 会触碰共享 WebContents，需要通过 runReadOnly 跟导航保持顺序。
-    return this.actionQueue.runReadOnly(sessionId, () =>
-      this.pageData.inspectPage(sessionId, context, options, abortSignal)
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      () => this.pageData.inspectPage(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'inspectPage' }
     )
   }
 
@@ -1556,8 +1640,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserFrameInfo[]> {
-    return this.actionQueue.runReadOnly(sessionId, () =>
-      this.pageData.listFrames(sessionId, context, abortSignal)
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      () => this.pageData.listFrames(sessionId, context, abortSignal),
+      { signal: abortSignal, label: 'listFrames' }
     )
   }
 
@@ -1585,12 +1671,15 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     query: CdpEventsInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserProtocolEvents> {
-    return this.actionQueue.runReadOnly(sessionId, () =>
-      this.protocolSessions.read(
-        sessionId,
-        () => this.openProtocolChannel(sessionId, abortSignal),
-        query
-      )
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      () =>
+        this.protocolSessions.read(
+          sessionId,
+          () => this.openProtocolChannel(sessionId, abortSignal),
+          query
+        ),
+      { signal: abortSignal, label: 'readProtocolEvents' }
     )
   }
 
@@ -1628,59 +1717,67 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: { script: BrowserUserScriptRecord; code: string; force?: boolean },
     abortSignal?: AbortSignal
   ): Promise<BrowserUserScriptLastRun> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const startedAt = Date.now()
-      const unsupported = (error: string): BrowserUserScriptLastRun => ({
-        status: 'unsupported',
-        url: this.externalPageSessions.get(sessionId)?.driver.getURL() || context.url,
-        documentId: `unsupported-${startedAt}`,
-        scriptRevision: input.script.revision,
-        startedAt,
-        finishedAt: Date.now(),
-        error,
-      })
-      if (this.externalPageSessions.has(sessionId))
-        return unsupported('external CDP 尚未实现 evaluate-on-new-document 用户脚本注册。')
-      if (input.script.runAt === 'document-start' && !input.force)
-        return unsupported('嵌入式浏览器尚未实现 document-start 预加载；请改用 document-end。')
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const startedAt = Date.now()
+        const unsupported = (error: string): BrowserUserScriptLastRun => ({
+          status: 'unsupported',
+          url: this.externalPageSessions.get(sessionId)?.driver.getURL() || context.url,
+          documentId: `unsupported-${startedAt}`,
+          scriptRevision: input.script.revision,
+          startedAt,
+          finishedAt: Date.now(),
+          error,
+        })
+        if (this.externalPageSessions.has(sessionId))
+          return unsupported('external CDP 尚未实现 evaluate-on-new-document 用户脚本注册。')
+        if (input.script.runAt === 'document-start' && !input.force)
+          return unsupported('嵌入式浏览器尚未实现 document-start 预加载；请改用 document-end。')
 
-      const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      const url = this.resolveCurrentPageUrl(session, context.url)
-      const source = buildBrowserUserScriptExecutionSource(input.script, input.code, !!input.force)
-      try {
-        const result =
-          input.script.world === 'main'
-            ? await session.webContents.executeJavaScript(source, false)
-            : await session.webContents.executeJavaScriptInIsolatedWorld(
-                1201,
-                [{ code: source, url: `velaros-userscript://${input.script.id}.js` }],
-                false
-              )
-        const payload = isPlainObject(result) ? result : {}
-        return {
-          status: payload.ok ? 'success' : 'error',
-          url,
-          documentId: isNonBlankString(payload.documentId)
-            ? payload.documentId
-            : `embedded-${startedAt}`,
-          scriptRevision: input.script.revision,
-          startedAt,
-          finishedAt: Date.now(),
-          error: optionalWhen(isNonBlankString, payload.error),
+        const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        const url = this.resolveCurrentPageUrl(session, context.url)
+        const source = buildBrowserUserScriptExecutionSource(
+          input.script,
+          input.code,
+          !!input.force
+        )
+        try {
+          const result =
+            input.script.world === 'main'
+              ? await session.webContents.executeJavaScript(source, false)
+              : await session.webContents.executeJavaScriptInIsolatedWorld(
+                  1201,
+                  [{ code: source, url: `velaros-userscript://${input.script.id}.js` }],
+                  false
+                )
+          const payload = isPlainObject(result) ? result : {}
+          return {
+            status: payload.ok ? 'success' : 'error',
+            url,
+            documentId: isNonBlankString(payload.documentId)
+              ? payload.documentId
+              : `embedded-${startedAt}`,
+            scriptRevision: input.script.revision,
+            startedAt,
+            finishedAt: Date.now(),
+            error: optionalWhen(isNonBlankString, payload.error),
+          }
+        } catch (error) {
+          return {
+            status: 'error',
+            url,
+            documentId: `embedded-${startedAt}`,
+            scriptRevision: input.script.revision,
+            startedAt,
+            finishedAt: Date.now(),
+            error: AppError.from(error).message,
+          }
         }
-      } catch (error) {
-        return {
-          status: 'error',
-          url,
-          documentId: `embedded-${startedAt}`,
-          scriptRevision: input.script.revision,
-          startedAt,
-          finishedAt: Date.now(),
-          error: AppError.from(error).message,
-        }
-      }
-    })
+      },
+      { signal: abortSignal, label: 'runUserScript' }
+    )
   }
 
   public async fetchResource(
@@ -1689,8 +1786,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserFetchResourceOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserFetchResourceResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.fetchResource(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.fetchResource(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'fetchResource' }
     )
   }
 
@@ -1700,8 +1799,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageDiagnosticsOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPageDiagnostics> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.getPageDiagnostics(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.getPageDiagnostics(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'getPageDiagnostics' }
     )
   }
 
@@ -1711,8 +1812,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserUploadFileOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserUploadFileResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.uploadFile(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.uploadFile(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'uploadFile' }
     )
   }
 
@@ -1722,8 +1825,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserExportPagePdfOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserExportPagePdfResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.exportPagePdf(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.exportPagePdf(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'exportPagePdf' }
     )
   }
 
@@ -1733,8 +1838,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkControlOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkControlResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.configureNetwork(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.configureNetwork(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'configureNetwork' }
     )
   }
 
@@ -1744,8 +1851,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkResponseBodyOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkResponseBodyResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.readNetworkResponseBody(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.readNetworkResponseBody(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'readNetworkResponseBody' }
     )
   }
 
@@ -1755,8 +1864,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkRequestDetailsOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkRequestDetailsResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.readNetworkRequestDetails(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.readNetworkRequestDetails(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'readNetworkRequestDetails' }
     )
   }
 
@@ -1766,8 +1877,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageWaitOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWaitResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.waitForPage(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.waitForPage(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'waitForPage' }
     )
   }
 
@@ -1778,85 +1891,89 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageNavigationOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageNavigationResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession)
-        return this.navigateExternalPage(sessionId, externalSession, context, options)
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (externalSession)
+          return this.navigateExternalPage(sessionId, externalSession, context, options)
 
-      const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      let navigated = false
+        const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        let navigated = false
 
-      if (options.action === 'goto') {
-        if (!options.url?.trim()) {
-          throw new AppError('VALIDATION', 'goto 导航必须提供 URL。')
-        }
-
-        const previousCommittedUrl = this.getLoadedPageUrl(session) ?? session.url
-        const previousUrl = previousCommittedUrl ?? normalizeUrl(context.url)
-        let targetUrl = normalizeUrl(options.url)
-        let didStartControlledPageLoad = false
-        if (previousUrl === targetUrl) {
-          // 目标 URL 已加载时避免重复 loadURL 打断页面状态。
-          return this.buildNavigationResult(session, options.action, false)
-        }
-
-        try {
-          // 先用隐藏窗口探测，避免失败导航污染当前受控 WebContents。
-          targetUrl = await this.probeUrlLoadWithSearchFallback(targetUrl, abortSignal)
-          didStartControlledPageLoad = true
-          await this.pageWaiter.loadUrl(session.webContents, targetUrl, abortSignal)
-        } catch (error) {
-          const navigationError = AppError.from(error)
-          if (!session.webContents.isDestroyed()) {
-            if (
-              navigationError.code !== 'EXECUTION_ABORTED' &&
-              didStartControlledPageLoad &&
-              this.getLoadedPageUrl(session) !== previousUrl
-            ) {
-              try {
-                // 预探测通过后真实加载仍可能因网络竞态失败；必须恢复
-                // 上一张已提交页面，不能只回滚 session.url 而把用户留在白屏。
-                await this.pageWaiter.loadUrl(session.webContents, previousUrl)
-              } catch (recoveryError) {
-                this.log.warn('失败导航后恢复上一页失败', {
-                  sessionId,
-                  previousUrl,
-                  targetUrl,
-                  error: AppError.from(recoveryError).message,
-                })
-              }
-            }
-            session.url = this.getLoadedPageUrl(session) ?? previousUrl
+        if (options.action === 'goto') {
+          if (!options.url?.trim()) {
+            throw new AppError('VALIDATION', 'goto 导航必须提供 URL。')
           }
 
-          throw navigationError
-        }
-        navigated = true
-      } else if (options.action === 'reload') {
-        const knownUrl = this.getKnownSessionUrl(session)
-        if (!this.getLoadedPageUrl(session) && knownUrl) {
-          await this.pageWaiter.loadUrl(session.webContents, knownUrl, abortSignal)
-        } else {
-          session.webContents.reload()
-          await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
-        }
-        navigated = true
-      } else if (options.action === 'back') {
-        navigated = await this.navigateRenderableHistory(session, -1, abortSignal)
-      } else if (options.action === 'forward') {
-        navigated = await this.navigateRenderableHistory(session, 1, abortSignal)
-      }
+          const previousCommittedUrl = this.getLoadedPageUrl(session) ?? session.url
+          const previousUrl = previousCommittedUrl ?? normalizeUrl(context.url)
+          let targetUrl = normalizeUrl(options.url)
+          let didStartControlledPageLoad = false
+          if (previousUrl === targetUrl) {
+            // 目标 URL 已加载时避免重复 loadURL 打断页面状态。
+            return this.buildNavigationResult(session, options.action, false)
+          }
 
-      const finalUrl = this.resolveCurrentPageUrl(session, context.url)
-      session.url = finalUrl
-      this.sessionManager.syncSessionSiteContext(sessionId, finalUrl)
-      if (navigated) {
-        this.targetRefs.clear(sessionId)
-      }
+          try {
+            // 先用隐藏窗口探测，避免失败导航污染当前受控 WebContents。
+            targetUrl = await this.probeUrlLoadWithSearchFallback(targetUrl, abortSignal)
+            didStartControlledPageLoad = true
+            await this.pageWaiter.loadUrl(session.webContents, targetUrl, abortSignal)
+          } catch (error) {
+            const navigationError = AppError.from(error)
+            if (!session.webContents.isDestroyed()) {
+              if (
+                navigationError.code !== 'EXECUTION_ABORTED' &&
+                didStartControlledPageLoad &&
+                this.getLoadedPageUrl(session) !== previousUrl
+              ) {
+                try {
+                  // 预探测通过后真实加载仍可能因网络竞态失败；必须恢复
+                  // 上一张已提交页面，不能只回滚 session.url 而把用户留在白屏。
+                  await this.pageWaiter.loadUrl(session.webContents, previousUrl)
+                } catch (recoveryError) {
+                  this.log.warn('失败导航后恢复上一页失败', {
+                    sessionId,
+                    previousUrl,
+                    targetUrl,
+                    error: AppError.from(recoveryError).message,
+                  })
+                }
+              }
+              session.url = this.getLoadedPageUrl(session) ?? previousUrl
+            }
 
-      return this.buildNavigationResult(session, options.action, navigated)
-    })
+            throw navigationError
+          }
+          navigated = true
+        } else if (options.action === 'reload') {
+          const knownUrl = this.getKnownSessionUrl(session)
+          if (!this.getLoadedPageUrl(session) && knownUrl) {
+            await this.pageWaiter.loadUrl(session.webContents, knownUrl, abortSignal)
+          } else {
+            session.webContents.reload()
+            await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
+          }
+          navigated = true
+        } else if (options.action === 'back') {
+          navigated = await this.navigateRenderableHistory(session, -1, abortSignal)
+        } else if (options.action === 'forward') {
+          navigated = await this.navigateRenderableHistory(session, 1, abortSignal)
+        }
+
+        const finalUrl = this.resolveCurrentPageUrl(session, context.url)
+        session.url = finalUrl
+        this.sessionManager.syncSessionSiteContext(sessionId, finalUrl)
+        if (navigated) {
+          this.targetRefs.clear(sessionId)
+        }
+
+        return this.buildNavigationResult(session, options.action, navigated)
+      },
+      { signal: abortSignal, label: 'navigatePage' }
+    )
   }
 
   /** 用隐藏 BrowserWindow 预探测目标 URL 是否可加载。 */
@@ -1893,18 +2010,22 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     _context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPendingEventsResult> {
-    return this.actionQueue.runReadOnly(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (!externalSession) {
-        await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      }
+    return this.actionQueue.runReadOnly(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (!externalSession) {
+          await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        }
 
-      return {
-        pending: this.sessionManager.getPendingEventsBroker().listPendingEvents(sessionId),
-        capturedAt: Date.now(),
-      }
-    })
+        return {
+          pending: this.sessionManager.getPendingEventsBroker().listPendingEvents(sessionId),
+          capturedAt: Date.now(),
+        }
+      },
+      { signal: abortSignal, label: 'listPendingEvents' }
+    )
   }
 
   /** 处理待处理的 JS 弹窗。 */
@@ -1914,20 +2035,24 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandleDialogOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandleDialogResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (!externalSession) {
-        await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      }
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (!externalSession) {
+          await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        }
 
-      return this.sessionManager.getPendingEventsBroker().resolveDialog({
-        sessionId,
-        eventId: options.eventId,
-        accept: options.accept,
-        promptText: options.promptText,
-      })
-    })
+        return this.sessionManager.getPendingEventsBroker().resolveDialog({
+          sessionId,
+          eventId: options.eventId,
+          accept: options.accept,
+          promptText: options.promptText,
+        })
+      },
+      { signal: abortSignal, label: 'handleDialog' }
+    )
   }
 
   /** 接受或取消待处理下载。 */
@@ -1937,26 +2062,30 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandleDownloadOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandleDownloadResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (!externalSession) {
-        await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      }
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (!externalSession) {
+          await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        }
 
-      const savePath =
-        options.action === 'accept' && options.savePath
-          ? (await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath'))
-              .path
-          : options.savePath
+        const savePath =
+          options.action === 'accept' && options.savePath
+            ? (await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath'))
+                .path
+            : options.savePath
 
-      return this.sessionManager.getPendingEventsBroker().resolveDownload({
-        sessionId,
-        eventId: options.eventId,
-        action: options.action,
-        savePath,
-      })
-    })
+        return this.sessionManager.getPendingEventsBroker().resolveDownload({
+          sessionId,
+          eventId: options.eventId,
+          action: options.action,
+          savePath,
+        })
+      },
+      { signal: abortSignal, label: 'handleDownload' }
+    )
   }
 
   /** 允许或拒绝待处理权限请求。 */
@@ -1966,19 +2095,23 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandlePermissionOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandlePermissionResult> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (!externalSession) {
-        await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-      }
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (!externalSession) {
+          await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+        }
 
-      return this.sessionManager.getPendingEventsBroker().resolvePermission({
-        sessionId,
-        eventId: options.eventId,
-        grant: options.grant,
-      })
-    })
+        return this.sessionManager.getPendingEventsBroker().resolvePermission({
+          sessionId,
+          eventId: options.eventId,
+          grant: options.grant,
+        })
+      },
+      { signal: abortSignal, label: 'handlePermission' }
+    )
   }
 
   /**
@@ -1993,8 +2126,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPerformanceTraceStartOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPerformanceTraceStartResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.performance.startTrace(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.performance.startTrace(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'startPerformanceTrace' }
     )
   }
 
@@ -2004,8 +2139,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPerformanceTraceStopResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.performance.stopTrace(sessionId, context, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.performance.stopTrace(sessionId, context, abortSignal),
+      { signal: abortSignal, label: 'stopPerformanceTrace' }
     )
   }
 
@@ -2027,8 +2164,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHeapSnapshotOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserHeapSnapshotResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.performance.captureHeapSnapshot(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.performance.captureHeapSnapshot(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'captureHeapSnapshot' }
     )
   }
 
@@ -2039,8 +2178,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserScreencastStartOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreencastStartResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.screenshot.startScreencast(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.screenshot.startScreencast(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'startScreencast' }
     )
   }
 
@@ -2051,8 +2192,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserScreencastStopOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreencastStopResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.screenshot.stopScreencast(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.screenshot.stopScreencast(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'stopScreencast' }
     )
   }
 

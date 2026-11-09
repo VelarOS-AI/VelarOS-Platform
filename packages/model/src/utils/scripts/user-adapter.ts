@@ -149,7 +149,7 @@ export const UserAdapterJsonStringifySource = `
 JSON.stringify(globalThis.__velarosUserAdapterValue__)
 `
 
-/** 跑一段沙箱脚本；V8 的 timeout 只打断同步执行，所以事后再复核一次实际时长。 */
+/** 跑一段同步合同的沙箱脚本；上下文会在返回前排空微任务，执行与 Promise jobs 共用期限。 */
 export function runUserAdapterScript<T = unknown>(
   script: Script,
   context: UserAdapterVmContext
@@ -160,7 +160,7 @@ export function runUserAdapterScript<T = unknown>(
     timeout: ModelTuning.userAdapter.executionTimeoutMs,
   }) as T
   const durationMs = Date.now() - startedAt
-  // V8 的 timeout 只打断同步执行；这道事后复核兜住"墙没生效"的情形，超时一律当失败（§0.1 条三）。
+  // 上下文的 afterEvaluate 把 Promise jobs 纳入执行墙；事后仍复核实际时长，超时一律当失败。
   if (durationMs > ModelTuning.userAdapter.executionTimeoutMs) {
     throw new AppError(
       'TIMEOUT',
@@ -172,7 +172,9 @@ export function runUserAdapterScript<T = unknown>(
 
 /** 建一个空原型的沙箱上下文，并跑一遍初始化脚本。 */
 export function createUserAdapterVmContext(setupScript: Script): UserAdapterVmContext {
-  const context = createContext(Object.create(null)) as UserAdapterVmContext
+  const context = createContext(Object.create(null), {
+    microtaskMode: 'afterEvaluate',
+  }) as UserAdapterVmContext
   context.console = createSafeConsole()
   runUserAdapterScript(setupScript, context)
   return context

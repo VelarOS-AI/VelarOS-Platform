@@ -4,6 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import type { CommandProvider } from '../contract/requires'
 import { createProjectKernel } from '../index'
 import { clampSnippet, snippetWindow } from '../utils/search-snippet'
@@ -73,4 +75,42 @@ test('ripgrep：长行里的命中在片段里，片段不超过展示长度', a
   const snippet = result.hits[0]!.snippet!
   expect(snippet).toContain(marker)
   expect(snippet.length).toBeLessThanOrEqual(ProjectTuning.queries.snippetChars + 1)
+})
+
+test('successful providers never turn After hook failures into a second fallback result', async () => {
+  const kernel = await createProjectKernel({
+    root,
+    providers: {
+      command: ripgrepProvider(),
+      codeIntelligence: {
+        isProjectEnabled: () => true,
+        listSymbols: async () => [],
+        getDefinition: async () => [
+          { path: 'bundle.js', line: 1, column: 1, endLine: 1, endColumn: 2 },
+        ],
+      },
+    },
+  })
+  let searched = 0
+  let resolved = 0
+  kernel.registerHook({
+    id: 'after-search',
+    event: 'AfterSearch',
+    run: () => {
+      if (++searched === 1) throw new AppError('UNAVAILABLE', 'original search hook')
+    },
+  })
+  kernel.registerHook({
+    id: 'after-resolve',
+    event: 'AfterResolve',
+    run: () => {
+      if (++resolved === 1) throw new AppError('UNAVAILABLE', 'original resolve hook')
+    },
+  })
+  await expect(kernel.search({ query: marker })).rejects.toThrow('original search hook')
+  expect(searched).toBe(1)
+  await expect(
+    kernel.resolveTarget({ path: 'bundle.js', target: { symbol: { name: 'symbol' } } })
+  ).rejects.toThrow('original resolve hook')
+  expect(resolved).toBe(1)
 })

@@ -1,5 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { closeSync, fstatSync, openSync, type Stats, writeSync } from 'node:fs'
+import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
@@ -18,7 +20,7 @@ import type { BrowserPageDriverKernel, BrowserPerformanceTraceState } from '../.
 import { extractKeyMetricsFromSummary, serializeBrowserTraceToGzip } from '../../utils/performance'
 import { resolveAutoStopMs } from '../../utils/performance'
 import { BrowserTuning } from '../../utils/tuning'
-import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
+import { isMissingFileError, resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
 import { BrowserPerformanceTraceEngine } from './BrowserPerformanceTraceEngine'
 
@@ -248,37 +250,157 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
   ): Promise<BrowserHeapSnapshotResult> {
     abortSignal?.throwIfAborted()
 
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const artifact = await resolveBrowserWorkspacePath(
-      context.workspaceRoot,
-      options.path?.trim() || `artifacts/memory/heap-${stamp}.heapsnapshot`,
-      '堆快照路径'
-    )
-    const { path: resolvedPath, relativePath } = artifact
-    await mkdir(dirname(resolvedPath), { recursive: true })
-
-    const chunks: string[] = []
-    const sink = (chunk: string): void => {
-      chunks.push(chunk)
-    }
-
     const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    if (!pageSession.driver.captureHeapSnapshot) {
+    abortSignal?.throwIfAborted()
+    const driver = pageSession.driver
+    if (!driver.captureHeapSnapshot) {
       throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持堆快照。')
     }
-    await pageSession.driver.captureHeapSnapshot(sink)
-    const url = pageSession.driver.getURL() || context.url
 
-    const payload = chunks.join('')
-    await writeFile(resolvedPath, payload, 'utf8')
-
-    return {
-      url,
-      path: resolvedPath,
-      relativePath,
-      bytes: Buffer.byteLength(payload),
-      capturedAt: Date.now(),
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const requestedPath = options.path?.trim() || `artifacts/memory/heap-${stamp}.heapsnapshot`
+    const artifact = await resolveBrowserWorkspacePath(
+      context.workspaceRoot,
+      requestedPath,
+      '堆快照路径'
+    )
+    abortSignal?.throwIfAborted()
+    await mkdir(dirname(artifact.path), { recursive: true })
+    const temporaryRelativePath = join(
+      dirname(artifact.relativePath),
+      `.velaros-heap-${randomUUID()}.tmp`
+    )
+    // mkdir 与取 driver 都可能让出执行权；打开独占文件前重新核对真实路径和取消。
+    await resolveBrowserWorkspacePath(context.workspaceRoot, requestedPath, '堆快照路径')
+    const temporary = await resolveBrowserWorkspacePath(
+      context.workspaceRoot,
+      temporaryRelativePath,
+      '堆快照暂存路径'
+    )
+    abortSignal?.throwIfAborted()
+    const descriptor = openSync(temporary.path, 'wx')
+    let identity: Stats | undefined
+    let acceptingChunks = true
+    let bytes = 0
+    let carry = ''
+    let url = context.url
+    const failures: unknown[] = []
+    const recordCancellation = (): void => {
+      if (abortSignal?.aborted) failures.push(abortSignal.reason)
     }
+    const write = (text: string): void => {
+      const buffer = Buffer.from(text, 'utf8')
+      let offset = 0
+      while (offset < buffer.byteLength) {
+        const written = writeSync(descriptor, buffer, offset, buffer.byteLength - offset)
+        if (written <= 0) throw new AppError('UNAVAILABLE', '堆快照暂存文件写入没有进展。')
+        offset += written
+        bytes += written
+      }
+    }
+    const ownedTemporaryPath = async (): Promise<Nullable<string>> => {
+      const verified = await resolveBrowserWorkspacePath(
+        context.workspaceRoot,
+        temporaryRelativePath,
+        '堆快照暂存路径'
+      )
+      const current = await lstat(verified.literalPath).catch((error: unknown) => {
+        if (isMissingFileError(error)) return null
+        throw error
+      })
+      if (!current) return null
+      if (
+        !identity ||
+        !current.isFile() ||
+        current.dev !== identity.dev ||
+        current.ino !== identity.ino
+      ) {
+        throw new AppError('CONFLICT', '堆快照暂存文件的所有权已变化，不能提交或删除。')
+      }
+      return verified.literalPath
+    }
+    try {
+      identity = fstatSync(descriptor)
+      abortSignal?.addEventListener('abort', recordCancellation, { once: true })
+      recordCancellation()
+      if (!failures.length) {
+        try {
+          await driver.captureHeapSnapshot((chunk) => {
+            if (!acceptingChunks || failures.length) return
+            try {
+              abortSignal?.throwIfAborted()
+              let text = carry + chunk
+              carry = ''
+              const last = text.charCodeAt(text.length - 1)
+              // CDP chunk 可在 UTF-16 代理对之间切开；只暂存一个尾部高代理项。
+              if (last >= 0xd800 && last <= 0xdbff) {
+                carry = text.slice(-1)
+                text = text.slice(0, -1)
+              }
+              write(text)
+            } catch (error) {
+              // sink 运行在 CDP 事件监听器里，不能直接抛出；后续 chunk 丢弃，物理采集仍须排空。
+              failures.push(error)
+            }
+          })
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      if (!failures.length) {
+        abortSignal?.throwIfAborted()
+        write(carry)
+        url = driver.getURL() || context.url
+      }
+    } catch (error) {
+      failures.push(error)
+    } finally {
+      acceptingChunks = false
+      abortSignal?.removeEventListener('abort', recordCancellation)
+      try {
+        closeSync(descriptor)
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    if (!failures.length) {
+      try {
+        abortSignal?.throwIfAborted()
+        const source = await ownedTemporaryPath()
+        if (!source) throw new AppError('NOT_FOUND', '堆快照暂存文件已不存在。')
+        const target = await resolveBrowserWorkspacePath(
+          context.workspaceRoot,
+          requestedPath,
+          '堆快照路径'
+        )
+        abortSignal?.throwIfAborted()
+        await rename(source, target.path)
+        return {
+          url,
+          path: target.path,
+          relativePath: target.relativePath,
+          bytes,
+          capturedAt: Date.now(),
+        }
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    try {
+      const source = await ownedTemporaryPath()
+      if (source) await rm(source)
+    } catch (error) {
+      failures.push(error)
+    }
+    if (failures.length === 1) throw failures[0]
+    throw AppError.withFields(
+      'EXECUTION_FAILED',
+      '堆快照采集或保存失败，附带后续失败详情。',
+      {
+        failures,
+      },
+      failures[0]
+    )
   }
 
   /** 应用退出或运行时重建时撤销全部登记并停止实际采集器。 */

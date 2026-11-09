@@ -4,6 +4,7 @@
  * 一律具名导出：本包作为 npm 库嵌入宿主，禁在 `JSON` 上挂静态扩展。
  */
 
+import { AppError } from '../error'
 import { isArray, isRecord, isUndefined } from '../typeGuards'
 
 /** 环引用占位：指纹与诊断路径遇环降级成占位，不抛断调用方。 */
@@ -69,6 +70,6 @@ function toStableJsonValue(value: unknown, seen: Set<object>, options: StableJso
 
 /** 指纹允许循环占位，严格调用者要求显式失败。 */
 function handleCircularValue(options: StableJsonOptions): string {
-  if (options.rejectCircular) throw new TypeError('稳定 JSON 序列化不接受循环引用。')
+  if (options.rejectCircular) throw new AppError('VALIDATION', '稳定 JSON 序列化不接受循环引用。')
   return CircularMarker
 }

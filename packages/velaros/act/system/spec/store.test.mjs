@@ -1286,7 +1286,7 @@ test('INV-18 发布只执行一次，持续 observe 中不会产生消息；新�
     ['event']
   )
 })
-test('INV-18 共享材料按键授权、正文可分页，伪造跨键或源会话引用不能读出原文', async (t) => {
+test('INV-18 共享材料按键和任务原文授权，重置拒绝零追加且目标与重附加保留', async (t) => {
   const f = await fixture(t, {
     stores: (s) => ({
       scope: 'project',
@@ -1333,6 +1333,50 @@ test('INV-18 共享材料按键授权、正文可分页，伪造跨键或源会�
     ),
     'STORE_DENIED'
   )
+
+  const goal = await f.session.updateGoal({
+    baseRevision: 0,
+    objective: '跨任务保留当前共享调查目标',
+    status: 'paused',
+  })
+  const goalRef = (await f.storage.load('main')).records.findLast(
+    (record) => record.title === 'session:goal'
+  ).ref
+  await submit(f.session, { text: '开始独立任务，不继承先前材料', task: 'new' })
+  const appendRecord = f.storage.appendRecord.bind(f.storage)
+  let materialAppends = 0
+  const append = t.mock.method(f.storage, 'appendRecord', (sessionId, record) => {
+    if (sessionId.startsWith('store-material:')) materialAppends += 1
+    return appendRecord(sessionId, record)
+  })
+  try {
+    assert.equal(
+      await execute(
+        f.session,
+        `try{await store.share({store:currentStore,key:'public/reset',baseRevision:0,ref:${JSON.stringify(ref)}})}catch(error){output(error.code)}`
+      ),
+      'STORE_DENIED'
+    )
+    assert.equal(materialAppends, 0)
+    assert.equal(await f.storage.stores.get(id, 'public/reset'), null)
+  } finally {
+    append.mock.restore()
+  }
+  const sharedGoal = await execute(
+    f.session,
+    `await store.share({store:currentStore,key:'public/goal',baseRevision:0,ref:${JSON.stringify(goalRef)}});output(await store.read({store:currentStore,key:'public/goal'}));`
+  )
+  assert.deepEqual(JSON.parse(sharedGoal.text), goal)
+  await submit(f.session, {
+    text: '明确重新附上先前材料',
+    task: 'new',
+    files: [{ ref, name: 'reattached.txt', mediaType: 'text/plain' }],
+  })
+  const reattached = await execute(
+    f.session,
+    `await store.share({store:currentStore,key:'public/reattached',baseRevision:0,ref:${JSON.stringify(ref)}});output(await store.read({store:currentStore,key:'public/reattached'}));`
+  )
+  assert.equal(reattached.text, 'literal code ` ${x}\nshared evidence')
   await f.restart()
   assert.match(
     (

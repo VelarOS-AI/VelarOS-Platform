@@ -219,6 +219,6 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
 
   public clearAll(): void {
     this.refsBySession.clear()
-    this.generationBySession.clear()
+    // closeAllSessions 后运行时仍可复用；已签发的代次不能从头再来。
   }
 }

@@ -7,20 +7,716 @@
  * area: packages
  */
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 
 import { describe, test } from 'bun:test'
 
-import { ExternalBrowserUnavailableReason } from '../../../dist/browser/contract/constants.js'
+import {
+  BrowserFetchLimits,
+  ExternalBrowserUnavailableReason,
+} from '../../../dist/browser/contract/constants.js'
 import { createElectronBrowserRuntime } from '../../../dist/browser/electron.js'
 import { CdpBrowserConnection } from '../../../dist/browser/impl/cdp/CdpBrowserConnection.js'
+import { CdpBrowserPageDownloadItem } from '../../../dist/browser/impl/cdp/CdpBrowserPageDownloadItem.js'
 import { CdpBrowserPageDriver } from '../../../dist/browser/impl/cdp/CdpBrowserPageDriver.js'
 import { CdpExternalBrowserLauncher } from '../../../dist/browser/impl/cdp/CdpExternalBrowserLauncher.js'
 import { CdpWebSocketTransport } from '../../../dist/browser/impl/cdp/CdpWebSocketTransport.js'
+import { buildFetchResourceFunction } from '../../../dist/browser/utils/cdp/driver.js'
 import { getDefaultUserDataDirCandidates } from '../../../dist/browser/utils/cdp/launcher.js'
 import { openCdpWebSocket } from '../../../dist/browser/utils/cdp/transport.js'
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5))
+
+// 逐条执行真实生成的远端函数，取消命令也经独立对象句柄投递；不用真实浏览器或网络。
+function createResourceDriver(fetch) {
+  const objects = new Map()
+  const calls = []
+  let nextId = 0
+  const driver = new CdpBrowserPageDriver({
+    transport: {
+      send: async (method, params) => {
+        calls.push({ method, params })
+        if (method === 'Runtime.evaluate') {
+          const objectId = `resource-${++nextId}`
+          objects.set(objectId, { controller: new AbortController(), reader: null })
+          return { result: { objectId } }
+        }
+        if (method === 'Runtime.releaseObject') {
+          assert.equal(objects.delete(params.objectId), true)
+          return {}
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          const holder = objects.get(params.objectId)
+          assert.ok(holder, '命令必须仍持有本次资源对象')
+          const operation = runInNewContext(`(${params.functionDeclaration})`, {
+            fetch,
+            Uint8Array,
+            btoa,
+          })
+          try {
+            return { result: { value: await operation.call(holder) } }
+          } catch (error) {
+            return { exceptionDetails: { text: String(error) } }
+          }
+        }
+        return {}
+      },
+    },
+  })
+  return { driver, objects, calls }
+}
+
+function createDownloadDriver(downloadPath) {
+  const listeners = new Map()
+  const closure = []
+  let notifyClosed
+  const closed = new Promise((resolve) => {
+    notifyClosed = resolve
+  })
+  const driver = new CdpBrowserPageDriver({
+    downloadPath,
+    onDispose: () => {
+      closure.push('driver')
+      notifyClosed()
+    },
+    transport: {
+      send: async () => ({}),
+      dispose: () => {
+        closure.push('transport')
+      },
+      onEvent: (method, listener) => {
+        const subscribers = listeners.get(method) ?? new Set()
+        subscribers.add(listener)
+        listeners.set(method, subscribers)
+        return () => subscribers.delete(listener)
+      },
+    },
+  })
+  return {
+    driver,
+    closure,
+    closed,
+    emit: (method, value) => {
+      for (const listener of [...(listeners.get(method) ?? [])]) listener(value)
+    },
+    finalDiagnostics: () =>
+      driver
+        .readDiagnostics({ limit: 100 })
+        .filter((entry) => entry.kind === 'download' && entry.details?.pending === false),
+  }
+}
+
+describe('CDP下载目标落盘终态', () => {
+  test('受理先于浏览器完成和浏览器先完成两种顺序，都落盘后才done并只发布一次', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'browser-cdp-download-')))
+    try {
+      for (const order of ['accepted-first', 'browser-first']) {
+        const downloadPath = join(root, order, 'downloads')
+        const savePath = join(root, order, 'saved.bin')
+        await mkdir(downloadPath, { recursive: true })
+        await writeFile(join(downloadPath, 'guid'), 'download bytes')
+        const fixture = createDownloadDriver(downloadPath)
+        let item
+        fixture.driver.onDownload((event) => {
+          item = event.item
+        })
+        try {
+          fixture.emit('Page.downloadWillBegin', { guid: 'guid', suggestedFilename: 'saved.bin' })
+          assert.ok(item)
+          const states = []
+          const finished = new Promise((resolve) =>
+            item.once('done', (_event, state) => {
+              states.push(state)
+              resolve(state)
+            })
+          )
+          if (order === 'accepted-first') {
+            item.setSavePath(savePath)
+            item.resume()
+          }
+          fixture.emit('Page.downloadProgress', { guid: 'guid', state: 'completed' })
+          assert.deepEqual(states, [])
+          assert.deepEqual(fixture.finalDiagnostics(), [])
+          if (order === 'browser-first') {
+            await settle()
+            assert.deepEqual(states, [])
+            assert.deepEqual(fixture.finalDiagnostics(), [])
+            item.setSavePath(savePath)
+            item.resume()
+            assert.deepEqual(states, [])
+          }
+          assert.equal(await finished, 'completed')
+          assert.equal(await readFile(savePath, 'utf8'), 'download bytes')
+          fixture.emit('Page.downloadProgress', { guid: 'guid', state: 'completed' })
+          item.resume()
+          item.cancel()
+          await settle()
+          assert.deepEqual(states, ['completed'])
+          assert.equal(fixture.finalDiagnostics().length, 1)
+          assert.equal(fixture.finalDiagnostics()[0].details.state, 'completed')
+          assert.equal(await readFile(savePath, 'utf8'), 'download bytes')
+        } finally {
+          fixture.driver.dispose()
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('目标移动失败时仅done interrupted，保留诊断且不重试finalization', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'browser-cdp-download-failed-')))
+    const downloadPath = join(root, 'downloads')
+    const savePath = join(root, 'existing-directory')
+    await mkdir(downloadPath)
+    await mkdir(savePath)
+    await writeFile(join(downloadPath, 'guid'), 'recoverable bytes')
+    const fixture = createDownloadDriver(downloadPath)
+    let item
+    fixture.driver.onDownload((event) => {
+      item = event.item
+    })
+    try {
+      fixture.emit('Page.downloadWillBegin', { guid: 'guid', suggestedFilename: 'saved.bin' })
+      assert.ok(item)
+      const states = []
+      const finished = new Promise((resolve) =>
+        item.once('done', (_event, state) => {
+          states.push(state)
+          resolve(state)
+        })
+      )
+      item.setSavePath(savePath)
+      item.resume()
+      fixture.emit('Page.downloadProgress', { guid: 'guid', state: 'completed' })
+      assert.deepEqual(states, [])
+      assert.deepEqual(fixture.finalDiagnostics(), [])
+      assert.equal(await finished, 'interrupted')
+      item.resume()
+      fixture.emit('Page.downloadProgress', { guid: 'guid', state: 'completed' })
+      await settle()
+      assert.deepEqual(states, ['interrupted'])
+      assert.equal(fixture.finalDiagnostics().length, 1)
+      assert.equal(fixture.finalDiagnostics()[0].details.state, 'interrupted')
+      const diagnostics = fixture.driver.readDiagnostics({ limit: 100 })
+      assert.equal(
+        diagnostics.some((entry) => entry.details?.state === 'completed'),
+        false
+      )
+      assert.equal(diagnostics.filter((entry) => entry.details?.renameError).length, 1)
+      assert.equal(diagnostics.filter((entry) => entry.details?.copyError).length, 0)
+      assert.deepEqual(await readdir(savePath), [])
+      assert.equal(await readFile(join(downloadPath, 'guid'), 'utf8'), 'recoverable bytes')
+    } finally {
+      fixture.driver.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('移动挂起期间取消与迟到canceled进度等待落盘结算，按实际结果仅通知一次', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'browser-cdp-download-drain-')))
+    try {
+      for (const outcome of ['completed', 'interrupted']) {
+        const downloadPath = join(root, outcome, 'downloads')
+        await mkdir(downloadPath, { recursive: true })
+        await writeFile(join(downloadPath, 'guid'), 'download')
+        const savePath = join(root, outcome, 'saved.bin')
+        if (outcome === 'interrupted') await mkdir(savePath)
+        let started
+        let release
+        const waiting = new Promise((resolve) => {
+          started = resolve
+        })
+        const gate = new Promise((resolve) => {
+          release = resolve
+        })
+        const diagnostics = []
+        const item = new CdpBrowserPageDownloadItem(
+          {
+            transport: { send: async () => ({}) },
+            guid: 'guid',
+            url: null,
+            filename: 'saved.bin',
+            downloadPath,
+            appendDiagnostic: (entry) => diagnostics.push(entry),
+          },
+          async (source, target) => {
+            started()
+            await gate
+            if (outcome === 'interrupted')
+              throw Object.assign(new Error('cross-device'), { code: 'EXDEV' })
+            await rename(source, target)
+          }
+        )
+        const states = []
+        const done = new Promise((resolve) =>
+          item.once('done', (_event, state) => {
+            states.push(state)
+            resolve(state)
+          })
+        )
+        item.setSavePath(savePath)
+        item.resume()
+        item.updateProgress({ state: 'completed' })
+        try {
+          await waiting
+          item.cancel()
+          item.updateProgress({ state: 'canceled' })
+          await settle()
+          assert.deepEqual(states, [])
+          release()
+          assert.equal(await done, outcome)
+          await item.drainFinalization()
+          assert.deepEqual(states, [outcome])
+          if (outcome === 'completed') assert.equal(await readFile(savePath, 'utf8'), 'download')
+          else {
+            assert.equal(await readFile(join(downloadPath, 'guid'), 'utf8'), 'download')
+            assert.equal(diagnostics.filter((entry) => entry.details.copyError).length, 1)
+          }
+        } finally {
+          release()
+          await item.drainFinalization()
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('真实launcher与runtime连续关闭先排空下载，再关闭页面连接和自有profile', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'browser-cdp-download-close-')))
+    const downloadPath = join(root, 'downloads')
+    await mkdir(downloadPath)
+    await writeFile(join(downloadPath, 'guid'), 'download')
+    const machine = createMachine()
+    const runtime = createElectronBrowserRuntime({ externalBrowserLauncher: machine.launcher })
+    const session = await machine.launcher.launch({
+      url: 'https://download.test/',
+      platform: 'darwin',
+      preferRunningBrowser: false,
+      downloadPath,
+    })
+    const browser = machine.spawned[0].browser
+    const targetId = [...browser.tabs].find(([, page]) => page.url === 'https://download.test/')[0]
+    const pageSessionId = [...browser.sessions].find(([, page]) => page.targetId === targetId)[0]
+    runtime.attachExternalPageDriver('s', session.driver, { disposeHost: session.dispose })
+    let release
+    let started
+    const waiting = new Promise((resolve) => {
+      started = resolve
+    })
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    let item
+    session.driver.onDownload((event) => {
+      item = event.item
+    })
+    try {
+      browser.event(pageSessionId, 'Page.downloadWillBegin', {
+        guid: 'guid',
+        suggestedFilename: 'saved.bin',
+      })
+      item.moveFile = async (source, target) => {
+        started()
+        await gate
+        await rename(source, target)
+      }
+      const states = []
+      item.once('done', (_event, state) => {
+        assert.equal(browser.tabs.has(targetId), true)
+        assert.equal(browser.sockets[0].closed, false)
+        assert.deepEqual(machine.kills, [])
+        assert.deepEqual(machine.removed, [])
+        states.push(state)
+      })
+      assert.equal(
+        (
+          await runtime.handleDownload(
+            's',
+            { url: 'https://download.test/', workspaceRoot: root },
+            { action: 'accept', savePath: 'saved.bin' }
+          )
+        ).state,
+        'accepted'
+      )
+      browser.event(pageSessionId, 'Page.downloadProgress', { guid: 'guid', state: 'completed' })
+      await waiting
+      runtime.dispose()
+      assert.deepEqual(states, [])
+      assert.equal(browser.tabs.has(targetId), true)
+      assert.equal(browser.sockets[0].closed, false)
+      assert.deepEqual(machine.kills, [])
+      assert.deepEqual(machine.removed, [])
+      await assert.rejects(session.driver.insertText({ text: 'late input' }), {
+        code: 'EXECUTION_ABORTED',
+      })
+      await assert.rejects(session.driver.executeJavaScript('document.title'), {
+        code: 'EXECUTION_ABORTED',
+      })
+      release()
+      await item.drainFinalization()
+      await settle()
+      assert.deepEqual(states, ['completed'])
+      assert.deepEqual(
+        browser.commands('Target.closeTarget').map((call) => call.params.targetId),
+        [targetId]
+      )
+      assert.equal(browser.sockets[0].closed, true)
+      assert.equal(machine.kills.length, 1)
+      assert.deepEqual(machine.removed, [machine.spawned[0].userDataDir])
+      assert.equal(await readFile(join(root, 'saved.bin'), 'utf8'), 'download')
+    } finally {
+      release()
+      runtime.dispose()
+      await item?.drainFinalization()
+      await settle()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('目标祖先在受理后变成链接时不创建越界目录，权限错误不进入复制兜底', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'browser-cdp-download-path-')))
+    try {
+      for (const change of [
+        'before-mkdir',
+        'before-copy',
+        'changed-decision',
+        'permission',
+        'cross-volume',
+      ]) {
+        const base = join(root, change)
+        const downloadPath = join(base, 'downloads')
+        const allowed = join(base, 'allowed')
+        const outside = join(base, 'outside')
+        await mkdir(downloadPath, { recursive: true })
+        await mkdir(allowed)
+        await mkdir(outside)
+        await writeFile(join(downloadPath, 'guid'), 'download')
+        const diagnostics = []
+        let moves = 0
+        const item = new CdpBrowserPageDownloadItem(
+          {
+            transport: { send: async () => ({}) },
+            guid: 'guid',
+            url: null,
+            filename: 'saved.bin',
+            downloadPath,
+            appendDiagnostic: (entry) => diagnostics.push(entry),
+          },
+          async () => {
+            moves += 1
+            if (change === 'before-copy') {
+              await rm(allowed, { recursive: true })
+              await symlink(outside, allowed, process.platform === 'win32' ? 'junction' : 'dir')
+            }
+            if (change === 'changed-decision') item.setSavePath(join(outside, 'replaced.bin'))
+            throw Object.assign(new Error(change), {
+              code: change === 'permission' ? 'EACCES' : 'EXDEV',
+            })
+          }
+        )
+        const savePath = join(allowed, change === 'before-mkdir' ? 'nested/saved.bin' : 'saved.bin')
+        item.setSavePath(savePath)
+        if (change === 'before-mkdir') {
+          await rm(allowed, { recursive: true })
+          await symlink(outside, allowed, process.platform === 'win32' ? 'junction' : 'dir')
+        }
+        const done = new Promise((resolve) => item.once('done', (_event, state) => resolve(state)))
+        item.resume()
+        item.updateProgress({ state: 'completed' })
+        assert.equal(await done, change === 'cross-volume' ? 'completed' : 'interrupted')
+        await item.drainFinalization()
+        assert.equal(moves, change === 'before-mkdir' ? 0 : 1)
+        assert.deepEqual(await readdir(outside), [])
+        if (change === 'cross-volume') {
+          assert.equal(await readFile(savePath, 'utf8'), 'download')
+          assert.deepEqual(await readdir(downloadPath), [])
+        } else {
+          assert.equal(await readFile(join(downloadPath, 'guid'), 'utf8'), 'download')
+          assert.equal(diagnostics.length, 1)
+          assert.equal(diagnostics[0].details.copyError, null)
+          if (change === 'changed-decision') assert.equal(diagnostics[0].details.code, 'CONFLICT')
+          else if (change !== 'permission') assert.equal(diagnostics[0].details.code, 'PERMISSION')
+          else assert.deepEqual(await readdir(allowed), [])
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('外部页面资源读取', () => {
+  test('空的成功资源合法返回零字节', async () => {
+    const driver = new CdpBrowserPageDriver({
+      transport: {
+        send: async (method) =>
+          method === 'Runtime.evaluate'
+            ? { result: { objectId: 'empty-resource' } }
+            : {
+                result: {
+                  value: { ok: true, status: 204, mimeType: null, contentLength: 0, data: '' },
+                },
+              },
+      },
+    })
+    try {
+      const resource = await driver.fetchResource({ url: 'https://example.test/empty' })
+      assert.equal(resource.ok, true)
+      assert.equal(resource.status, 204)
+      assert.equal(resource.bytes.byteLength, 0)
+    } finally {
+      driver.dispose()
+    }
+  })
+
+  test('没有Content-Length的资源按累计字节上限取消，原样保留VALIDATION原因', async () => {
+    let reads = 0
+    let cancelled = 0
+    let released = 0
+    const payload = await runInNewContext(
+      `(${buildFetchResourceFunction({ url: 'https://example.test/large' })}).call({ controller: new AbortController(), reader: null })`,
+      {
+        AbortController,
+        Uint8Array,
+        btoa,
+        fetch: async () => ({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          body: {
+            getReader: () => ({
+              read: async () => ({
+                done: false,
+                // 不在测试里分配50MiB；超限块在拷贝前就应被拒绝。
+                value:
+                  ++reads === 1
+                    ? new Uint8Array(2)
+                    : { byteLength: BrowserFetchLimits.fileBytes - 1 },
+              }),
+              cancel: async () => {
+                cancelled += 1
+              },
+              releaseLock: () => {
+                released += 1
+              },
+            }),
+          },
+        }),
+      }
+    )
+    assert.equal(reads, 2)
+    assert.equal(cancelled, 1)
+    assert.equal(released, 1)
+    assert.equal(payload.limitExceededBytes, BrowserFetchLimits.fileBytes + 1)
+    const driver = new CdpBrowserPageDriver({
+      transport: {
+        send: async (method) =>
+          method === 'Runtime.evaluate'
+            ? { result: { objectId: 'large-resource' } }
+            : { result: { value: payload } },
+      },
+    })
+    try {
+      await assert.rejects(driver.fetchResource({ url: 'https://example.test/large' }), (error) => {
+        assert.equal(error.code, 'VALIDATION')
+        assert.equal(error.context.bytes, BrowserFetchLimits.fileBytes + 1)
+        return true
+      })
+    } finally {
+      driver.dispose()
+    }
+  })
+
+  test('响应头尚未返回时取消真正中止远端fetch，释放本次句柄且不影响另一请求', async () => {
+    let started
+    const waiting = new Promise((resolve) => {
+      started = resolve
+    })
+    let remoteAborts = 0
+    let remoteSignal
+    const fixture = createResourceDriver(async (url, options) => {
+      if (url.endsWith('/healthy'))
+        return { ok: true, status: 204, body: null, headers: { get: () => null } }
+      remoteSignal = options.signal
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener(
+          'abort',
+          () => {
+            remoteAborts += 1
+            reject(options.signal.reason)
+          },
+          { once: true }
+        )
+        started()
+      })
+    })
+    const abort = new AbortController()
+    const pending = fixture.driver.fetchResource({
+      url: 'https://example.test/headers',
+      signal: abort.signal,
+    })
+    const rejected = assert.rejects(pending, { name: 'AbortError' })
+    try {
+      await waiting
+      assert.notEqual(remoteSignal, abort.signal)
+      const healthy = await fixture.driver.fetchResource({ url: 'https://example.test/healthy' })
+      assert.equal(healthy.bytes.byteLength, 0)
+      abort.abort()
+      await rejected
+      assert.equal(remoteAborts, 1)
+      assert.equal(remoteSignal.aborted, true)
+      assert.equal(fixture.objects.size, 0)
+      assert.equal(
+        fixture.calls.filter((call) => call.method === 'Runtime.releaseObject').length,
+        2
+      )
+    } finally {
+      abort.abort()
+      fixture.driver.dispose()
+    }
+  })
+
+  test('远端reader.read挂起时取消与driver关闭都停止读取，取消监听和句柄结算', async () => {
+    for (const action of ['abort', 'dispose']) {
+      let started
+      const waiting = new Promise((resolve) => {
+        started = resolve
+      })
+      let cancelled = 0
+      let released = 0
+      let remoteSignal
+      const stream = new ReadableStream({
+        cancel: () => {
+          cancelled += 1
+        },
+      })
+      const reader = stream.getReader()
+      const fixture = createResourceDriver(async (_url, options) => {
+        remoteSignal = options.signal
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          body: {
+            getReader: () => ({
+              read: () => {
+                started()
+                return reader.read()
+              },
+              cancel: () => reader.cancel(),
+              releaseLock: () => {
+                released += 1
+                reader.releaseLock()
+              },
+            }),
+          },
+        }
+      })
+      const abort = new AbortController()
+      const pending = fixture.driver.fetchResource({
+        url: 'https://example.test/body',
+        signal: abort.signal,
+      })
+      const rejected = assert.rejects(
+        pending,
+        action === 'abort' ? { name: 'AbortError' } : { code: 'EXECUTION_ABORTED' }
+      )
+      try {
+        await waiting
+        if (action === 'abort') abort.abort()
+        else fixture.driver.dispose()
+        await rejected
+        assert.equal(remoteSignal.aborted, true)
+        assert.equal(cancelled, 1)
+        assert.equal(released, 1)
+        assert.equal(fixture.objects.size, 0)
+        const commands = fixture.calls.length
+        abort.abort()
+        await settle()
+        assert.equal(fixture.calls.length, commands)
+      } finally {
+        abort.abort()
+        fixture.driver.dispose()
+      }
+    }
+  })
+
+  test('已取消调用不创建远端fetch，创建句柄期间取消也不开始传输', async () => {
+    const abort = new AbortController()
+    abort.abort()
+    const fixture = createResourceDriver(() => {
+      throw new Error('不得开始fetch')
+    })
+    try {
+      await assert.rejects(
+        fixture.driver.fetchResource({ url: 'https://example.test/data', signal: abort.signal }),
+        { name: 'AbortError' }
+      )
+      assert.deepEqual(fixture.calls, [])
+    } finally {
+      fixture.driver.dispose()
+    }
+    let release
+    let started
+    const waiting = new Promise((resolve) => {
+      started = resolve
+    })
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    const during = new AbortController()
+    const calls = []
+    const driver = new CdpBrowserPageDriver({
+      transport: {
+        send: async (method, params) => {
+          calls.push({ method, params })
+          if (method === 'Runtime.evaluate') {
+            started()
+            await gate
+            return { result: { objectId: 'late-controller' } }
+          }
+          return {}
+        },
+      },
+    })
+    const pending = driver.fetchResource({
+      url: 'https://example.test/data',
+      signal: during.signal,
+    })
+    const rejected = assert.rejects(pending, { name: 'AbortError' })
+    try {
+      await waiting
+      during.abort()
+      release()
+      await rejected
+      assert.equal(calls.filter((call) => call.method === 'Runtime.callFunctionOn').length, 1)
+      assert.equal(
+        calls.find((call) => call.method === 'Runtime.callFunctionOn').params.awaitPromise,
+        undefined
+      )
+      assert.equal(calls.at(-1).method, 'Runtime.releaseObject')
+    } finally {
+      release()
+      driver.dispose()
+    }
+  })
+})
 
 /** 一条假的 WebSocket：发出去的交给对面的假浏览器，对面回的按 message 事件送回来。 */
 class FakeSocket {
@@ -479,6 +1175,8 @@ describe('浏览器级连接上的标签页会话', () => {
     assert.equal(machine.network.opened.length, 1, '从头到尾一条 WebSocket')
     assert.equal(browser.commands('Target.getTargets').length > 0, true)
     switched.dispose()
+    await settle()
+    assert.equal(browser.tabs.has(bTab.id), true, '派生驱动只脱开协议，不关闭借用的标签页')
     other.dispose()
     session.dispose()
     machine.launcher.dispose()
@@ -486,6 +1184,60 @@ describe('浏览器级连接上的标签页会话', () => {
 })
 
 describe('外部浏览器启动器', () => {
+  test('同步spawn失败和Node error事件都拒绝启动并回收未启动的临时profile', async () => {
+    for (const mode of ['throw', 'error']) {
+      const failure = new Error('ENOENT: browser executable missing')
+      const profiles = []
+      const removed = []
+      let killCalls = 0
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null,
+        signalCode: null,
+        pid: undefined,
+        killed: false,
+        kill: () => {
+          killCalls += 1
+          return false
+        },
+      })
+      const launcher = new CdpExternalBrowserLauncher({
+        existsSync: () => false,
+        mkdtemp: async (prefix) => {
+          const profile = `${prefix}${profiles.length + 1}`
+          profiles.push(profile)
+          return profile
+        },
+        unlink: async () => undefined,
+        rm: async (path) => {
+          removed.push(path)
+        },
+        sleep: async () => undefined,
+        spawn: () => {
+          if (mode === 'throw') throw failure
+          queueMicrotask(() => child.emit('error', failure))
+          return child
+        },
+      })
+      try {
+        await assert.rejects(
+          launcher.launch({
+            executablePath: '/missing/browser',
+            preferRunningBrowser: false,
+            platform: 'linux',
+          }),
+          mode === 'error' ? { code: 'UNAVAILABLE' } : (error) => error === failure
+        )
+        await settle()
+        assert.ok(profiles.length > 0)
+        assert.deepEqual(removed, profiles)
+        assert.equal(killCalls, 0)
+        assert.equal(child.listenerCount('error'), 0)
+      } finally {
+        launcher.dispose()
+      }
+    }
+  })
+
   test('用户自己的 Chrome：按默认配置目录的端口文件接上，过期的端口文件跳过；不改它的下载行为', async () => {
     const machine = createMachine()
     machine.files.set(

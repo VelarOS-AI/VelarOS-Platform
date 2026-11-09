@@ -5,7 +5,11 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { BrowserOperationContext } from '../../contract/requires.js'
+import type { BrowserOperationContext, BrowserPageDriver } from '../../contract/requires.js'
+import { BrowserInteractionEngine } from '../../impl/electron/BrowserInteractionEngine.js'
+import { ElectronWebContentsBrowserPageDriver } from '../../impl/electron/ElectronWebContentsBrowserPageDriver.js'
+import { CdpInteractionEngine } from '../../impl/engines/CdpInteractionEngine.js'
+import { BrowserTargetRefStore } from '../../impl/session/BrowserTargetRefStore.js'
 import type { BrowserElementTargetHint, BrowserTargetActionResult } from '../../types/browser.js'
 import { performTargetActionWithRecovery } from '../../utils/target-recovery.js'
 
@@ -201,5 +205,101 @@ void describe('target action 的坐标恢复', () => {
 
     assert.equal(result.matched, false)
     assert.deepEqual(clicks, [])
+  })
+})
+
+void describe('输入已经开始后的失败不重放', () => {
+  void test('坐标点击回包失败不会再执行 DOM click', async () => {
+    const failure = new Error('mouse reply missing after dispatch')
+    const scripts: string[] = []
+    let clicks = 0
+    const driver = {
+      kind: 'external',
+      executeJavaScript: async (script: string) => {
+        scripts.push(script)
+        if (script.includes('__velarosActionEffectSnapshot')) return null
+        return {
+          action: 'click',
+          url: 'https://example.test/',
+          matched: true,
+          clickMethod: 'coordinate',
+          clickPoint: { x: 40, y: 60 },
+          failureReason: null,
+        }
+      },
+      clickCoordinates: async () => {
+        clicks++
+        throw failure
+      },
+    } as unknown as BrowserPageDriver
+    const engine = new CdpInteractionEngine(
+      {
+        getExternalPageSession: () => ({ driver, visible: false }),
+      } as never,
+      new BrowserTargetRefStore()
+    )
+    await assert.rejects(
+      engine.performTargetAction('s', { url: 'https://example.test/' } as never, {
+        action: 'click',
+        target: createTarget(),
+      }),
+      (error) => error === failure
+    )
+    assert.equal(clicks, 1)
+    assert.equal(
+      scripts.filter((script) => !script.includes('__velarosActionEffectSnapshot')).length,
+      1
+    )
+  })
+
+  void test('embedded CDP 点击和拖拽部分派发失败后不换 sendInputEvent 重放', async () => {
+    for (const action of ['click', 'drag'] as const) {
+      const failure = new Error('mousePressed accepted but reply lost')
+      const sent: string[] = []
+      let nativeInputs = 0
+      const driver = new ElectronWebContentsBrowserPageDriver({
+        isDestroyed: () => false,
+        focus: () => undefined,
+        debugger: {
+          isAttached: () => true,
+          sendCommand: async (_method: string, event: { type: string }) => {
+            sent.push(event.type)
+            if (event.type === 'mousePressed') throw failure
+          },
+        },
+        sendInputEvent: () => {
+          nativeInputs++
+        },
+      } as never)
+      const pending =
+        action === 'click'
+          ? driver.clickCoordinates({ x: 20, y: 30 })
+          : driver.dragCoordinates({ startX: 20, startY: 30, endX: 80, endY: 90 })
+      await assert.rejects(pending, (error) => error === failure)
+      assert.deepEqual(sent, ['mouseMoved', 'mousePressed'])
+      assert.equal(nativeInputs, 0)
+    }
+  })
+
+  void test('embedded 注入的 driver 缺坐标能力时，在任何输入或画面反馈前拒绝', async () => {
+    let scripts = 0
+    const engine = new BrowserInteractionEngine(
+      {
+        getExternalPageSession: () => null,
+        getLivePageSession: async () => ({ webContents: {} }),
+        wrapPageDriver: () => ({
+          executeJavaScript: async () => {
+            scripts++
+          },
+        }),
+      } as never,
+      {} as never,
+      new BrowserTargetRefStore()
+    )
+    await assert.rejects(
+      engine.clickCoordinates('s', { url: 'https://example.test/' } as never, { x: 20, y: 30 }),
+      { code: 'VALIDATION' }
+    )
+    assert.equal(scripts, 0)
   })
 })

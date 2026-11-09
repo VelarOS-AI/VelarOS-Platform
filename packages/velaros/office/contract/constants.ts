@@ -104,6 +104,8 @@ export const OfficeInputLimits = Object.freeze({
   presentation: Object.freeze({
     /** 一份演示文稿最多多少页。 */
     slides: 200,
+    /** 自动排版单页正文字符上限；超限要求调用方分页，不丢弃正文。 */
+    autoBodyChars: 2_800,
     /** 单页最多多少个元素。 */
     elements: 200,
   }),

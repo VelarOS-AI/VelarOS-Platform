@@ -41,6 +41,7 @@ export interface RegisteredProviderScriptSource {
  */
 export interface ProviderScriptRegistryPort {
   supportsProvider(provider: ChatProviderId): boolean
+  /** 只含 manifest 的深冻结快照；同一加载代身份稳定，需要编辑时先复制。 */
   getProviderScript(provider: ChatProviderId): Nullable<ProviderScriptDescriptor>
   listProviderManifests(): ProviderScriptManifest[]
   validateProviderRuntime(

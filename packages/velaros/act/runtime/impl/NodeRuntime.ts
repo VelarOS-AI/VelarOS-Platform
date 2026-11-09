@@ -129,7 +129,9 @@ class NodeRuntime implements NodeRuntimeApi {
         .filter((result) => result.status === 'rejected')
         .map((result) => result.reason)
       if (failures.length)
-        throw new AggregateError([error, ...failures], 'Node Runtime 初始化及资源清理失败')
+        throw AppError.withFields('UNAVAILABLE', 'Node Runtime 初始化及资源清理失败', {
+          errors: [error, ...failures],
+        })
       throw error
     }
   }

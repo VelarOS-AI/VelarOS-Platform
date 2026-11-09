@@ -587,12 +587,10 @@ export class AdvancedSearch implements AdvancedSearchApi {
     }
     if (!isEmpty(failures)) {
       const errors = [...(failed ? [primary] : []), ...failures]
-      throw Object.assign(
-        new AggregateError(
-          errors,
-          `搜索收尾失败；已尝试预算、会话和执行权清理：${errors.map((error) => (error instanceof Error ? error.message : String(error))).join('；')}`
-        ),
-        { code: 'SEARCH_CLEANUP' }
+      throw AppError.withFields(
+        'SEARCH_CLEANUP',
+        `搜索收尾失败；已尝试预算、会话和执行权清理：${errors.map((error) => (error instanceof Error ? error.message : String(error))).join('；')}`,
+        { errors: [...errors] }
       )
     }
     if (failed) throw primary

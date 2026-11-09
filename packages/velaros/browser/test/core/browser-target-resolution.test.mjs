@@ -157,6 +157,22 @@ test('INV-31 inspection refs are generation-scoped, fail closed, and keep stored
   )
 })
 
+test('closing all sessions keeps previously issued ref generations retired when the runtime is reused', () => {
+  const store = new BrowserTargetRefStore()
+  const first = target({ ref: '@e1', css: '#first' })
+  store.storeTargets('session', [first])
+  const retired = first.ref
+  store.clearAll()
+  const next = target({ ref: '@e1', css: '#next' })
+  store.storeTargets('session', [next])
+  assert.notEqual(next.ref, retired)
+  assert.throws(
+    () => store.hydrateTarget('session', target({ ref: retired })),
+    (error) => error?.context?.reason === 'stale-ref'
+  )
+  assert.equal(store.hydrateTarget('session', target({ ref: next.ref })).css, '#next')
+})
+
 test('snapshot only publishes refs retained by the final target collection', () => {
   const store = new BrowserTargetRefStore()
   const retained = target({ ref: '@e1', css: '#primary', text: 'Primary' })

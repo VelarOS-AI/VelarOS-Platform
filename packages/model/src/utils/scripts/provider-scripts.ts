@@ -23,6 +23,7 @@ import type {
   ModelInputModality,
   ModelRequestOptions,
   ProviderModelCatalogEntry,
+  ProviderScriptDescriptor,
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
 } from '../../types/model'
@@ -43,6 +44,20 @@ const ProviderScriptDefinitionOptionalMembers = [
   'listModels',
   'resolveRuntimeMetadata',
 ] as const
+
+/** 公开描述符只有脱离脚本执行对象的清单；嵌套冻结后可稳定承担同一加载代的缓存身份。 */
+export function createProviderScriptDescriptor(
+  manifest: ProviderScriptManifest
+): ProviderScriptDescriptor {
+  const snapshot = structuredClone(manifest)
+  for (const model of snapshot.models) {
+    if (model.inputModalities) Object.freeze(model.inputModalities)
+    Object.freeze(model)
+  }
+  Object.freeze(snapshot.models)
+  Object.freeze(snapshot)
+  return Object.freeze({ manifest: snapshot })
+}
 
 /** 注入 provider id 的形状规则：小写开头、只许小写字母数字与 `._-`，且不与内置 id 冲突。 */
 export function normalizeInjectedProviderId(value: unknown): Nullable<ChatProviderId> {

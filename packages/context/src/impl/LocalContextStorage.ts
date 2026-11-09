@@ -5,6 +5,7 @@ import { getBuiltinModule } from 'node:process'
 import type { DatabaseSync } from 'node:sqlite'
 
 import { isEmpty, isFalse, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
 
 import { ContextLimits } from '../contract/constants.js'
@@ -89,7 +90,9 @@ export class LocalContextStorage implements ContextStorage {
       try {
         this.db.close()
       } catch (cleanup) {
-        throw new AggregateError([error, cleanup], '本地存储初始化及清理失败')
+        throw AppError.withFields('UNAVAILABLE', '本地存储初始化及清理失败', {
+          errors: [error, cleanup],
+        })
       }
       throw error
     }

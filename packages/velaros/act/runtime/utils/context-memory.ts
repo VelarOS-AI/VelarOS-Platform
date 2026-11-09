@@ -819,3 +819,18 @@ export function memoryReference(state: Nullable<ContextState>, ref: ContextRef) 
     ? record
     : undefined
 }
+
+/** 当前任务原文共用同一授权；当前目标跨任务可读，旧目标仍须当前代次或用户显式重附加。 */
+export function memoryMaterialReference(
+  state: Nullable<ContextState>,
+  sessionId: string,
+  ref: ContextRef
+): Optional<ContextRecord> {
+  const currentGoal = state?.records.findLast((item) => item.title === 'session:goal')
+  return (
+    memoryReference(state, ref) ??
+    (ref.sessionId === sessionId && currentGoal?.kind === 'audit' && currentGoal.ref.id === ref.id
+      ? currentGoal
+      : undefined)
+  )
+}

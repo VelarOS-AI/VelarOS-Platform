@@ -20,20 +20,20 @@ export interface FeaturesOperationsApi {
    * @OperationEffect none
    */
   list(ctx: FeaturesOperationContext): Promise<readonly FeatureSummary[]>
-  /** @AgentView 按身份加载本轮可用能力的完整 Skill 说明和资源目录。新 npm 包从下一次程序执行生效。
+  /** @AgentView 按身份加载本轮可用能力的完整 Skill 说明和资源目录。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
    * @OperationEffect none
    */
   load(input: FeatureIdInput, ctx: FeaturesOperationContext): Promise<FeatureLoaded>
-  /** @AgentView 静态校验 Feature、Codex Skill 或 Markdown；不执行来源代码、不安装依赖。
+  /** @AgentView 静态校验 Feature、Codex Skill 或 Markdown；path 最多 4096 个字符。不执行来源代码、不安装依赖。
    * @OperationEffect none
    */
   validate(input: FeaturePathInput, ctx: FeaturesOperationContext): Promise<FeatureDefinition>
-  /** @AgentView 安装或升级本机来源，发布前由宿主确认；依赖脚本默认关闭。
+  /** @AgentView 安装或升级本机来源，path 最多 4096 个字符；发布前由宿主确认，依赖脚本默认关闭。
    * @OperationEffect write
    * @OperationModes execute
    */
   install(input: FeatureInstallInput, ctx: FeaturesOperationContext): Promise<FeatureSummary>
-  /** @AgentView 卸载能力并撤销后续调用；在途执行及后台任务持有的文件继续受租约保护。
+  /** @AgentView 卸载能力并撤销后续调用，id 最多 214 个字符；在途执行及后台任务持有的文件继续受租约保护。
    * @OperationEffect write
    * @OperationModes execute
    */

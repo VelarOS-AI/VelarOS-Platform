@@ -73,14 +73,21 @@ async function startNode(): Promise<{
   readonly server: RemoteNodeServer
   readonly url: string
   readonly credentials: MemoryNodeCredentialStore
+  readonly activeSubscriptions: () => number
 }> {
   const credentials = new MemoryNodeCredentialStore()
+  let subscriptions = 0
   const server = new RemoteNodeServer({
     nodeName: 'test-node',
     nodeVersion: '0.3.0',
     manifestSource: {
       current: () => createManifest([], []),
-      onChange: () => () => undefined,
+      onChange: () => {
+        subscriptions++
+        return () => {
+          subscriptions--
+        }
+      },
     },
     invoker: {
       invoke: async () => ({ status: 'success' as const, output: null }),
@@ -91,7 +98,7 @@ async function startNode(): Promise<{
   })
   servers.push(server)
   const status = await server.start()
-  return { server, url: status.endpoint, credentials }
+  return { server, url: status.endpoint, credentials, activeSubscriptions: () => subscriptions }
 }
 
 function createClient(url: string, clientName: string): RemoteNodeClient {
@@ -106,6 +113,67 @@ function createClient(url: string, clientName: string): RemoteNodeClient {
 }
 
 describe('远程节点配对窗口', () => {
+  test('迟到凭据读取不能恢复已解除信任，停机排空同代启动并允许显式重启', async () => {
+    for (const phase of ['unpair', 'stop'] as const) {
+      const { server, credentials, activeSubscriptions } = await startNode()
+      await server.stop()
+      credentials.stored = {
+        clientId: 'old-client',
+        publicKey: 'old-public-key',
+        clientName: 'Old client',
+        pairedAt: 0,
+      }
+      const load = credentials.load.bind(credentials)
+      const entered = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      let loads = 0
+      credentials.load = async () => {
+        loads++
+        const snapshot = await load()
+        entered.resolve()
+        await release.promise
+        return snapshot
+      }
+      const starting = server.start()
+      const result = starting.catch((error: unknown) => error)
+      let closing: Promise<void> | undefined
+      try {
+        expect(server.start()).toBe(starting)
+        await entered.promise
+        expect(loads).toBe(1)
+        if (phase === 'unpair') {
+          await server.unpair()
+          release.resolve()
+          expect((await starting).pairedClientId).toBeNull()
+          expect(credentials.stored).toBeNull()
+          expect(activeSubscriptions()).toBe(1)
+        } else {
+          let stopped = false
+          closing = server.stop().then(() => {
+            stopped = true
+          })
+          await expect(server.start()).rejects.toMatchObject({ code: 'CLOSED' })
+          expect(stopped).toBe(false)
+          expect(activeSubscriptions()).toBe(0)
+          release.resolve()
+          expect(await result).toMatchObject({ name: 'AbortError' })
+          await closing
+          expect(activeSubscriptions()).toBe(0)
+          expect(() => server.getStatus()).toThrow('远程节点服务端还没启动')
+          credentials.load = load
+          expect((await server.start()).pairedClientId).toBe('old-client')
+          expect(activeSubscriptions()).toBe(1)
+        }
+      } finally {
+        release.resolve()
+        await result
+        await closing
+        credentials.load = load
+        await server.stop()
+      }
+    }
+  })
+
   test('配对码一经接受立刻作废，落盘途中同一个码不能被第二条连接复用', async () => {
     const { server, url, credentials } = await startNode()
     credentials.hold = true
@@ -138,6 +206,63 @@ describe('远程节点配对窗口', () => {
     })
     expect(server.getStatus().pairedClientId).toBe(pairedClientId!)
     expect(credentials.stored?.clientId).toBe(pairedClientId!)
+  })
+
+  test('解除配对排空已接受的凭据写入，迟到配对不能恢复连接或落盘凭据', async () => {
+    const { server, url, credentials } = await startNode()
+    const completed: string[] = []
+    const save = credentials.save.bind(credentials)
+    credentials.save = async (credential) => {
+      await save(credential)
+      // 模拟真正落盘在 gate 之后结束，不能仅靠清掉内存就通过。
+      credentials.stored = credential
+      completed.push('save')
+    }
+    credentials.hold = true
+    server.startPairing()
+    const client = createClient(url, 'cancelled-pairing')
+    const connecting = client.connect().catch((error: unknown) => error)
+    await credentials.saveEntered
+    let cleared = false
+    const clear = credentials.clear.bind(credentials)
+    credentials.clear = async () => {
+      cleared = true
+      await clear()
+      completed.push('clear')
+    }
+    let unpaired = false
+    let stopped = false
+    const unpairing = server.unpair().then(() => {
+      unpaired = true
+    })
+    let stopping: Promise<void> | undefined
+    try {
+      await Promise.resolve()
+      expect(cleared).toBe(false)
+      expect(server.getStatus().pairingCode).toBeNull()
+      expect(server.getStatus().pairedClientId).toBeNull()
+      expect(server.getStatus().connectedClientId).toBeNull()
+      expect(await connecting).toMatchObject({ code: 'REMOTE_NODE_UNAUTHORIZED' })
+      stopping = server.stop().then(() => {
+        stopped = true
+        completed.push('stop')
+      })
+      // 让已关闭连接的本地 close 回调跑完；凭据 save 仍由 gate 持有。
+      await new Promise<void>((resolve) => setImmediate(() => setImmediate(resolve)))
+      expect(unpaired).toBe(false)
+      expect(stopped).toBe(false)
+      credentials.releaseSave()
+      await Promise.all([unpairing, stopping])
+      expect(cleared).toBe(true)
+      expect(await credentials.load()).toBeNull()
+      expect(completed).toEqual(['save', 'clear', 'stop'])
+      expect(() => server.getStatus()).toThrow('远程节点服务端还没启动')
+    } finally {
+      credentials.releaseSave()
+      await unpairing
+      await stopping
+      await connecting
+    }
   })
 })
 

@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 
 import { test } from 'bun:test'
 
+import { BrowserFileLimits } from '../../contract/constants.js'
 import { createBrowserSiteWorkspaceFileAccess } from '../../impl/workspace/BrowserWorkspaceFileAccess.js'
 
 async function fixture() {
@@ -44,6 +45,23 @@ test('listing includes only the current root and respects nonexistent directorie
     const entries = await f.access.listFiles({ path: 'recipes', recursive: true, limit: 50 })
     assert.deepEqual(entries.map((entry) => basename(entry.path)).sort(), ['a.json', 'shared.json'])
     assert.deepEqual(await f.access.listFiles({ path: 'missing' }), [])
+  } finally {
+    await f.dispose()
+  }
+})
+
+test('default text reads respect the declared character limit while explicit larger reads remain available', async () => {
+  const f = await fixture()
+  try {
+    const content = '甲'.repeat(BrowserFileLimits.readChars + 7)
+    await writeFile(join(f.root, 'large.txt'), content, 'utf8')
+    const bounded = await f.access.readFile('large.txt')
+    assert.equal(bounded.content.length, BrowserFileLimits.readChars)
+    assert.equal(bounded.returnedChars, BrowserFileLimits.readChars)
+    assert.equal(bounded.truncated, true)
+    const complete = await f.access.readFile('large.txt', 1, undefined, content.length)
+    assert.equal(complete.content, content)
+    assert.equal(complete.truncated, false)
   } finally {
     await f.dispose()
   }

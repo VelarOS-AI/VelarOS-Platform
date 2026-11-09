@@ -205,6 +205,60 @@ test('polling driver requires executor-native progress and stable idle', async (
   await driver.closeSession(session)
 })
 
+test('polling refreshes the pre-send fence after awaiting input or abort and still detects synchronous completion', async () => {
+  for (const previous of ['awaiting-input', 'aborted'] as const) {
+    let sends = 0
+    let revision = 'r0'
+    let continuationPolls = 0
+    const driver = labDrivers.createPolling(
+      adapter({
+        send: async () => {
+          sends += 1
+          if (sends !== 2) revision = `r${sends}`
+        },
+        readState: async () => {
+          if (sends === 2) {
+            continuationPolls += 1
+            if (continuationPolls >= 4) revision = 'r2'
+          }
+          return {
+            running: sends === 2 && continuationPolls === 3,
+            awaitingConfirmation: false,
+            awaitingInput: sends === 1 && previous === 'awaiting-input',
+            revision,
+            usage: EmptyBudgetUsage,
+            unavailable: null,
+          }
+        },
+      }),
+      Policy
+    )
+    const session = await driver.openSession(sessionSpec())
+    const request = {
+      budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
+      signal: new AbortController().signal,
+      onSample: async () => ({ kind: 'continue' as const }),
+    }
+    try {
+      await driver.send(session, journey().legs[0]!)
+      const first = await driver.waitSettled(session, {
+        ...request,
+        onSample: async () => ({ kind: 'abort', detectorId: 'fixture', reason: 'stop' }),
+      })
+      expect(first.kind).toBe(previous)
+
+      await driver.send(session, journey().legs[0]!)
+      expect(await driver.waitSettled(session, request)).toEqual({ kind: 'settled' })
+      expect(continuationPolls).toBe(5)
+
+      await driver.send(session, journey().legs[0]!)
+      expect(await driver.waitSettled(session, request)).toEqual({ kind: 'settled' })
+    } finally {
+      await driver.closeSession(session)
+    }
+  }
+})
+
 test('polling driver classifies native executor unavailability as attrition', async () => {
   const driver = labDrivers.createPolling(
     adapter({

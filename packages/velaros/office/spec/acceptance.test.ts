@@ -524,6 +524,7 @@ export const bytes = written.bytes
       `摘要，最多 ${OfficeInputLimits.word.abstractChars} 个字符`,
       `最多 ${OfficeInputLimits.keywords} 个，每个最多 ${OfficeInputLimits.tinyFieldChars} 个字符`,
       `最多 ${OfficeInputLimits.presentation.slides} 页，每页最多 ${OfficeInputLimits.presentation.elements} 个元素`,
+      `正文最多 ${OfficeInputLimits.presentation.autoBodyChars} 字符`,
       `最多 ${OfficeInputLimits.spreadsheet.sheets} 张`,
       `name 最多 ${OfficeInputLimits.spreadsheet.sheetNameChars} 个字符`,
       `最多 ${OfficeInputLimits.spreadsheet.rows} 行、每行最多 ${OfficeInputLimits.spreadsheet.columns} 格`,

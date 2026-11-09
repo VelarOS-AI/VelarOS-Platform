@@ -3458,6 +3458,8 @@ export class RuntimeSession implements VelarosSession {
       Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
       failures.push(error)
     }
+    // 探测取消可先返回给业务轮；其物理清理仍须在资源和存储关闭前完成。
+    await this.pendingObservationProbe
     try {
       await this.view.end(wasRunning ? 'cancelled' : undefined)
     } catch (error) {
@@ -3477,7 +3479,8 @@ export class RuntimeSession implements VelarosSession {
       failures.push(error)
     }
     this.dependencies.closed?.()
-    if (!isEmpty(failures)) throw new AggregateError(failures, '会话关闭失败')
+    if (!isEmpty(failures))
+      throw AppError.withFields('UNAVAILABLE', '会话关闭失败', { errors: [...failures] })
   }
 }
 

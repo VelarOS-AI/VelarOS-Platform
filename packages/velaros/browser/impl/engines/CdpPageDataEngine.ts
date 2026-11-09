@@ -220,7 +220,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const targetUrl = normalizeFetchResourceUrl(options.url)
-    const artifactPath = await resolveWorkspaceFilePath(
+    let artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
       options.savePath,
       'savePath'
@@ -232,6 +232,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     const response = await externalSession.driver.fetchResource({
       url: targetUrl,
       referer,
+      ...(_abortSignal ? { signal: _abortSignal } : {}),
     })
     const status = response.status
     if (!response.ok) {
@@ -260,7 +261,20 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       )
     }
 
+    _abortSignal?.throwIfAborted()
+    artifactPath = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
+    _abortSignal?.throwIfAborted()
     await mkdir(dirname(artifactPath.path), { recursive: true })
+    artifactPath = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
+    _abortSignal?.throwIfAborted()
     await writeFile(artifactPath.path, response.bytes)
 
     return {

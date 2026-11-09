@@ -14,7 +14,7 @@ import type { Socket } from 'node:net'
 import { type RawData, WebSocket, type WebSocketServer } from 'ws'
 
 import { isNotNull, isNull, isPresent, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, createAbortError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RemoteNodeLimits } from '../../contract/constants'
@@ -24,6 +24,7 @@ import type {
   RemoteNodeServerOptions,
   RemoteNodeServerStatus,
 } from '../../types/remote-node'
+import { isNodeError } from '../../utils/fs'
 import {
   createChallenge,
   createEpoch,
@@ -87,11 +88,15 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
   private runner: RemoteNodeCallRunner
   private manifest: RemoteNodeManifest
   private credential: Nullable<RemoteNodePairedCredential> = null
+  private credentialGeneration = 0
+  private credentialWrites: Promise<void> = Promise.resolve()
   private ready: Nullable<RemoteNodeConnection> = null
   private unsubscribeManifest: Nullable<() => void> = null
   private httpServer?: Server
   private webSocketServer?: WebSocketServer
   private endpoint?: string
+  private starting: Nullable<Promise<RemoteNodeServerStatus>> = null
+  private stopping: Nullable<Promise<void>> = null
 
   public constructor(private readonly options: RemoteNodeServerOptions) {
     this.now = options.now ?? Date.now
@@ -109,38 +114,96 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     }
   }
 
-  public async start(): Promise<RemoteNodeServerStatus> {
-    if (isPresent(this.endpoint)) return this.getStatus()
+  public start(): Promise<RemoteNodeServerStatus> {
+    if (this.stopping) return Promise.reject(new AppError('CLOSED', '远程节点服务端正在停止'))
+    if (this.starting) return this.starting
+    if (isPresent(this.endpoint)) return Promise.resolve(this.getStatus())
     if (this.timers.isDisposed) {
       this.timers = new TimerScope({ name: 'RemoteNodeServer' })
       this.pairing = this.createPairingGate()
       this.runner = this.createCallRunner()
     }
+    const timers = this.timers
+    const starting: Promise<RemoteNodeServerStatus> = Promise.resolve().then(async () => {
+      try {
+        return await this.startOnce(timers)
+      } finally {
+        if (this.starting === starting) this.starting = null
+      }
+    })
+    this.starting = starting
+    return starting
+  }
+
+  private async startOnce(timers: TimerScope): Promise<RemoteNodeServerStatus> {
+    this.assertStarting(timers)
+    const generation = this.credentialGeneration
     // 凭据一次性读进内存:握手路径因此全同步,不会出现「已收 hello 但还没决定 paired」的窗口。
-    this.credential = await this.options.credentialStore.load()
+    // 已接纳的清除先落盘；读取途中解除配对则由同一信任代次阻止旧快照恢复。
+    const credential = await this.credentialWrites.then(() => this.options.credentialStore.load())
+    this.assertStarting(timers)
+    if (generation === this.credentialGeneration) this.credential = credential
     const listener = await listenRemoteNode({
       bindHost: this.options.bindHost ?? RemoteNodeServer.DefaultBindHost,
       portStart: this.options.portStart ?? RemoteNodeLimits.defaultPortStart,
       portEnd: this.options.portEnd ?? RemoteNodeLimits.defaultPortEnd,
       onConnection: (socket) => this.accept(socket),
       onNetworkSocket: (socket) => {
+        if (timers !== this.timers || timers.isDisposed || this.stopping) {
+          socket.destroy()
+          return
+        }
         this.networkSockets.add(socket)
         socket.once('close', () => this.networkSockets.delete(socket))
       },
     })
-    this.httpServer = listener.httpServer
-    this.webSocketServer = listener.webSocketServer
-    this.endpoint = listener.endpoint
-    // 订阅放在监听之后且与之同 tick:监听抛错时不留悬空订阅,而这一 tick 内还没有任何连接能
-    // 到达,不存在漏掉一次清单变更的窗口。
-    this.manifest = this.options.manifestSource.current()
-    this.unsubscribeManifest = this.options.manifestSource.onChange((manifest) => {
-      this.manifest = manifest
-      const ready = this.ready
-      if (isNull(ready)) return
-      sendFrame(ready.socket, { type: 'manifest_changed', manifest })
-    })
-    return this.getStatus()
+    let unsubscribe: Nullable<() => void> = null
+    try {
+      this.assertStarting(timers)
+      // 订阅与监听发布在同一 tick；发布前句柄仍归这次启动所有，停机不能漏掉迟到资源。
+      this.manifest = this.options.manifestSource.current()
+      this.assertStarting(timers)
+      unsubscribe = this.options.manifestSource.onChange((changed) => {
+        this.manifest = changed
+        const ready = this.ready
+        if (isNull(ready)) return
+        sendFrame(ready.socket, { type: 'manifest_changed', manifest: changed })
+      })
+      this.assertStarting(timers)
+      this.httpServer = listener.httpServer
+      this.webSocketServer = listener.webSocketServer
+      this.endpoint = listener.endpoint
+      this.unsubscribeManifest = unsubscribe
+      return this.getStatus()
+    } catch (error) {
+      const cleanup = await Promise.allSettled([
+        Promise.resolve().then(() => {
+          unsubscribe?.()
+        }),
+        this.closeListener(listener.httpServer, listener.webSocketServer),
+      ])
+      const cleanupErrors = cleanup.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
+      if (cleanupErrors.length) {
+        throw AppError.withFields(
+          'UNAVAILABLE',
+          '远程节点启动失败且监听清理失败',
+          {
+            startupFailure: error,
+            cleanupErrors,
+          },
+          error
+        )
+      }
+      throw error
+    }
+  }
+
+  private assertStarting(timers: TimerScope): void {
+    if (timers !== this.timers || timers.isDisposed || this.stopping) {
+      throw createAbortError('Remote node server stopped during startup')
+    }
   }
 
   /** 开一次配对窗口,返回给宿主展示的六位码。 */
@@ -152,13 +215,15 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
 
   /** 解除配对:斩断在线连接,并丢掉终态回放缓存(它属于上一段信任关系)。 */
   public async unpair(): Promise<void> {
-    const ready = this.ready
-    if (isNotNull(ready)) {
-      this.closeConnection(ready, RemoteNodeCloseCode.Unauthorized, '凭据已清除')
+    this.credentialGeneration++
+    this.pairing.cancel()
+    for (const connection of [...this.connections]) {
+      this.closeConnection(connection, RemoteNodeCloseCode.Unauthorized, '凭据已清除')
     }
     this.credential = null
     this.runner.forgetCompleted()
-    await this.options.credentialStore.clear()
+    // 已接受的 save 即使不能取消，也必须先结束，再清除其真实落盘结果。
+    await this.writeCredential(() => this.options.credentialStore.clear())
   }
 
   public getStatus(): RemoteNodeServerStatus {
@@ -175,9 +240,23 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     }
   }
 
-  public async stop(): Promise<void> {
+  public stop(): Promise<void> {
+    if (this.stopping) return this.stopping
+    const stopping: Promise<void> = Promise.resolve().then(async () => {
+      try {
+        await this.stopOnce()
+      } finally {
+        if (this.stopping === stopping) this.stopping = null
+      }
+    })
+    this.stopping = stopping
+    return stopping
+  }
+
+  private async stopOnce(): Promise<void> {
     this.pairing.cancel()
-    this.unsubscribeManifest?.()
+    this.timers.dispose()
+    const unsubscribe = this.unsubscribeManifest
     this.unsubscribeManifest = null
     this.runner.abortAll('Remote node server stopped')
     for (const connection of [...this.connections]) {
@@ -185,18 +264,51 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     }
     this.connections.clear()
     this.ready = null
-    this.timers.dispose()
-    for (const client of this.webSocketServer?.clients ?? []) client.terminate()
-    for (const socket of this.networkSockets) socket.destroy()
-    this.networkSockets.clear()
-    // noServer 模式下 `ws` 不持监听句柄;上面把升级后的 TCP socket 全销毁之后,close 只是翻转
-    // 内存状态,等它的可选回调在不同 Node 兼容运行时上并不可靠。
-    this.webSocketServer?.close()
-    this.httpServer?.closeAllConnections()
-    this.httpServer?.close()
+    const closing = this.httpServer
+      ? this.closeListener(this.httpServer, this.webSocketServer)
+      : Promise.resolve()
     this.webSocketServer = undefined
     this.httpServer = undefined
     this.endpoint = undefined
+    // 启动只核本代准入并自行清掉迟到 listener，不反过来等待 stop。
+    const outcomes = await Promise.allSettled([
+      this.starting,
+      closing,
+      Promise.resolve().then(() => {
+        unsubscribe?.()
+      }),
+      // 排序尾等待已接纳写入物理结算；原 save/clear 错误仍归各自调用方。
+      this.credentialWrites,
+    ])
+    const failures = outcomes.flatMap((result, index) =>
+      result.status === 'rejected' &&
+      !(index === 0 && result.reason instanceof Error && result.reason.name === 'AbortError')
+        ? [result.reason]
+        : []
+    )
+    if (failures.length === 1) throw failures[0]
+    if (failures.length > 1) {
+      throw AppError.withFields('UNAVAILABLE', '远程节点停止失败', { failures })
+    }
+  }
+
+  private async closeListener(
+    httpServer: Server,
+    webSocketServer?: WebSocketServer
+  ): Promise<void> {
+    // 启动回滚和停机共用同一实例的 socket owner，迟到监听也不能留下原始连接。
+    for (const socket of this.networkSockets) socket.destroy()
+    this.networkSockets.clear()
+    for (const client of webSocketServer?.clients ?? []) client.terminate()
+    // noServer 的 ws 不持监听句柄，关闭其内存状态即可；HTTP close 的回调结算真实端口释放。
+    webSocketServer?.close()
+    httpServer.closeAllConnections()
+    await new Promise<void>((resolve, reject) => {
+      httpServer.close((error?: Error) => {
+        if (error && !isNodeError(error, 'ERR_SERVER_NOT_RUNNING')) reject(error)
+        else resolve()
+      })
+    })
   }
 
   private createPairingGate(): RemoteNodePairingGate {
@@ -222,7 +334,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
 
   private accept(socket: WebSocket): void {
     // 停机与升级完成之间存在极窄的竞态窗口;此时不能再向已释放的 TimerScope 注册任何东西。
-    if (this.timers.isDisposed) {
+    if (this.timers.isDisposed || this.stopping) {
       socket.close(RemoteNodeCloseCode.Transient, 'Node stopped')
       return
     }
@@ -355,6 +467,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     // 码一旦被接受就立刻关窗:配对码是**一次性**的。原来关窗在 `await save()` 之后,落盘那段
     // 时间里同一个码还能被第二条连接再用一次。
     this.pairing.close()
+    const generation = this.credentialGeneration
     const previousClientId = this.credential?.clientId
     const credential: RemoteNodePairedCredential = {
       clientId,
@@ -363,7 +476,15 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
       pairedAt: this.now(),
     }
     try {
-      await this.options.credentialStore.save(credential)
+      await this.writeCredential(async () => {
+        if (
+          generation !== this.credentialGeneration ||
+          connection.phase !== 'pairing' ||
+          this.timers.isDisposed
+        )
+          return
+        await this.options.credentialStore.save(credential)
+      })
     } catch (error) {
       log.error('Remote node credential could not be persisted', { error })
       this.fatal(
@@ -374,6 +495,12 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
       )
       return
     }
+    if (
+      generation !== this.credentialGeneration ||
+      connection.phase !== 'pairing' ||
+      this.timers.isDisposed
+    )
+      return
     this.credential = credential
     // 换了配对对象:终态回放缓存属于上一段信任关系,和 `unpair()` 一样必须丢掉,
     // 否则新 Client 能拿旧 Client 的 callId 把别人的调用结果读出来。
@@ -382,6 +509,13 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     }
     sendFrame(connection.socket, { type: 'paired', node: this.node })
     this.grantReady(connection)
+  }
+
+  /** 凭据写入只由本服务端排序；失败仍交给原调用方，后续清除不能被失败的 save 卡住。 */
+  private writeCredential(write: () => Promise<void>): Promise<void> {
+    const writing = this.credentialWrites.then(write)
+    this.credentialWrites = writing.catch(() => undefined)
+    return writing
   }
 
   private handleAuthenticate(

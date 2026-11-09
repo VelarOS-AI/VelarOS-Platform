@@ -765,10 +765,9 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       this.running.delete(parentId)
       if (!isEmpty(cleanup)) {
         cleanupFailed = true
-        failure = new AggregateError(
-          [...(failure ? [failure] : []), ...cleanup],
-          '整理工具结算失败'
-        )
+        failure = AppError.withFields('UNAVAILABLE', '整理工具结算失败', {
+          errors: [...(failure ? [failure] : []), ...cleanup],
+        })
       }
     }
     const delivery = report

@@ -390,7 +390,6 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
         ))
       )
         return false
-      if (evidence.freshness === 'historical') continue
       for (const stamp of evidence.readSet) {
         if (stamp.sourceId === 'artifact') continue
         const source = this.source(stamp.sourceId)
@@ -406,6 +405,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
         )
           return false
         if (
+          evidence.freshness !== 'historical' &&
           stamp.consistency === 'revision-checkable' &&
           (await awaitContextOperation(source.validate(view.scope, stamp, signal), signal)) !==
             'current'

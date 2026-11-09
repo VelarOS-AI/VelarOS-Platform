@@ -135,7 +135,7 @@ export function buildTemplatePresentationSlide(input: {
           ? [
               {
                 kind: 'text' as const,
-                value: bodyLines.slice(0, 4).join('\n'),
+                value: bodyLines.join('\n'),
                 x: 1.08,
                 y: 2.75,
                 w: 8.8,

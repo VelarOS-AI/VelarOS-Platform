@@ -253,7 +253,7 @@ export interface BrowserOperationsApi {
     input: BrowserDialogInput,
     ctx: BrowserOperationContext
   ): Promise<BrowserHandleDialogResult>
-  /** @AgentView 保存或取消一次下载。
+  /** @AgentView 接受保存或取消一次下载。返回 handled 与 accepted 只表示决策已处理、保存请求已受理，不代表文件已保存。
    * @OperationEffect write
    */
   handleDownload(
@@ -437,12 +437,14 @@ export class BrowserOperations implements BrowserOperationsApi {
       target: element,
       value,
     })
+    ctx.abortSignal.throwIfAborted()
     const { inputRequired, ...prepared } = selected
     if (!selected.matched) return { ...prepared, action: 'fill' }
     if (inputRequired ?? true) {
       if (isEmpty(value)) await ctx.browser.pressKey({ key: 'Backspace' })
       else await ctx.browser.insertText({ text: value })
     }
+    ctx.abortSignal.throwIfAborted()
     // 读状态的那一步不算动作效果：它前后页面本来就不变，带着它只会让模型以为没写进去。
     const { effect: _unchanged, ...filled } = await ctx.browser.performTargetAction({
       action: 'focus',

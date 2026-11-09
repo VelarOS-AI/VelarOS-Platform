@@ -55,6 +55,7 @@ import {
   memoryDeliveredOutputs,
   memoryFeedbackKey,
   memoryMaterialKind,
+  memoryMaterialReference,
   memoryMessageKey,
   memoryOutput,
   memoryOutputRefs,
@@ -216,12 +217,7 @@ export class ContextMemory implements ContextMemoryApi {
       { kind: 'user' },
       { refId: ref.id },
     ])
-    const currentGoal = snapshot?.records.findLast((item) => item.title === 'session:goal')
-    const record =
-      memoryReference(snapshot, ref) ??
-      (ref.sessionId === this.id && currentGoal?.kind === 'audit' && currentGoal.ref.id === ref.id
-        ? currentGoal
-        : undefined)
+    const record = memoryMaterialReference(snapshot, this.id, ref)
     return { snapshot, record }
   }
 

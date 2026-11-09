@@ -134,6 +134,8 @@ async function fixture(t, stream, options = {}) {
   const runtime = await createRuntime({
     storage,
     model,
+    runner: options.runner,
+    resources: options.resources,
     modules: [module],
     context: { maintenance: false, ...(options.disabled ? {} : { observation }) },
   })
@@ -155,6 +157,8 @@ async function fixture(t, stream, options = {}) {
     f.runtime = await createRuntime({
       storage: f.storage,
       model,
+      runner: options.runner,
+      resources: options.resources,
       modules: [module],
       context: { maintenance: false, ...(options.disabled ? {} : { observation }) },
     })
@@ -440,6 +444,87 @@ test(
         assert.equal(f.frames[2].observation.freshness.status, 'collected')
         assert.equal(f.frames[3].observation.freshness.status, 'reused')
       })
+  }
+)
+
+test(
+  'Runtime close waits for a cancelled probe to finish cleanup before closing resources and storage',
+  { timeout: 3000 },
+  async (t) => {
+    let enter
+    let cancel
+    let release
+    const entered = new Promise((resolve) => {
+      enter = resolve
+    })
+    const cancelled = new Promise((resolve) => {
+      cancel = resolve
+    })
+    const cleanup = new Promise((resolve) => {
+      release = resolve
+    })
+    const order = []
+    let runs = 0
+    const f = await fixture(
+      t,
+      async function* (request) {
+        yield* done(request)
+      },
+      {
+        runner: {
+          environment: 'node',
+          async run() {
+            runs++
+            throw new AppError('INVARIANT', 'The cancelled probe must not start a program')
+          },
+        },
+        resources: [
+          {
+            async close() {
+              order.push('resource')
+            },
+          },
+        ],
+        observation: {
+          probeTimeoutMs: 30000,
+          reuse: {
+            coversNativeIO: true,
+            async probe(_input, signal) {
+              enter()
+              try {
+                await new Promise((_resolve, reject) => {
+                  signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+                })
+              } finally {
+                cancel()
+                await cleanup
+                order.push('probe')
+              }
+            },
+          },
+        },
+      }
+    )
+    const closeStorage = f.storage.close.bind(f.storage)
+    f.storage.close = async () => {
+      order.push('storage')
+      await closeStorage()
+    }
+    const running = collect(f).catch((error) => error)
+    await entered
+    try {
+      const closing = f.runtime.close({ timeoutMs: 10 })
+      await cancelled
+      await assert.rejects(closing, { code: 'TIMEOUT', phase: 'sessions' })
+      assert.deepEqual(order, [], 'accepted probe cleanup still owns its resources and storage')
+    } finally {
+      release()
+    }
+    await f.runtime.close({ timeoutMs: 2000 })
+    await running
+    assert.deepEqual(order, ['probe', 'resource', 'storage'])
+    assert.equal(runs, 0)
+    assert.equal(f.calls, 0)
   }
 )
 
