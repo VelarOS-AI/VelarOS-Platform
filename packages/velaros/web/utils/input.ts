@@ -87,7 +87,10 @@ export function readRequest(input: unknown): WebReadRequest {
       'VALIDATION',
       `url 最多 ${WebLimits.urlChars} 个字符，这里有 ${written.length} 个`
     )
-  const url = httpUrl(/^[a-z][\d+.a-z-]*:\/\//iu.test(written) ? written : `https://${written}`)
+  // 仅明确的域名、IPv4 或 localhost 可用裸数字端口；未知单标签仍按显式协议核对。
+  const hasBarePort = /^(?:localhost|[a-z\d-]+(?:\.[a-z\d-]+)+\.?):\d+(?:[/?#]|$)/iu.test(written)
+  const hasScheme = /^[a-z][\d+.a-z-]*:/iu.test(written) && !hasBarePort
+  const url = httpUrl(hasScheme ? written : `https://${written}`)
   if (!url)
     throw new AppError(
       'VALIDATION',

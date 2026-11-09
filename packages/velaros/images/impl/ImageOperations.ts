@@ -134,7 +134,7 @@ export class ImageOperations implements ImageOperationsApi {
       mediaType: media.mediaType,
     }
     if (region) request.region = region
-    const shrunk = await shrinkImageToLimits(resize, request, {
+    const shrunk = await shrinkImageToLimits(resize.bind(ctx.images), request, {
       longEdge: ImageLimits.edge,
       base64Bytes: ImageLimits.base64Bytes,
     })

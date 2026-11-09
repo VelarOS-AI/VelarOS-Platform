@@ -4,9 +4,11 @@ import { spawnSync } from 'node:child_process'
 import { chmod, truncate, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
+import { textFileIo } from '@velaros-ai/core/text-files'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 import type { ImageResizeRequest, ImageResizeResult } from '../index'
 import { ImageLimits, imageOperations } from '../index'
@@ -460,6 +462,30 @@ describe('view 的边角', () => {
         'error' in file ? file.error.code : `${file.sent.width}×${file.sent.height}`
       )
     ).toEqual([`${ImageLimits.edge}×10`, `10×${ImageLimits.edge}`, '10×10', '10×10', 'VALIDATION'])
+    const readBounded = spyOn(textFileIo, 'readBounded')
+    try {
+      const target = join(root, 'limit.png')
+      readBounded.mockRejectedValueOnce(
+        AppError.withFields(TextFileErrorCodes.externalEdit, `文件已变更：${target}`, {
+          path: target,
+        })
+      )
+      const changed = imageSpace({ root, clamp: true })
+      expect(
+        await failureOf(imageOperations.view({ files: [{ path: 'limit.png' }] }, changed.context))
+      ).toEqual({
+        code: 'VALIDATION',
+        message: '图片文件在读取期间发生变化：limit.png；请重试查看',
+      })
+      expect(changed.attached).toEqual([])
+      const unknown = new AppError('UNAVAILABLE', '图片读取暂时不可用')
+      readBounded.mockRejectedValueOnce(unknown)
+      await expect(
+        imageOperations.view({ files: [{ path: 'limit.png' }] }, changed.context)
+      ).rejects.toBe(unknown)
+    } finally {
+      readBounded.mockRestore()
+    }
   })
 
   test.skipIf(process.platform === 'win32')('设备文件与命名管道不读，也不会卡住', async () => {

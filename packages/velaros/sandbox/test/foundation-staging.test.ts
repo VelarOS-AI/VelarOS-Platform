@@ -83,3 +83,96 @@ for (const mutation of ['source', 'mirror', 'staged', 'cancel-before-rename', 'n
     }
   })
 }
+
+test('暂存清理失败保留成功提交事实，也不覆盖此前的部分提交错误', async () => {
+  const script = `
+    import fs from 'node:fs';
+    import { mock } from 'bun:test';
+    import { AppError } from '@velaros-ai/core/error';
+    import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+    import { tmpdir } from 'node:os';
+    import { basename, dirname, join } from 'node:path';
+    const base = await mkdtemp(join(tmpdir(), 'sandbox-cleanup-failure-'));
+    const originalRename = fs.promises.rename;
+    const originalRm = fs.promises.rm;
+    let active;
+    mock.module('node:fs/promises', () => ({ ...fs.promises,
+      rename: async (...args) => {
+        if (active?.partial && String(args[1]) === join(active.source, 'second.txt'))
+          throw active.commitError;
+        return originalRename(...args);
+      },
+      rm: async (...args) => {
+        const target = String(args[0]);
+        if (active && dirname(target) === active.source && basename(target).startsWith('.velaros-sandbox-'))
+          throw active.cleanupError;
+        return originalRm(...args);
+      }
+    }));
+    try {
+      const { applyMirrorChanges, scanTree } = await import(${JSON.stringify(mirrorModule)});
+      const outcomes = [];
+      for (const partial of [false, true]) {
+        const directory = join(base, partial ? 'partial' : 'complete');
+        const source = join(directory, 'source'), root = join(directory, 'mirror');
+        await mkdir(source, { recursive: true }); await mkdir(root);
+        for (const name of ['first.txt', 'second.txt']) {
+          await writeFile(join(source, name), 'original');
+          await writeFile(join(root, name), 'sandbox-plan');
+        }
+        const commitError = new AppError('PERMISSION', 'fixture second commit failed');
+        const cleanupError = new AppError('UNAVAILABLE', 'fixture staging cleanup failed');
+        active = { source, partial, commitError, cleanupError };
+        const manifest = { version: 2, record: { id: 'fixture', source, root }, files: await scanTree(source), mirror: {} };
+        try {
+          await applyMirrorChanges(manifest, { created: [], modified: ['first.txt', 'second.txt'], deleted: [] });
+          throw new Error('fixture expected cleanup failure');
+        } catch (error) {
+          outcomes.push({
+            partial, code: error.code, message: error.message, context: error.context,
+            originalCommitPreserved: error.cause?.cause === commitError,
+            cleanupPreserved: error.context?.cleanupError === cleanupError,
+            first: await readFile(join(source, 'first.txt'), 'utf8'),
+            second: await readFile(join(source, 'second.txt'), 'utf8'),
+            retainedStages: (await readdir(source)).filter(name => name.startsWith('.velaros-sandbox-')).length,
+          });
+        }
+        active = undefined;
+      }
+      console.log(JSON.stringify(outcomes));
+    } finally {
+      await originalRm(base, { recursive: true, force: true });
+    }
+  `
+  const child = Bun.spawn([process.execPath, '--eval', script], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: '' })
+  const outcomes = JSON.parse(stdout)
+  expect(outcomes).toHaveLength(2)
+  for (const outcome of outcomes) {
+    expect(outcome.context.executionOutcome).toBe('failed')
+    expect(outcome.context.applied).toEqual(
+      outcome.partial ? ['first.txt'] : ['first.txt', 'second.txt']
+    )
+    expect(outcome.cleanupPreserved).toBe(true)
+    expect(outcome.message).toContain('fixture staging cleanup failed')
+    expect(outcome.retainedStages).toBe(1)
+    expect(outcome.first).toBe('sandbox-plan')
+    expect(outcome.second).toBe(outcome.partial ? 'original' : 'sandbox-plan')
+    if (outcome.partial) {
+      expect(outcome.code).toBe('PERMISSION')
+      expect(outcome.originalCommitPreserved).toBe(true)
+      expect(outcome.message).toContain('fixture second commit failed')
+    } else {
+      expect(outcome.code).toBe('UNAVAILABLE')
+      expect(outcome.message).not.toContain('后面的没落')
+    }
+  }
+})

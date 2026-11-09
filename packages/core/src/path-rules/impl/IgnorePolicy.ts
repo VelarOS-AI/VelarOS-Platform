@@ -95,11 +95,10 @@ export class IgnorePolicy implements IgnorePolicyApi {
     if (isNull(repositoryRoot) || repositoryRoot === this.rootPath) return repositoryRoot
     const relativePath = relativeInsideRoot(repositoryRoot, this.rootPath)
     if (isNull(relativePath)) return null
-    const ignored = this.rules.isIgnored(
-      relativePath,
-      await this.rulesFor(repositoryRoot, relativePath),
-      true
-    )
+    const fromGit = await this.askGit(repositoryRoot, [relativePath])
+    const ignored = isNotNull(fromGit)
+      ? fromGit.has(relativePath)
+      : this.rules.isIgnored(relativePath, await this.rulesFor(repositoryRoot, relativePath), true)
     return ignored ? null : repositoryRoot
   }
 

@@ -140,6 +140,13 @@ function tagsField(value: unknown): string[] {
       )
   }
   const tags = normalizeTags(value)
+  for (const tag of tags) {
+    if (tag.length > MemoryLimits.tagChars)
+      throw new AppError(
+        'VALIDATION',
+        `一个标签规整后最多 ${MemoryLimits.tagChars} 个字符，「${tag}」超了`
+      )
+  }
   if (tags.length > MemoryLimits.tagCount)
     throw new AppError(
       'VALIDATION',

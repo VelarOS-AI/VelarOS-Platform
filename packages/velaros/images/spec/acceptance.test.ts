@@ -16,7 +16,12 @@ import { AppError } from '@velaros-ai/core/error'
 import { ModelImageLimits } from '@velaros-ai/kernel'
 
 import { VelarImagesModule } from '../contract/surface'
-import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../index'
+import type {
+  ImageAttachment,
+  ImageOperationContext,
+  ImageResizeRequest,
+  ImageSpacePort,
+} from '../index'
 import { ImageLimits, imageOperations } from '../index'
 import { createLocalImagePort } from '../local'
 
@@ -110,6 +115,14 @@ describe('原样交出，超了才压、要了才裁', () => {
     await writeFile(join(root, 'wide.png'), wide)
     await writeFile(join(root, 'banner.gif'), banner)
     const space = imageSpace({ root, resize: pngResizer() })
+    const statefulPort = {
+      ...space.port,
+      renderer: space.port.resizeImage!,
+      resizeImage(request: ImageResizeRequest) {
+        return this.renderer(request)
+      },
+    }
+    space.context.images = statefulPort
     const result = await imageOperations.view(
       { files: [{ path: 'wide.png' }, { path: 'banner.gif' }] },
       space.context

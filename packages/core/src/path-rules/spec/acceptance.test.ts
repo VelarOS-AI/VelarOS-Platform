@@ -178,4 +178,47 @@ describe('遍历忽略策略', () => {
     })
     expect(await insideIgnored.shouldSkip(join(root, 'node_modules', 'pkg'), true)).toBe(false)
   })
+
+  test('INV-5/6 repository 子根先采用 git 结论，null 后只按本地规则判', async () => {
+    await mkdir(join(root, '.git'), { recursive: true })
+    for (const directory of ['external', 'local', 'fallback']) await mkdir(join(root, directory))
+    await write('.gitignore', 'local/\nfallback/out/\n')
+
+    const externalAsked: string[][] = []
+    const external = createIgnorePolicy(join(root, 'external'), {
+      rulesFrom: 'repository',
+      gitCheckIgnore: async (repositoryRoot, paths) => {
+        expect(repositoryRoot).toBe(root)
+        externalAsked.push([...paths])
+        // 模拟仅 git 的全局规则或 info/exclude 才知道这个根被忽略。
+        return new Set(paths)
+      },
+    })
+    expect(await external.shouldSkip(join(root, 'external', 'pkg'), true)).toBe(false)
+    expect(await external.shouldSkip(join(root, 'external', 'other'), true)).toBe(false)
+    expect(externalAsked).toEqual([['external']])
+
+    const localAsked: string[][] = []
+    const local = createIgnorePolicy(join(root, 'local'), {
+      rulesFrom: 'repository',
+      gitCheckIgnore: async (_root, paths) => {
+        localAsked.push([...paths])
+        return new Set()
+      },
+    })
+    expect(await local.shouldSkip(join(root, 'local', 'pkg'), true)).toBe(false)
+    expect(localAsked).toEqual([['local'], ['local/pkg']])
+
+    let fallbackCalls = 0
+    const fallback = createIgnorePolicy(join(root, 'fallback'), {
+      rulesFrom: 'repository',
+      gitCheckIgnore: async () => {
+        fallbackCalls += 1
+        return null
+      },
+    })
+    expect(await fallback.shouldSkip(join(root, 'fallback', 'out'), true)).toBe(true)
+    expect(await fallback.shouldSkip(join(root, 'fallback', 'out', 'nested'), true)).toBe(true)
+    expect(fallbackCalls).toBe(1)
+  })
 })
