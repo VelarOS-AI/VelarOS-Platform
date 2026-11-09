@@ -1,5 +1,6 @@
 /** 代码面验收：每条用例以不变量编号开头，`spec/invariants.md` 是它的登记表。 */
 
+import { getEventListeners } from 'node:events'
 import { existsSync } from 'node:fs'
 
 import { describe, expect, test } from 'bun:test'
@@ -613,6 +614,63 @@ export default 1`)
 })
 
 describe('程序停下、数据与回执', () => {
+  test('INV-26 runner 拒绝仍取消在途调用、清除外部监听并保留原错误', async () => {
+    const stop = new AbortController()
+    const failure = new Error('runner cleanup failed')
+    const listenersBefore = getEventListeners(stop.signal, 'abort').length
+    let invocationSignal: AbortSignal | undefined
+    let pending: Promise<unknown> | undefined
+    let release: (() => void) | undefined
+    const rejected = createCodeSurfaceSession({
+      checker: codeProgramChecker,
+      capabilities: {
+        listOperations: () => ({ demo: ['hang'] }),
+        invoke: async (_call, signal) => {
+          invocationSignal = signal
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              signal?.removeEventListener('abort', finish)
+              resolve()
+            }
+            release = finish
+            if (signal?.aborted) finish()
+            else signal?.addEventListener('abort', finish, { once: true })
+          })
+          return { error: { code: 'ABORTED', message: 'fixture cancelled' } }
+        },
+      },
+      runner: {
+        run: async (_request, dispatch) => {
+          pending = dispatch(
+            { callId: 1, namespace: 'demo', operation: 'hang', input: { tag: 'rejected' } },
+            () => () => {}
+          )
+          throw failure
+        },
+      },
+    })
+    try {
+      await expect(
+        rejected.submit({
+          program: {
+            source:
+              "import { hang } from 'velaros:demo'; void hang({tag:'rejected'}); export default 1",
+          },
+          granted,
+          signal: stop.signal,
+        })
+      ).rejects.toBe(failure)
+      expect(invocationSignal?.aborted).toBe(true)
+      expect(invocationSignal?.reason).toBe(failure)
+      expect(getEventListeners(stop.signal, 'abort').length).toBe(listenersBefore)
+      await pending
+    } finally {
+      release?.()
+      stop.abort()
+      await pending
+    }
+  })
+
   it('INV-26 程序停下时还没落定的调用被叫停，并逐条列在 unsettled 里', async () => {
     // 发出去不等就交卷：程序跑完了，那次调用还挂着。
     const leftBehind = await submit(

@@ -23,11 +23,13 @@
 - 新基础归档复用本批已打包身份；扩展声明 peer 的元数据遗漏被消费门拦下后，只重包该扩展，保留失败尝试身份，不重建基础或重跑已绿行为。
 - 新扩展与冻结 0.9.0 逐文件比对，除版本、精确基础 peer、已声明宿主 peer 范围/optional 元数据和 README 版本外，代码与资产必须完全相同；据此继承原扩展业务 JS 证据。
 
-Windows 真实 PTY 停止及自然退出须由 Server owner 仅复验其 `terminal-seam` 失败路径；Platform 的假终端用例不冒称该原生资源问题已通过。候选交接只提供本批固定两包，不为产品覆盖旧文件或自动改依赖。
+Server owner 已对固定 0.9.1 仅复验一次原 `terminal-seam` 失败路径：初始 PID 0，就绪后实际 PID 与 Host 任务 PID 均为 44000；哨兵输出、原 taskId 停止和 exited 状态通过，Node runner 3137.62 ms 自然退出码 0。Host close 瞬间仍可能短暂观察到资源，不宣称瞬时全空；Windows 证据也不代替 Linux PTY。Platform 仅追加该产品证据，没有重跑。候选交接不为产品覆盖旧文件或自动改依赖。
 
 固定的 0.9.1 验收归档：基础 SHA256 `7845f1e6c90fd93f90faf8d5c52203a7110580054365419acb1c38d72d0e93c2`（2,217,426 bytes），capabilities SHA256 `9e29f4b00ee12aa51a2d086b32eaff8ce7c15672041048590cac0dc6ba911a5a`（7,148,180 bytes）。独立归档 JS 控制消费与 skipLibCheck:false 通过，冷控制阶段 child_process 尝试为 0；扩展比较 4066 个条目通过，只有明示的版本/peer/README 变化。
 
 小交接 receipt 的绝对路径：`D:/Projects/VelarOS-Platform/.velaros-workspace/candidates/platform-0.9.1-7845f1e6-9e29f4b0/candidate.json`。初始打包的失败扩展身份保留在原始 receipt 的 supersededArchives；交接只选上面两份最终身份。新目录不覆盖 0.9.0，后续产品验证只追加证明，不改变包字节。
+
+Server 原生证据为同目录 `server-terminal-validation.json`，捕获 `D:/Projects/VelarOS-Server/docs/platform-host-issue.md` 的原始说明、报告 SHA256 和验证边界；两包 SHA256 再次核对未变。此目录仍是本地候选，不虚构已发布 tag 或下载资产。
 
 ## 0.9.0 补充的冻结来源与 Linux 证据
 

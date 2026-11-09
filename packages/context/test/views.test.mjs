@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import { TaskCapsuleLimits } from '../dist/contract/constants.js'
-import { createContextRuntime, createContextView } from '../dist/index.js'
+import { createContextRuntime, createContextView, createEvidenceAccess } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 import { checkTaskCapsule } from '../dist/utils/view-input.js'
 
@@ -428,7 +430,7 @@ test('A26: observed-only sources disclose weak freshness and never assert a snap
   assert.equal(view.readSet[0].revision, null)
 })
 
-test('A11: denied candidate previews never reach the view or plan audit', async (t) => {
+test('A11: denied previews stay private while source and cancellation failures remain observable', async (t) => {
   const f = await fixture(t)
   f.source.search = async () => [
     { target: f.direct.target, preview: 'FORBIDDEN_SECRET', forms: ['full'] },
@@ -440,6 +442,51 @@ test('A11: denied candidate previews never reach the view or plan audit', async 
   const view = await f.view.build({ maxChars: 12000 })
   assert(!JSON.stringify(view).includes('FORBIDDEN_SECRET'))
   assert.equal((await f.context.search({ query: 'FORBIDDEN_SECRET' })).items.length, 0)
+
+  const access = createEvidenceAccess([f.source])
+  const scope = { sessionId: 's', revision: (await f.view.inspect()).revision }
+  const signal = new AbortController().signal
+  assert.deepEqual(await access.search(scope, 'project', 'find', 1, signal), [])
+  const failure = new AppError('UNAVAILABLE', 'Authorization backend is unavailable')
+  f.source.authorize = async () => {
+    throw failure
+  }
+  await assert.rejects(
+    access.search(scope, 'project', 'find', 1, signal),
+    (error) => error === failure
+  )
+
+  const previewFailure = new AppError('DENIED', 'Preview processing failed after authorization')
+  f.source.authorize = async () => true
+  f.source.search = async () => [
+    {
+      target: f.direct.target,
+      forms: ['full'],
+      get preview() {
+        throw previewFailure
+      },
+    },
+  ]
+  await assert.rejects(
+    access.search(scope, 'project', 'find', 1, signal),
+    (error) => error === previewFailure
+  )
+
+  let enterAuthorization
+  const entered = new Promise((resolve) => {
+    enterAuthorization = resolve
+  })
+  f.source.search = async () => [{ target: f.direct.target, preview: 'preview', forms: ['full'] }]
+  f.source.authorize = () => {
+    enterAuthorization()
+    return new Promise(() => {})
+  }
+  const controller = new AbortController()
+  const pending = access.search(scope, 'project', 'find', 1, controller.signal)
+  await entered
+  const cancellation = new AppError('CANCELLED', 'Stop authorizing the source')
+  controller.abort(cancellation)
+  await assert.rejects(pending, (error) => error === cancellation)
 })
 
 test('A13/A16/A17: hung and late source results cannot publish after cancellation or task revision change', async (t) => {

@@ -72,6 +72,7 @@ export class ImageOperations implements ImageOperationsApi {
         })
       }
     }
+    ctx.abortSignal.throwIfAborted()
     if (firstFailure && files.every((file) => 'error' in file)) throw firstFailure
     return { files }
   }

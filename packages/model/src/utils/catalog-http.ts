@@ -193,11 +193,12 @@ export function normalizeProviderErrorMessage(
   let message = text
 
   try {
-    const parsed = JSON.parse(text) as {
-      error?: { message?: string }
-      message?: string
+    const parsed: unknown = JSON.parse(text)
+    if (isPlainObject(parsed)) {
+      const nestedMessage = isPlainObject(parsed.error) ? parsed.error.message : undefined
+      if (isString(nestedMessage) && nestedMessage) message = nestedMessage
+      else if (isString(parsed.message) && parsed.message) message = parsed.message
     }
-    message = parsed.error?.message || parsed.message || text
   } catch {
     // arch-guard:silent-catch-ok Provider 错误正文允许是纯文本或 HTML；下方仍会归一化并返回明确错误。
   }

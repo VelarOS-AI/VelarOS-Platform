@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { ModelProviderCollection } from '../src/impl/providers/ModelProviderCollection'
 import { ProviderModelCatalogService } from '../src/impl/providers/ProviderModelCatalogService'
 import type { ProviderScriptRegistryPort } from '../src/index'
+import { ModelTuning } from '../src/utils/tuning'
 
 const EmptyProviderScripts: ProviderScriptRegistryPort = {
   supportsProvider: () => false,
@@ -196,21 +197,40 @@ describe('ProviderModelCatalogService', () => {
   })
 
   test('returns a bounded provider error instead of rejecting the product IPC', async () => {
-    const service = createService(
-      async () =>
-        new Response(JSON.stringify({ error: { message: 'invalid api key with details' } }), {
-          status: 401,
-        })
-    )
-
-    const catalog = await service.listProviderModels({
-      provider: 'openai',
-      apiKey: 'bad',
-      baseURL: '',
-    })
-
-    expect(catalog.models).toEqual([])
-    expect(catalog.error).toBe('ChatGPT API Key 不可用')
+    const cases = [
+      {
+        rawText: JSON.stringify({ error: { message: 'invalid api key with details' } }),
+        status: 401,
+        expected: 'ChatGPT API Key 不可用',
+      },
+      { rawText: JSON.stringify({ error: { message: 123 } }), status: 500 },
+      { rawText: JSON.stringify({ message: ['unavailable'] }), status: 500 },
+      {
+        rawText: JSON.stringify({
+          error: { message: { code: 'busy' } },
+          message: 'Service unavailable',
+        }),
+        status: 503,
+        expected: 'Service unavailable',
+      },
+      {
+        rawText: JSON.stringify({ message: 'x'.repeat(ModelTuning.catalog.errorMessageChars + 1) }),
+        status: 500,
+        expected: 'x'.repeat(ModelTuning.catalog.errorMessageChars),
+      },
+      { rawText: '<html>Service unavailable</html>', status: 503 },
+    ]
+    for (const { rawText, status, expected = rawText } of cases) {
+      const service = createService(async () => new Response(rawText, { status }))
+      const request = { provider: 'openai' as const, apiKey: 'bad', baseURL: '' }
+      const catalog = await service.listProviderModels(request)
+      expect(catalog.models).toEqual([])
+      expect(catalog.error).toBe(expected)
+      expect(await service.validateProviderRuntime(request)).toEqual({
+        ok: false,
+        message: expected,
+      })
+    }
   })
 })
 

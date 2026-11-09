@@ -666,6 +666,28 @@ describe('入参与格式', () => {
     expect(failure).toEqual({ code: 'ABORTED', message: '用户中途停了' })
     expect(space.located).toEqual(['a.png'])
     expect(space.attached.every((image) => image.label.includes('a.png'))).toBe(true)
+
+    // 最后一张取消并失败时，前面的成功不能把整批取消变成部分成功。
+    const last = new AbortController()
+    const reason = new AppError('ABORTED', '用户在最后一张停了')
+    const lastSpace = imageSpace({ root, abortSignal: last.signal })
+    const lastLocate = lastSpace.port.locate
+    lastSpace.port.locate = async (path) => {
+      const location = await lastLocate(path)
+      if (path === 'c.png') {
+        last.abort(reason)
+        throw reason
+      }
+      return location
+    }
+    await expect(
+      imageOperations.view(
+        { files: [{ path: 'a.png' }, { path: 'b.png' }, { path: 'c.png' }] },
+        lastSpace.context
+      )
+    ).rejects.toBe(reason)
+    expect(lastSpace.located).toEqual(['a.png', 'b.png', 'c.png'])
+    expect(lastSpace.attached).toHaveLength(2)
   })
 })
 

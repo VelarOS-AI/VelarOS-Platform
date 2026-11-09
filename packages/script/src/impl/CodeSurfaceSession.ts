@@ -22,7 +22,7 @@ import type {
   CodeSurfaceEventSink,
 } from '../contract/requires.js'
 import type { CodeAttachment, CodeSurfaceOutcome } from '../types/outcome.js'
-import type { CodeRunRequest } from '../types/runner.js'
+import type { CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
 import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
@@ -139,71 +139,78 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       ),
     }
     const executionStartedAt = Date.now()
-    const outcome = await this.runner.run(
-      {
-        host: input.host,
-        mode: input.mode,
-        language: program.language,
-        source: normalized.source,
-        path: program.path,
-        modules: normalized.modules,
-        blobs: program.blobs ?? {},
-        input: program.input,
-        operations: this.capabilities.listOperations(),
-        packages: input.packages,
-        timeoutMs: Math.min(
-          input.timeoutMs ??
-            (this.runner.environment === 'node'
-              ? CodeSurfaceLimits.timeoutMs
-              : CodeSurfaceTuning.defaultTimeoutMs),
-          this.runner.environment === 'node' && input.mode !== 'observe'
-            ? CodeSurfaceLimits.maxExecutionTimeoutMs
-            : CodeSurfaceLimits.timeoutMs
-        ),
-      },
-      async (call, holdClock) => {
-        calls += 1
-        if (calls > CodeSurfaceLimits.calls)
-          return {
-            error: {
-              code: CodeSurfaceErrorCodes.tooLarge,
-              message: `这次脚本已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次做。`,
-            },
+    let outcome: CodeRunOutcome
+    try {
+      outcome = await this.runner.run(
+        {
+          host: input.host,
+          mode: input.mode,
+          language: program.language,
+          source: normalized.source,
+          path: program.path,
+          modules: normalized.modules,
+          blobs: program.blobs ?? {},
+          input: program.input,
+          operations: this.capabilities.listOperations(),
+          packages: input.packages,
+          timeoutMs: Math.min(
+            input.timeoutMs ??
+              (this.runner.environment === 'node'
+                ? CodeSurfaceLimits.timeoutMs
+                : CodeSurfaceTuning.defaultTimeoutMs),
+            this.runner.environment === 'node' && input.mode !== 'observe'
+              ? CodeSurfaceLimits.maxExecutionTimeoutMs
+              : CodeSurfaceLimits.timeoutMs
+          ),
+        },
+        async (call, holdClock) => {
+          calls += 1
+          if (calls > CodeSurfaceLimits.calls)
+            return {
+              error: {
+                code: CodeSurfaceErrorCodes.tooLarge,
+                message: `这次脚本已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次做。`,
+              },
+            }
+          const name = `${call.namespace}.${call.operation}`
+          this.events.callStarted?.({ ...call })
+          const startedAt = Date.now()
+          inFlight.set(call.callId, name)
+          issued.set(call.callId, name)
+          // 调用的时间不是程序的时间：命令跑多久由它自己的时限管，等用户点头也在调用里。开始就停表，落定再接着走。
+          const release = holdClock()
+          let result: CodeCapabilityOutcome
+          try {
+            result = await this.capabilities.invoke(
+              { namespace: call.namespace, operation: call.operation, input: call.input },
+              run.signal
+            )
+          } finally {
+            release()
+            inFlight.delete(call.callId)
           }
-        const name = `${call.namespace}.${call.operation}`
-        this.events.callStarted?.({ ...call })
-        const startedAt = Date.now()
-        inFlight.set(call.callId, name)
-        issued.set(call.callId, name)
-        // 调用的时间不是程序的时间：命令跑多久由它自己的时限管，等用户点头也在调用里。开始就停表，落定再接着走。
-        const release = holdClock()
-        let result: CodeCapabilityOutcome
-        try {
-          result = await this.capabilities.invoke(
-            { namespace: call.namespace, operation: call.operation, input: call.input },
-            run.signal
-          )
-        } finally {
-          release()
-          inFlight.delete(call.callId)
-        }
-        this.events.callSettled?.({
-          callId: call.callId,
-          ok: !result.error,
-          elapsedMs: Date.now() - startedAt,
-        })
-        completed.push(settledCall(name, result))
-        if (result.notices) notices.push(...result.notices)
-        if (result.attachments) attachments.push(...result.attachments)
-        if (result.error && isRefusal(result.error.code)) {
-          notices.push({ call: name, action: 'denied', detail: result.error.message })
-        }
-        return result
-      },
-      (line, stream) => this.events.logged?.(line, stream),
-      input.signal
-    )
-    input.signal?.removeEventListener('abort', stopRun)
+          this.events.callSettled?.({
+            callId: call.callId,
+            ok: !result.error,
+            elapsedMs: Date.now() - startedAt,
+          })
+          completed.push(settledCall(name, result))
+          if (result.notices) notices.push(...result.notices)
+          if (result.attachments) attachments.push(...result.attachments)
+          if (result.error && isRefusal(result.error.code)) {
+            notices.push({ call: name, action: 'denied', detail: result.error.message })
+          }
+          return result
+        },
+        (line, stream) => this.events.logged?.(line, stream),
+        input.signal
+      )
+    } catch (error) {
+      run.abort(error)
+      throw error
+    } finally {
+      input.signal?.removeEventListener('abort', stopRun)
+    }
     const unsettled = outcome.pendingCalls
       ? outcome.pendingCalls.map((id) => issued.get(id)).filter(isString)
       : [...inFlight.values()]
