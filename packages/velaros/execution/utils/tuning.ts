@@ -43,6 +43,8 @@ export const ShellTuning = Object.freeze({
     terminationDeadlineMs: 5_000,
     /** 等子进程真正起来（spawn 事件）的最长毫秒数。 */
     spawnTimeoutMs: 2_000,
+    /** 伪终端没有公开握手事件时，核对其有效 PID 的间隔毫秒数。 */
+    spawnPollMs: 10,
     /** 进程控制用的短命令（查进程启动时刻等）的超时毫秒数。 */
     controlTimeoutMs: 2_000,
     /** 进程控制用的短命令最多收多少字节的输出。 */

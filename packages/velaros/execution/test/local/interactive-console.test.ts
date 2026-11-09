@@ -29,8 +29,10 @@ import { ShellTuning } from '../../utils/tuning.js'
 class FakeTerminal implements ShellTerminalProcess {
   public readonly writes: string[] = []
   public readonly sizes: Array<[number, number]> = []
+  public readonly kills: Array<string | undefined> = []
   private readonly child: ChildProcess
   private readonly dataListeners = new Set<(data: string) => void>()
+  private ready = false
 
   constructor(
     public readonly file: string,
@@ -38,10 +40,14 @@ class FakeTerminal implements ShellTerminalProcess {
     public readonly options: ShellTerminalSpawnOptions
   ) {
     this.child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
+    // 和 Windows PTY 一样，句柄先返回，握手完成后才发布真实 PID。
+    setTimeout(() => {
+      this.ready = true
+    }, 25)
   }
 
   public get pid(): number {
-    return this.child.pid!
+    return this.ready ? this.child.pid! : 0
   }
 
   public onData(listener: (data: string) => void): { dispose(): void } {
@@ -65,6 +71,7 @@ class FakeTerminal implements ShellTerminalProcess {
   }
 
   public kill(signal?: string): void {
+    this.kills.push(signal)
     this.child.kill((signal ?? 'SIGHUP') as NodeJS.Signals)
   }
 
@@ -281,6 +288,9 @@ setInterval(() => {}, 1000)
           acceptsInput: true,
         })
         const [fake] = spawned
+        expect(fake!.pid).toBeGreaterThan(0)
+        expect(started.backgroundProcess?.pid).toBe(fake!.pid)
+        expect(shellProcessManager.find(fake!.pid)?.pid).toBe(fake!.pid)
         expect(fake?.options).toMatchObject({
           cwd: resolve(workingDirectory),
           cols: ShellTuning.command.consoleColumns,
@@ -317,8 +327,14 @@ setInterval(() => {}, 1000)
         const [record] = await kernel.listBackgroundTasks({ taskId })
         expect(plainTerminalText(record!.recentOutput ?? '')).toBe('>>> 1+1\n2\n')
 
-        // 停掉任务：进程组收掉，任务记下怎么结束的，控制台不再收输入。
+        // 错误会话不能通过补登记的 PID 越过原授权检查，也不能触碰终端。
+        await expect(
+          kernel.terminateBackgroundTask({ taskId, sessionId: 'another-session' })
+        ).rejects.toMatchObject({ code: 'PERMISSION' })
+        expect(fake!.kills).toEqual([])
+        // 停掉任务：调用真实终端 kill，任务记下怎么结束的，控制台不再收输入。
         await kernel.terminateBackgroundTask({ taskId, sessionId: 'session-terminal' })
+        expect(fake!.kills).toEqual(['SIGTERM'])
         expect(await waitUntilExited(kernel, taskId)).toBe('exited')
         const [ended] = await kernel.listBackgroundTasks({ taskId })
         expect(ended).toMatchObject({ status: 'exited', signal: 'SIGTERM', exitCode: null })

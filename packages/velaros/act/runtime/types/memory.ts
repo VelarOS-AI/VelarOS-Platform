@@ -1,4 +1,4 @@
-import type { ContextReadStamp, ContextRef } from '@velaros-ai/context'
+import type { ContextReadStamp, ContextRecord, ContextRef, ContextState } from '@velaros-ai/context'
 import type { MemorySaveInput } from '@velaros-ai/velaros/memory'
 
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
@@ -49,6 +49,16 @@ export interface WorkspaceNote {
   readonly resident: boolean
   readonly stamps: readonly ContextReadStamp[]
   readonly origin: 'model-note'
+}
+
+/** 当前授权笔记及其同版存储快照；选择性读取时 records 仅含已请求的目录。 */
+export interface SessionNotesSnapshot {
+  /** 与所载笔记来自同一版本的完整元数据与所选目录。 */
+  readonly snapshot: Nullable<ContextState>
+  /** 历史重置与当前任务起点共同决定的授权下界。 */
+  readonly reset: number
+  /** 每个稳定键在授权下界之后的最新不可变版本。 */
+  readonly notes: ReadonlyArray<{ readonly record: ContextRecord; readonly note: WorkspaceNote }>
 }
 
 /** 宿主分页查看一个确定版本的工作笔记。 */

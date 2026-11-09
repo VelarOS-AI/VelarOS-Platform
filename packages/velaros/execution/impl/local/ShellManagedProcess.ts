@@ -8,6 +8,7 @@ import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
 import { isNumber } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ShellTerminalProcess } from '../../contract/requires.js'
@@ -21,6 +22,8 @@ export interface ManagedShellProcess {
   identity: string
   /** 进程号；子进程还没拉起来时没有。 */
   readonly pid: Optional<number>
+  /** 等待伪终端握手产生有效 PID 并补登记；普通子进程仍由 spawn 事件确认。 */
+  waitForTerminalStart(): Promise<void>
   /** 被管理的子进程本身；伪终端里的进程归宿主的伪终端，这里是 null。 */
   child: Nullable<ChildProcess>
   /** 进程彻底收尾时兑现，只兑现一次：退出且管道排空，或者期限到了放弃等待。 */
@@ -123,6 +126,36 @@ export class ShellManagedProcess implements ManagedShellProcess {
     return this.terminal?.pid ?? this.child?.pid
   }
 
+  public async waitForTerminalStart(): Promise<void> {
+    if (!this.terminal) throw new AppError('INVARIANT', '只有伪终端需要等待终端启动握手。')
+    const timers = new TimerScope({ name: 'ShellTerminalSpawn' })
+    try {
+      await timers.withTimeout(
+        ShellTuning.process.spawnTimeoutMs,
+        async (signal) => {
+          for (;;) {
+            signal.throwIfAborted()
+            if (this.exited)
+              throw new AppError('UNAVAILABLE', '伪终端在确认有效进程身份前已经退出。')
+            const pid = this.pid
+            if (!Number.isSafeInteger(pid) || !pid || pid < 1) {
+              await timers.sleep(ShellTuning.process.spawnPollMs, { signal })
+              continue
+            }
+            this.hooks.track(this)
+            return
+          }
+        },
+        {
+          signal: this.options.abortSignal,
+          timeoutMessage: '等待伪终端确认有效进程身份超时。',
+        }
+      )
+    } finally {
+      timers.dispose()
+    }
+  }
+
   public async stop(requestedSignal: NodeJS.Signals = 'SIGTERM'): Promise<boolean> {
     if (this.closeObserved) return true
     if (this.finished) {
@@ -177,7 +210,7 @@ export class ShellManagedProcess implements ManagedShellProcess {
     })
   }
 
-  /** 伪终端里的进程：一建好就有 pid，退出就是收尾；被信号杀掉时没有退出码，和子进程的口径一致。 */
+  /** 伪终端里的进程：握手确认 PID 后登记，退出就是收尾；被信号杀掉时没有退出码，和子进程的口径一致。 */
   private watchTerminal(terminal: ShellTerminalProcess): void {
     terminal.onExit(({ exitCode, signal }) => {
       this.exited = true
@@ -253,12 +286,15 @@ export class ShellManagedProcess implements ManagedShellProcess {
     }
   }
 
-  /** 终止整棵进程树：调用方给了 terminate 就用它，否则按平台终止。 */
+  /** 宿主终端通过自己的 kill 释放原生资源；管道进程仍按平台终止进程树。 */
   private terminate(requestedSignal: NodeJS.Signals): Promise<unknown> {
-    return (
-      this.options.terminate?.(requestedSignal) ??
-      terminateProcessTree(this.pid ?? 0, requestedSignal, { platform: this.platform })
-    )
+    if (this.options.terminate) return this.options.terminate(requestedSignal)
+    if (this.terminal) {
+      // Windows PTY 不支持 POSIX 信号参数；真正退出仍由 onExit 确认。
+      this.terminal.kill(this.platform === 'win32' ? undefined : requestedSignal)
+      return Promise.resolve(true)
+    }
+    return terminateProcessTree(this.pid ?? 0, requestedSignal, { platform: this.platform })
   }
 
   /** 还没收尾时才排定一个延时动作。 */

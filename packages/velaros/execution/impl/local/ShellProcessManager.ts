@@ -140,7 +140,9 @@ class ShellProcessManager implements ShellProcessManagerApi {
   private hooks(): ShellManagedProcessHooks {
     return {
       track: (managed) => {
-        if (managed.pid) this.processes.set(managed.pid, managed)
+        const pid = managed.pid
+        if (pid !== undefined && Number.isSafeInteger(pid) && pid > 0)
+          this.processes.set(pid, managed)
       },
       onFinished: () => this.pruneCompleted(),
     }

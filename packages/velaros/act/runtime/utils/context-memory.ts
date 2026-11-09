@@ -13,14 +13,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { ScriptOutputFormat } from '@velaros-ai/script'
 import { scriptOutputs } from '@velaros-ai/script'
-import type { WorkspaceEntry } from '@velaros-ai/velaros/act/system'
 
-import type {
-  ContextMemoryPolicy,
-  MemoryFrameDisplay,
-  MemoryFrameResult,
-  WorkspaceNote,
-} from '../types/memory.js'
+import type { ContextMemoryPolicy, MemoryFrameDisplay, MemoryFrameResult } from '../types/memory.js'
 import type { SegmentFeedback, SegmentHistory, SegmentOutputProof } from '../types/segment.js'
 
 import { decisionStateProjection } from './decision-state.js'
@@ -75,18 +69,6 @@ export function adjustedWorkspaceShare(
           : share
   const ceiling = Math.min(0.5, 0.8 - policy.recentShare)
   return Math.round(Math.min(ceiling, Math.max(0.05, next)) * 100) / 100
-}
-
-/** 目录仅携带稳定键、版本与原文位置，正文按引用独立召回。 */
-export function noteEntry(note: WorkspaceNote, record: ContextRecord): WorkspaceEntry {
-  return {
-    key: note.key,
-    revision: note.revision,
-    title: note.title,
-    ref: record.ref,
-    resident: note.resident,
-    chars: note.body.length,
-  }
 }
 
 /** 新文本投影按计量结果直接交付；旧 JSON 材料继续展开原来的块正文。 */

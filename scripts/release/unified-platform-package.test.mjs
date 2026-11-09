@@ -1,17 +1,69 @@
 // 整体发布的入口、声明和动态加载重定位回归。
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import {
   moduleReferences,
   isModelSourceAsset,
   relocatePlatformText,
   relocateRelativeReferences,
+  resolvePeerContract,
+  declarationPeerNames,
 } from './unified-platform-package.mjs'
 import {
   distributionExports,
   distributionForVelarosPath,
   capabilityDistributionItem,
 } from './platform-distributions.mjs'
+
+const semver = createRequire(new URL('../../packages/velaros/package.json', import.meta.url))(
+  'semver'
+)
+
+test('declaration peers follow referenced runtime packages without adding UI peers to Node', () => {
+  const manifest = {
+    peerDependencies: { '@types/react': '^19.0.0', '@types/babel__core': '^7.0.0' },
+  }
+  assert.deepEqual(declarationPeerNames(new Set(['react']), manifest), ['@types/react'])
+  assert.deepEqual(declarationPeerNames(new Set(['@babel/core']), manifest), ['@types/babel__core'])
+  assert.deepEqual(declarationPeerNames(new Set(['execa']), manifest), [])
+  assert.deepEqual(
+    declarationPeerNames(new Set(['react']), { devDependencies: { '@types/react': '^19.0.0' } }),
+    []
+  )
+})
+
+test('host peers preserve declared support instead of the development-machine version', () => {
+  assert.deepEqual(resolvePeerContract([{ range: '^19.0.0', optional: true }], semver), {
+    range: '^19.0.0',
+    optional: true,
+  })
+  const intersection = resolvePeerContract(
+    [
+      { range: '^18 || ^19', optional: true },
+      { range: '^19 || ^20', optional: false },
+    ],
+    semver
+  )
+  assert.equal(intersection.optional, false)
+  assert.deepEqual(
+    ['18.3.0', '19.2.0', '20.0.0'].map((version) => semver.satisfies(version, intersection.range)),
+    [false, true, false]
+  )
+  const nested = resolvePeerContract([{ range: '>=41.0.0' }, { range: '^42.0.0' }], semver)
+  assert.deepEqual(
+    ['41.9.0', '42.11.16', '43.0.0'].map((version) => semver.satisfies(version, nested.range)),
+    [false, true, false]
+  )
+  assert.throws(
+    () => resolvePeerContract([{ range: '>=41 <42' }, { range: '>=42' }], semver),
+    /Incompatible host peer ranges/
+  )
+  assert.throws(
+    () => resolvePeerContract([{ range: '>=1.0.0-beta' }, { range: '*' }], semver),
+    /Cannot preserve/
+  )
+})
 
 test('rewrites static, dynamic, require and declaration references without prefix collisions', () => {
   for (const text of [

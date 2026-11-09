@@ -129,7 +129,7 @@ export interface ShellTerminalSpawnOptions {
 
 /** 伪终端里跑着的进程：工厂返回的那一面，node-pty 的进程对象就长这样。 */
 export interface ShellTerminalProcess {
-  /** 进程号。 */
+  /** 进程号；启动握手期间可以为 0，Host 等有效身份后才发布后台任务。 */
   readonly pid: number
   /** 订阅终端输出（已按 UTF-8 解码）；返回的对象用来退订。 */
   onData(listener: (data: string) => void): { dispose(): void }
@@ -139,7 +139,7 @@ export interface ShellTerminalProcess {
   write(data: string): void
   /** 改终端尺寸。 */
   resize(cols: number, rows: number): void
-  /** 给进程发信号，缺省 SIGHUP。 */
+  /** 请求终止并释放终端原生资源；Windows Host 不传信号名，其他平台传原终止信号。 */
   kill(signal?: string): void
 }
 

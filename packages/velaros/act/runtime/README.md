@@ -43,20 +43,22 @@ try {
 }
 ```
 
-渲染进程把同一串事件投影成界面状态：
+已有会话的存储控制独立于执行环境；身份与连接由宿主核验，完整边界见 [ADR 0029](../../../../docs/decisions/0029-session-control-lease.md)。
 
 ```ts
-import type { ActRunEvent } from '@velaros-ai/agent'
-import { createActEventProjector } from '@velaros-ai/velaros/renderer'
-// 主进程按顺序转来的 submit 事件
-declare const liveEvents: AsyncIterable<ActRunEvent>
-const projector = createActEventProjector()
-for await (const event of liveEvents) {
-  const run = projector.applyLive(event).runs[event.runId]
-  console.log(run.status, run.messages.at(-1)?.text ?? run.preview) // 接纳过的正文；没接纳的只是预览
+import { openSessionControl, type SessionControlOptions } from '@velaros-ai/velaros'
+declare const options: SessionControlOptions
+const control = await openSessionControl(options)
+try {
+  console.log(await control.listNotes())
+  const goal = await control.getGoal()
+  if (goal?.status === 'paused') await control.controlGoal({ baseRevision: goal.revision, action: 'resume' })
+} finally {
+  await control.close()
 }
-projector.finish() // 交付结束：清掉没接纳的预览
 ```
+
+渲染入口的 `createActEventProjector` 将事件投影为界面状态：实时事件用 `applyLive`，持久事件用 `apply`；交付结束调用 `finish()` 清除未接纳预览。投影不改变执行与持久事实。
 
 标准 Node 会话支持等价的原生 JSON 工具与自定义文本控制段。`createNodeRuntime({ protocol: { transport: 'tools' } })` 选择原生工具，`transport: 'text'` 选择文本协议；省略时使用公开的 `DefaultScriptProtocolTransport`，驱动声明不支持工具时自动使用文本，显式要求工具而驱动不支持时返回错误。主会话默认开放 execute、observe、blobs、done，受限会话仍按 `allowed` 裁剪。默认值为 `tools`，依据及费用覆盖限制见 [2026-10-07 双路真实任务评测](../../../../docs/engineering/scriptact-protocol-ab-20261007.md)。
 原生入口为 `exec({code, options?})`、`observe({code, options?})`、`blobs({name, text})`、`done({message?, completion?})`。文本入口仍使用本帧标记加同名声明（execute 对应 exec），闭合段承载裸源码或原文。两者共用参数绑定、来源引用与编辑、快照观察、异步调度、结果租约和显式完成判定；工具调用与真实回执按各自身份持久配对。原生 exec 与 observe 分别生成参数 Schema：async/retain 属于执行，snapshot/refresh/clear 属于观察。程序与原文只能在整份响应校验通过后派发。完整结束并已回收的进程返回非零码时，保留失败回执并继续本批独立程序；取消、超时、宿主故障与未知效果仍停止后续派发。依赖步骤应放在同一程序中顺序 await。有后台程序或子任务待处理时，模型仅回复进度即可等待；本地程序、子任务或共享状态任一进展都唤醒父任务，结束等待保留其他工作。
@@ -77,6 +79,8 @@ Node 收尾说明要求模型核对原始需求、最终产物和实际验证；
 | `@velaros-ai/velaros/node` | Node | 显式 Node 资源装配和执行环境 |
 
 ## 约定
+
+存储控制 lease 复用原笔记与目标事实，核验原执行身份、授权及绑定完整性；resume 只修改目标状态。成功打开接管注入存储，失败仍归调用方；关闭等待已受理操作。不存在会话时读为空页/null，readNote/controlGoal 返回 NOT_FOUND，查询不创建会话。
 Node 基础提示词只提供运行环境、通用执行和能力发现说明；工作区任务方法及常用领域合同由宿主的 `instructions` 提供。挂载 project 或 browser 不自动改变基础提示词。Skill 安装目录可发现，默认、显式选择或按需加载的 Skill 才向当前会话暴露能力。
 
 - `createRuntime({ executionDepth: 'high' })` 选择 Platform 的通用执行策略，支持 low/medium/high/xhigh/max，省略为 medium。它独立于模型供应商的 reasoningLevel 与回退，不修改模型参数、工具权限、预算或完成协议。low 优先最短可靠路径，medium 理解直接关联，high 先核实任务相关全貌，xhigh 检查系统耦合与方案取舍，max 挑战关键假设与高代价失败情形。高风险补足必要调查，简单任务不膨胀，关键未知不再影响决策时停止调查。业务子任务继承档位但只调查分配范围；专项模型不注入通用任务策略。宿主只传选择与产品专属指令，不重复维护默认执行规则。策略块身份为 `platform.runtime.execution-policy`，内容版本和启用依据随指令清单归档；提示词测试证明装配，不证明真实模型行为改善。

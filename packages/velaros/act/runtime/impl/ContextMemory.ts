@@ -63,17 +63,19 @@ import {
   memoryProofCarriers,
   memoryReference,
   memoryTaskHistory,
-  noteEntry,
 } from '../utils/context-memory.js'
 import { decisionStateProjection } from '../utils/decision-state.js'
 import { executionMaterial, materialHistoryDelta, readMaterialField } from '../utils/materials.js'
 import { segmentBase, skeletonLine } from '../utils/segment.js'
+import { noteEntry } from '../utils/session-notes.js'
 import { taskActiveProjection } from '../utils/task-projection.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import { ActiveContext } from './ActiveContext.js'
 import type { ProgramContextApi } from './ProgramContext.js'
 import type { RecentContextApi } from './RecentContext.js'
+import type { SessionNotesApi } from './SessionNotes.js'
+import { SessionNotes } from './SessionNotes.js'
 
 /** 工作区和五分区帧的唯一组装端口。 */
 export interface ContextMemoryApi {
@@ -168,6 +170,7 @@ export interface ContextMemoryApi {
 /** 同一可靠存储上的工作内存，分区只改变组装与驻留，不改变事实和权限。 */
 export class ContextMemory implements ContextMemoryApi {
   private readonly policy: Required<ContextMemoryPolicy>
+  private readonly sessionNotes: SessionNotesApi
   /** 已记过缺页的材料，只针对最近送达的那一帧。 */
   private readonly faulted = new Set<string>()
   private faultFrame = ''
@@ -183,6 +186,7 @@ export class ContextMemory implements ContextMemoryApi {
     private readonly journal?: ContextInvocationJournalApi
   ) {
     this.policy = memoryPolicy(policy)
+    this.sessionNotes = new SessionNotes(id, storage)
   }
 
   public updateActive(
@@ -221,41 +225,12 @@ export class ContextMemory implements ContextMemoryApi {
     return { snapshot, record }
   }
 
-  private async notes(
+  private notes(
     signal: AbortSignal,
     selective = false,
     selections: readonly ContextRecordSelection[] = []
   ) {
-    const snapshot = await this.snapshot(
-      signal,
-      selective
-        ? [
-            { title: 'search:history-reset', latest: true },
-            { titlePrefix: 'workspace:note:', latestPerTitle: true },
-            ...selections,
-          ]
-        : undefined
-    )
-    const reset = Math.max(
-      snapshot?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ??
-        0,
-      snapshot?.task?.startedSequence ?? 0
-    )
-    const records = [
-      ...new Map(
-        (snapshot?.records ?? [])
-          .filter((record) => record.sequence > reset && record.title.startsWith('workspace:note:'))
-          .map((record) => [record.title, record])
-      ).values(),
-    ]
-    const notes = []
-    for (const record of records) {
-      signal.throwIfAborted()
-      const body = await this.storage.get(this.id, record.objectId)
-      if (isNull(body)) throw new AppError('NOT_FOUND', '工作笔记原文缺失')
-      notes.push({ record, note: JSON.parse(body) as WorkspaceNote })
-    }
-    return { snapshot, reset, notes }
+    return this.sessionNotes.load(signal, selective, selections)
   }
 
   public async update(input: WorkspaceUpdate, signal: AbortSignal): Promise<WorkspaceEntry> {
@@ -349,41 +324,15 @@ export class ContextMemory implements ContextMemoryApi {
     throw new AppError('WORKSPACE_BUSY', '工作区持续发生并发变化')
   }
 
-  public async list(input: { after?: string; limit?: number }, signal: AbortSignal) {
-    const limit = input.limit ?? ActRuntimeTuning.workspacePage
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > WorkspaceLimits.maxPage)
-      throw new AppError('VALIDATION', `笔记目录每页 1–${WorkspaceLimits.maxPage} 条`)
-    const { notes } = await this.notes(signal, true)
-    const items = notes
-      .map((item) => noteEntry(item.note, item.record))
-      .filter((item) => isUndefined(input.after) || item.key > input.after)
-      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-    const page = items.slice(0, limit)
-    return { items: page, nextAfter: items.length > limit ? page.at(-1)!.key : null }
+  public list(
+    input: { after?: string; limit?: number },
+    signal: AbortSignal
+  ): Promise<{ items: readonly WorkspaceEntry[]; nextAfter: Nullable<string> }> {
+    return this.sessionNotes.list(input, signal)
   }
 
-  public async readNote(input: RuntimeNoteRead, signal: AbortSignal): Promise<RuntimeNoteContent> {
-    const offset = input.offset ?? 0
-    const limit = input.limit ?? ActRuntimeTuning.noteReadChars
-    if (
-      !Number.isSafeInteger(offset) ||
-      offset < 0 ||
-      !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > ActRuntimeTuning.noteReadChars
-    )
-      throw new AppError('VALIDATION', '笔记正文分页无效')
-    const { notes } = await this.notes(signal, true)
-    const entry = notes.find((item) => item.note.key === input.key)
-    if (!entry) throw new AppError('MEMORY_NOT_FOUND', '工作笔记不存在')
-    if (entry.note.revision !== input.revision)
-      throw new AppError('WORKSPACE_CONFLICT', '笔记版本已变化，请刷新目录')
-    return {
-      entry: noteEntry(entry.note, entry.record),
-      text: entry.note.body.slice(offset, offset + limit),
-      totalChars: entry.note.body.length,
-      offset,
-    }
+  public readNote(input: RuntimeNoteRead, signal: AbortSignal): Promise<RuntimeNoteContent> {
+    return this.sessionNotes.readNote(input, signal)
   }
 
   public async read(

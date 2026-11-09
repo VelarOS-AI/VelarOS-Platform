@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto'
 import { mkdir, realpath, stat } from 'node:fs/promises'
-import { userInfo } from 'node:os'
 import { isAbsolute, join, relative, sep } from 'node:path'
 
 import { localContextStorage } from '@velaros-ai/context/node'
@@ -16,6 +14,7 @@ import type { NodeRuntimeOptions } from '../contract/requires.js'
 import type { VelarosRuntime } from './ComposedRuntime.js'
 import { createRuntime } from './ComposedRuntime.js'
 import { createNodeExecutionEnvironment } from './NodeExecutionEnvironment.js'
+import { resolveNodeRuntimeBinding } from './NodeRuntimeBinding.js'
 
 /** 普通 Node 环境的单一资源装配器。 */
 export interface NodeRuntimeApi {
@@ -93,27 +92,12 @@ class NodeRuntime implements NodeRuntimeApi {
         limits,
       })
     }
-    const user = userInfo()
-    const binding = {
-      executionIdentity: createHash('sha256')
-        .update(
-          JSON.stringify({
-            identity: options.binding.executionIdentity,
-            cwd,
-            user: { name: user.username, uid: user.uid, gid: user.gid },
-            executable: await realpath(executable),
-          })
-        )
-        .digest('hex'),
-      authorizationScope: createHash('sha256')
-        .update(
-          JSON.stringify({
-            scope: options.binding.authorizationScope,
-            confinement: localHost?.processConfinement ?? null,
-          })
-        )
-        .digest('hex'),
-    }
+    const binding = await resolveNodeRuntimeBinding({
+      cwd,
+      binding: options.binding,
+      executable,
+      processConfinement: localHost?.processConfinement,
+    })
     const ownedHost = host ? undefined : createLocalShellHost({ ...localHost, cwd })
     let storage = injectedStorage
     try {

@@ -422,6 +422,28 @@ export interface RuntimeResource {
   close(): void | Promise<void>
 }
 
+/** 仅操作已有会话的笔记与目标；成功后由控制 lease 持有本次存储连接。 */
+export interface SessionControlOptions {
+  /** 已经通过产品权限检查的主会话身份。 */
+  readonly sessionId: string
+  /** 独立连接或池租约，不能让关闭控制 lease 影响仍在执行的 Runtime。 */
+  readonly storage: ContextStorage
+  /** 与原始 Runtime 相同的已解析身份和授权范围。 */
+  readonly binding: RuntimeSessionBinding
+}
+
+/** Node 执行身份的无执行资源解析；结果可用于已有会话的控制 lease。 */
+export interface NodeRuntimeBindingOptions {
+  /** 与原 Node 装配相同的真实执行目录。 */
+  readonly cwd: string
+  /** 宿主核验的不透明主体和授权范围。 */
+  readonly binding: RuntimeSessionBinding
+  /** 与原装配相同的 Node 可执行文件；省略时按标准发现。 */
+  readonly executable?: string
+  /** 自持本机 Host 的原策略；借用外部 Host 时由 binding.authorizationScope 表达其策略。 */
+  readonly processConfinement?: LocalShellHostOptions['processConfinement']
+}
+
 /** 普通 Node 环境装配；不根据路径或模型推导领域能力。 */
 export interface NodeRuntimeOptions extends Omit<
   VelarosRuntimeOptions,

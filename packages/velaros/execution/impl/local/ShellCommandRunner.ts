@@ -776,7 +776,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     let started: { owned: ManagedShellProcess; flush: () => void }
     try {
       started = terminal
-        ? this.startInTerminal(terminal, prepared, cwd, taskId, append, abortSignal)
+        ? await this.startInTerminal(terminal, prepared, cwd, taskId, append, abortSignal)
         : await this.startWithPipes(prepared, cwd, taskId, !!interactive, append, abortSignal)
     } catch (error) {
       this.consoles.delete(taskId)
@@ -950,14 +950,14 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
    * 在宿主的伪终端里起交互式任务：终端输出只有一路、已经解码，终端本身就是控制台的另一头。
    * 进程带着约束包装原样交给工厂，TERM 与终端类型一致；工厂起不来就抛错。
    */
-  private startInTerminal(
+  private async startInTerminal(
     factory: ShellTerminalFactory,
     prepared: PreparedShellCommand,
     cwd: string,
     taskId: string,
     append: (text: string) => void,
     abortSignal?: AbortSignal
-  ): { owned: ManagedShellProcess; flush: () => void } {
+  ): Promise<{ owned: ManagedShellProcess; flush: () => void }> {
     abortSignal?.throwIfAborted()
     const terminal = factory.spawn(prepared.spec.file, prepared.spec.args, {
       cwd,
@@ -976,6 +976,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     terminal.onData(append)
     const buffered = this.consoles.get(taskId)
     if (buffered) buffered.end = { channel: 'pty', terminal }
+    try {
+      await owned.waitForTerminalStart()
+      abortSignal?.throwIfAborted()
+    } catch (error) {
+      await owned.stop('SIGKILL')
+      throw error
+    }
     return { owned, flush: () => undefined }
   }
 

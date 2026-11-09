@@ -9,6 +9,7 @@ export { DefaultScriptProtocolTransport, TaskMaterialLimits } from './contract/c
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type { MemoryConsolidationApi } from './contract/provides.js'
+export type { SessionControlLease } from './contract/provides.js'
 export type {
   ObservationReuseOptions,
   ObservationReusePort,
@@ -34,6 +35,7 @@ export type {
   RuntimeResource,
   RuntimeSessionBinding,
 } from './contract/requires.js'
+export type { SessionControlOptions } from './contract/requires.js'
 export { createCapabilityModule } from './impl/CapabilityModules.js'
 export type { VelarosRuntime } from './impl/ComposedRuntime.js'
 export { createRuntime } from './impl/ComposedRuntime.js'
@@ -42,6 +44,7 @@ export type { McpClientConnectionApi } from './impl/McpClientConnection.js'
 export { createMcpClientConnection } from './impl/McpClientConnection.js'
 export { createMemoryConsolidation } from './impl/MemoryConsolidation.js'
 export type { VelarosSession } from './impl/RuntimeSession.js'
+export { openSessionControl } from './impl/SessionControl.js'
 export { createMcpModule } from './impl/StandardModules.js'
 export type {
   InstructionAudience,

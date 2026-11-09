@@ -85,6 +85,54 @@ export function moduleReferences(text, file) {
   return references
 }
 
+// 宿主 peer 取源码支持范围的交集；必需声明不能被另一处 optional 降级。
+export function resolvePeerContract(declarations, semver) {
+  if (!declarations.length) throw new Error('A host peer needs at least one declared range')
+  const ranges = [...new Set(declarations.map((entry) => entry.range))]
+  const parsedRanges = ranges.map((range) => new semver.Range(range))
+  let range = ranges[0]
+  if (ranges.length > 1) {
+    let terms = ['*']
+    for (const parsed of parsedRanges) {
+      const alternatives = parsed.set.map(
+        (set) =>
+          set
+            .map((comparator) => comparator.value)
+            .filter(Boolean)
+            .join(' ') || '*'
+      )
+      const next = new Set()
+      for (const term of terms) {
+        for (const alternative of alternatives) {
+          const conjunction = new semver.Range(`${term} ${alternative}`).range || '*'
+          if (semver.minVersion(conjunction)) next.add(conjunction)
+        }
+      }
+      terms = [...next]
+      if (!terms.length) throw new Error(`Incompatible host peer ranges: ${ranges.join(' / ')}`)
+    }
+    range = new semver.Range(terms.join(' || ')).range || '*'
+    // 合并 prerelease 比较器可能扩大允许集；无法证明仍是各源子集时明确失败。
+    if (!ranges.every((declared) => semver.subset(range, declared)))
+      throw new Error(
+        `Cannot preserve every host peer prerelease constraint: ${ranges.join(' / ')}`
+      )
+  }
+  return { range, optional: declarations.every((entry) => entry.optional === true) }
+}
+
+// 声明的类型提供者跟随实际引用的运行包，不把宿主 UI peer 带入无关的 Node 发行单元。
+export function declarationPeerNames(references, manifest) {
+  return Object.keys(manifest.peerDependencies ?? {}).filter((name) => {
+    if (!name.startsWith('@types/')) return false
+    const short = name.slice('@types/'.length)
+    const separator = short.indexOf('__')
+    const provided =
+      separator < 0 ? short : `@${short.slice(0, separator)}/${short.slice(separator + 2)}`
+    return references.has(provided)
+  })
+}
+
 function mapTarget(value, name) {
   if (typeof value === 'string') return `./modules/${name}/${value.slice(2)}`
   if (Array.isArray(value)) return value.map((item) => mapTarget(item, name))
@@ -358,6 +406,13 @@ export async function stageUnifiedPlatformPackage(directory, manifest, distribut
             name,
             `${path.relative(directory, owner.source).split(path.sep).join('/')}/package.json dependencies.${name}`
           )
+    const referencedPackages = new Set(dependencies)
+    for (const owner of owners)
+      for (const name of declarationPeerNames(referencedPackages, owner.manifest))
+        recordDependency(
+          name,
+          `${path.relative(directory, owner.source).split(path.sep).join('/')}/package.json declaration peer ${name}`
+        )
     for (const name of [...dependencies].sort()) {
       const declarations = owners.flatMap((owner) =>
         ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'].flatMap(
@@ -375,19 +430,39 @@ export async function stageUnifiedPlatformPackage(directory, manifest, distribut
         throw new Error(
           `Public ${distribution} declaration depends on development-only ${name}\n${origins}`
         )
-      const selected = runtime.find((entry) => entry.field === 'dependencies') ?? runtime[0]
+      const selected =
+        runtime.find((entry) => entry.field === 'dependencies') ??
+        runtime.find((entry) => entry.field === 'optionalDependencies') ??
+        runtime[0]
       const installed = await installedDependency(name, selected.source)
       if (!runtime.every((entry) => semver.satisfies(installed.version, entry.range)))
         throw new Error(
           `Installed ${name}@${installed.version} does not satisfy ${runtime.map((entry) => entry.range).join(', ')}`
         )
-      const field = selected.field === 'peerDependencies' ? 'peerDependencies' : 'dependencies'
-      result[field][name] = installed.version
+      const peerOnly = runtime.every((entry) => entry.field === 'peerDependencies')
+      if (peerOnly) {
+        let peer
+        try {
+          peer = resolvePeerContract(
+            runtime.map((entry) => ({
+              range: entry.range,
+              optional: entry.manifest.peerDependenciesMeta?.[name]?.optional,
+            })),
+            semver
+          )
+        } catch (error) {
+          throw new Error(
+            `${distribution} host peer ${name}: ${error instanceof Error ? error.message : String(error)}\n${origins}`,
+            { cause: error }
+          )
+        }
+        result.peerDependencies[name] = peer.range
+        if (peer.optional) {
+          result.peerDependenciesMeta ??= {}
+          result.peerDependenciesMeta[name] = { optional: true }
+        }
+      } else result.dependencies[name] = installed.version
       dependencyDirectories[name] = selected.source
-      if (selected.field === 'peerDependencies' && selected.manifest.peerDependenciesMeta?.[name]) {
-        result.peerDependenciesMeta ??= {}
-        result.peerDependenciesMeta[name] = selected.manifest.peerDependenciesMeta[name]
-      }
       if (owners.some((owner) => owner.manifest.bundledDependencies?.includes(name)))
         result.bundledDependencies.push(name)
     }

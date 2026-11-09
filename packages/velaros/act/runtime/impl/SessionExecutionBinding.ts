@@ -5,11 +5,14 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ModuleBinding } from '@velaros-ai/kernel'
 
 import type { RuntimeSessionBinding } from '../contract/requires.js'
+import { readSessionBinding, sessionBindingBody } from '../utils/session-binding.js'
 
 /** 会话范围绑定只通过已有 ContextStorage 的原子提交维护。 */
 export interface SessionExecutionBindingApi {
   /** 首次固定已核验的执行身份、授权与模块，重开与并发打开必须匹配同一绑定。 */
   bind(sessionId: string): Promise<void>
+  /** 核对既有存储控制范围；不存在返回 false，绝不创建绑定或要求重建执行模块。 */
+  assertControl(sessionId: string): Promise<boolean>
 }
 
 /** 固定会话的通用执行边界；产品选择、路径与组织语义不进入核心。 */
@@ -17,24 +20,28 @@ export class SessionExecutionBinding implements SessionExecutionBindingApi {
   private readonly body: string
   public constructor(
     private readonly storage: ContextStorage,
-    binding: RuntimeSessionBinding,
+    private readonly binding: RuntimeSessionBinding,
     modules: readonly ModuleBinding[]
   ) {
-    this.body = JSON.stringify({
-      version: 1,
-      executionIdentity: binding.executionIdentity,
-      authorizationScope: binding.authorizationScope,
-      modules: modules
-        .map((binding) => ({
-          moduleId: binding.moduleId,
-          instanceId: binding.instanceId,
-          generation: binding.generation,
-        }))
-        .sort(
-          (one, two) =>
-            one.moduleId.localeCompare(two.moduleId) || one.instanceId.localeCompare(two.instanceId)
-        ),
-    })
+    this.body = sessionBindingBody(binding, modules)
+  }
+  public async assertControl(sessionId: string): Promise<boolean> {
+    const snapshot = await this.storage.selectSnapshot(sessionId, [
+      { title: 'runtime:binding' },
+      { title: 'runtime:workspace' },
+    ])
+    if (!snapshot) return false
+    if (snapshot.records.length !== 1 || snapshot.records[0]!.title !== 'runtime:binding')
+      throw new AppError('CONFLICT', '会话缺少有效的执行绑定，需要宿主核验迁移')
+    const body = await this.storage.get(sessionId, snapshot.records[0]!.objectId)
+    if (body === null) throw new AppError('CONFLICT', '会话执行绑定原文缺失')
+    const document = readSessionBinding(body)
+    if (
+      document.executionIdentity !== this.binding.executionIdentity ||
+      document.authorizationScope !== this.binding.authorizationScope
+    )
+      throw new AppError('CONFLICT', '会话执行身份或授权范围已经变化')
+    return true
   }
   public async bind(sessionId: string): Promise<void> {
     const body = this.body

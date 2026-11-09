@@ -760,6 +760,7 @@ describe('本机宿主：进程生命周期', () => {
         return {
           identity: `managed:fixture-${terminal.pid}`,
           pid: terminal.pid,
+          waitForTerminalStart: async () => {},
           child: null,
           exited: true,
           result,
