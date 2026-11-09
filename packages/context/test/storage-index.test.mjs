@@ -440,7 +440,6 @@ test('selected snapshots keep one version while another connection commits betwe
   )
 })
 
-
 test(`indexed: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
   const files = await fixture(t)
   const storage = files.open()
