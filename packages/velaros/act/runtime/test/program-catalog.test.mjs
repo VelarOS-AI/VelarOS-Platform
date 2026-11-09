@@ -4,9 +4,15 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
+import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
-import { codeProgramChecker, createNodeCodeRunner } from '@velaros-ai/script'
+import { createOperationRuntime } from '@velaros-ai/kernel'
+import {
+  codeProgramChecker,
+  createKernelScriptSession,
+  createNodeCodeRunner,
+} from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
@@ -35,7 +41,7 @@ async function fixture(t) {
       host,
     })
   )
-  const f = { root, writes: 0, runs: 0, modules: [], checks: 0 }
+  const f = { root, writes: 0, runs: 0, modules: [], checks: 0, catalogAllowed: true }
   const module = {
     binding: { moduleId: 'test:catalog', instanceId: 'one', generation: 1, schemaRevision: '1' },
     summary: 'parameterized catalog proof',
@@ -61,12 +67,14 @@ async function fixture(t) {
       return delegate.run(...args)
     },
   }
+  f.runner = runner
   const open = async () => {
     f.storage = localContextStorage({ path: join(root, 'state.sqlite') })
     f.runtime = await createRuntime({
       storage: f.storage,
       runner,
       modules: f.modules,
+      moduleAccess: (_id, moduleId) => moduleId !== 'test:catalog' || f.catalogAllowed,
       context: { maintenance: false },
     })
     f.session = await f.runtime.openSession('s')
@@ -286,7 +294,7 @@ test('INV-81 catalog survives restart, respects current permissions and reset, a
     valid(await f.session.execute(request('describe', { name: 'call' }))).sourceRef,
     entry.sourceRef
   )
-  await f.restart([])
+  f.catalogAllowed = false
   assert.deepEqual(valid(await f.session.execute(request('list', {}))).items, [])
   await assert.rejects(f.session.execute({ sourceRef: entry.sourceRef }), { code: 'SCRIPT_CHECK' })
   await f.session.context.append({
@@ -305,20 +313,49 @@ test('INV-81 catalog survives restart, respects current permissions and reset, a
   )
   assert.equal(replaced.revision, 1)
   assert.notEqual(replaced.sourceRef, entry.sourceRef)
+  await assert.rejects(f.restart([]), { code: 'CONFLICT' })
 })
 
 test('INV-81 same schema label with changed actual operation contract forces import recheck', async (t) => {
   const f = await fixture(t)
-  const entry = valid(
-    await f.session.execute(
-      request('publish', {
-        name: 'binding',
-        purpose: 'Follow exact import contract',
-        source: "import {add} from 'test:catalog';export default await add(1);",
+  const journal = createContextInvocationJournal(f.storage)
+  let kernel = createOperationRuntime({ modules: f.modules, journal })
+  t.after(() => kernel.drain())
+  let checks = 0
+  const programs = new ProgramContext('s', f.session.context, f.storage, {
+    async unchanged(bindings, signal) {
+      signal.throwIfAborted()
+      return bindings.every(
+        (binding) => JSON.stringify(kernel.bind('s', binding.moduleId)) === JSON.stringify(binding)
+      )
+    },
+    async validate(program, signal) {
+      signal.throwIfAborted()
+      checks++
+      const script = createKernelScriptSession({
+        runtime: kernel,
+        runner: f.runner,
+        allowedModules: ['test:catalog'],
+        sessionId: 's',
+        executionId: crypto.randomUUID(),
+        mode: 'execute',
       })
-    )
+      if (!script.check(program).ok) throw new AppError('VALIDATION', 'current import rejected')
+      return script.dependencies(program)
+    },
+  })
+  const signal = new AbortController().signal
+  const entry = await programs.catalog.publish(
+    {
+      name: 'binding',
+      purpose: 'Follow exact import contract',
+      source: "import {add} from 'test:catalog';export default await add(1);",
+    },
+    signal
   )
-  await f.restart([
+  assert.equal((await programs.catalog.list({}, signal)).items[0].sourceRef, entry.sourceRef)
+  assert.equal(checks, 1, 'unchanged bindings reuse the successful publication check')
+  const replacement = [
     {
       binding: {
         moduleId: 'test:catalog',
@@ -337,17 +374,90 @@ test('INV-81 same schema label with changed actual operation contract forces imp
         },
       },
     },
+  ]
+  await kernel.drain()
+  kernel = createOperationRuntime({ modules: replacement, journal })
+  assert.deepEqual((await programs.catalog.list({}, signal)).items, [])
+  await assert.rejects(programs.catalog.describe({ name: 'binding' }, signal), {
+    code: 'NOT_FOUND',
+  })
+  await assert.rejects(programs.catalog.describe({ sourceRef: entry.sourceRef }, signal), {
+    code: 'NOT_FOUND',
+  })
+  assert.ok(checks > 1, 'the real checker rechecks the changed operation declarations')
+  await kernel.drain()
+  await assert.rejects(f.restart(replacement), { code: 'CONFLICT' })
+  assert.equal(f.runs, 0)
+  assert.equal(f.writes, 0)
+})
+
+test('INV-81 catalog preserves backend and archive failures while hiding only authorization and import rejections', async (t) => {
+  const f = await fixture(t)
+  const signal = new AbortController().signal
+  const entry = await f.programs.catalog.publish(
+    { name: 'fault-boundary', purpose: 'Keep failure facts', source: 'export default 1;' },
+    signal
+  )
+  const source = await f.session.context.read({ sessionId: 's', id: entry.sourceRef }, { limit: 1 })
+  const fault = { phase: undefined, error: undefined }
+  const storage = new Proxy(f.storage, {
+    get(target, key) {
+      if (key === 'selectSnapshot')
+        return async (sessionId, selections) => {
+          if (
+            fault.phase === 'snapshot' &&
+            selections.some((item) => item.refId === entry.sourceRef)
+          )
+            throw fault.error
+          return target.selectSnapshot(sessionId, selections)
+        }
+      if (key === 'get')
+        return async (sessionId, objectId) => {
+          if (objectId === source.record.objectId) {
+            if (fault.phase === 'read') throw fault.error
+            if (fault.phase === 'json') return '{'
+          }
+          return target.get(sessionId, objectId)
+        }
+      const value = Reflect.get(target, key, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  const programs = new ProgramContext('s', f.session.context, storage, {
+    async unchanged() {
+      if (fault.phase === 'unchanged') throw fault.error
+      return false
+    },
+    async validate() {
+      if (fault.phase === 'validate') throw fault.error
+      return []
+    },
+  })
+  const lookups = [
+    () => programs.catalog.list({}, signal),
+    () => programs.catalog.describe({ name: entry.name }, signal),
+  ]
+  for (const [phase, failure] of [
+    ['snapshot', new AppError('NOT_FOUND', 'storage segment missing')],
+    ['read', new AppError('VALIDATION', 'archive backend corrupt')],
+    ['unchanged', new AppError('UNAVAILABLE', 'authorization backend offline')],
+    ['validate', new AppError('CLOSED', 'checker runtime closed')],
+    ['validate', new TypeError('checker backend fault')],
+  ]) {
+    Object.assign(fault, { phase, error: failure })
+    for (const lookup of lookups) await assert.rejects(lookup, (error) => error === failure)
+  }
+  fault.phase = 'json'
+  for (const lookup of lookups) await assert.rejects(lookup, SyntaxError)
+  for (const [phase, codes] of [
+    ['unchanged', ['PERMISSION', 'NOT_FOUND']],
+    ['validate', ['VALIDATION', 'PERMISSION', 'NOT_FOUND']],
   ])
-  assert.deepEqual(valid(await f.session.execute(request('list', {}))).items, [])
-  assert.equal(
-    valid(await f.session.execute(request('describe', { name: 'binding' }, true))).error.code,
-    'NOT_FOUND'
-  )
-  assert.equal(
-    valid(await f.session.execute(request('describe', { sourceRef: entry.sourceRef }, true))).error
-      .code,
-    'NOT_FOUND'
-  )
-  await assert.rejects(f.session.execute({ sourceRef: entry.sourceRef }), { code: 'SCRIPT_CHECK' })
+    for (const code of codes) {
+      Object.assign(fault, { phase, error: new AppError(code, 'current import is unavailable') })
+      assert.deepEqual(await programs.catalog.list({}, signal), { items: [], nextOffset: null })
+      await assert.rejects(lookups[1], { code: 'NOT_FOUND' })
+    }
+  assert.equal(f.runs, 0)
   assert.equal(f.writes, 0)
 })

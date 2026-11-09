@@ -640,15 +640,12 @@ class ComposedRuntime implements VelarosRuntime {
     } catch (error) {
       const cleanup = await Promise.allSettled([session.close(), model.close()])
       cleanup.push(...(await Promise.allSettled([materials?.close()])))
-      try {
-        await activity.close()
-      } finally {
-        this.sessions.delete(job.sessionId)
-        this.programAccess.delete(job.sessionId)
-        this.scopes.delete(job.sessionId)
-        this.stores.delete(job.sessionId)
-        this.taskModels.delete(job.sessionId)
-      }
+      cleanup.push(...(await Promise.allSettled([activity.close()])))
+      this.sessions.delete(job.sessionId)
+      this.programAccess.delete(job.sessionId)
+      this.scopes.delete(job.sessionId)
+      this.stores.delete(job.sessionId)
+      this.taskModels.delete(job.sessionId)
       const failures = cleanup.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : []
       )

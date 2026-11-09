@@ -29,6 +29,59 @@ const setup = async (t, options) => {
 }
 const task = (request, source) => turn(request, { execute: { source } })
 
+test('child startup preserves the original failure when durable activity release also fails', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  const releaseFailure = Error('durable child release unavailable')
+  const put = storage.put.bind(storage)
+  let releases = 0
+  storage.put = async (id, body) => {
+    if (body.includes('"activationId"') && body.includes('"status":"closed"')) {
+      releases++
+      throw releaseFailure
+    }
+    return put(id, body)
+  }
+  const f = await setup(t, {
+    storage,
+    context: { maintenance: false },
+    runner: { run: async () => assert.fail('startup must not execute code') },
+    agents: {
+      concurrency: 1,
+      maxChildren: 1,
+      profiles: {
+        worker: { model: model(() => assert.fail('startup must not call a model')), modules: [] },
+      },
+    },
+  })
+  const input = await f.session.context.append({ kind: 'user', body: 'delegate' })
+  const parentTaskId = await f.session.view.begin(input.ref)
+  const sessionId = 'agent:root/invalid-material'
+  // Inject the two independent boundary failures at the real child assembly owner.
+  await assert.rejects(
+    f.runtime.openChild(
+      {
+        id: 'invalid-material',
+        sessionId,
+        parentSessionId: 'root',
+        parentTaskId,
+        profile: 'worker',
+      },
+      { materials: [{ sessionId: 'foreign', id: 'unowned' }] },
+      new AbortController().signal
+    ),
+    (error) => {
+      assert.equal(error.code, 'UNAVAILABLE')
+      assert.equal(error.errors.length, 2)
+      assert.equal(error.errors[0].code, 'VALIDATION')
+      assert.match(error.errors[0].message, /只能分享父任务/)
+      assert.equal(error.errors[1], releaseFailure)
+      return true
+    }
+  )
+  assert.equal(releases, 1)
+  assert.equal(f.runtime.getSession(sessionId), undefined)
+})
+
 test('immediate child guidance reaches the same real runtime run before completion', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'child-guidance-'))
   const path = join(root, 'state.sqlite')
