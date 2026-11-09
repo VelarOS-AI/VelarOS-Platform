@@ -18,6 +18,7 @@ export type { KernelScriptSessionApi } from './contract/provides.js'
 export type { ScriptPackageCompilerApi } from './contract/provides.js'
 export type { ScriptContractCompilerApi } from './contract/provides.js'
 export type { NodeRuntimePackagesApi } from './contract/provides.js'
+export type { NodeCodeRunnerApi } from './contract/provides.js'
 export type {
   CodeCapabilityCall,
   CodeCapabilityOutcome,

@@ -5,6 +5,12 @@ import {
   type SessionControlLease,
   type SessionControlOptions,
 } from '@velaros-ai/velaros'
+import { createNodeCodeRunner, type NodeCodeRunnerApi, type NodeCodeRunnerOptions } from '@velaros-ai/velaros/script'
+
+declare const nodeOptions: NodeCodeRunnerOptions
+const nodeRunner: NodeCodeRunnerApi = createNodeCodeRunner(nodeOptions)
+const nodeSupport: { readonly available: boolean; readonly reason?: string } = nodeRunner.observationSupport()
+void nodeSupport
 
 // The isolated consumer compiles this file with strict:true and skipLibCheck:false.
 declare const options: SessionControlOptions

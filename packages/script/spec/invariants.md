@@ -8,7 +8,7 @@
 | INV-2 | 程序使用真实 Node 标准库与子进程；操作系统权限由宿主进程端口约束，自定义包仍逐次经过 Kernel 授权 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 到时必停：超过 `timeoutMs` 的程序一定被终止并回 `TIMEOUT`，死循环也不例外；`signal` 触发时同样停 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 拒绝是可捕获的异常：能力端口报错在程序里是一个能 `try/catch` 的 throw，不是一份静默的空回执；**拒绝**（用户或策略说了不，码里带 DENIED、PERMISSION）同时进回给模型的 `notices`，程序把异常吞了模型也知道；找不到、不唯一这类是调用自己的结果，程序接得住，不在 `notices` 里再回放；程序正是死在那次拒绝上时 `failed` 已经说了，不重复 | 测试 | `spec/acceptance.test.ts` |
-| INV-5 | 执行器使用真实 Node 与按需导入的能力包；发布认证标记 `NodeSubprocessRunnerIsReleaseReady` 保持 false，由宿主完成部署隔离验收 | 测试 | `spec/acceptance.test.ts` |
+| INV-5 | 执行器使用真实 Node 与按需导入的能力包；Node 工厂保证提供只读支持查询，便利运行器转发内部查询；发布认证标记 `NodeSubprocessRunnerIsReleaseReady` 保持 false，由宿主完成部署隔离验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 大字符串走 `blobs` 不进源码：含反引号、`${`、反斜杠、引号的内容原样送达程序，只过一层转义 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 超预算不静默：返回值与日志超过上限时按**结尾**保留（失败现场在尾部），并在 `notices` 里说清省略了多少 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 程序源码与 blobs 超过体量上限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏 | 测试 | `spec/acceptance.test.ts` |

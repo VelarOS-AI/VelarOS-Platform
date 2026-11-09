@@ -66,6 +66,7 @@ if (built) {
     'base instructions stay small',
     'Node hints expose only',
     'runtime delivers native output',
+    'package environment assembly forwards live observation support',
   ].join('|')
   run('core runtime behavior', node, [
     '--test',

@@ -23,7 +23,7 @@ export interface NodeCodeRunnerOptions {
   readonly packageDirectory?: string
   /** 当前会话锁定的 Skill 与标准依赖环境。 */
   readonly runtime?: NodeRuntimeEnvironment
-  /** 宿主只读约束的真实规格检测；省略时不宣称程序观察可用。 */
+  /** 宿主只读约束的真实规格检测；装饰器须保留 receiver 并实时转发，省略时不宣称程序观察可用。 */
   readonly observationSupport?: CodeRunnerApi['observationSupport']
   /** 每次执行固定新的依赖快照；优先于静态 runtime，进程树收束后释放。 */
   acquireRuntime?(signal: AbortSignal): Promise<NodeRuntimeLease>

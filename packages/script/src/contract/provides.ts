@@ -1,6 +1,7 @@
 export type { CodeProgramCheckerApi } from '../impl/CodeProgramChecker.js'
 export type { CodeSurfaceSessionApi } from '../impl/CodeSurfaceSession.js'
 export type { KernelScriptSessionApi } from '../impl/KernelScriptSession.js'
+export type { NodeCodeRunnerApi } from '../impl/NodeCodeRunner.js'
 export type { NodeExecutableApi } from '../impl/NodeExecutable.js'
 export type { NodeRuntimePackagesApi } from '../impl/NodeRuntimePackages.js'
 export type { ScriptContractCompilerApi } from '../impl/ScriptContractCompiler.js'

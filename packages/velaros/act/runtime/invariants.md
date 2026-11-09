@@ -212,7 +212,7 @@ Node 的模型展示省略空运行时分区与内部统计，完整帧继续用
 
 验证：`test/protocol-parity.test.mjs` 对同一含转义、Unicode、原文、宿主参数、引用编辑、快照、清除、异步、租约与完成声明进行双路增量解码，显式核对原生混批修复与文本/宿主原子提交的差异；真实 Node 会话保留跨轮观察、执行回执与协议切换。`test/text-decoder.test.mjs` 保留同响应观察与执行的原文绑定和增量边界；提示中的观察 JSON 示例经解码验证。`test/node-runtime.test.mjs` 的 Node/Execa、跨存储重开、完整响应拒绝与取消恢复；Model `test/native-tools.test.ts` 的 Responses/Chat 往返、调用回执拒绝、截断与工具指纹。
 
-持久 npm 环境仅由宿主显式装配，Node 环境和状态目录不会自动授予包管理。`packageEnvironment` 固定宿主作用域，模型写入经过 Kernel 授权；当前已打开会话每次执行获取环境快照并复用原宿主进程端口，静态 Skill 依赖与动态 npm 包名冲突显式报错。模型说明给出发现、安装和验证路径。验证：`../system/spec/environment.test.mjs`。
+持久 npm 环境仅由宿主显式装配，Node 环境和状态目录不会自动授予包管理。`packageEnvironment` 固定宿主作用域，模型写入经过 Kernel 授权；当前已打开会话每次执行获取环境快照并复用原宿主进程端口，静态 Skill 依赖与动态 npm 包名冲突显式报错。Node/npm 包装和只读运行器逐次转发真实 `observationSupport()`，保留状态、原因及原 receiver，不缓存或按 OS 猜测。模型说明给出发现、安装和验证路径。验证：`../system/spec/environment.test.mjs`；`test/node-runtime.test.mjs` 的 package environment assembly。
 
 ## INV-91 前台等待由事件唤醒且不重启程序
 

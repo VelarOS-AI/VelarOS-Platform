@@ -45,8 +45,14 @@ import { describeChildExit } from '../utils/process-error.js'
 
 import { nodeRuntimePackages } from './NodeRuntimePackages.js'
 
+/** 标准 Node 工厂始终提供宿主只读支持查询；自定义运行器仍可省略该端口。 */
+export interface NodeCodeRunnerApi extends CodeRunnerApi {
+  /** 每次读取宿主当前支持状态及原因，不缓存结果或推测操作系统能力。 */
+  observationSupport(): ReturnType<NonNullable<CodeRunnerApi['observationSupport']>>
+}
+
 /** 一次标准 Node 程序；宿主端口承担操作系统权限与进程树所有权。 */
-class NodeCodeRunner implements CodeRunnerApi {
+class NodeCodeRunner implements NodeCodeRunnerApi {
   public readonly environment = 'node' as const
 
   public constructor(private readonly options: NodeCodeRunnerOptions) {}
@@ -639,6 +645,6 @@ class NodeCodeRunner implements CodeRunnerApi {
 }
 
 /** 宿主显式选择并注入经批准的标准 Node 进程环境。 */
-export function createNodeCodeRunner(options: NodeCodeRunnerOptions): CodeRunnerApi {
+export function createNodeCodeRunner(options: NodeCodeRunnerOptions): NodeCodeRunnerApi {
   return new NodeCodeRunner(options)
 }
