@@ -1,12 +1,12 @@
 # ADR 0029 — 已有会话的存储控制 lease
 
-日期：2026-11-09。状态：实施中，目标版本 0.9.1；0.9.0 及其冻结归档保持不变。
+日期：2026-11-09。状态：0.9.1 存储控制已固定；0.9.2 集中补齐只读追踪。旧冻结归档保持不变。
 
 ## 缺口与决定
 
 宿主在会话空闲或应用重启后需要读取持久笔记、目标及按版本控制目标。`createRuntime/openSession` 要求真实执行口与完整模块绑定；为此重造浏览器等能力或读取私有绑定造伪模块，都违反资源与授权边界。
 
-新增只持有存储的控制 lease，直接复用 SessionNotes 和 SessionGoal。它不创建 Runtime、Kernel、Agent、Node、Host 或领域模块；没有 submit、execute、steer 或回答交互的权限。它适用于任意产品会话，不识别 workspace、People 或产品种类。
+新增只持有存储的控制 lease，直接复用 SessionNotes、SessionGoal 及 RuntimeTrace。它不创建 Runtime、Kernel、Agent、Node、Host 或领域模块；没有 submit、execute、steer 或回答交互的权限。它适用于任意产品会话，不识别 workspace、People 或产品种类。
 
 ```ts
 // @velaros-ai/velaros
@@ -27,6 +27,8 @@ interface SessionControlLease {
   readNote(input: RuntimeNoteRead): Promise<RuntimeNoteContent>
   getGoal(): Promise<GoalState | null>
   controlGoal(input: GoalControl): Promise<GoalState>
+  trace(input?: ActTraceQuery): Promise<ActTracePage>
+  traceBranches(): Promise<ActTracePage['branches']>
   close(): Promise<void>
 }
 
@@ -45,13 +47,17 @@ resolveNodeRuntimeBinding(options: NodeRuntimeBindingOptions): Promise<RuntimeSe
 
 会话尚不存在时可取得一个控制 lease：getGoal 返回 null、listNotes 返回空页，readNote/controlGoal 拒绝 NOT_FOUND；不创建会话元数据、输入或绑定。存在但缺绑定、绑定重复或损坏时拒绝，不把未知旧历史当成新会话。
 
+0.9.2 的 trace 固定读取 lease.id 的根范围，每次重新核验上述绑定；query.sessionId 只能是该根或有持久归属记录的支线。traceBranches 仅返回当前任务支线目录，不加载请求或正文。不存在的根 trace 返回空页、目录为空，仍不创建元数据；跨根支线拒绝 PERMISSION。
+
+两项追踪复用现有唯一 RuntimeTrace 与 Context 的只读 journal.list/read。ActTraceQuery 的模型请求/会话活动双游标、每页各最多 32 项、默认共享 maxChars 和八百万上限不变；显式 fullContent 只读已有归档正文并沿用分页，不重建或新归档完整模型请求。请求持久格式仍为有界 v3 元数据、指纹及真实发布帧引用，不复制图片。活动回合需重读，Context 快照与调用日志不宣称跨库原子一致。
+
 成功打开后 lease 接管该次注入的存储连接；初始化失败仍归调用方。close 停止新准入，等待已受理读取或 CAS 操作落定，再关闭连接；重复关闭安全。产品仍负责同会话串行控制、删除/关闭排斥及其窗口权限检查，不能与活动 Runtime 共享并提前关闭同一个连接。
 
 ## 产品接入和版本门
 
 Workbench 的 listNotes/readNote/getGoal/controlGoal：活跃时借现有 VelarosSession；空闲时通过上述存储 lease，finally close。它不需要上一轮 request、模型配置或领域实现。读取尚未运行会话时，产品可直接沿用其空页/null/不存在语义。
 
-0.9.1 使用基础 `@velaros-ai/velaros@0.9.1` 和扩展 `@velaros-ai/capabilities@0.9.1`，扩展仍精确 required peer 基础 0.9.1；0.9.0 两包继续成对使用，不能把不同版本拼接。Server 只用基础，可继续固定 0.9.0；需要新控制 lease 时一次切换至新基础。Bun 根 dependencies/overrides 使用同一固定基础资产来源。
+0.9.2 集中版本使用基础 `@velaros-ai/velaros@0.9.2` 和扩展 `@velaros-ai/capabilities@0.9.2`，扩展仍精确 required peer 基础 0.9.2；旧两包继续成对使用，不能把不同版本拼接。Bun 根 dependencies/overrides 使用同一固定基础资产来源。Desktop 的独立改动聚合 worker 与空闲调试只需本存储 lease，不恢复 dataDir/false 预设，也不装配空执行器。Workbench 已有调用无需额外合同。
 
 宿主 UI peer 只属于能力扩展：Electron `>=41.0.0`、React `^19.0.0`、React 声明 `^19.0.0` 继承源码已声明支持范围和 optional 标记。0.9.0 发行器错误地把开发机版本写成精确 peer；0.9.1 修正发行投影，不扩写源码支持范围。基础 Node 包不声明这些 peer，普通第三方 dependencies 继续精确固定安装版本。
 

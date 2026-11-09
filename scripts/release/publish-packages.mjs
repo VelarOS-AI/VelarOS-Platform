@@ -34,9 +34,21 @@
 // artifact 里的 sourceSha·fileName·sizeBytes·sha256 / publish 的第一参数是 tarballPath。
 // 改这些写法要同时改门,别加豁免。
 
+import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -54,6 +66,7 @@ import {
 import { safePackPackage } from './safe-package-pack.mjs'
 import { normalizeTarEntryPaths } from './tar-entry-paths.mjs'
 import { platformModules } from './platform-distributions.mjs'
+import { validateSessionTraceArchive } from './validate-session-trace-archive.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const { dryRun, skipBuild, githubRelease, localTag, onlySelectors } = parseReleaseArguments(
@@ -240,6 +253,71 @@ if (dryRun && !skipBuild) {
 if (!dryRun) assertLocalIdentity()
 
 const artifacts = []
+// 每次发布持有独占候选目录，包字节和本地收据留存；out 已由 workspace 忽略。
+const candidateRoot = path.join(root, 'out', 'release-candidates')
+await mkdir(candidateRoot, { recursive: true })
+const resolvedCandidateRoot = await realpath(candidateRoot)
+const candidateRelative = path.relative(await realpath(root), resolvedCandidateRoot)
+assert(
+  candidateRelative &&
+    candidateRelative !== '..' &&
+    !candidateRelative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(candidateRelative),
+  'Release candidates must stay inside the publishing workspace'
+)
+const candidateDirectory = await mkdtemp(
+  path.join(resolvedCandidateRoot, `release-${sourceSha.slice(0, 12)}-`)
+)
+const candidateReceiptPath = path.join(candidateDirectory, 'candidate.json')
+const candidateReceipt = {
+  schemaVersion: 1,
+  kind: 'platform-release-candidate',
+  sourceSha,
+  releaseTag,
+  toolchain: {
+    node: process.version,
+    bun: runForOutput('bun', ['--version'], root),
+    platform: process.platform,
+    arch: process.arch,
+  },
+  sourceValidation: { command: 'bun run release:check', passed: !dryRun },
+  packages: artifacts,
+  traceValidation: null,
+  local: { directory: candidateDirectory, archives: {} },
+}
+const saveCandidateReceipt = () =>
+  writeFile(candidateReceiptPath, `${JSON.stringify(candidateReceipt, null, 2)}\n`)
+await saveCandidateReceipt()
+console.info(`Preserved release candidate: ${candidateDirectory}`)
+
+// 公布前同时核对存盘收据与保留字节，不用上一候选或仅源码级的结果代替本次消费。
+const assertCandidateReceipt = async () => {
+  assert.deepEqual(JSON.parse(await readFile(candidateReceiptPath, 'utf8')), candidateReceipt)
+  for (const artifact of artifacts) {
+    const retained = candidateReceipt.local.archives[artifact.fileName]
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(retained))
+        .digest('hex'),
+      artifact.sha256
+    )
+  }
+  const base = artifacts.find((artifact) => artifact.name === '@velaros-ai/velaros')
+  if (base) {
+    const trace = candidateReceipt.traceValidation
+    assert(trace, 'Base publication requires the installed session trace consumer')
+    assert.equal(trace.sourceSha, sourceSha)
+    assert.equal(trace.releaseTag, releaseTag)
+    assert.equal(trace.name, base.name)
+    assert.equal(trace.version, base.version)
+    assert.equal(trace.sha256, base.sha256)
+    assert.equal(trace.local.archive, candidateReceipt.local.archives[base.fileName])
+    assert.equal(trace.validation.javascript, true)
+    assert.equal(trace.validation.strictDeclarations, true)
+    assert.deepEqual(JSON.parse(await readFile(trace.local.receiptPath, 'utf8')), trace)
+  }
+}
+
 if (githubRelease) {
   // Existing releases are never overwritten. An interrupted draft remains inspectable.
   run(
@@ -255,7 +333,7 @@ if (githubRelease) {
       '--title',
       `Platform ${releaseTag}`,
       '--notes',
-      `Built and checked on GitHub Actions from ${sourceSha}. Package hashes are recorded in release-manifest.json.`,
+      `Release source: ${sourceSha}; tag: ${releaseTag}. When this release includes the base archive, that exact archive must pass isolated JavaScript and strict declaration consumption before this draft becomes public. Package hashes and validation results are recorded in release-manifest.json and release-validation.json.`,
     ],
     root
   )
@@ -310,6 +388,28 @@ for (const item of selected) {
     }
     console.info(`release artifact: ${JSON.stringify(artifact)}`)
     artifacts.push(artifact)
+    const retainedArchive = path.join(candidateDirectory, artifact.fileName)
+    await copyFile(tarballPath, retainedArchive, fsConstants.COPYFILE_EXCL)
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(retainedArchive))
+        .digest('hex'),
+      artifact.sha256
+    )
+    candidateReceipt.local.archives[artifact.fileName] = retainedArchive
+    await saveCandidateReceipt()
+    if (artifact.name === '@velaros-ai/velaros') {
+      candidateReceipt.traceValidation = await validateSessionTraceArchive({
+        archive: retainedArchive,
+        sha256: artifact.sha256,
+        sourceSha,
+        releaseTag,
+        version: artifact.version,
+        receiptDirectory: candidateDirectory,
+        bunVersion: candidateReceipt.toolchain.bun,
+      })
+      await saveCandidateReceipt()
+    }
 
     // —— ③ 发布那一份已验明的 tarball ——
     const publishArgs = [
@@ -336,6 +436,7 @@ for (const item of selected) {
       }
       if (!dryRun) assertLocalIdentity()
     }
+    await assertCandidateReceipt()
     if (githubRelease) run('gh', ['release', 'upload', releaseTag, tarballPath], root)
     else run('bun', publishArgs, root)
   } finally {
@@ -343,16 +444,57 @@ for (const item of selected) {
   }
 }
 
+await assertCandidateReceipt()
 if (githubRelease) {
   const manifestDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-manifest-'))
   try {
+    // 公开版仅列身份、哈希及验证结果；机器路径和原始命令输出留在本地候选收据。
+    const { local: _traceLocal, ...publicTrace } = candidateReceipt.traceValidation ?? {}
+    const validationPath = path.join(candidateDirectory, 'release-validation.json')
+    const validationBytes = `${JSON.stringify(
+      {
+        schemaVersion: candidateReceipt.schemaVersion,
+        kind: candidateReceipt.kind,
+        sourceSha,
+        releaseTag,
+        toolchain: candidateReceipt.toolchain,
+        sourceValidation: candidateReceipt.sourceValidation,
+        packages: artifacts,
+        traceValidation: candidateReceipt.traceValidation ? publicTrace : null,
+      },
+      null,
+      2
+    )}\n`
+    await writeFile(validationPath, validationBytes, { flag: 'wx' })
+    const validationSha256 = createHash('sha256').update(validationBytes).digest('hex')
     const manifestPath = path.join(manifestDirectory, 'release-manifest.json')
     await writeFile(
       manifestPath,
-      `${JSON.stringify({ sourceSha, releaseTag, packages: artifacts }, null, 2)}\n`
+      `${JSON.stringify({ sourceSha, releaseTag, packages: artifacts, validationReceipt: { fileName: path.basename(validationPath), sha256: validationSha256 } }, null, 2)}\n`
+    )
+    await copyFile(
+      manifestPath,
+      path.join(candidateDirectory, 'release-manifest.json'),
+      fsConstants.COPYFILE_EXCL
     )
     assertLocalIdentity()
+    await assertCandidateReceipt()
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(validationPath))
+        .digest('hex'),
+      validationSha256
+    )
+    run('gh', ['release', 'upload', releaseTag, validationPath], root)
     run('gh', ['release', 'upload', releaseTag, manifestPath], root)
+    assertLocalIdentity()
+    await assertCandidateReceipt()
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(validationPath))
+        .digest('hex'),
+      validationSha256
+    )
     run('gh', ['release', 'edit', releaseTag, '--draft=false'], root)
   } finally {
     await rm(manifestDirectory, { recursive: true, force: true })

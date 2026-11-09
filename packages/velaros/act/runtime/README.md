@@ -51,6 +51,7 @@ declare const options: SessionControlOptions
 const control = await openSessionControl(options)
 try {
   console.log(await control.listNotes())
+  console.log(await control.trace({ limit: 1 }), await control.traceBranches())
   const goal = await control.getGoal()
   if (goal?.status === 'paused') await control.controlGoal({ baseRevision: goal.revision, action: 'resume' })
 } finally {

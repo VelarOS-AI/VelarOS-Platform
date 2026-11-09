@@ -422,7 +422,7 @@ export interface RuntimeResource {
   close(): void | Promise<void>
 }
 
-/** 仅操作已有会话的笔记与目标；成功后由控制 lease 持有本次存储连接。 */
+/** 仅操作已有会话的笔记、目标与只读追踪；成功后由控制 lease 持有本次存储连接。 */
 export interface SessionControlOptions {
   /** 已经通过产品权限检查的主会话身份。 */
   readonly sessionId: string

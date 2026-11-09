@@ -1,3 +1,4 @@
+import { createContextInvocationJournal } from '@velaros-ai/context'
 import { isNonBlankString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -5,8 +6,10 @@ import type { GoalControl, GoalState } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
 import type { SessionControlOptions } from '../contract/requires.js'
 import type { RuntimeNoteContent, RuntimeNoteRead } from '../types/memory.js'
+import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 import { notePageLimit, noteReadRange } from '../utils/session-notes.js'
 
+import { RuntimeTrace } from './RuntimeTrace.js'
 import { SessionExecutionBinding } from './SessionExecutionBinding.js'
 import { SessionGoal } from './SessionGoal.js'
 import { SessionNotes } from './SessionNotes.js'
@@ -26,6 +29,10 @@ export interface SessionControlLease {
   getGoal(): Promise<Nullable<GoalState>>
   /** 按 baseRevision 改变目标事实；resume 不启动或恢复模型。 */
   controlGoal(input: GoalControl): Promise<GoalState>
+  /** 分页读取根会话或持久归属支线的现存事实；沿用共享正文预算，不重建模型请求。 */
+  trace(input?: ActTraceQuery): Promise<ActTracePage>
+  /** 只读当前任务的支线目录，不加载请求或正文。 */
+  traceBranches(): Promise<ActTracePage['branches']>
   /** 停止新准入、等待已受理操作落定，再释放本次存储连接；重复调用安全。 */
   close(): Promise<void>
 }
@@ -35,6 +42,7 @@ class SessionControl implements SessionControlLease {
   private readonly binding: SessionExecutionBinding
   private readonly notes: SessionNotes
   private readonly goal: SessionGoal
+  private readonly traceReader: RuntimeTrace
   private readonly signal = new AbortController().signal
   private readonly pending = new Set<Promise<unknown>>()
   private closing?: Promise<void>
@@ -44,6 +52,11 @@ class SessionControl implements SessionControlLease {
     this.binding = new SessionExecutionBinding(options.storage, { ...options.binding }, [])
     this.notes = new SessionNotes(this.id, options.storage)
     this.goal = new SessionGoal(this.id, options.storage)
+    this.traceReader = new RuntimeTrace(
+      this.id,
+      options.storage,
+      createContextInvocationJournal(options.storage)
+    )
   }
 
   public listNotes(input: { after?: string; limit?: number } = {}) {
@@ -87,6 +100,21 @@ class SessionControl implements SessionControlLease {
       if (!(await this.binding.assertControl(this.id)) || !(await this.goal.get(this.signal)))
         throw new AppError('NOT_FOUND', '会话目标不存在')
       return this.goal.control(request, this.signal)
+    })
+  }
+
+  public trace(input: ActTraceQuery = {}) {
+    const request = { ...input }
+    return this.perform(async () => {
+      await this.binding.assertControl(this.id)
+      return this.traceReader.page(request)
+    })
+  }
+
+  public traceBranches() {
+    return this.perform(async () => {
+      await this.binding.assertControl(this.id)
+      return this.traceReader.branches()
     })
   }
 
