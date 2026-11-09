@@ -1,5 +1,6 @@
 import type { CodeProgramRequest, CodeSurfaceOutcome } from '@velaros-ai/script'
 
+import type { ObservationHistoryRequest } from './observation.js'
 import type { ScriptRetention } from './results.js'
 import type {
   ScriptControlReceipt,
@@ -12,9 +13,16 @@ import type {
 export type ScriptSourceProgram = Omit<CodeProgramRequest, 'path'>
 
 /** 持续观察可在发布时要求下一正常业务轮真实采集。 */
-export type ScriptObservationProgram = (
-  ScriptSourceProgram | ScriptReferenceProgram | ScriptObservationEdit | ScriptSnapshotObservation
-) & { readonly refresh?: boolean }
+export type ScriptObservationProgram =
+  | ((
+      | ScriptSourceProgram
+      | ScriptReferenceProgram
+      | ScriptObservationEdit
+      | ScriptSnapshotObservation
+    ) & {
+      readonly refresh?: boolean
+    })
+  | { readonly history: ObservationHistoryRequest }
 
 /** 一次脚本提交；至少包含观察更新或本轮执行。 */
 export type ScriptSubmissionFields = {

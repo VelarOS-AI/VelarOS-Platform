@@ -1,5 +1,6 @@
 import type { CodeProgramRequest } from '@velaros-ai/script'
 
+import type { ObservationHistoryRequest } from './observation.js'
 import type { ScriptControlReceipt, ScriptProgramVersion } from './runtime.js'
 import type { ScriptSubmission } from './session.js'
 
@@ -19,6 +20,10 @@ export interface ScriptProtocolSubmission {
 
 /** 检查后的候选程序，发布前不改变持久会话状态。 */
 export interface PreparedScript {
+  /** 历史选择不创建或替换观察程序。 */
+  readonly history?: ObservationHistoryRequest
+  /** 准入时冻结的任务与授权水位，发布不能按晚到时的任务重新签发。 */
+  readonly historyOwner?: string
   /** 需要保存的完整候选代码。 */
   readonly program?: CodeProgramRequest
   /** 对应不可变源码版本的谱系。 */

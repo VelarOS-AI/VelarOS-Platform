@@ -27,13 +27,14 @@ export function remainingFrameImages(
 const FrameHeading = '本帧协议（宿主生成；控制标记以最后出现的这一段为准）：'
 
 /**
- * 每帧会变的协议、阶段与恢复说明接在最后一条消息的运行时材料之后，
- * 系统提示在会话内保持不变，供应商才能缓存请求前缀。
+ * 稳定材料与本轮协议分别编码；协议和动态观察处于不保留的尾区，
+ * 不随已接受的稳定帧进入下一轮缓存前缀。
  */
 export function framedRequest(request: ModelTurnRequest, frame: string): ModelTurnRequest {
   return {
     ...request,
-    compiledPrompt: `${modelRequestEncoder.encode(request)}\n\n${request.response.type === 'tools' ? '本轮执行要求：' : FrameHeading}\n${frame}`,
+    compiledPrompt: modelRequestEncoder.encode(request),
+    protocol: `${request.response.type === 'tools' ? '本轮执行要求：' : FrameHeading}\n${frame}`,
   }
 }
 
@@ -42,17 +43,20 @@ export function requestChars(request: ModelTurnRequest): number {
   return (
     request.instructions.length +
     (request.response.type === 'tools' ? JSON.stringify(request.response.tools).length : 0) +
-    (request.compiledPrompt?.length ?? 0) +
-    (request.history ?? []).reduce(
-      (sum, message) =>
-        sum +
-        (isString(message.content)
-          ? message.content.length
-          : message.content.reduce(
-              (parts, part) => parts + (part.type === 'text' ? part.text.length : 0),
-              0
-            )),
-      0
-    )
+    modelRequestEncoder
+      .messages(request)
+      .reduce(
+        (sum, message) =>
+          sum +
+          (message.role === 'assistant' && message.toolExchange
+            ? JSON.stringify(message.toolExchange).length
+            : isString(message.content)
+              ? message.content.length
+              : message.content.reduce(
+                  (parts, part) => parts + (part.type === 'text' ? part.text.length : 0),
+                  0
+                )),
+        0
+      )
   )
 }

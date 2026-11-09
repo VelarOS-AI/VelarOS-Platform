@@ -8,7 +8,7 @@ declare module 'velaros:project' {
    */
   export function commit(input: ProjectCommitInput): Promise<ProjectCommitResult>
 
-  /** 捕获声明式 files 纯快照计划：最多 20 个文件、每次捕获 500000 个字符；在同一项目读门内前后完整读取，任何缺失、截断或前后变化都失败。快照只证明此次捕获值相同，不能证明读取期间没有 ABA，也不授予后续写入或跳过 IO。
+  /** 捕获声明式 files 纯快照计划：最多 20 个文件，exec 每次捕获最多 500000 个字符；observe 另受宿主的小型状态采集预算限制，需显式选择小范围。在同一项目读门内前后完整读取，任何缺失、截断或前后变化都失败。快照只证明此次捕获值相同，不能证明读取期间没有 ABA，也不授予后续写入或跳过 IO。
    */
   export function snapshot(input: ProjectSnapshotInput): Promise<ProjectSnapshotCapture>
 

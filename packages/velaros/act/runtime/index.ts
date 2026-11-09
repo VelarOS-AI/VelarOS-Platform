@@ -5,7 +5,11 @@ export { modulesModule } from '../system/index.js'
 export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
 export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
-export { DefaultScriptProtocolTransport, TaskMaterialLimits } from './contract/constants.js'
+export {
+  DefaultScriptProtocolTransport,
+  ObservationLimits,
+  TaskMaterialLimits,
+} from './contract/constants.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type { MemoryConsolidationApi } from './contract/provides.js'
@@ -69,6 +73,10 @@ export type {
   ModelToolModelProfile,
   ModelToolPolicy,
 } from './types/model-tools.js'
+export type {
+  ObservationHistoryRequest,
+  ObservationHistorySelectionReceipt,
+} from './types/observation.js'
 export type { ScriptRetention } from './types/results.js'
 export type {
   ObservationRegistration,

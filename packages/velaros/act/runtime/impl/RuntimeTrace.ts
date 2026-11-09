@@ -489,6 +489,44 @@ export class RuntimeTrace implements RuntimeTraceApi {
           observed = frame.observation
           select(byRef(frame.observation?.sourceRef))
           select(byRef(frame.observation?.resultRef))
+          const historySelection = byRef(frame.observation?.historySelectionRef)
+          if (historySelection?.title === 'observation:selection') {
+            select(historySelection)
+            const selection = await raw(historySelection)
+            if (!isNull(selection)) {
+              const request = JSON.parse(selection)
+              if (request.kind === 'read' && isString(request.snapshotId)) {
+                const snapshot = byRef(request.snapshotId)
+                if (snapshot?.title === 'observation:snapshot') {
+                  select(snapshot)
+                  const transition = await raw(snapshot)
+                  if (!isNull(transition)) {
+                    const saved = JSON.parse(transition)
+                    for (const ref of [saved.sourceRef, saved.captureRef, saved.resultRef])
+                      if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
+                    const content =
+                      saved.contentRef?.sessionId === this.sessionId
+                        ? byRef(saved.contentRef.id)
+                        : undefined
+                    if (content?.title.startsWith('observation:content:')) {
+                      select(content)
+                      const body = await raw(content)
+                      if (!isNull(body)) {
+                        const locator = JSON.parse(body).locator
+                        const ref =
+                          locator?.kind === 'capture' ? locator.captureRef : locator?.resultRef
+                        if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          const snapshot = byRef(frame.observation?.snapshotId)
+          if (snapshot?.title === 'observation:snapshot') select(snapshot)
+          for (const ref of frame.observation?.dynamicExchangeRefs ?? [])
+            if (ref?.sessionId === this.sessionId) select(byRef(ref.id))
           const capture = frame.observation?.freshness?.snapshot
           if (isString(capture?.captureExecutionId)) {
             executions.add(capture.captureExecutionId)
@@ -705,16 +743,21 @@ export class RuntimeTrace implements RuntimeTraceApi {
       })
     }
     let registration: Nullable<ActObservationRegistration> = null
-    if (registered && ['updated', 'unchanged', 'cleared', 'rejected'].includes(registered.status)) {
+    if (
+      registered &&
+      ['updated', 'unchanged', 'cleared', 'rejected', 'selected'].includes(registered.status)
+    ) {
       const status = registered.status as ActObservationRegistration['status']
       registration = {
         status,
         // 没登记上的控制回执带着诊断，与没过检查的执行同一套原因
         failure: status === 'rejected' ? executionOutcome(registered, []).failure : null,
-        ...(status === 'cleared'
+        ...(status === 'cleared' || status === 'selected'
           ? { source: '', sourceTruncated: false }
           : await programSource(registered.sourceRef ?? registered.draftRef)),
       }
+      if (status === 'selected')
+        Object.assign(registration, { selectionRef: registered.selectionRef })
     }
     let run: Nullable<ActObservationRun> = null
     const observation = observed?.resultRef ? recordById.get(observed.resultRef) : undefined

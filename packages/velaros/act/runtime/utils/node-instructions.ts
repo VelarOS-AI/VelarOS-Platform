@@ -8,9 +8,14 @@ import {
 import { AgentsModuleId } from '../../agents/contract/constants.js'
 import { SearchModuleId } from '../../search/contract/constants.js'
 import { ContextMaterialsModuleId } from '../../system/contract/constants.js'
+import { ObservationLimits } from '../contract/constants.js'
 
 /** 基础运行说明与工作区任务无关；任务方法和领域合同由宿主工作区提供。 */
-export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] = []): string {
+export function nodeRuntimeInstructions(
+  cwd: string,
+  modules: readonly string[] = [],
+  observationPrograms = true
+): string {
   const capabilities = [
     [SearchModuleId, '检索来源证据'],
     [ContextMaterialsModuleId, '读取父任务原文并提交整理补丁'],
@@ -33,6 +38,10 @@ export function nodeRuntimeInstructions(cwd: string, modules: readonly string[] 
     '后台/委派核身份、进度、错误、退出；等回执续跑。时长不证明有效，停滞先诊断。',
     '以用户目标、实际产物和执行回执确认结果；进程成功退出不等于任务完成。遵守任务范围与授权，保留已有成果，按当前任务选择必要验证。',
     '独立读/算批量核结果；依赖 await。副作用留回执，断流核状态，未知不重放。',
+    observationPrograms
+      ? `仅在当前入口已提供且宿主支持只读采集时，持续只读观察用于跨轮需要及时核对的小状态、摘要、差异或引用；按需登记，不必每轮调用。观察正文只进入当前 dynamic，默认 ${ObservationLimits.defaultChars}、最多 ${ObservationLimits.maxChars} 字符；普通读取、大文件、完整 DOM 与动作结果用一次性执行，正常进入结果增量。只读能力不可用就如实报告，不能用普通执行冒充。`
+      : '当前只读程序采集不可用，持续只读观察入口仍保留局部历史选择与退订，真实原因见入口说明；不要提交观察源码、快照或刷新，也不能用普通执行冒充。普通读取与动作结果仍由一次性执行正常交付。',
+    '核实前后变化或排查旧状态时，用持续只读观察入口的 history 选项选择局部历史：先 kind:"list" 取得 snapshotId，再 kind:"read" 配 pointer/offset/limit 读必要片段。只在下一帧 dynamic 出现，不替换持续观察，不自动反复注入；与其他观察选项和源码互斥。原生观察与一次性执行必须分响应，文本声明保持原子预检。',
     `其他宿主能力按需从 process.env.${NodeEnvironmentVariables.directory.name}/index.json 的 capabilities 按 module/member 定向查找，只输出命中项；documentationPath、operationPaths[操作名] 指向声明/示例；packages 查包，${modules.includes('velaros:features') ? 'velaros:features.load({id}) 读全文' : 'skills 的 directory/instructions 定位说明文件，按需读取'}。`,
     ...capabilities.map((capability) => `按需能力：${capability}。`),
     ...(modules.includes(AgentsModuleId)

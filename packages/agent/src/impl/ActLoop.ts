@@ -506,9 +506,11 @@ export class ActLoop implements ActLoopApi {
               acceptedInputTokens = usage?.inputTokens
               acceptedText = received
               acceptedResponseRef = accepted.ref
-              // 图片仍在投影授权集合内时沿用整份出线，下一帧仅追加新图片；过期后退回纯文本基线。
+              // 只保留完整稳定消息；动态观察、待交付观察往返与本轮协议不进入下一轮前缀。
+              // 图片仍在投影授权集合内时沿用稳定出线，下一帧仅追加新图片；过期后退回纯文本基线。
               // 两份基线都受逻辑历史核对与独立历史预算约束，不能通过保留前缀延长附件寿命。
-              const sent = modelRequestEncoder.messages(compiled.request)
+              const layout = modelRequestEncoder.layout(compiled.request)
+              const sent = layout.messages.slice(0, layout.retainablePrefixLength)
               if (frame.retainFrames) {
                 const transcript = {
                   logical: frame.logical,
@@ -653,7 +655,7 @@ export class ActLoop implements ActLoopApi {
                 this.compiler.compileModelTurn(
                   {
                     ...frame.request,
-                    compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
+                    protocol: `${frame.request.protocol ?? ''}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
                   },
                   this.options.model,
                   this.options.limits.safetyTokens,
@@ -693,6 +695,7 @@ export class ActLoop implements ActLoopApi {
             acceptedCalls,
             this.options.control?.turnSignal()
           )
+          let delivery: 'history' | 'dynamic' = 'history'
           if (!isEmpty(acceptedCalls)) {
             if (!isObject(success) || !('results' in success))
               throw new AppError('INVARIANT', '原生工具执行缺少对应回执')
@@ -701,18 +704,26 @@ export class ActLoop implements ActLoopApi {
               calls: acceptedCalls,
               results: success.results,
             })
-            await this.options.context.append(
+            delivery = success.delivery ?? 'history'
+            const record = await this.options.context.append(
               {
                 kind: 'audit',
                 title: 'model-tool-exchange',
-                body: JSON.stringify(exchange),
+                body: JSON.stringify({ ...exchange, delivery }),
                 sources: [acceptedResponseRef!],
               },
               controller.signal
             )
+            if (delivery === 'dynamic') {
+              if (!this.options.frames.stageDynamicExchange)
+                throw new AppError('INVARIANT', '动态工具往返缺少待交付登记端口')
+              await this.options.frames.stageDynamicExchange(record.ref, controller.signal)
+            }
           }
           if (this.options.control?.pending()) continue turns
           if (isFalse(success) || (isObject(success) && !success.succeeded)) continue
+          // 动态往返尚待下一请求交付，不能因既有宿主产物已就绪就跳过这次感知。
+          if (delivery === 'dynamic') continue
           if (!done && !isEmpty(acceptedCalls) && this.options.frames.deliveryReady?.()) {
             await this.options.context.append(
               {
@@ -993,6 +1004,7 @@ export class ActLoop implements ActLoopApi {
           instructions: this.options.instructions,
           images: retained?.images ?? projected.images,
           compiledPrompt: reconciled.prompt,
+          dynamic: reconciled.dynamic,
           materials: [
             {
               ref: evidence.id,
@@ -1014,6 +1026,7 @@ export class ActLoop implements ActLoopApi {
         limits.safetyTokens,
         this.planner.calibration()
       )
+      const layout = modelRequestEncoder.layout(compiled.request)
       return {
         publication: cycle,
         segment: projected.segment,
@@ -1024,7 +1037,9 @@ export class ActLoop implements ActLoopApi {
         logical,
         body,
         images: projected.images,
-        positions: retained?.positions ?? logical.map((_, index) => index),
+        positions: (retained?.positions ?? logical.map((_, index) => index)).map(
+          (index) => layout.historyPositions[index]!
+        ),
         retained: Boolean(retained),
         historyTokens: retained ? await historyTokens(compiled, logical, projected.images) : 0,
       }
@@ -1384,7 +1399,7 @@ export class ActLoop implements ActLoopApi {
   }
 
   /**
-   * 新投影以上次接受请求的逻辑历史开头时，沿用那次的实际出线（含它的最后一条消息）再追加新条目；
+   * 新投影以上次接受请求的逻辑历史开头时，沿用那次完整的稳定消息前缀，再追加新条目；
    * 历史被改写（封段、超窗重组等）就返回 undefined，本帧完整重发并重新开始保留。
    * 断点跟随逻辑条目的实际位置，另保留上次请求末尾；相同内容和插入帧不共享标记。
    */

@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import ts from 'typescript'
-import { Ajv } from '../../packages/kernel/node_modules/ajv/dist/ajv.js'
 import { operationContract, operationSchema } from './operation-contracts.mjs'
+const { Ajv } = createRequire(new URL('../../packages/kernel/package.json', import.meta.url))('ajv')
 function schemas(text) {
   const root = mkdtempSync(join(tmpdir(), 'operation-contract-')),
     file = join(root, 'types.ts')

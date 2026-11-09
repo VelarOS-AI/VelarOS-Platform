@@ -43,6 +43,22 @@ export const ObservationReuseLimits = Object.freeze({
   identityChars: 2_048,
 })
 
+/** observe 当前状态与显式历史片段的动态展示边界。 */
+export const ObservationLimits = Object.freeze({
+  /** 当前观察业务材料的默认 UTF-16 字符数。 */
+  defaultChars: 2_048,
+  /** 当前观察与显式历史材料合计的最大 UTF-16 字符数。 */
+  maxChars: 4_096,
+  /** 历史目录默认返回的条目数。 */
+  defaultList: 10,
+  /** 历史目录单页最多返回的条目数。 */
+  maxList: 20,
+  /** 历史局部正文默认读取的 UTF-16 字符数。 */
+  defaultReadChars: 1_024,
+  /** 历史局部正文单次最多读取的 UTF-16 字符数。 */
+  maxReadChars: 2_048,
+})
+
 /** 主干缺省预算，覆盖模型回合、请求投影和恢复材料。 */
 export const VelarosRunLimits = Object.freeze({
   /** 一次用户运行最多推进的模型回合。 */

@@ -12,6 +12,7 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { createPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
+import { ShellErrorCodes } from '../../contract/constants.js'
 import type {
   LocalShellHostOptions,
   ShellHostPort,
@@ -42,6 +43,7 @@ import type {
   SystemProcessInfo,
   SystemProcessQueryOptions,
 } from '../../types/shell-command.js'
+import { buildConfinedSpawnSpec } from '../../utils/confinement.js'
 import { runPlatformCommand } from '../../utils/process.js'
 import { detectAvailableShells, replaceEnvironment, toShellDescriptor } from '../../utils/shells.js'
 import {
@@ -141,9 +143,11 @@ export class LocalShellHost implements LocalShellHostApi {
   private readonly shells: ShellResolverApi = shellResolver
   private readonly commands: ShellCommandRunnerApi
   private readonly observationCommands: ShellCommandRunnerApi
+  private readonly confinementProvider: LocalShellHostOptions['confinementProvider']
 
   constructor(options: LocalShellHostOptions) {
     this.environment = options.environment
+    this.confinementProvider = options.confinementProvider
     const root = resolve(options.cwd)
     this.homeDir = options.homeDir ?? homedir()
     this.hostPlatform = options.platform ?? platform()
@@ -372,6 +376,23 @@ export class LocalShellHost implements LocalShellHostApi {
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {
     return this.commands.run(command, this.resolvePath(options.cwd), options, abortSignal)
+  }
+
+  public observationSupport(): ReturnType<NonNullable<ShellHostPort['observationSupport']>> {
+    try {
+      buildConfinedSpawnSpec(
+        {
+          spec: { file: process.execPath, args: [] },
+          policy: { mode: 'read-only', workspaceRoot: this.workingDirectory, network: false },
+        },
+        { platform: this.hostPlatform, provider: this.confinementProvider }
+      )
+      return { available: true }
+    } catch (error) {
+      if (error instanceof AppError && error.code === ShellErrorCodes.processConfinementUnavailable)
+        return { available: false, reason: error.message }
+      throw error
+    }
   }
 
   public runObservationCommand(

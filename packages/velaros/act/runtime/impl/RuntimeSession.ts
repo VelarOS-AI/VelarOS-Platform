@@ -27,19 +27,22 @@ import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { isFalse, isTrue } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
-import { isNull, isUndefined, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isNumber, isString } from '@velaros-ai/core'
 import { AppError, createTimeoutError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   InvocationReceipt,
+  ModelDynamicInput,
   ModelImage,
   ModelToolCall,
   ModelToolResult,
   ModelTurnRequest,
   OperationRuntimeApi,
 } from '@velaros-ai/kernel'
+import { OperationLimits } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
+import { modelRequestEncoder } from '@velaros-ai/model'
 import type {
   CodeProgramRequest,
   CodeRunnerApi,
@@ -78,6 +81,7 @@ import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
 import {
   ExecutionObservabilityLimits,
+  ObservationLimits,
   ObservationReuseLimits,
   TaskMaterialLimits,
 } from '../contract/constants.js'
@@ -95,6 +99,10 @@ import type {
   RuntimeNoteRetention,
 } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
+import type {
+  ObservationHistoryResult,
+  ObservationHistorySelectionReceipt,
+} from '../types/observation.js'
 import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
 import type {
@@ -121,13 +129,14 @@ import type {
   ScriptSubmissionReceipt,
 } from '../types/session.js'
 import type { ActTurnTrace } from '../types/trace.js'
-import { memoryPrompt } from '../utils/context-memory.js'
+import { memoryObservation, memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
 import { readExecutionOutput } from '../utils/execution-output.js'
 import { executionPolicy } from '../utils/execution-policy.js'
 import { assembleInstructionManifest } from '../utils/instruction-manifest.js'
 import { boundedInventory, capabilityHints } from '../utils/inventory.js'
+import { readMaterialField } from '../utils/materials.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nativeProtocolRules, nativeToolName } from '../utils/native-protocol.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
@@ -138,7 +147,11 @@ import {
 } from '../utils/program-context.js'
 import { failedInvocationRecovery, invocationFeedbackDetails } from '../utils/results.js'
 import { protocolConfig, protocolProgramRules, protocolRules } from '../utils/script-protocol.js'
-import { completeSnapshot } from '../utils/snapshot-observation.js'
+import {
+  completeSnapshot,
+  observationHistoryRequest,
+  observationResultValue,
+} from '../utils/snapshot-observation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ContextMemoryApi } from './ContextMemory.js'
@@ -344,7 +357,7 @@ export interface VelarosSession {
     program: ScriptObservationProgram,
     signal?: AbortSignal,
     options?: ScriptControlOptions
-  ): Promise<ObservationRegistration>
+  ): Promise<ObservationRegistration | ObservationHistorySelectionReceipt>
   /** 宿主执行便捷调用，转交 script({execute}) 并将拒绝回执转成错误。 */
   execute(
     program: ScriptSourceProgram | ScriptReferenceProgram,
@@ -470,6 +483,7 @@ export class RuntimeSession implements VelarosSession {
   private readonly snapshotProviders = new WeakMap<SnapshotObservationProvider, string>()
   /** 超时端口仍未响应取消时，跟踪到收束并禁止再次派发探测。 */
   private pendingObservationProbe?: Promise<ObservationProbe>
+  private pendingObservationScope?: Promise<Optional<string>>
   private acceptedDecision?: ScriptDecisionBasis
   private readonly executionRunner: CodeRunnerApi
 
@@ -492,14 +506,25 @@ export class RuntimeSession implements VelarosSession {
     this.executionRunner = dependencies.node
       ? createNodeCodeRunner(dependencies.node)
       : dependencies.runner
+    const observationSupport = this.executionRunner.observationSupport?.()
     this.config = protocolConfig(
       this.executionRunner.environment === 'node'
         ? {
             ...dependencies.protocol,
+            observationPrograms: isTrue(observationSupport?.available),
+            observationUnavailableReason:
+              observationSupport?.reason ??
+              (!observationSupport ? '宿主未声明只读程序约束支持' : undefined),
             presentation: 'node',
             allowed: dependencies.protocol?.allowed ?? ['blobs', 'observe', 'execute', 'done'],
           }
-        : dependencies.protocol
+        : observationSupport
+          ? {
+              ...dependencies.protocol,
+              observationPrograms: observationSupport.available,
+              observationUnavailableReason: observationSupport.reason,
+            }
+          : dependencies.protocol
     )
     this.context = createContextRuntime({ sessionId: id, storage: dependencies.storage })
     this.view = createContextView({
@@ -608,7 +633,8 @@ export class RuntimeSession implements VelarosSession {
           this.executionRunner.environment === 'node'
             ? nodeRuntimeInstructions(
                 this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd(),
-                modules
+                modules,
+                !isFalse(this.config.observationPrograms)
               )
             : runtimeInstructions({
                 modules,
@@ -662,12 +688,12 @@ export class RuntimeSession implements VelarosSession {
         owner: '@velaros-ai/velaros',
         audience,
         source: 'runtime/snapshot-plans',
-        enabled: true,
-        condition: 'snapshot-plans: resolved session configuration',
+        enabled:
+          this.config.allowed.includes('observe') && !isFalse(this.config.observationPrograms),
+        condition: 'snapshot-plans: authorized observation programs and resolved providers',
         text: `\n${
-          this.executionRunner.environment === 'node'
-            ? ''
-            : JSON.stringify({
+          this.config.allowed.includes('observe') && !isFalse(this.config.observationPrograms)
+            ? JSON.stringify({
                 snapshotPlans: (dependencies.contextOptions?.snapshots ?? [])
                   .filter((provider) => modules.includes(provider.moduleId))
                   .map((provider) => ({
@@ -677,6 +703,7 @@ export class RuntimeSession implements VelarosSession {
                     operation: provider.operation,
                   })),
               })
+            : ''
         }`,
       },
       {
@@ -869,6 +896,7 @@ export class RuntimeSession implements VelarosSession {
               )
               .map((item) => item.executionId)
           },
+          stageDynamicExchange: (ref, signal) => this.programs.stageDynamicExchange(ref, signal),
           beginFrame: (view, signal, maxChars) =>
             this.beginFrame(view, signal, maxChars, nativeTools),
           acknowledge: (request, signal) => this.acknowledge(request, signal),
@@ -912,6 +940,8 @@ export class RuntimeSession implements VelarosSession {
             )
             if (await this.organizePending()) return true
             const state = await this.programs.state()
+            if (state.pendingObservationHistory || state.pendingDynamicExchanges?.length)
+              return true
             return (
               (state.resultsRevision ?? 0) !==
                 frame.partitions.runtime.programFrame.resultsRevision ||
@@ -1072,7 +1102,196 @@ export class RuntimeSession implements VelarosSession {
       : Math.min(this.submissionDeadline, parent ?? this.submissionDeadline)
   }
 
+  private async observationScopeToken(signal: AbortSignal): Promise<Optional<string>> {
+    const options = this.dependencies.contextOptions?.observation
+    if (!options || this.pendingObservationScope) return undefined
+    const timers = new TimerScope({ name: 'RuntimeSession.observationScope' })
+    try {
+      const scope = await timers.withTimeout(
+        options.probeTimeoutMs ?? ObservationReuseLimits.probeTimeoutMs,
+        (currentSignal) => {
+          const pending = this.trackHostOperation(
+            Promise.resolve().then(() => options.scope(this.id, currentSignal))
+          )
+          this.pendingObservationScope = pending
+          return pending.finally(() => {
+            if (this.pendingObservationScope === pending) this.pendingObservationScope = undefined
+          })
+        },
+        { signal: AbortSignal.any([signal, this.lifetime.signal]) }
+      )
+      return isString(scope) &&
+        scope.length > 0 &&
+        scope.length <= ObservationReuseLimits.identityChars
+        ? scope
+        : undefined
+    } catch (error) {
+      signal.throwIfAborted()
+      this.lifetime.signal.throwIfAborted()
+      Log.tag('ActRuntime').debug('观察权限代次未知，历史不获得额外授权', { error })
+      return undefined
+    } finally {
+      timers.dispose()
+    }
+  }
+
+  private async observationScope(signal: AbortSignal): Promise<Optional<string>> {
+    const hostScope = await this.observationScopeToken(signal)
+    if (this.dependencies.contextOptions?.observation && isUndefined(hostScope)) return undefined
+    const selected = await this.dependencies.storage.selectSnapshot(this.id, [
+      { title: 'search:history-reset', latest: true },
+    ])
+    const modules = [...this.dependencies.allowedModules()]
+      .sort()
+      .map((id) => this.dependencies.kernel.bind(this.id, id))
+    signal.throwIfAborted()
+    return scriptOutputs.hash({
+      sessionId: this.id,
+      taskId: selected?.metadata.task?.id,
+      taskStarted: selected?.metadata.task?.startedSequence,
+      reset: selected?.records[0]?.sequence ?? 0,
+      modules,
+      hostScope,
+    })
+  }
+
+  private async observationHistory(
+    signal: AbortSignal
+  ): Promise<ObservationHistoryResult | undefined> {
+    const pending = (await this.programs.state()).pendingObservationHistory
+    if (!pending) return undefined
+    const request = observationHistoryRequest(pending.request)
+    try {
+      const scope = await this.observationScope(signal)
+      if (isUndefined(scope)) {
+        const result: ObservationHistoryResult = {
+          kind: 'unavailable',
+          reason: 'UNKNOWN_SCOPE',
+        }
+        if (request.kind === 'read') Object.assign(result, { snapshotId: request.snapshotId })
+        return result
+      }
+      if (request.kind === 'list') {
+        const result = await this.programs.listObservationSnapshots(request, scope, signal)
+        if (scope !== (await this.observationScope(signal)))
+          throw new AppError('PERMISSION', '读取期间观察授权已经变化')
+        return result
+      }
+      const snapshot = await this.programs.readObservationSnapshot(
+        request.snapshotId,
+        scope,
+        signal
+      )
+      const locator = snapshot.content.locator
+      const ref = locator.kind === 'capture' ? locator.captureRef : locator.resultRef
+      const archived = await this.context.read(ref, { limit: 1 })
+      const raw = await this.dependencies.storage.get(this.id, archived.record.objectId)
+      if (isNull(raw)) throw new AppError('NOT_FOUND', '观察原始记录不可用')
+      const saved = JSON.parse(raw)
+      if (
+        saved.mode !== 'observe' ||
+        archived.record.title !== `script:${saved.executionId}:result`
+      )
+        throw new AppError('PERMISSION', '观察历史正文来源无效')
+      let value: unknown
+      if (locator.kind === 'capture') {
+        if (saved.kind !== 'snapshot-capture' || saved.invocationId !== locator.invocationId)
+          throw new AppError('PERMISSION', '观察捕获引用与权威调用不一致')
+        const record = await this.dependencies.journal.read(this.id, locator.invocationId)
+        if (!record?.receipt || record.phase !== 'settled')
+          throw new AppError('UNAVAILABLE', '观察捕获尚无完整权威回执')
+        if (
+          record.prepared.sessionId !== this.id ||
+          record.prepared.executionId !== saved.executionId ||
+          record.prepared.id !== locator.invocationId ||
+          JSON.stringify(record.receipt.invocation) !== JSON.stringify(record.prepared) ||
+          !this.dependencies.allowedModules().includes(record.prepared.binding.moduleId) ||
+          JSON.stringify(
+            this.dependencies.kernel.bind(this.id, record.prepared.binding.moduleId)
+          ) !== JSON.stringify(record.prepared.binding) ||
+          record.prepared.mode !== 'observe' ||
+          record.receipt.outcome !== 'succeeded' ||
+          record.receipt.effect !== 'none' ||
+          !record.receipt.observation?.completed
+        )
+          throw new AppError('PERMISSION', '观察捕获调用归属或完整性无效')
+        value = completeSnapshot(record.receipt.value).value
+      } else value = observationResultValue(saved)
+      if (scriptOutputs.hash(value) !== snapshot.content.fingerprint)
+        throw new AppError('UNAVAILABLE', '观察历史正文与内容指纹不一致')
+      if (scope !== (await this.observationScope(signal)))
+        throw new AppError('PERMISSION', '读取期间观察授权已经变化')
+      const text = JSON.stringify(value)
+      if (isUndefined(text)) throw new AppError('UNAVAILABLE', '观察历史正文不可序列化')
+      const pointer = request.pointer ?? ''
+      const offset = request.offset ?? 0
+      const limit = request.limit ?? ObservationLimits.defaultReadChars
+      if (offset > text.length && isEmpty(pointer))
+        throw new AppError('VALIDATION', '观察读取偏移超出正文')
+      const page = isEmpty(pointer)
+        ? { text: text.slice(offset, offset + limit), offset, totalChars: text.length }
+        : readMaterialField(text, pointer, offset, limit)
+      return {
+        kind: 'read',
+        snapshot: snapshot.summary,
+        pointer,
+        ...page,
+        nextOffset:
+          page.offset + page.text.length < page.totalChars ? page.offset + page.text.length : null,
+      }
+    } catch (error) {
+      signal.throwIfAborted()
+      if (
+        !(error instanceof AppError) ||
+        !['NOT_FOUND', 'PERMISSION', 'UNAVAILABLE', 'LIMIT'].includes(error.code)
+      )
+        throw error
+      const result: ObservationHistoryResult = {
+        kind: 'unavailable',
+        reason: error.code,
+      }
+      if (request.kind === 'read') Object.assign(result, { snapshotId: request.snapshotId })
+      return result
+    }
+  }
+
   private async prepareFrame(signal: AbortSignal, maxChars: number, nativeTools: boolean) {
+    const dynamicState = await this.programs.state()
+    const observationScope = await this.observationScope(signal)
+    const history = await this.observationHistory(signal)
+    const currentDynamicState = await this.programs.state()
+    if (
+      observationScope !== (await this.observationScope(signal)) ||
+      dynamicState.pendingDynamicOwner !== currentDynamicState.pendingDynamicOwner ||
+      dynamicState.pendingObservationHistory?.selectionRef !==
+        currentDynamicState.pendingObservationHistory?.selectionRef
+    )
+      throw new AppError('STALE_VIEW', '历史观察准备期间授权或选择已经变化')
+    const exchangeRefs = dynamicState.pendingDynamicExchanges ?? []
+    const exchanges: Array<NonNullable<ModelDynamicInput['exchanges']>[number]> = []
+    for (const ref of exchangeRefs) {
+      const record = await this.context.read(ref, { limit: 1 })
+      const raw = await this.dependencies.storage.get(this.id, record.record.objectId)
+      if (isNull(raw) || record.record.title !== 'model-tool-exchange')
+        throw new AppError('NOT_FOUND', '动态原生往返记录缺失')
+      const { delivery, ...exchange } = JSON.parse(raw)
+      if (delivery !== 'dynamic') throw new AppError('PERMISSION', '原生往返不属于动态交付')
+      const item: NonNullable<ModelDynamicInput['exchanges']>[number] = {
+        exchange: modelRequestEncoder.toolExchange(exchange),
+      }
+      const responseRef = record.record.sources.find((source) => source.sessionId === this.id)
+      if (responseRef) {
+        const response = await this.context.read(responseRef, { limit: 1 })
+        for (const source of response.record.sources) {
+          const continuation = await this.context.read(source, { limit: 1 })
+          if (continuation.record.title !== 'model-continuation') continue
+          const body = await this.dependencies.storage.get(this.id, continuation.record.objectId)
+          if (isNull(body)) throw new AppError('NOT_FOUND', '动态原生延续状态缺失')
+          Object.assign(item, { continuation: modelRequestEncoder.continuation(JSON.parse(body)) })
+        }
+      }
+      exchanges.push(item)
+    }
     const stores = await this.dependencies.stores?.frame(
       Math.max(1, Math.min(8, Math.floor(maxChars / 4000))),
       Math.min(StoreProjectionLimits.activeChars, Math.floor(maxChars / 4))
@@ -1102,7 +1321,22 @@ export class RuntimeSession implements VelarosSession {
     const inventory = await this.inventory(signal, ActRuntimeTuning.inventoryChars, (value) => {
       environmentVersion = value
     })
-    return { stores, tool, goal, goalControl, environment, inventory, environmentVersion }
+    return {
+      stores,
+      tool,
+      goal,
+      goalControl,
+      environment,
+      inventory,
+      environmentVersion,
+      observationHistory: history,
+      observationScope,
+      observationHistoryHead: dynamicState.observationHistoryHead,
+      pendingDynamicOwner: dynamicState.pendingDynamicOwner,
+      selectionRef: dynamicState.pendingObservationHistory?.selectionRef,
+      exchangeRefs,
+      exchanges,
+    }
   }
 
   private async beginFrame(
@@ -1136,10 +1370,15 @@ export class RuntimeSession implements VelarosSession {
       signal,
       maxChars
     )
+    const dynamicDeliveries = new Set<string>()
     return {
       retainFrames: true,
       project: (budget: number) => this.project(budget, stable, memory),
-      reconcile: memory.reconcile,
+      reconcile: async (...args: Parameters<typeof memory.reconcile>) => {
+        const result = await memory.reconcile(...args)
+        if (result.dynamic) dynamicDeliveries.add(result.body)
+        return result
+      },
       publish: async (body: string, currentSignal: AbortSignal) => {
         currentSignal.throwIfAborted()
         const node = this.dependencies.node
@@ -1162,7 +1401,21 @@ export class RuntimeSession implements VelarosSession {
           throw new AppError('STALE_VIEW', '发布前能力授权或环境事实发生变化')
         if (!(await this.view.validate(view, currentSignal)))
           throw new AppError('STALE_VIEW', '发布前证据版本发生变化')
-        return memory.publish(body, currentSignal)
+        if (
+          (stable.selectionRef || stable.exchangeRefs.length) &&
+          (stable.observationScope !== (await this.observationScope(currentSignal)) ||
+            stable.pendingDynamicOwner !== (await this.programs.state()).pendingDynamicOwner)
+        )
+          throw new AppError('STALE_VIEW', '发布前历史观察授权已经变化')
+        const ref = await memory.publish(body, currentSignal)
+        if (dynamicDeliveries.has(body) && (stable.selectionRef || stable.exchangeRefs.length))
+          await this.programs.registerDynamicDelivery(
+            JSON.parse(body).frameId,
+            stable.selectionRef,
+            stable.exchangeRefs,
+            currentSignal
+          )
+        return ref
       },
     }
   }
@@ -1201,6 +1454,24 @@ export class RuntimeSession implements VelarosSession {
       (tool ? JSON.stringify(tool).length : 0)
     const projected = await memory.project(Math.max(1, maxChars - extra))
     const frame = JSON.parse(projected.body)
+    if (
+      !stable.observationScope ||
+      stable.observationHistoryHead?.scopeFingerprint !== stable.observationScope
+    )
+      delete frame.partitions.observation.snapshotId
+    if (isFalse(this.config.observationPrograms))
+      frame.partitions.observation.availability = {
+        available: false,
+        reason: this.config.observationUnavailableReason,
+      }
+    if (stable.observationHistory && stable.selectionRef)
+      frame.partitions.observation.history = {
+        selectionRef: stable.selectionRef,
+        result: stable.observationHistory,
+      }
+    if (!isEmpty(stable.exchangeRefs))
+      frame.partitions.observation.dynamicExchangeRefs = stable.exchangeRefs
+    if (!isEmpty(stable.exchanges)) frame.partitions.observation.dynamicExchanges = stable.exchanges
     if (this.executionRunner.environment === 'node') frame.presentation = 'node'
     frame.partitions.runtime = {
       ...frame.partitions.runtime,
@@ -1219,7 +1490,7 @@ export class RuntimeSession implements VelarosSession {
     if (tool) frame.partitions.runtime.modelTool = tool
     frame.memoryStatus.footprint.runtime = JSON.stringify(frame.partitions.runtime).length
     const body = JSON.stringify(frame)
-    return { ...projected, body }
+    return { ...projected, body, dynamic: memoryObservation(body).dynamic }
   }
 
   private async waitExecution(signal: AbortSignal): Promise<void> {
@@ -1404,13 +1675,13 @@ export class RuntimeSession implements VelarosSession {
     program: ScriptObservationProgram,
     signal?: AbortSignal,
     options?: ScriptControlOptions
-  ): Promise<ObservationRegistration> {
+  ): Promise<ObservationRegistration | ObservationHistorySelectionReceipt> {
     const result = await this.script({ observe: program }, signal, options)
     if (result.status === 'rejected') {
       const { code, message, ...fields } = result.observe ?? {}
       throw AppError.withFields(code ?? 'VALIDATION', message ?? '', fields)
     }
-    return result.observe as ObservationRegistration
+    return result.observe as ObservationRegistration | ObservationHistorySelectionReceipt
   }
 
   public async execute(
@@ -1476,12 +1747,16 @@ export class RuntimeSession implements VelarosSession {
     control: ScriptControlIdentity,
     signal: AbortSignal
   ): Promise<ScriptSubmissionReceipt> {
+    const historyOwner =
+      request.observe && 'history' in request.observe
+        ? await this.programs.observationDeliveryOwner(signal)
+        : undefined
     await this.recoverInterrupted(signal)
     signal.throwIfAborted()
     const saved = await this.programs.receipt(control)
     if (saved) return recoverScriptSubmission(saved, control)
     const observe = request.observe
-      ? await this.prepareProgram(request.observe, control, signal, false)
+      ? await this.prepareProgram(request.observe, control, signal, false, historyOwner)
       : undefined
     const {
       retainTurns = ScriptLeaseLimits.defaultTurns,
@@ -1612,9 +1887,32 @@ export class RuntimeSession implements VelarosSession {
       | ScriptObservationProgram,
     control: ScriptControlIdentity,
     signal: AbortSignal,
-    execute: boolean
+    execute: boolean,
+    historyOwner?: string
   ): Promise<PreparedScript> {
-    const { refresh, ...requestedProgram } = requested as ScriptObservationProgram
+    if ('history' in requested) {
+      if (execute) throw new AppError('VALIDATION', '观察历史只能通过 observe 选择')
+      if (!historyOwner) throw new AppError('STALE_VIEW', '观察历史选择缺少接受时的任务归属')
+      return {
+        history: observationHistoryRequest(requested.history),
+        historyOwner,
+        receipt: {
+          status: 'selected',
+          selectionRef: (await createContextReference(this.dependencies.storage, this.id)).id,
+          effective: 'next-model-turn',
+          executed: false,
+        },
+      }
+    }
+    if (!execute && isFalse(this.config.observationPrograms))
+      throw new AppError(
+        'UNAVAILABLE',
+        this.config.observationUnavailableReason ?? '宿主不支持只读观察程序'
+      )
+    const { refresh, ...requestedProgram } = requested as Exclude<
+      ScriptObservationProgram,
+      { readonly history: unknown }
+    >
     let program = requestedProgram
     const active = toNullable((await this.programs.state()).observation)
     const parentRef =
@@ -1806,6 +2104,11 @@ export class RuntimeSession implements VelarosSession {
     this.observationResult = undefined
     this.observationImages = []
     const state = await this.programs.state()
+    if (isFalse(this.config.observationPrograms)) {
+      this.observationBaseline = undefined
+      this.snapshotBaseline = undefined
+      return
+    }
     if (!state.observation) {
       this.observationBaseline = undefined
       this.snapshotBaseline = undefined
@@ -2039,8 +2342,10 @@ export class RuntimeSession implements VelarosSession {
     let capture: Optional<SnapshotObservationCapture>
     let failure: Optional<AppError>
     let identity: Optional<string>
+    let historyScope: Optional<string>
     try {
       identity = await this.snapshotIdentity(version, signal)
+      historyScope = await this.observationScope(signal)
       const provider = this.dependencies.contextOptions!.snapshots!.find(
         (item) => item.id === version.snapshot!.provider
       )!
@@ -2085,7 +2390,17 @@ export class RuntimeSession implements VelarosSession {
         mode: 'observe',
         kind: 'snapshot-capture',
         checked: true,
-        capture: optionalWhen(!failure, capture),
+        capture:
+          !failure && capture
+            ? {
+                complete: capture.complete,
+                providerId: capture.providerId,
+                fingerprint: capture.fingerprint,
+                checkedAt: capture.checkedAt,
+                readRequests: capture.readRequests,
+                materialBytes: capture.materialBytes,
+              }
+            : undefined,
         result: failure ? { failed: { code: failure.code, message: failure.message } } : {},
         timing: { durationMs: captureMs },
         invocationId: receipt?.invocation.id,
@@ -2112,6 +2427,29 @@ export class RuntimeSession implements VelarosSession {
       derived: false,
       reused: false,
     }
+    if (
+      !failure &&
+      capture &&
+      receipt &&
+      !isUndefined(historyScope) &&
+      historyScope === (await this.observationScope(signal))
+    )
+      await this.programs.recordObservationSnapshot(
+        {
+          sourceRef: version.sourceRef,
+          fingerprint: scriptOutputs.hash(capture.value),
+          scopeFingerprint: historyScope!,
+          observedAt: capture.checkedAt,
+          chars: JSON.stringify(capture.value).length,
+          locator: {
+            kind: 'capture',
+            captureRef: captureResult.ref,
+            invocationId: receipt.invocation.id,
+          },
+          captureRef: captureResult.ref,
+        },
+        signal
+      )
     if (failure || !capture || !identity) {
       this.snapshotBaseline = undefined
       this.observationResult = captureResult.ref
@@ -2256,7 +2594,7 @@ export class RuntimeSession implements VelarosSession {
     })
     const pending = Promise.resolve()
       .then(async (): Promise<ObservationProbe> => {
-        const scope = await options.scope(this.id, controller.signal)
+        const scope = await this.observationScopeToken(controller.signal)
         controller.signal.throwIfAborted()
         if (!isString(scope) || !scope || scope.length > ObservationReuseLimits.identityChars)
           return { kind: 'unknown', reason: 'scope-unknown' }
@@ -2538,7 +2876,10 @@ export class RuntimeSession implements VelarosSession {
     acceptedTurnId: string,
     calls: readonly ModelToolCall[] = [],
     waitSignal?: AbortSignal
-  ): Promise<boolean | { succeeded: boolean; results: readonly ModelToolResult[] }> {
+  ): Promise<
+    | boolean
+    | { succeeded: boolean; results: readonly ModelToolResult[]; delivery: 'history' | 'dynamic' }
+  > {
     const control = scriptControlIdentity(
       this.id,
       acceptedTurnId,
@@ -2563,6 +2904,7 @@ export class RuntimeSession implements VelarosSession {
     let executionIndex = 0
     return {
       succeeded,
+      delivery: isEmpty(input.executions) && !isUndefined(input.observe) ? 'dynamic' : 'history',
       results: calls.map((call) => {
         const executionId =
           call.name === nativeToolName('execute', this.config)
@@ -2614,7 +2956,7 @@ export class RuntimeSession implements VelarosSession {
     )
     try {
       const [turnId, responseId] = acceptedTurnId.split(':')
-      await this.context.append(
+      const dispatch = await this.context.append(
         {
           kind: 'audit',
           title: 'script:dispatch',
@@ -2640,10 +2982,14 @@ export class RuntimeSession implements VelarosSession {
         recoverScriptSubmission(saved, control)
         return saved.status !== 'rejected'
       }
+      const historyOwner =
+        input.observe && 'history' in input.observe
+          ? await this.programs.observationDeliveryOwner(signal, dispatch.ref)
+          : undefined
       const observe = isNull(input.observe)
         ? { receipt: { status: 'cleared' as const, executed: false } }
         : input.observe
-          ? await this.prepareProgram(input.observe, control, signal, false)
+          ? await this.prepareProgram(input.observe, control, signal, false, historyOwner)
           : undefined
       const basis = toNullable((await this.view.inspect())?.view)
       const executions: PreparedScript[] = []
@@ -2698,7 +3044,8 @@ export class RuntimeSession implements VelarosSession {
         return published.receipt.status !== 'rejected'
       }
       if (!isEmpty(rejected)) return false
-      if (observe) this.expectedObservation = toNullable(observe.receipt.sourceRef)
+      if (observe && !('history' in observe && observe.history))
+        this.expectedObservation = toNullable(observe.receipt.sourceRef)
       if (isEmpty(executions)) return true
       const controller = new AbortController()
       const cancel = (): void => controller.abort(signal.reason)
@@ -2990,6 +3337,7 @@ export class RuntimeSession implements VelarosSession {
   ): Promise<CodeSurfaceOutcome> {
     if (signal.aborted) throw new AppError('CANCELLED', '程序已取消')
     const executionId = identity ?? crypto.randomUUID()
+    const observationScope = mode === 'observe' ? await this.observationScope(signal) : undefined
     const source = savedSource
       ? { ref: savedSource }
       : await this.context.append(
@@ -3064,6 +3412,22 @@ export class RuntimeSession implements VelarosSession {
     } finally {
       durationMs = performance.now() - scriptStarted
       await this.dependencies.settleModelTools?.(executionId)
+      if (
+        mode === 'observe' &&
+        result &&
+        ((result.checked && result.attachments?.length) ||
+          JSON.stringify(result).length > OperationLimits.observationChars)
+      )
+        result = {
+          checked: true,
+          result: {
+            failed: {
+              code: 'TOO_LARGE',
+              message:
+                'LIMIT: 观察仅接受上限内的小型状态，不支持图片；请收窄观察或在 execute 中读取材料。',
+            },
+          },
+        }
       const attachments: ContextRef[] = []
       if (result?.checked)
         for (const image of result.attachments ?? [])
@@ -3149,6 +3513,27 @@ export class RuntimeSession implements VelarosSession {
           success,
           Boolean(!isEmpty(uncertain))
         )
+        if (
+          success &&
+          !signal.aborted &&
+          !isUndefined(observationScope) &&
+          !(await this.programs.version(source.ref.id))?.snapshot &&
+          observationScope === (await this.observationScope(signal))
+        ) {
+          const value = observationResultValue(persisted)
+          await this.programs.recordObservationSnapshot(
+            {
+              sourceRef: source.ref.id,
+              fingerprint: scriptOutputs.hash(value),
+              scopeFingerprint: observationScope!,
+              observedAt: output.createdAt,
+              chars: JSON.stringify(value).length,
+              locator: { kind: 'result', resultRef: output.ref },
+              resultRef: output.ref,
+            },
+            signal
+          )
+        }
         if (!isEmpty(uncertain))
           await this.view.recover(
             uncertain.map((record) => ({

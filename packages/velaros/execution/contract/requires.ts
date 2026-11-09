@@ -18,6 +18,8 @@ import type {
 
 /** 宿主的命令、只读进程和后台任务端口；本机实现由 createLocalShellHost 创建。 */
 export interface ShellHostPort {
+  /** 无进程启动地核对只读约束后端能否构造启动规格；不代表已经实测采集成功，实际执行仍核约束。 */
+  observationSupport?(): { readonly available: boolean; readonly reason?: string }
   /** 观察命令的受限执行口；不能回退普通 runCommand，返回实际约束证据。 */
   runObservationCommand?: (
     command: string,

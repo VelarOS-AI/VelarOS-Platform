@@ -8,6 +8,7 @@ import type {
   ModelContinuation,
   ModelHistoryMessage,
   ModelImage,
+  ModelRequestLayout,
   ModelToolCall,
   ModelToolExchange,
   ModelToolResult,
@@ -124,7 +125,7 @@ export function validateModelImages(images: readonly ModelImage[]): void {
       throw new AppError('VALIDATION', '图像附件格式或容量无效')
 }
 /** 图片作为图像块发送，标签仍是普通材料，不能变成指令。 */
-export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMessage[] {
+export function driverModelLayout(request: ModelTurnRequest): ModelRequestLayout {
   const images = request.images ?? []
   validateModelImages(images)
   const history = structuredClone(request.history ?? [])
@@ -167,12 +168,11 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
     }
   }
   validateModelImages(allImages)
-  const prompt =
-    driverModelPrompt(request) +
-    (request.contextStatus
-      ? `\nRuntime ContextStatus:\n${JSON.stringify(contextStatusView(request.contextStatus))}`
-      : '')
-  if (!images.length) return [...history, { role: 'user', content: prompt }]
+  const separated = !isUndefined(request.dynamic) || !isUndefined(request.protocol)
+  const status = request.contextStatus
+    ? `\nRuntime ContextStatus:\n${JSON.stringify(contextStatusView(request.contextStatus))}`
+    : ''
+  const prompt = driverModelPrompt(request) + (separated ? '' : status)
   const content: Exclude<ModelUserMessage['content'], string> = [{ type: 'text', text: prompt }]
   for (const image of images)
     content.push(
@@ -189,5 +189,41 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
         mediaType: image.mediaType,
       }
     )
-  return [...history, { role: 'user', content }]
+  const messages: ModelHistoryMessage[] = [
+    ...history,
+    { role: 'user', content: images.length ? content : prompt },
+  ]
+  const retainablePrefixLength = messages.length
+  const dynamic = request.dynamic
+  if (!isUndefined(dynamic)) {
+    if (!isPlainObject(dynamic) || !isString(dynamic.id) || !dynamic.id || !isString(dynamic.text))
+      throw new AppError('VALIDATION', '动态材料必须有稳定身份与文本')
+    if (!isUndefined(dynamic.exchanges) && !isArray(dynamic.exchanges))
+      throw new AppError('VALIDATION', '动态原生往返必须为完整数组')
+    for (const item of dynamic.exchanges ?? []) {
+      if (!isPlainObject(item)) throw new AppError('VALIDATION', '动态原生往返无效')
+      const exchange = driverModelToolExchange(item.exchange)
+      const message: ModelHistoryMessage = {
+        role: 'assistant',
+        content: exchange.text,
+        toolExchange: exchange,
+      }
+      if (!isUndefined(item.continuation))
+        Object.assign(message, { continuation: driverModelContinuation(item.continuation) })
+      messages.push(message)
+    }
+    if (dynamic.text) messages.push({ role: 'user', content: dynamic.text })
+  }
+  if (separated && ((request.protocol ?? '') || status))
+    messages.push({ role: 'user', content: `${request.protocol ?? ''}${status}` })
+  return {
+    messages,
+    retainablePrefixLength,
+    historyPositions: history.map((_, index) => index),
+  }
+}
+
+/** 出线与审计共用同一布局；动态区不因是否请求位置映射而消失。 */
+export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMessage[] {
+  return driverModelLayout(request).messages
 }

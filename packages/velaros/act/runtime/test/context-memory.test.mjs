@@ -8,6 +8,7 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 
+import { ObservationLimits } from '../../../dist/act/runtime/contract/constants.js'
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
@@ -15,6 +16,8 @@ import { SessionGoal } from '../../../dist/act/runtime/impl/SessionGoal.js'
 import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
 import {
   memoryCommittedGroups,
+  memoryMessageKey,
+  memoryObservation,
   memoryOutput,
   memoryPrompt,
   memoryTaskHistory,
@@ -33,7 +36,6 @@ import { baseNotes, baseText, done, historyEntries, turn } from './support/model
 import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
 
 const signal = new AbortController().signal
-const platformHasDefaultConfinement = process.platform === 'darwin' || process.platform === 'linux'
 
 test('INV-58 new and legacy output representations share actual prompt bounds and preserve failure gaps', () => {
   const value = 'alpha("beta");\n'.repeat(40)
@@ -430,6 +432,15 @@ async function execute(f, source) {
   const result = await f.session.execute({ source })
   assert(result.checked && !result.result.failed, JSON.stringify(result))
   return result.result.value?.default
+}
+
+async function archivedProgramResults(f) {
+  const selected = await f.storage.selectSnapshot('s', [
+    { titlePrefix: 'script:', titleSuffix: ':result' },
+  ])
+  return Promise.all(
+    selected.records.map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
+  )
 }
 
 test('generated material read hints satisfy the live memory contract and recall original bytes', async (t) => {
@@ -1695,7 +1706,11 @@ test('INV-18 one partitioned frame carries current observation, persistent notes
       yield { type: 'finish', reason: 'stop' }
     } else yield* done(request)
   })
-  await f.session.observe({ source: "import {output} from 'velaros';output({version:2});" })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({ source: "import {output} from 'velaros';output({version:2});" })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   const frame = JSON.parse(f.requests[1].materials[0].text)
   assert.deepEqual(Object.keys(frame.partitions), [
@@ -1708,16 +1723,23 @@ test('INV-18 one partitioned frame carries current observation, persistent notes
   assert.equal(frame.goals, undefined)
   assert.equal(frame.results, undefined)
   assert.equal(f.requests[1].contextStatus.mode, 'partitioned')
+  assert(
+    frame.partitions.workspace.notes[0],
+    JSON.stringify({
+      notes: frame.partitions.workspace.notes,
+      results: frame.partitions.recent.results,
+    })
+  )
   assert.equal(frame.partitions.workspace.notes[0].text, 'Cache restoration remains unverified')
   assert.equal(frame.partitions.workspace.notes[0].origin, 'model-note')
-  if (platformHasDefaultConfinement) assert.match(frame.partitions.observation.text, /version/)
+  if (support.available) assert.match(frame.partitions.observation.text, /version/)
   else {
-    assert.equal(frame.partitions.observation.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-    const programs = new ProgramContext('s', f.session.context, f.storage)
-    const archived = JSON.parse((await programs.read(frame.partitions.observation.resultRef)).text)
-    assert.equal(archived.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-    assert.equal(archived.result.process, undefined)
-    assert.equal(archived.output, undefined)
+    assert.equal(frame.partitions.observation.resultRef, null)
+    assert.equal(JSON.parse(f.requests[1].dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
   }
   assert(frame.partitions.recent.results.length)
   assert(frame.memoryStatus.changes.added.includes('workspace:auth'))
@@ -1787,16 +1809,24 @@ test('eviction removes only residency, remount preserves exact archived note and
 
 test('observation cannot mutate a workspace through aliases or wrappers', async (t) => {
   const f = await fixture(t)
-  await f.session.observe({
-    source:
-      "import {memory as memoryApi} from 'velaros:system';const {update:edit}=memoryApi;await edit({key:'bad',baseRevision:0,body:'repeat'});",
-  })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({
+      source:
+        "import {memory as memoryApi} from 'velaros:system';const {update:edit}=memoryApi;await edit({key:'bad',baseRevision:0,body:'repeat'});",
+    })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   assert.equal((await f.memory.list({}, signal)).items.length, 0)
-  assert.match(
-    f.requests[0].materials[0].text,
-    platformHasDefaultConfinement ? /OPERATION_MODE_DENIED/ : /SHELL_CONFINEMENT_UNAVAILABLE/
-  )
+  if (support.available) assert.match(f.requests[0].materials[0].text, /OPERATION_MODE_DENIED/)
+  else {
+    assert.equal(JSON.parse(f.requests[0].dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
+  }
 })
 
 test('oversized notes become honest reference cards and can be recalled without auto-residency changes', async (t) => {
@@ -1962,9 +1992,13 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
     { key: 'progress', baseRevision: 0, body: 'Original main-model progress' },
     signal
   )
-  await f.session.observe({
-    source: "import {output} from 'velaros';output('current observation');",
-  })
+  const support = f.session.executionRunner.observationSupport()
+  const observe = () =>
+    f.session.observe({
+      source: "import {output} from 'velaros';output('current observation');",
+    })
+  if (support.available) await observe()
+  else await assert.rejects(observe(), { code: 'UNAVAILABLE' })
   await run(f)
   assert.equal(
     JSON.parse((await f.memory.read(note.ref, 0, 60000, signal)).text).body,
@@ -1975,14 +2009,11 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   // 派生展示换了投影策略，下一帧重建底座，笔记快照换成整理后的展示
   assert.match(baseText(f.requests[1]), /Maintenance preserved progress/)
   assert.doesNotMatch(baseText(f.requests[1]), /Original main-model progress/)
-  const state = await f.storage.load('s')
-  const results = await Promise.all(
-    state.records
-      .filter((item) => /^script:[0-9a-f-]+:result$/u.test(item.title))
-      .map(async (item) => JSON.parse(await f.storage.get('s', item.objectId)))
-  )
-  assert.equal(results.filter((item) => item.mode === 'observe').length, 1)
+  const results = await archivedProgramResults(f)
+  assert.equal(results.filter((item) => item.mode === 'observe').length, support.available ? 1 : 0)
   assert.equal(results.filter((item) => item.mode === 'execute').length, 0)
+  if (!support.available)
+    assert.equal(JSON.parse(f.requests[1].dynamic.text).current.availability.available, false)
 })
 
 test('INV-74 actual requests retain maintenance narrative provenance through continued execution', async (t) => {
@@ -2659,6 +2690,7 @@ test('INV-75 authenticated page lineage rejects stale or foreign inner receipts 
 function acceptedMemoryRequest(frame) {
   return {
     compiledPrompt: frame.prompt,
+    ...(frame.dynamic ? { dynamic: frame.dynamic } : {}),
     history: frame.history,
     instructions: 'synthetic accepted request',
     materials: [
@@ -3610,7 +3642,9 @@ test('zero-history results and current observation render code without extra str
   const result = 'function receipt() {\n  return "\\n";\n}'
   const f = await fixture(t, undefined, { context: { sources: [], memory: { recentRecords: 0 } } })
   const source = `import {output} from 'velaros';output(${JSON.stringify(observed)},{key:'observe-code',type:'code'});`
-  const observation = await f.session.observe({ source })
+  const support = f.session.executionRunner.observationSupport()
+  if (support.available) await f.session.observe({ source })
+  else await assert.rejects(f.session.observe({ source }), { code: 'UNAVAILABLE' })
   await execute(
     f,
     `import {output} from 'velaros';output(${JSON.stringify(result)},{key:'result-code',type:'code'});`
@@ -3629,20 +3663,20 @@ test('zero-history results and current observation render code without extra str
   const programs = new ProgramContext('s', f.session.context, f.storage)
   const original = JSON.parse((await programs.read(rendered.ref)).text)
   assert.equal(original.output.blocks.find((block) => block.key === 'result-code').value, result)
-  if (platformHasDefaultConfinement) {
-    assert(request.compiledPrompt.includes(observed))
+  if (support.available) {
+    assert(JSON.parse(request.dynamic.text).current.text.includes(observed))
+    assert(!request.compiledPrompt.includes(observed))
     assert.equal(frame.partitions.observation.presentation.format, 'text')
     assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
     assert(frame.partitions.observation.text.endsWith(observed))
   } else {
-    const archived = JSON.parse((await programs.read(frame.partitions.observation.resultRef)).text)
-    assert.equal(frame.partitions.observation.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-    assert.equal(archived.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-    assert.equal(archived.result.process, undefined)
-    assert.equal(archived.output, undefined)
+    assert.equal(frame.partitions.observation.resultRef, null)
+    assert.equal(JSON.parse(request.dynamic.text).current.availability.available, false)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
     assert(!request.compiledPrompt.includes(observed))
-    const saved = JSON.parse((await programs.readProgram(observation.sourceRef)).text)
-    assert.equal(saved.source, source)
   }
 })
 
@@ -3846,6 +3880,184 @@ function frameBody(overrides = {}) {
   return JSON.stringify(merged)
 }
 
+test('small dynamic observations retain safety and changes while ordinary prompts contain no observation body', () => {
+  const observation = {
+    sourceRef: 'observer',
+    resultRef: 'observed-result',
+    snapshotId: 'snapshot',
+    text: 'CURRENT_SMALL_STATE',
+    bodyIncluded: true,
+    collection: 'partial',
+    safety: [
+      {
+        id: 'read-1',
+        operation: 'project.read',
+        effect: 'unknown',
+        outcome: 'failed',
+        protection: 'partial',
+        completed: false,
+        code: 'READ_UNCONFIRMED',
+        detail: 'SAFETY_DETAIL',
+      },
+    ],
+    outputChanges: [{ key: 'status', change: 'updated', contentHash: 'new-hash' }],
+    missingOutputs: [{ key: 'expected', status: 'not-produced' }],
+    exitedOutputs: [{ key: 'old', status: 'absent' }],
+    presentationChanges: [{ key: 'status', from: 'full', to: 'excerpt', reason: 'budget' }],
+    missingRequired: ['expected'],
+  }
+  const body = frameBody({ 'partitions.observation': observation })
+  const small = memoryObservation(body)
+  assert.equal(small.limited, false)
+  assert(small.dynamic.text.length <= ObservationLimits.defaultChars)
+  const current = JSON.parse(small.dynamic.text).current
+  for (const key of [
+    'safety',
+    'outputChanges',
+    'missingOutputs',
+    'exitedOutputs',
+    'presentationChanges',
+    'missingRequired',
+  ])
+    assert.deepEqual(current[key], observation[key])
+  assert.equal(current.text, observation.text)
+  assert.equal(current.bodyIncluded, true)
+  assert.equal(current.collection, 'partial')
+  assert.equal(current.requiredMissing, true)
+  assert.doesNotMatch(memoryPrompt(body), /CURRENT_SMALL_STATE|SAFETY_DETAIL|READ_UNCONFIRMED/)
+
+  const bodyLimited = memoryObservation(
+    frameBody({
+      'partitions.observation': {
+        ...observation,
+        text: 'BODY_TOO_LARGE'.repeat(400),
+        totalChars: 5600,
+      },
+    })
+  )
+  const limited = JSON.parse(bodyLimited.dynamic.text).current
+  assert(bodyLimited.limited)
+  assert.equal(limited.text, undefined)
+  assert.equal(limited.bodyIncluded, false)
+  assert.equal(limited.limit.code, 'LIMIT')
+  assert.deepEqual(limited.safety, observation.safety)
+  assert(bodyLimited.dynamic.text.length <= ObservationLimits.maxChars)
+
+  const metadataLimited = memoryObservation(
+    frameBody({
+      'partitions.observation': {
+        ...observation,
+        safety: [{ ...observation.safety[0], detail: 'UNDELIVERED_SAFETY'.repeat(400) }],
+      },
+    })
+  )
+  const unavailable = JSON.parse(metadataLimited.dynamic.text).current
+  assert(metadataLimited.limited)
+  assert.equal(unavailable.status, 'LIMIT')
+  assert.equal(unavailable.requiresReview, true)
+  assert.equal(unavailable.bodyIncluded, false)
+  assert(unavailable.omitted.includes('safety'))
+  assert.equal(unavailable.text, undefined)
+  assert(metadataLimited.dynamic.text.length <= ObservationLimits.maxChars)
+})
+
+test('notes catalog filtering does not read unrelated large execution result bodies', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const ignored = await archiveResult(f, programs, 'UNRELATED_RESULT'.repeat(2048))
+  const note = await f.memory.update(
+    { key: 'visible-note', baseRevision: 0, body: 'note body' },
+    signal
+  )
+  const record = (await f.storage.selectSnapshot('s', [{ refId: ignored.id }])).records[0]
+  const get = f.storage.get.bind(f.storage)
+  let resultReads = 0
+  f.storage.get = async (sessionId, objectId) => {
+    if (objectId === record.objectId) resultReads++
+    return get(sessionId, objectId)
+  }
+  try {
+    const notes = await f.memory.catalog({ kind: 'notes', limit: 10 }, signal)
+    assert(notes.items.some((item) => item.ref.id === note.ref.id))
+    assert.equal(resultReads, 0)
+  } finally {
+    f.storage.get = get
+  }
+  assert.equal(f.requests.length, 0)
+})
+
+test('current result proof requires the complete dynamic exchange and binds the retainable message before the protocol tail', async (t) => {
+  for (const scenario of ['exact', 'drop-exchange', 'mutate-exchange'])
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t, undefined, { context: { memory: { recentRecords: 0 } } })
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(f, programs, ['REQUIRED_CURRENT_BODY'], 8000)
+      const cycle = await f.memory.beginFrame(requiredView(), undefined, [], signal, 600000)
+      const projected = await cycle.project(600000)
+      const body = JSON.parse(projected.body)
+      body.partitions.observation.dynamicExchanges = [
+        {
+          exchange: {
+            text: 'Choose an old snapshot',
+            calls: [
+              {
+                id: 'history-selection',
+                name: 'observe',
+                input: { code: '', options: { history: { kind: 'list' } } },
+              },
+            ],
+            results: [
+              {
+                id: 'history-selection',
+                name: 'observe',
+                output: {
+                  status: 'completed',
+                  effect: 'none',
+                  receipt: {
+                    status: 'selected',
+                    selectionRef: 'selected-history',
+                    executed: false,
+                    effective: 'next-model-turn',
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ]
+      const selected = {
+        ...projected,
+        ...(await cycle.reconcile(JSON.stringify(body), projected.history, undefined, signal)),
+      }
+      await cycle.publish(selected.body, signal)
+      const request = structuredClone(acceptedMemoryRequest(selected))
+      request.protocol = 'CONTROL_TAIL_AFTER_DYNAMIC'
+      if (scenario === 'drop-exchange') delete request.dynamic.exchanges
+      if (scenario === 'mutate-exchange')
+        request.dynamic.exchanges[0].exchange.results[0].output.receipt.selectionRef =
+          'different-history'
+      await f.memory.acknowledge(JSON.parse(selected.body).frameId, signal, request)
+      const delivered = (
+        await f.storage.selectSnapshot('s', [{ title: 'context:delivered', latest: true }])
+      ).records[0]
+      const carriers = JSON.parse(await f.storage.get('s', delivered.objectId)).accepted.carriers
+      const proofs = carriers.flatMap((carrier) => carrier.proofs)
+      assert.equal(
+        proofs.some((proof) => proof.ref === source.id),
+        scenario === 'exact'
+      )
+      if (scenario === 'exact') {
+        const layout = modelRequestEncoder.layout(request)
+        const current = layout.messages[layout.retainablePrefixLength - 1]
+        assert(carriers.some((carrier) => carrier.message === memoryMessageKey(current)))
+        assert(
+          !carriers.some((carrier) => carrier.message === memoryMessageKey(layout.messages.at(-1)))
+        )
+      }
+      assert.equal(f.requests.length, 0)
+    })
+})
+
 /** 仅从实际展示过的完整快照恢复未变任务，不能借用原始内部帧。 */
 function nodeTaskSnapshot(prompt, history = []) {
   const heading = 'task（earlier 为此前运行的输入）：\n'
@@ -3974,7 +4186,7 @@ function section(prompt, name) {
   return JSON.parse(prompt.split(new RegExp(`分区 ${name}[^\\n]*：\\n`, 'u'))[1].split('\n')[0])
 }
 
-test('INV-74 current state is self-contained while unchanged result and observation bodies remain in history', () => {
+test('INV-74 ordinary results remain in history while observation bodies stay self-contained in dynamic', () => {
   const failed = {
     id: 'failed',
     executionId: 'e1',
@@ -3993,6 +4205,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
       resultRef: 'observed',
       source: 'readCurrent()',
       text: 'OBSERVED-BODY',
+      bodyIncluded: true,
       observedAt: 'T1',
     },
     'partitions.recent.results': [{ ref: 'result', text: 'LARGE-RESULT', source: 'readFile()' }],
@@ -4006,6 +4219,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
       resultRef: 'observed',
       source: 'readCurrent()',
       text: 'OBSERVED-BODY',
+      bodyIncluded: true,
       observedAt: 'T1',
     },
     'partitions.recent.results': [
@@ -4013,7 +4227,7 @@ test('INV-74 current state is self-contained while unchanged result and observat
     ],
   })
   const prompt = memoryPrompt(current, before)
-  for (const partition of ['task', 'workspace', 'observation', 'recent', 'runtime'])
+  for (const partition of ['task', 'workspace', 'recent', 'runtime'])
     assert(section(prompt, partition))
   const runtime = section(prompt, 'runtime')
   assert.equal(runtime.mandatory[0].code, 'CONFLICT')
@@ -4031,16 +4245,22 @@ test('INV-74 current state is self-contained while unchanged result and observat
     shell: 'posix',
     time: 'T1',
   })
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, true)
+  assert(!prompt.includes('分区 observation：'))
+  const dynamic = memoryObservation(current).dynamic
+  assert.match(dynamic.text, /OBSERVED-BODY/)
+  assert(!dynamic.text.includes('outputInEarlierFrame'))
+  assert(!dynamic.text.includes('readCurrent()'))
+  assert.deepEqual(dynamic, memoryObservation(before).dynamic)
   assert.match(memoryPrompt(current), /DIAGNOSTIC/)
   assert.match(memoryPrompt(current), /LARGE-RESULT/)
-  assert.match(memoryPrompt(current), /OBSERVED-BODY/)
+  assert.doesNotMatch(memoryPrompt(current), /OBSERVED-BODY/)
   const changed = JSON.parse(current)
   changed.partitions.observation.text = 'CHANGED-OBSERVATION'
   changed.partitions.recent.results[0].text = 'CHANGED-RESULT'
   changed.partitions.runtime.mandatory[0].detail = 'CHANGED-DIAGNOSTIC'
   const updated = memoryPrompt(JSON.stringify(changed), current)
-  assert.match(updated, /CHANGED-OBSERVATION/)
+  assert.doesNotMatch(updated, /CHANGED-OBSERVATION/)
+  assert.match(memoryObservation(JSON.stringify(changed)).dynamic.text, /CHANGED-OBSERVATION/)
   assert.match(updated, /CHANGED-RESULT/)
   assert.match(updated, /CHANGED-DIAGNOSTIC/)
 })
@@ -4241,8 +4461,8 @@ test('INV-74 reference-only materials never claim delivery and source delivery i
   const output = cards.find((card) => card.ref === 'output-only-result')
   assert.equal(output.bodyInEarlierFrame, true)
   assert.equal(output.sourceInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').sourceInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, false)
+  assert(!prompt.includes('分区 observation：'))
+  assert.equal(memoryObservation(frame).dynamic, undefined)
   assert.deepEqual(section(prompt, 'runtime').gaps, [
     { ref: 'reference-result', reason: 'required-body-missing' },
   ])
@@ -4277,6 +4497,7 @@ test('INV-74 actual structured reference presentations distinguish metadata from
           resultRef: 'actual-result',
           source: '',
           text: projection.prompt,
+          bodyIncluded,
           blocks: projection.blocks.map((block) => ({ bodyIncluded: block.bodyIncluded })),
           presentation: { format },
         },
@@ -4294,9 +4515,11 @@ test('INV-74 actual structured reference presentations distinguish metadata from
           : [{ ref: 'actual-result', reason: 'required-body-missing' }],
       })
       const prompt = memoryPrompt(frame, frame)
-      const observation = section(prompt, 'observation')
-      assert.equal(observation.outputInEarlierFrame, bodyIncluded)
-      assert.equal(observation.outputPresentationInEarlierFrame, true)
+      assert(!prompt.includes('分区 observation：'))
+      const observation = JSON.parse(memoryObservation(frame).dynamic.text).current
+      assert.equal(observation.text, projection.prompt)
+      assert.equal(observation.bodyIncluded, bodyIncluded)
+      assert(!Object.hasOwn(observation, 'outputInEarlierFrame'))
       const result = prompt
         .split('\n')
         .filter((line) => line.startsWith('{'))
@@ -4313,15 +4536,27 @@ test('INV-74 actual structured reference presentations distinguish metadata from
 test('INV-74 newly included bodies cannot inherit delivery from identical prior reference metadata', () => {
   const make = (bodyIncluded) =>
     frameBody({
-      'partitions.observation': { source: '', text: 'IMAGE-METADATA', blocks: [{ bodyIncluded }] },
+      'partitions.observation': {
+        sourceRef: 'observer',
+        resultRef: 'observed',
+        source: '',
+        text: 'IMAGE-METADATA',
+        bodyIncluded,
+        blocks: [{ bodyIncluded }],
+      },
       'partitions.workspace.notes': [
         { key: 'note', revision: 1, ref: 'note', text: 'NOTE-METADATA', bodyIncluded },
       ],
       'partitions.recent.results': [{ ref: 'image', text: 'IMAGE-METADATA', bodyIncluded }],
     })
   const prompt = memoryPrompt(make(true), make(false))
-  assert.equal(section(prompt, 'observation').outputInEarlierFrame, false)
-  assert.equal(section(prompt, 'observation').outputPresentationInEarlierFrame, true)
+  assert(!prompt.includes('分区 observation：'))
+  const dynamic = JSON.parse(memoryObservation(make(true)).dynamic.text).current
+  const previousDynamic = JSON.parse(memoryObservation(make(false)).dynamic.text).current
+  assert.equal(dynamic.bodyIncluded, true)
+  assert.equal(previousDynamic.bodyIncluded, false)
+  assert.equal(dynamic.text, 'IMAGE-METADATA')
+  assert(!Object.hasOwn(dynamic, 'outputInEarlierFrame'))
   const cards = prompt
     .split('\n')
     .filter((line) => line.startsWith('{'))
@@ -4426,14 +4661,27 @@ test('INV-74 same output body under a new ref is delivered again and failures re
 
 test('INV-74 capacity retire turns expired frozen bodies into reference cards once, never touching leased ones', async (t) => {
   const f = await fixture(t)
+  const support = f.session.executionRunner.observationSupport()
+  if (!support.available)
+    await assert.rejects(
+      f.session.observe({ source: "import {output} from 'velaros';output('must not run');" }),
+      { code: 'UNAVAILABLE' }
+    )
   const leased = await f.session.execute(
     { source: "import {output} from 'velaros';output('LEASED-BODY')" },
     'task'
   )
+  assert(leased.checked && !leased.result.failed, JSON.stringify(leased))
   const expiring = await f.session.execute(
     { source: "import {output} from 'velaros';output('EXPIRED-BODY')" },
     1
   )
+  assert(expiring.checked && !expiring.result.failed, JSON.stringify(expiring))
+  if (!support.available)
+    assert.equal(
+      (await archivedProgramResults(f)).filter((result) => result.mode === 'observe').length,
+      0
+    )
   const view = {
     id: 'frame',
     scope: { sessionId: 's', revision: 0 },

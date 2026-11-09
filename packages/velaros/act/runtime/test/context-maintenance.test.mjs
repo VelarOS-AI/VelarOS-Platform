@@ -516,7 +516,7 @@ async function* deliverDataPatch(request, extra = {}) {
 }
 const execute = (request, source) => ({
   type: 'text',
-  text: `${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} execute()\n${source}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]}`,
+  text: `${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} execute()\n${source}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]}`,
 })
 const snapshotOf = (request) =>
   JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
@@ -528,7 +528,7 @@ async function* deliverPatch(request, extra = {}) {
   )
   yield {
     ...part,
-    text: `${part.text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
+    text: `${part.text}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} done`,
   }
   yield finish
 }
@@ -1936,7 +1936,7 @@ test('organize plus done delivers the actual outcome in another main request bef
       if (++calls === 1) {
         yield {
           type: 'text',
-          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
+          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.protocol.match(/当前帧标记：(@@\w+)。/)[1]} done`,
         }
         yield finish
       } else {
@@ -2518,8 +2518,8 @@ test(
         yield finish
       } else {
         assert.equal(calls, 2)
-        assert.match(request.compiledPrompt, /当前候选补丁已通过校验并受理/)
-        assert.match(request.compiledPrompt, /applied 回执只在本支线完成之后产生/)
+        assert.match(request.protocol, /当前候选补丁已通过校验并受理/)
+        assert.match(request.protocol, /applied 回执只在本支线完成之后产生/)
         yield* done(request)
       }
     })

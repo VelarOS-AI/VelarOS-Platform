@@ -638,7 +638,7 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   for await (const event of f.session.submit('user-text-only')) events.push(event)
   assert.match(frames[0].instructions, /host-language-first/)
   assert.match(frames[0].instructions, /Node.js/)
-  assert.match(frames[0].compiledPrompt, /当前帧标记/)
+  assert.match(frames[0].protocol, /当前帧标记/)
   const turn = events.find((event) => event.type === 'turn')
   const trace = await f.session.trace(turn.turnId)
   const manifests = trace.records.filter(

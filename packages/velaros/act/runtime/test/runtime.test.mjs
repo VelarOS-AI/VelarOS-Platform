@@ -426,7 +426,7 @@ test(
       async *stream(request) {
         calls++
         const frame = JSON.parse(request.materials[0].text)
-        const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+        const tag = request.protocol.match(/当前帧标记：(@@\w+)。/)[1]
         bodies.push(request.materials[0].text.length)
         if (!largestFrame || request.materials[0].text.length > largestFrame.chars)
           largestFrame = {

@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import {
+  NativeObservationControlSchema,
+  NativeObservationSchema,
+} from '../../../dist/act/runtime/contract/surface.js'
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDecoder.js'
 import { nativeProtocolRules } from '../../../dist/act/runtime/utils/native-protocol.js'
 import { protocolConfig } from '../../../dist/act/runtime/utils/script-protocol.js'
+import { checkScriptSubmission } from '../../../dist/act/runtime/utils/script-submission.js'
 
 import { createTestStorage } from './support/runtime-fixture.mjs'
 
@@ -125,6 +130,9 @@ const valid = [
   [
     { kind: 'blobs', name: 'literal', text: raw },
     { kind: 'observe', code: source, options: { inputRef: 'host:data', refresh: true } },
+  ],
+  [
+    { kind: 'blobs', name: 'literal', text: raw },
     {
       kind: 'execute',
       code: source,
@@ -136,8 +144,8 @@ const valid = [
       },
     },
   ],
+  [{ kind: 'observe', options: { clear: true } }],
   [
-    { kind: 'observe', options: { clear: true } },
     {
       kind: 'execute',
       options: {
@@ -200,6 +208,158 @@ for (const [index, records] of valid.entries())
       decode('text', records, {}, { data: { value: raw } })
     )
   })
+test('history selection is a one-shot observe input in both transports and host submissions', () => {
+  for (const history of [
+    { kind: 'list' },
+    { kind: 'list', cursor: 'opaque-page', limit: 20 },
+    { kind: 'read', snapshotId: 'snapshot' },
+    { kind: 'read', snapshotId: 'snapshot', pointer: '/result/outputs/0', offset: 2, limit: 2048 },
+  ]) {
+    const expected = { observe: { history }, executions: [] }
+    for (const mode of ['tools', 'text'])
+      assert.deepEqual(
+        decode(mode, [{ kind: 'observe', options: { history } }]).submission,
+        expected
+      )
+    assert.doesNotThrow(() => checkScriptSubmission({ observe: { history } }))
+  }
+})
+
+test('history rejects mixed program options, invalid ranges and unknown fields before dispatch', () => {
+  const list = { kind: 'list' }
+  const read = { kind: 'read', snapshotId: 'snapshot' }
+  const invalid = [
+    { history: { ...list, limit: 0 } },
+    { history: { ...list, limit: 21 } },
+    { history: { ...list, cursor: '' } },
+    { history: { ...list, pointer: '/result' } },
+    { history: { kind: 'compare' } },
+    { history: { ...read, snapshotId: '' } },
+    { history: { ...read, limit: 2049 } },
+    { history: { ...read, offset: -1 } },
+    { history: { ...read, offset: 0.5 } },
+    { history: { ...read, pointer: 'x'.repeat(4097) } },
+    { history: { ...read, cursor: 'other' } },
+    ...[
+      { snapshot: { provider: 'domain', plan: 'current', input: {} } },
+      { refresh: false },
+      { clear: true },
+      { sourceRef: 'saved' },
+      { edits: [{ oldText: 'a', newText: 'b' }] },
+      { input: {} },
+      { blobs: { value: 'text' } },
+      { format: 'program' },
+    ].map((fields) => ({ history: list, ...fields })),
+  ]
+  for (const options of invalid) {
+    for (const mode of ['tools', 'text'])
+      assert.throws(() => decode(mode, [{ kind: 'observe', options }]), { code: 'SCRIPT_PROTOCOL' })
+    assert.throws(() => checkScriptSubmission({ observe: options }), { code: 'INPUT_SCHEMA' })
+  }
+  for (const mode of ['tools', 'text']) {
+    for (const records of [
+      [{ kind: 'observe', code: source, options: { history: list } }],
+      [{ kind: 'execute', options: { history: list } }],
+      [
+        {
+          kind: 'observe',
+          code: JSON.stringify({ history: list }),
+          options: { format: 'program' },
+        },
+      ],
+      [
+        { kind: 'blobs', name: 'extra', text: raw },
+        { kind: 'observe', options: { history: list } },
+      ],
+    ])
+      assert.throws(() => decode(mode, records), { code: 'SCRIPT_PROTOCOL' })
+  }
+})
+
+test('native mixed controls require repair while text and host retain atomic submissions', () => {
+  for (const observer of [
+    { kind: 'observe', code: source },
+    { kind: 'observe', options: { clear: true } },
+    { kind: 'observe', options: { history: { kind: 'list' } } },
+  ]) {
+    const execution = { kind: 'execute', code: source }
+    for (const records of [
+      [observer, execution],
+      [execution, observer],
+    ]) {
+      const text = decode('text', records).submission
+      assert(Object.hasOwn(text, 'observe'))
+      assert.equal(text.executions.length, 1)
+      assert.equal(text.executions[0].program.source, source)
+      if (Object.hasOwn(observer.options ?? {}, 'clear')) assert.equal(text.observe, null)
+      else if (Object.hasOwn(observer.options ?? {}, 'history'))
+        assert.deepEqual(text.observe, { history: { kind: 'list' } })
+      else assert.equal(text.observe.source, source)
+      assert.throws(() => decode('tools', records), { code: 'SCRIPT_PROTOCOL' })
+    }
+  }
+  for (const observe of [{ source }, { history: { kind: 'list' } }])
+    assert.doesNotThrow(() => checkScriptSubmission({ observe, execute: { source } }))
+  const mixed = decode(
+    'text',
+    [
+      { kind: 'blobs', name: 'literal', text: raw },
+      { kind: 'observe', code: source, options: { inputRef: 'host:data', refresh: true } },
+      { kind: 'execute', code: source, options: { async: true, retain: 'task' } },
+    ],
+    {},
+    { data: { value: raw } }
+  ).submission
+  assert.deepEqual(mixed.observe.input, { value: raw })
+  assert.equal(mixed.observe.blobs.literal, raw)
+  assert.equal(mixed.executions[0].program.blobs.literal, raw)
+  assert.equal(mixed.executions[0].program.retainTurns, 'task')
+})
+
+test('unavailable program observations keep history and clear controls in both transports', () => {
+  const config = {
+    observationPrograms: false,
+    observationUnavailableReason: 'fixture read-only backend unavailable',
+  }
+  for (const mode of ['tools', 'text']) {
+    assert.deepEqual(
+      decode(mode, [{ kind: 'observe', options: { history: { kind: 'list' } } }], config)
+        .submission,
+      { observe: { history: { kind: 'list' } }, executions: [] }
+    )
+    assert.deepEqual(
+      decode(mode, [{ kind: 'observe', options: { clear: true } }], config).submission,
+      { observe: null, executions: [] }
+    )
+    for (const record of [
+      { kind: 'observe', code: source },
+      { kind: 'observe', options: { sourceRef: 'saved' } },
+      { kind: 'observe', options: { sourceRef: 'saved', refresh: true } },
+      {
+        kind: 'observe',
+        options: { snapshot: { provider: 'domain', plan: 'current', input: {} } },
+      },
+      { kind: 'observe', options: { history: { kind: 'list' }, clear: true } },
+    ])
+      assert.throws(() => decode(mode, [record], config), { code: 'SCRIPT_PROTOCOL' })
+  }
+  const observe = new NativeTurnDecoder(config).response.tools.find(
+    (tool) => tool.name === 'observe'
+  )
+  assert.match(observe.description, /fixture read-only backend unavailable/)
+  assert.match(observe.description, /clear:true/)
+  const clearAndExecute = [
+    { kind: 'observe', options: { clear: true } },
+    { kind: 'execute', code: source },
+  ]
+  assert.equal(decode('text', clearAndExecute, config).submission.observe, null)
+  assert.throws(() => decode('tools', clearAndExecute, config), { code: 'SCRIPT_PROTOCOL' })
+  assert.throws(() => protocolConfig({ observationPrograms: 'yes' }), { code: 'SCRIPT_PROTOCOL' })
+  assert.throws(() => protocolConfig({ observationUnavailableReason: false }), {
+    code: 'SCRIPT_PROTOCOL',
+  })
+})
+
 const invalid = [
   [{ kind: 'execute', code: 'console.log(1)', options: { inputRef: 'host:missing' } }],
   [{ kind: 'execute', code: source, options: { sourceRef: 'saved' } }],
@@ -269,11 +429,11 @@ test('plain replies enter completion validation, tool identities stay unique, an
 })
 
 test(
-  'INV-88 real Node sessions observe, execute, pair mixed receipts and switch transports',
+  'INV-88 real Node sessions observe, execute on separate turns, pair receipts and switch transports',
   {
     skip:
       process.platform !== 'darwin' && process.platform !== 'linux'
-        ? 'Successful mixed observation receipts require the default read-only process backend.'
+        ? 'Successful observation receipts require the default read-only process backend.'
         : false,
   },
   async (t) => {
@@ -335,7 +495,7 @@ test(
             records = [{ kind: 'done', message: 'Verified' }]
           }
           if (transport === 'text') {
-            const frame = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+            const frame = request.protocol.match(/当前帧标记：(@@\w+)。/)[1]
             yield { type: 'text', text: encode(records).replaceAll(marker, frame) }
           } else
             for (const [index, record] of records.entries()) {
@@ -376,7 +536,7 @@ test(
           0,
           JSON.stringify(events)
         )
-        assert.equal(events.at(-1).status, 'completed')
+        assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
         assert.equal(await readFile(join(cwd, 'state.txt'), 'utf8'), 'after-change')
       } finally {
         await runtime.close()
@@ -401,7 +561,7 @@ test('explicit tools rejects unsupported drivers and omitted transport falls bac
         estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
         async *stream(request) {
           assert.equal(request.response.type, 'text')
-          const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
+          const tag = request.protocol.match(/当前帧标记：(@@\w+)。/)[1]
           yield { type: 'text', text: `${tag} done()\nVerified` }
           yield { type: 'finish', reason: 'stop' }
         },
@@ -412,7 +572,7 @@ test('explicit tools rejects unsupported drivers and omitted transport falls bac
     else {
       const session = await runtime.openSession('s')
       const events = await Array.fromAsync(session.submit('Answer'))
-      assert.equal(events.at(-1).status, 'completed')
+      assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
     }
   }
 })
@@ -520,6 +680,7 @@ test('actual requests carry only their selected transport syntax with scoped nam
   await mkdir(workspace)
   const instructions = new Map()
   for (const transport of ['tools', 'text']) {
+    let support
     const runtime = await createRuntime(
       {
         storage: await createTestStorage(join(root, transport)),
@@ -534,12 +695,24 @@ test('actual requests carry only their selected transport syntax with scoped nam
           limits: { contextTokens: 128000, inputTokens: 100000, outputTokens: 4000 },
           estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
           async *stream(request) {
+            assert(support, 'The real runner support query must precede model dispatch')
             instructions.set(transport, request.instructions)
             assert.match(request.instructions, /完整响应全部校验后才执行/)
             if (transport === 'tools') {
               assert.equal(request.response.type, 'tools')
               const tool = request.response.tools.find((item) => item.name === 'watch')
-              assert.match(tool.description, /整体替换.*只读观察/)
+              assert.deepEqual(
+                tool.schema,
+                support.available ? NativeObservationSchema : NativeObservationControlSchema
+              )
+              if (support.available)
+                assert.match(tool.description, /登记只读观察，下个正常业务轮采集/)
+              else {
+                assert.match(tool.description, /只读程序观察不可用/)
+                assert.match(tool.description, /options\.history/)
+                assert.match(tool.description, /options\.clear:true/)
+                assert(tool.description.includes(support.reason ?? '宿主未声明只读程序约束支持'))
+              }
               assert.match(
                 request.instructions,
                 /watch 退订参数：\{"code":"","options":\{"clear":true\}\}/
@@ -547,7 +720,7 @@ test('actual requests carry only their selected transport syntax with scoped nam
               assert.match(request.instructions, /options\.sourceRef/)
               assert.match(request.instructions, /literal 用 name\/text/)
               assert.doesNotMatch(
-                request.instructions + request.compiledPrompt,
+                request.instructions + request.compiledPrompt + request.protocol,
                 /控制头|源码段|空段|闭合标记|当前帧标记|@@s/
               )
               yield {
@@ -556,15 +729,25 @@ test('actual requests carry only their selected transport syntax with scoped nam
               }
             } else {
               assert.equal(request.response.type, 'text')
-              assert.match(request.instructions, /空段 watch\(\{clear:true\}\) 退订/)
+              if (support.available)
+                assert.match(request.instructions, /空段 watch\(\{clear:true\}\) 退订/)
+              else {
+                assert.match(
+                  request.instructions,
+                  /watch 当前只支持空段 history 选择或 watch\(\{clear:true\}\) 退订/
+                )
+                assert(
+                  request.instructions.includes(support.reason ?? '宿主未声明只读程序约束支持')
+                )
+              }
               assert.match(request.instructions, /literal\("名称"\) 段保留原文/)
               assert.match(request.instructions, /blobs\["名称"\] 读原文/)
               assert.doesNotMatch(
                 request.instructions,
                 /JSON Schema|工具 Schema|options\.sourceRef|"code":""/
               )
-              const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
-              assert(request.compiledPrompt.includes(`${tag} run()`))
+              const tag = request.protocol.match(/当前帧标记：(@@\w+)。/)[1]
+              assert(request.protocol.includes(`${tag} run()`))
               yield { type: 'text', text: `${tag} finish()\nChecked` }
             }
             yield { type: 'finish', reason: 'stop' }
@@ -575,8 +758,9 @@ test('actual requests carry only their selected transport syntax with scoped nam
     )
     try {
       const session = await runtime.openSession('s')
+      support = session.executionRunner.observationSupport()
       const events = await Array.fromAsync(session.submit('Explain the supported protocol.'))
-      assert.equal(events.at(-1).status, 'completed')
+      assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
       assert.equal(events.filter((event) => event.type === 'error').length, 0)
     } finally {
       await runtime.close()
@@ -616,7 +800,7 @@ for (const mode of ['tools', 'text']) {
 test('native inline blobs emit distinct cards without changing execution scope or positions', () => {
   const decoder = new NativeTurnDecoder()
   const events = []
-  for (const [id, name] of ['exec', 'observe', 'exec'].entries()) {
+  for (const [id, name] of ['exec', 'exec', 'exec'].entries()) {
     events.push(
       ...decoder.acceptTool({
         id: String(id),
@@ -631,7 +815,7 @@ test('native inline blobs emit distinct cards without changing execution scope o
   const starts = events.filter((event) => event.phase === 'start')
   assert.deepEqual(
     starts.map((event) => event.kind),
-    ['blobs', 'blobs', 'execute', 'blobs', 'blobs', 'observe', 'blobs', 'blobs', 'execute']
+    ['blobs', 'blobs', 'execute', 'blobs', 'blobs', 'execute', 'blobs', 'blobs', 'execute']
   )
   assert.equal(new Set(starts.map((event) => event.index)).size, 9)
   assert.deepEqual(
@@ -640,7 +824,7 @@ test('native inline blobs emit distinct cards without changing execution scope o
       .map((event) => event.text),
     [raw, '', raw, '', raw, '']
   )
-  assert.equal(decoder.finish().submission.executions.length, 2)
+  assert.equal(decoder.finish().submission.executions.length, 3)
   decoder.reset()
   assert.equal(
     decoder.acceptTool({ id: 'reset', name: 'exec', input: { code: source } })[0].index,

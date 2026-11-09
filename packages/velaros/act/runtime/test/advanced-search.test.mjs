@@ -426,7 +426,7 @@ test(
           yield finish
         } else {
           assert.equal(request.contextStatus.phase, 'finalizing')
-          assert.match(request.compiledPrompt, /最后的报告交付机会/)
+          assert.match(request.protocol, /最后的报告交付机会/)
           yield {
             type: 'text',
             text: `${block(request, 'execute()', `import {read,report} from 'velaros:evidence';import {output} from 'velaros';try{await read({target:${JSON.stringify(target)}})}catch{}await report({findings:[],gaps:[{code:'UNRESOLVED',detail:'budget ended'}],nextSteps:['continue']});`)}${marker(request)} done`,
@@ -503,7 +503,7 @@ test(
       }
     })
     f.model.estimate = async (request) => ({
-      tokens: request.compiledPrompt.includes('最后的报告交付机会') ? 1000 : 50000,
+      tokens: request.protocol?.includes('最后的报告交付机会') ? 1000 : 50000,
       precision: 'exact',
       basis: 'budget-boundary-fixture',
     })

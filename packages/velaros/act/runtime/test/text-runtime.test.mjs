@@ -728,7 +728,7 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
       assert.match(system, /结果未知(?:时不得|不)重跑/)
       assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
       assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用归档源码/)
-      const protocol = request.compiledPrompt.split('本帧协议').at(-1)
+      const protocol = request.protocol
       const tag = marker(request)
       assert(protocol.includes(`${tag} run()`))
       assert(protocol.includes(`${tag} finish`))
@@ -792,8 +792,8 @@ test('INV-63 missing closure between blob and program rejects the whole response
         [],
         'earlier valid block cannot execute before the whole response passes'
       )
-      assert(request.compiledPrompt.includes(`闭合行必须逐字为：\n${tag}\n`))
-      assert.match(request.compiledPrompt, /下一控制头不能代替闭合行/)
+      assert(request.protocol.includes(`闭合行必须逐字为：\n${tag}\n`))
+      assert.match(request.protocol, /下一控制头不能代替闭合行/)
       yield {
         type: 'text',
         text:

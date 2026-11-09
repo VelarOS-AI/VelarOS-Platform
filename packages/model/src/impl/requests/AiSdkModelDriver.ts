@@ -51,13 +51,18 @@ class AiSdkModelDriver implements ModelDriver {
   }
 
   private inputSample(request: ModelTurnRequest): Promise<ModelInputSample> {
-    return this.inputEstimator.prepare(
-      request,
-      restoreResponseContinuations(
-        modelRequestEncoder.messages(request),
-        this.options.model,
-        this.id
-      )
+    return this.inputEstimator.prepare(request, this.inputMessages(request))
+  }
+
+  private inputMessages(
+    request: ModelTurnRequest
+  ): ReturnType<typeof restoreResponseContinuations> {
+    const layout = modelRequestEncoder.layout(request)
+    return restoreResponseContinuations(
+      layout.messages,
+      this.options.model,
+      this.id,
+      layout.retainablePrefixLength - 1
     )
   }
 
@@ -80,11 +85,7 @@ class AiSdkModelDriver implements ModelDriver {
       const openaiOptions: Record<string, boolean> = {}
       if (format.type === 'json') openaiOptions.strictJsonSchema = false
       if (usesResponseContinuation(this.options.model)) openaiOptions.store = false
-      const messages = restoreResponseContinuations(
-        modelRequestEncoder.messages(request),
-        this.options.model,
-        this.id
-      ).messages
+      const messages = this.inputMessages(request).messages
       try {
         await beforeDispatch?.()
       } catch (error) {

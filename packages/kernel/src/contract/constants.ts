@@ -448,3 +448,10 @@ export type RemoteNodeCloseCode = (typeof RemoteNodeCloseCodes)[keyof typeof Rem
 /** 合法的模块隔离形态。 */
 export type KernelModuleIsolation =
   (typeof KernelModuleIsolations)[keyof typeof KernelModuleIsolations]
+/** 观察调用只能携带小型状态；在 journal 结算前拒绝大载荷。 */
+export const OperationLimits = Object.freeze({
+  /** 单次观察调用及整次观察执行的业务载荷 UTF-16 字符上限。 */
+  observationChars: 4_096,
+  /** 观察失败回执保留的错误消息 UTF-16 字符上限。 */
+  observationErrorChars: 256,
+})

@@ -708,7 +708,7 @@ test('INV-51 a run without progress reflects, then pauses for the user, and the 
   const f = await setup(t, async function* (request) {
     calls++
     stalls.push(request.contextStatus.stall?.repeatedSteps ?? 0)
-    if (request.compiledPrompt.includes('反思轮')) reflected = true
+    if (request.protocol.includes('反思轮')) reflected = true
     // 安全阀：暂停失效时让测试失败而不是一直跑
     if (calls > 40) {
       yield* done(request)

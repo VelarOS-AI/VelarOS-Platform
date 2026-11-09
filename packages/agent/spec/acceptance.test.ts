@@ -15,7 +15,7 @@ import { createAgentSupervisor } from '../src/index.js'
 import { createActRunService } from '../src/index.js'
 import { sessionCacheKey } from '../src/utils/cache-key.js'
 import { agentCollaboration, agentCollaborationConflicts } from '../src/utils/delegation.js'
-import { remainingFrameImages } from '../src/utils/frame-prompt.js'
+import { remainingFrameImages, requestChars } from '../src/utils/frame-prompt.js'
 import { boundedModelStream } from '../src/utils/model-stream.js'
 
 test('collaboration normalizes lexical roots and rejects ambiguous write paths', () => {
@@ -320,6 +320,7 @@ function runFixture() {
             if (frame.reconcile) return frame.reconcile(body, history, previous, signal)
             return {
               body,
+              dynamic: projected.dynamic,
               prompt:
                 previous && frame.delta ? frame.delta(body, previous) : (projected.prompt ?? body),
             }
@@ -643,10 +644,15 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
   const f = runFixture()
   const requests: ModelTurnRequest[] = []
   let logical: ModelHistoryMessage[] = [{ role: 'user', content: 'original task' }]
+  const observations = ['A', 'A', 'B', 'A']
   let revision = 0
   f.frame.delta = (body) => `current state ${body}`
   f.frame.project = async () => ({
     body: JSON.stringify({ revision }),
+    dynamic: {
+      id: `observation-${revision}`,
+      text: `current-perception-${observations[revision]}`,
+    },
     history: structuredClone(logical),
     images: [],
   })
@@ -655,29 +661,54 @@ test('INV-49 accepted request prefixes survive sequential submissions only while
     yield { type: 'text', text: `answer-${revision}` }
     yield { type: 'finish', reason: 'stop' }
   }
+  f.options.protocol.open = () => ({
+    instructions: `current-protocol-${revision}`,
+    reset() {},
+    push() {
+      return []
+    },
+    finish: () => ({ message: 'done', done: true, events: [] }),
+  })
   const service = createActRunService(f.options)
   const withoutMarks = (messages: readonly ModelHistoryMessage[]) =>
     messages.map(({ cacheBreakpoint: _mark, ...message }) => message)
   try {
-    for (const prompt of ['first', 'follow-up', 'corrected history']) {
+    for (const prompt of ['first', 'follow-up', 'changed observation', 'corrected history']) {
       const events = []
       for await (const event of service.submit(prompt)) events.push(event)
       expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       revision++
       logical =
-        revision === 1
+        revision < 3
           ? [
               ...logical,
-              { role: 'assistant', content: 'answer-0' },
-              { role: 'user', content: 'follow-up' },
+              { role: 'assistant', content: `answer-${revision - 1}` },
+              { role: 'user', content: `input-${revision}` },
             ]
           : [{ role: 'user', content: 'revised task after compaction' }]
     }
-    const previous = modelRequestEncoder.messages(requests[0]!)
-    const followup = modelRequestEncoder.messages(requests[1]!)
-    expect(withoutMarks(followup.slice(0, previous.length))).toEqual(withoutMarks(previous))
-    expect(JSON.stringify(followup.at(-1))).toContain('revision')
-    expect(requests[2]!.history).toEqual([
+    for (const index of [1, 2]) {
+      const previous = modelRequestEncoder.layout(requests[index - 1]!)
+      const followup = modelRequestEncoder.layout(requests[index]!)
+      expect(withoutMarks(followup.messages.slice(0, previous.retainablePrefixLength))).toEqual(
+        withoutMarks(previous.messages.slice(0, previous.retainablePrefixLength))
+      )
+    }
+    for (const [index, request] of requests.entries()) {
+      expect(request.dynamic?.text).toBe(`current-perception-${observations[index]}`)
+      expect(request.protocol).toContain(`current-protocol-${index}`)
+      expect(JSON.stringify(request.history)).not.toContain('current-perception-')
+      expect(JSON.stringify(request.history)).not.toContain('current-protocol-')
+      const layout = modelRequestEncoder.layout(request)
+      const prefix = JSON.stringify(layout.messages.slice(0, layout.retainablePrefixLength))
+      expect(prefix).not.toContain('current-perception-')
+      expect(prefix).not.toContain('current-protocol-')
+      const tail = JSON.stringify(layout.messages.slice(layout.retainablePrefixLength))
+      expect(tail).toContain(request.dynamic!.text)
+      expect(tail).toContain(`current-protocol-${index}`)
+    }
+    expect(requests[1]!.compiledPrompt).toContain('revision')
+    expect(requests[3]!.history).toEqual([
       { role: 'user', content: 'revised task after compaction' },
     ])
     expect(new Set(requests.map((request) => request.cacheKey)).size).toBe(1)
@@ -991,6 +1022,8 @@ test.each(['ready', 'not-ready', 'execution-failed', 'completion-blocked', 'pend
       })
       const records = (await f.store.load('fault'))!.records
       expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
+      const exchange = records.find((record) => record.title === 'model-tool-exchange')!
+      expect(JSON.parse((await f.store.get('fault', exchange.objectId))!).delivery).toBe('history')
       expect(records.filter((record) => record.title === 'execution-completion')).toHaveLength(
         mode === 'execution-failed' || mode === 'not-ready' ? 0 : 1
       )
@@ -999,6 +1032,114 @@ test.each(['ready', 'not-ready', 'execution-failed', 'completion-blocked', 'pend
     }
   }
 )
+
+test('dynamic native exchanges stage the original persisted receipt and remain outside retained prefixes', async () => {
+  const f = runFixture()
+  const requests: ModelTurnRequest[] = []
+  const staged: string[] = []
+  const receipt = { status: 'registered', sourceRef: 'original-observation-source' }
+  let pending: ModelTurnRequest['dynamic']
+  let calls = 0
+  let consumed = 0
+  let readyChecks = 0
+  f.frame.delta = (body) => body
+  f.frame.project = async () => ({ body: '{}', images: [], dynamic: pending })
+  f.options.frames.deliveryReady = () => {
+    readyChecks++
+    return true
+  }
+  f.options.frames.stageDynamicExchange = async (ref) => {
+    const record = (await f.store.load('fault'))!.records.find((item) => item.ref.id === ref.id)!
+    const stored = JSON.parse((await f.store.get('fault', record.objectId))!)
+    expect(stored.delivery).toBe('dynamic')
+    expect(stored.results).toEqual([
+      { id: 'read-state', name: 'fixture-observer', output: receipt },
+    ])
+    staged.push(ref.id)
+    pending = {
+      id: ref.id,
+      text: 'CURRENT_ONLY observation',
+      exchanges: [{ exchange: modelRequestEncoder.toolExchange(stored) }],
+    }
+  }
+  f.options.frames.acknowledge = async (request) => {
+    if (pending && request.dynamic?.id === pending.id) {
+      consumed++
+      pending = undefined
+    }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'native fixture',
+    response: {
+      type: 'tools',
+      tools: [{ name: 'fixture-observer', description: 'fixture', schema: { type: 'object' } }],
+    },
+    reset() {},
+    push() {
+      return []
+    },
+    acceptTool() {
+      return []
+    },
+    finish() {
+      if (calls === 2) throw new AppError('SCRIPT_PROTOCOL', 'retry the same pending observation')
+      return calls === 1
+        ? { message: '', done: true, submission: {}, events: [] }
+        : { message: 'done', done: true, events: [] }
+    },
+  })
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    calls++
+    if (calls === 1)
+      yield { type: 'tool-call', value: { id: 'read-state', name: 'fixture-observer', input: {} } }
+    else yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.execution.invoke = async () => ({
+    succeeded: true,
+    delivery: 'dynamic',
+    results: [{ id: 'read-state', name: 'fixture-observer', output: receipt }],
+  })
+  const service = createActRunService(f.options)
+  try {
+    for (const input of ['observe once', 'continue without another observation']) {
+      const events = []
+      for await (const event of service.submit(input)) events.push(event)
+      expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+    }
+    expect(requests).toHaveLength(4)
+    expect(staged).toHaveLength(1)
+    expect(consumed).toBe(1)
+    expect(readyChecks).toBe(0)
+    expect(requests[0]!.dynamic).toBeUndefined()
+    expect(requests[1]!.dynamic?.id).toBe(staged[0])
+    expect(requests[2]!.dynamic).toEqual(requests[1]!.dynamic)
+    expect(requests[3]!.dynamic).toBeUndefined()
+    expect(requestChars(requests[1]!)).toBeGreaterThan(
+      requestChars({
+        ...requests[1]!,
+        dynamic: { ...requests[1]!.dynamic!, exchanges: [] },
+      })
+    )
+    for (const request of requests) {
+      const layout = modelRequestEncoder.layout(request)
+      const stable = JSON.stringify(layout.messages.slice(0, layout.retainablePrefixLength))
+      expect(stable).not.toContain('fixture-observer')
+      expect(stable).not.toContain('original-observation-source')
+      expect(stable).not.toContain('CURRENT_ONLY')
+      if (request.dynamic) {
+        const tail = JSON.stringify(layout.messages.slice(layout.retainablePrefixLength))
+        expect(tail).toContain('original-observation-source')
+        expect(tail).toContain('CURRENT_ONLY')
+      }
+    }
+    const records = (await f.store.load('fault'))!.records
+    expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
+  } finally {
+    await service.close()
+  }
+})
 
 test('INV-34 cleanup failure still releases ownership and cannot report a completed run', async () => {
   const f = runFixture()
@@ -1314,7 +1455,8 @@ test.each(['default', 0, 0.125, 1] as const)(
         ).toEqual(logical.slice(0, 1 + index * 2))
         if (priorFrames.length) {
           retained++
-          const previous = modelRequestEncoder.messages(requests[index - 1]!)
+          const layout = modelRequestEncoder.layout(requests[index - 1]!)
+          const previous = layout.messages.slice(0, layout.retainablePrefixLength)
           expect(
             modelRequestEncoder
               .messages(request)
@@ -1815,6 +1957,7 @@ test.each([
       async project() {
         return {
           body: JSON.stringify({ turn }),
+          dynamic: { id: 'unreconciled', text: 'discarded projection' },
           images: [],
           prompt: 'old prompt',
           history: logical,
@@ -1829,7 +1972,11 @@ test.each([
         const retained = history.length > logical.length
         const resolved = JSON.stringify({ ...JSON.parse(body), retained })
         calls.push({ previous, retained, body: resolved })
-        return { body: resolved, prompt: `actual ${resolved}` }
+        return {
+          body: resolved,
+          prompt: `actual ${resolved}`,
+          dynamic: { id: `observation-${turn}`, text: `current-perception-${turn}` },
+        }
       },
     })
     f.options.frames = {
@@ -1879,6 +2026,14 @@ test.each([
       const last = requests.at(-1)!
       expect(JSON.parse(last.materials[0]!.text).retained).toBe(!fallback)
       expect(last.compiledPrompt).toContain(last.materials[0]!.text)
+      expect(last.dynamic).toEqual({ id: 'observation-1', text: 'current-perception-1' })
+      expect(JSON.stringify(last.history)).not.toContain('current-perception-')
+      expect(JSON.stringify(last.history)).not.toContain('synthetic protocol rejection')
+      if (repair) {
+        expect(requests[1]!.compiledPrompt).toBe(requests[0]!.compiledPrompt)
+        expect(requests[1]!.dynamic).toEqual(requests[0]!.dynamic)
+        expect(requests[1]!.protocol).toContain('synthetic protocol rejection')
+      }
       expect(
         calls.some((call) => call.previous === requests[0]!.materials[0]!.text && call.retained)
       ).toBe(true)

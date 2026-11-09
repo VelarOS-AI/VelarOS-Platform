@@ -14,11 +14,16 @@ import { ModelTuning } from './tuning.js'
  */
 export function estimateRequestInput(
   request: ModelTurnRequest,
-  restored?: { messages: readonly ModelMessage[]; opaqueTokens: number },
+  restored?: { messages: readonly ModelMessage[]; opaqueTokens: number; currentFrom?: number },
   textCounter?: (text: string, bytes: number) => number
 ): ModelInputEstimate {
   const format = modelRequestEncoder.response(request)
-  const sent = restored?.messages ?? modelRequestEncoder.messages(request)
+  const layout = restored ? undefined : modelRequestEncoder.layout(request)
+  const sent = restored?.messages ?? layout!.messages
+  // 本轮稳定帧、动态往返、观察正文和协议都属于当前输入；原生工具展开后使用恢复器的真实坐标。
+  const currentFrom = restored
+    ? (restored.currentFrom ?? sent.length - 1)
+    : layout!.retainablePrefixLength - 1
   const opaqueTokens = restored?.opaqueTokens ?? 0
   const count = sent.reduce(
     (sum, message) =>
@@ -63,7 +68,7 @@ export function estimateRequestInput(
   }
   for (const [index, message] of messages.entries()) {
     const key =
-      index === messages.length - 1
+      index >= currentFrom
         ? 'current'
         : message.role === 'assistant'
           ? 'assistantHistory'

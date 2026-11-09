@@ -446,6 +446,8 @@ export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptio
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** 观察模式的宿主采集预算；在读入大文件与 journal 结算之前生效。 */
+  readonly observationChars?: number
   /** Kernel 分配的本次调用身份，用作默认重试键。 */
   invocationId?: string
   /** 提交事实独立于业务返回值，宿主写入已有调用诊断。 */

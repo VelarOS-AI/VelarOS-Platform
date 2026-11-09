@@ -123,12 +123,33 @@ export type ModelResponseFormat =
       /** 原始文本流；业务协议由调用方解析，供应商不做结构化输出。 */
       readonly type: 'text'
     }
+/** 当前请求独有的动态材料；完整原生往返不得拆开或改成虚构回执。 */
+export interface ModelDynamicInput {
+  readonly id: string
+  readonly text: string
+  readonly exchanges?: ReadonlyArray<{
+    readonly exchange: ModelToolExchange
+    readonly continuation?: ModelContinuation
+  }>
+}
+
+/** 同一编码器给出的真实消息布局；位置均为中立消息坐标。 */
+export interface ModelRequestLayout {
+  readonly messages: ModelHistoryMessage[]
+  readonly retainablePrefixLength: number
+  readonly historyPositions: readonly number[]
+}
+
 /** 一次已经冻结的中立请求。 */
 export interface ModelTurnRequest {
   /** 宿主为单次驱动派发生成的预算身份；不进入供应商消息、缓存键或模型材料。 */
   readonly budgetRequestId?: string
   /** ProviderRequestCompiler 封存的实际 prompt；驱动不能重新选择或压缩材料。 */
   readonly compiledPrompt?: string
+  /** 当前观察与局部历史材料，仅本轮发送，不进入增量前缀。 */
+  readonly dynamic?: ModelDynamicInput
+  /** 本轮控制标记与修复说明，位于完整动态区之后，不进入增量前缀。 */
+  readonly protocol?: string
   /** 历史与当前材料分开编码，不能伪造 tool 消息。 */
   readonly history?: readonly ModelHistoryMessage[]
   /** 当前发送帧的宿主容量状态。 */

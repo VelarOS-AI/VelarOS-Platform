@@ -101,7 +101,8 @@ export interface ActExecutionSummary {
 /** 本回合响应里 observe 声明的登记结果；登记本身不运行程序，新版本从下一回合起每帧运行。 */
 export interface ActObservationRegistration {
   /** updated 登记了新版本，unchanged 与当前版本一样，cleared 清掉了观察，rejected 没登记上。 */
-  readonly status: 'updated' | 'unchanged' | 'cleared' | 'rejected'
+  readonly status: 'updated' | 'unchanged' | 'cleared' | 'rejected' | 'selected'
+  readonly selectionRef?: string
   /** 没登记上的原因；登记上了为 null。 */
   readonly failure: Nullable<ActExecutionFailure>
   /** 登记的源码，受本页正文预算约束；清除时为空。 */

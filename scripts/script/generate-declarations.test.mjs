@@ -109,7 +109,13 @@ test('module selection preserves shared artifacts and rereads transitive source 
     )
     put(
       'packages/velaros/act/runtime/types/native-tools.ts',
-      ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone']
+      [
+        'NativeExecution',
+        'NativeObservation',
+        'NativeObservationControl',
+        'NativeBlob',
+        'NativeDone',
+      ]
         .map((name) => `export interface ${name}Input {value: string}`)
         .join('\n')
     )
@@ -390,7 +396,7 @@ export const surfaceConstantName=(name)=>name+'Module';
   put('packages/beta/src/api.ts', shared ? 'export {}' : api('BetaApi'))
   put(
     'packages/velaros/act/runtime/types/native-tools.ts',
-    ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone']
+    ['NativeExecution', 'NativeObservation', 'NativeObservationControl', 'NativeBlob', 'NativeDone']
       .map((name) => `export interface ${name}Input { value: string }`)
       .join('\n')
   )

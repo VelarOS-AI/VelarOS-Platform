@@ -9,10 +9,15 @@ import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { createNodeCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
+import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { ScriptTurnDecoder } from '../../../dist/act/runtime/impl/ScriptTurnDecoder.js'
 import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
+import {
+  observationHistoryRequest,
+  observationResultValue,
+} from '../../../dist/act/runtime/utils/snapshot-observation.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import {
   createProjectCapabilityModule,
@@ -22,6 +27,45 @@ import {
 
 import { done, marker, runtimeFrame, turn } from './support/model-turn.mjs'
 import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
+
+test('observation content excludes engine log identity while retaining actual resource revisions', () => {
+  const material = {
+    result: {
+      process: {
+        exitCode: 0,
+        signal: null,
+        stdout: 'state A',
+        stderr: '',
+        logPath: '/first/log',
+        logBytes: 7,
+        logTruncated: false,
+      },
+      value: { revision: 'resource-A', logPath: 'business-value' },
+    },
+  }
+  const before = structuredClone(material)
+  assert.equal(Object.hasOwn(observationResultValue(material), 'output'), false)
+  assert.equal(
+    Object.hasOwn(observationResultValue({ ...material, output: undefined }), 'output'),
+    false
+  )
+  assert.equal(Object.hasOwn(observationHistoryRequest({ kind: 'list' }), 'cursor'), false)
+  assert.equal(
+    Object.hasOwn(observationHistoryRequest({ kind: 'list', cursor: undefined }), 'cursor'),
+    false
+  )
+  const repeated = structuredClone(material)
+  repeated.result.process.logPath = '/second/log'
+  repeated.result.process.logBytes = 17
+  assert.deepEqual(observationResultValue(material), observationResultValue(repeated))
+  repeated.result.value.revision = 'resource-B'
+  assert.notDeepEqual(observationResultValue(material), observationResultValue(repeated))
+  repeated.result.value.revision = 'resource-A'
+  repeated.result.process.stdout = 'state B'
+  assert.notDeepEqual(observationResultValue(material), observationResultValue(repeated))
+  assert.equal(observationResultValue(material).result.value.logPath, 'business-value')
+  assert.deepEqual(material, before)
+})
 
 const stop = { type: 'finish', reason: 'stop' }
 const noop = "import {output} from 'velaros'; output('continue');"
@@ -88,9 +132,14 @@ async function fixture(t, stream, options = {}) {
     completed: false,
   }
   let kernel
-  const runner = {
+  const runner = options.runner ?? {
     environment: delegate.environment,
     cwd: delegate.cwd,
+    observationSupport: () =>
+      delegate.observationSupport?.() ?? {
+        available: false,
+        reason: 'Host has no declared read-only backend',
+      },
     async run(request, ...args) {
       const started = performance.now()
       const result = await delegate.run(request, ...args)
@@ -102,6 +151,7 @@ async function fixture(t, stream, options = {}) {
       return result
     },
   }
+  f.observationSupport = () => runner.observationSupport?.()
   const model = {
     id: 'real-project-pure-snapshot',
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
@@ -155,6 +205,20 @@ async function fixture(t, stream, options = {}) {
     f.storage = localContextStorage({ path: join(root, 'state.sqlite') })
     f.runtime = await createRuntime({ ...runtimeOptions, storage: f.storage })
     f.session = await f.runtime.openSession('s')
+    const plans = f.session
+      .instructionManifest()
+      .blocks.find((block) => block.id === 'platform.runtime.snapshot-plans')
+    const programsAvailable =
+      runner.environment !== 'node' || runner.observationSupport?.().available === true
+    assert.equal(
+      plans.enabled,
+      programsAvailable,
+      'plan discovery follows the actual observation capability'
+    )
+    if (programsAvailable) {
+      assert.match(plans.text, /"provider":"project"/)
+      assert.match(plans.text, /"plans":\["files"\]/)
+    } else assert.equal(plans.text.trim(), '')
   }
   await open()
   f.restart = async () => {
@@ -183,8 +247,216 @@ const steady = (rounds) =>
     } else yield* done(request)
   }
 
+test('observation history indexes A A B A transitions without copying archived content or replacing the active program', async (t) => {
+  // 此夹具只核索引与选择，永不执行程序，不证明宿主的只读进程边界。
+  const f = await fixture(t, steady(1), {
+    runner: {
+      async run() {
+        throw Error('Index fixture must not execute a program')
+      },
+    },
+  })
+  const signal = new AbortController().signal
+  const goal = await f.session.context.append({
+    kind: 'user',
+    body: 'Keep pending observation delivery in its original task.',
+  })
+  const firstTask = await f.session.view.begin(goal.ref, signal, 'new')
+  const firstStartedSequence = (await f.storage.loadMetadata('s')).task.startedSequence
+  const registration = await f.session.observe({
+    source: "import {output} from 'velaros'; output('owner fixture');",
+  })
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  assert.equal(Object.hasOwn(await programs.state(), 'observationHistoryHead'), false)
+  const ids = []
+  for (const [index, value] of ['A', 'A', 'B', 'A'].entries()) {
+    const executionId = crypto.randomUUID()
+    const material = { result: { value: value.repeat(256) } }
+    const result = await f.session.context.append({
+      kind: 'audit',
+      title: `script:${executionId}:result`,
+      body: JSON.stringify({ executionId, mode: 'observe', checked: true, ...material }),
+      sources: [{ sessionId: 's', id: registration.sourceRef }],
+    })
+    ids.push(
+      await programs.recordObservationSnapshot(
+        {
+          sourceRef: registration.sourceRef,
+          fingerprint: scriptOutputs.hash(material),
+          scopeFingerprint: 'fixture-session-scope',
+          observedAt: new Date(1000 + index).toISOString(),
+          chars: JSON.stringify(material).length,
+          locator: { kind: 'result', resultRef: result.ref },
+          resultRef: result.ref,
+        },
+        new AbortController().signal
+      )
+    )
+  }
+  assert.equal(ids[0], ids[1])
+  assert.notEqual(ids[0], ids[3])
+  const page = await programs.listObservationSnapshots(
+    { kind: 'list', limit: 2 },
+    'fixture-session-scope',
+    signal
+  )
+  assert.deepEqual(
+    page.entries.map((entry) => entry.snapshotId),
+    [ids[0], ids[2]]
+  )
+  assert(page.nextCursor)
+  const last = await programs.listObservationSnapshots(
+    { kind: 'list', cursor: page.nextCursor, limit: 2 },
+    'fixture-session-scope',
+    signal
+  )
+  assert.deepEqual(
+    last.entries.map((entry) => entry.snapshotId),
+    [ids[3]]
+  )
+  assert.equal(last.entries[0].revision, 3)
+  assert.equal(last.entries[0].observedAt, new Date(1003).toISOString())
+  const firstContent = await programs.readObservationSnapshot(
+    ids[0],
+    'fixture-session-scope',
+    signal
+  )
+  const lastContent = await programs.readObservationSnapshot(
+    ids[3],
+    'fixture-session-scope',
+    signal
+  )
+  assert.deepEqual(lastContent.content.locator, firstContent.content.locator)
+  const records = (await f.storage.load('s')).records
+  assert.equal(
+    records.filter((record) => record.title.startsWith('observation:content:')).length,
+    2
+  )
+  assert.equal(records.filter((record) => record.title === 'observation:snapshot').length, 3)
+  for (const record of records.filter((record) => record.title.startsWith('observation:')))
+    assert(!(await f.storage.get('s', record.objectId)).includes('A'.repeat(256)))
+  await assert.rejects(programs.readObservationSnapshot(ids[0], 'revoked-scope', signal), {
+    code: 'PERMISSION',
+  })
+  const selected = await f.session.observe({ history: { kind: 'list' } })
+  assert.equal(selected.status, 'selected')
+  assert.equal(selected.executed, false)
+  assert.equal((await programs.state()).observation, registration.sourceRef)
+  assert.equal(
+    (await programs.state()).pendingObservationHistory.selectionRef,
+    selected.selectionRef
+  )
+  const stageSelection = async (selection, tag) => {
+    const scope = await f.storage.selectSnapshot('s', [
+      { title: 'search:history-reset', latest: true },
+    ])
+    const metadata = scope.metadata
+    const frame = await f.session.context.append({
+      kind: 'audit',
+      title: `context:frame:${tag}`,
+      body: JSON.stringify({
+        frameId: tag,
+        taskId: metadata.task.id,
+        taskStartedSequence: metadata.task.startedSequence,
+        authorizationReset: Math.max(
+          metadata.task.startedSequence,
+          scope.records.at(-1)?.sequence ?? 0
+        ),
+      }),
+    })
+    // 刻意没有 budgetRequest：归属必须由实际 frameRef 证明，而非可选预算字段。
+    const request = await f.session.context.append({
+      kind: 'audit',
+      title: 'model-request',
+      body: JSON.stringify({ frameRef: frame.ref }),
+      sources: [frame.ref],
+    })
+    const response = await f.session.context.append({
+      kind: 'assistant',
+      body: 'Select observation history',
+      sources: [request.ref],
+    })
+    const exchange = await f.session.context.append({
+      kind: 'audit',
+      title: 'model-tool-exchange',
+      body: JSON.stringify({
+        delivery: 'dynamic',
+        text: '',
+        calls: [
+          { id: tag, name: 'observe', input: { code: '', options: { history: { kind: 'list' } } } },
+        ],
+        results: [
+          {
+            id: tag,
+            name: 'observe',
+            output: { status: 'completed', receipt: selection, effect: 'none' },
+          },
+        ],
+      }),
+      sources: [response.ref],
+    })
+    await programs.stageDynamicExchange(exchange.ref, signal)
+    const projected = await programs.project(
+      await f.session.view.build({ maxChars: 20_000 }),
+      undefined,
+      [],
+      signal,
+      20_000
+    )
+    await programs.registerDynamicDelivery(
+      JSON.parse(projected.body).programFrame.id,
+      selection.selectionRef,
+      [exchange.ref],
+      signal
+    )
+    return exchange.ref
+  }
+  const firstOwner = (await programs.state()).pendingDynamicOwner
+  const oldExchange = await stageSelection(selected, 'task-a')
+  assert.ok((await programs.state()).pendingDynamicDelivery)
+  await f.session.view.end()
+  assert.notEqual(await f.session.view.begin(goal.ref, signal, 'new'), firstTask)
+  assert.equal((await f.storage.loadMetadata('s')).task.startedSequence, firstStartedSequence)
+  const current = await programs.state()
+  assert.equal(current.pendingObservationHistory, undefined)
+  assert.equal(current.pendingDynamicExchanges, undefined)
+  assert.equal(current.pendingDynamicDelivery, undefined)
+  assert.equal(current.observation, registration.sourceRef)
+  await assert.rejects(programs.stageDynamicExchange(oldExchange, signal), { code: 'STALE_VIEW' })
+  const late = {
+    status: 'selected',
+    selectionRef: crypto.randomUUID(),
+    effective: 'next-model-turn',
+    executed: false,
+  }
+  await assert.rejects(
+    programs.publish(
+      [{ history: { kind: 'list' }, historyOwner: firstOwner, receipt: late }],
+      {
+        id: crypto.randomUUID(),
+        fingerprint: 'late-task-a-selection',
+        expectedObservation: registration.sourceRef,
+      },
+      { status: 'completed', executed: false, observe: late },
+      false,
+      false,
+      signal
+    ),
+    { code: 'STALE_VIEW' }
+  )
+  const next = await f.session.observe({ history: { kind: 'list' } })
+  const nextExchange = await stageSelection(next, 'task-b')
+  await f.session.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+  const reset = await programs.state()
+  assert.equal(reset.pendingObservationHistory, undefined)
+  assert.equal(reset.pendingDynamicExchanges, undefined)
+  assert.equal(reset.pendingDynamicDelivery, undefined)
+  assert.equal(reset.observation, registration.sourceRef)
+  await assert.rejects(programs.stageDynamicExchange(nextExchange, signal), { code: 'PERMISSION' })
+})
+
 test(
-  'INV-80 unavailable read-only derivation retains authorized captures and archives failures without reuse',
+  'INV-80 an unavailable read-only backend rejects programs before capture and still accepts history selections',
   {
     skip: platformHasDefaultConfinement
       ? 'This host has a default read-only backend; successful derivation is covered below.'
@@ -192,57 +464,42 @@ test(
   },
   async (t) => {
     const f = await fixture(t, steady(2), { custom: true })
-    await f.session.observe(snapshot())
-    assert.equal((await collect(f)).at(-1).status, 'completed')
-    assert.equal(f.reads, 4)
-    assert.equal(f.captureCalls, 2)
-    const derives = f.runs.filter((run) => run.derive)
-    assert.equal(derives.length, 2)
-    assert.notEqual(f.frames[0].observation.resultRef, f.frames[1].observation.resultRef)
-    assert(f.frames.every((frame) => frame.observation.freshness.status !== 'reused'))
+    await assert.rejects(f.session.observe(snapshot()), { code: 'UNAVAILABLE' })
+    const selection = await f.session.observe({ history: { kind: 'list' } })
+    assert.equal(selection.status, 'selected')
+    assert.equal(selection.executed, false)
+    assert.equal(f.reads, 0)
+    assert.equal(f.captureCalls, 0)
+    assert.equal(f.runs.length, 0)
     assert.equal(
       await readFile(join(f.workspace, 'facts.json'), 'utf8'),
       '{"active":{"items":[1,2],"enabled":true},"ignored":7}'
     )
-    const traces = (await f.runtime.trace('s', { fullContent: true, limit: 8 })).turns
-    assert.equal(traces.length, 2)
-    for (const [index, trace] of traces.entries()) {
-      const request = JSON.parse(trace.request.body)
-      assert.equal(request.requestAudit.schemaVersion, 3)
-      const frameRecord = trace.records.find((record) => record.ref.id === request.frameRef.id)
-      const frame = JSON.parse(frameRecord.body)
-      assert.equal(frameRecord.title, `context:frame:${frame.frameId}`)
-      const sourceRecord = trace.records.find(
-        (record) => record.ref.id === frame.observation.sourceRef
-      )
-      assert.equal(JSON.parse(sourceRecord.body).source, derives[index].source)
-      const versionRecord = trace.records.find(
-        (record) => record.title === `script:version:${frame.observation.sourceRef}`
-      )
-      assert.deepEqual(JSON.parse(versionRecord.body).snapshot.input, { files: entries })
-      const captured = trace.records.find(
-        (record) => record.ref.id === frame.observation.freshness.snapshot.captureResultRef
-      )
-      const capture = JSON.parse(captured.body)
-      assert.ok(capture.capture)
-      assert.equal(capture.result.failed, undefined)
-      assert.equal(trace.invocations.length, 1)
-      assert.equal(trace.invocations[0].summary.moduleId, 'velaros:project')
-      assert.equal(trace.invocations[0].summary.operation, 'snapshot')
-      assert.equal(trace.invocations[0].summary.status, 'succeeded')
-      const failed = trace.records.find((record) => record.ref.id === frame.observation.resultRef)
-      const result = JSON.parse(failed.body)
-      assert.equal(result.result.failed.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-      assert.equal(result.result.process, undefined)
-      assert.equal(result.attachments, undefined)
-      assert.equal(trace.observation.run.status, 'failed')
-      assert.equal(trace.observation.run.failure.code, 'SHELL_CONFINEMENT_UNAVAILABLE')
-    }
+    assert.equal(
+      (await new ProgramContext('s', f.session.context, f.storage).state()).observation,
+      undefined
+    )
   }
 )
 
 test('INV-80 denied capture and project escape never start a derivation on any host', async (t) => {
   const f = await fixture(t, steady(1), { custom: true })
+  const support = f.observationSupport()
+  assert.ok(support, 'the real Node runner must declare its observation support')
+  if (!support.available) {
+    assert.equal(typeof support.reason, 'string')
+    assert.ok(support.reason.length > 0)
+    await assert.rejects(f.session.observe(snapshot()), (error) => {
+      assert.equal(error.code, 'UNAVAILABLE')
+      assert.equal(error.message, support.reason)
+      return true
+    })
+    assert.equal(f.captureCalls, 0)
+    assert.equal(f.reads, 0)
+    assert.equal(f.readCompletions, 0)
+    assert.equal(f.runs.length, 0)
+    return
+  }
   f.onCapture = async () => {
     throw new AppError('PERMISSION', 'permission revoked before capture')
   }
@@ -317,6 +574,17 @@ test(
           item.summary.moduleId === 'velaros:project' && item.summary.operation === 'snapshot'
       )
       assert.equal(capture.length, 1)
+      const captureRecord = trace.records.find(
+        (record) => record.ref.id === trace.observation.run.collection.snapshot.captureResultRef
+      )
+      const captureArchive = JSON.parse(captureRecord.body)
+      assert.equal(Object.hasOwn(captureArchive.capture, 'value'), false)
+      const invocation = await createContextInvocationJournal(f.storage).read(
+        's',
+        captureArchive.invocationId
+      )
+      assert.equal(invocation.receipt.value.fingerprint, captureArchive.capture.fingerprint)
+      assert.ok(invocation.receipt.value.value.files[0].text.includes('active'))
       assert.equal(
         trace.invocations.length,
         1,

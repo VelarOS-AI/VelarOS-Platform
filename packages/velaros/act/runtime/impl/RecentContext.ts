@@ -138,6 +138,46 @@ export class RecentContext implements RecentContextApi {
     return observation
   }
 
+  private async exchanges(
+    records: readonly ContextRecord[],
+    after: number,
+    signal: AbortSignal
+  ): Promise<{
+    readonly dynamic: ReadonlySet<string>
+    readonly regular: ReadonlyMap<string, unknown>
+  }> {
+    const responses = new Map(
+      records
+        .filter((record) => record.kind === 'assistant' && record.sequence > after)
+        .map((record) => [record.ref.id, record])
+    )
+    const dynamic = new Set<string>()
+    const regular = new Map<string, unknown>()
+    for (const record of records) {
+      signal.throwIfAborted()
+      if (
+        record.kind !== 'audit' ||
+        record.title !== 'model-tool-exchange' ||
+        record.sequence <= after
+      )
+        continue
+      const source = record.sources.find((ref) => {
+        const response = ref.sessionId === this.id ? responses.get(ref.id) : undefined
+        return response && response.sequence < record.sequence
+      })
+      if (!source) continue
+      const raw = await this.storage.get(this.id, record.objectId)
+      if (isNull(raw)) throw new AppError('NOT_FOUND', '原生工具往返记录缺失')
+      const exchange: unknown = JSON.parse(raw)
+      if (isPlainObject(exchange)) {
+        const { delivery, ...value } = exchange
+        if (delivery === 'dynamic') dynamic.add(source.id)
+        else regular.set(source.id, value)
+      } else regular.set(source.id, exchange)
+    }
+    return { dynamic, regular }
+  }
+
   public async list(input: HistoryListRequest, signal: AbortSignal): Promise<HistoryPage> {
     signal.throwIfAborted()
     const { after = 0, limit = 32 } = input
@@ -345,10 +385,12 @@ export class RecentContext implements RecentContextApi {
       ),
     ])
     const reset = this.reset(state)
+    const exchanges = await this.exchanges(state?.records ?? [], reset, signal)
     const carried = new Set(segment.carried)
     const candidates = (state?.records ?? []).filter(
       (record) =>
         record.sequence > reset &&
+        !exchanges.dynamic.has(record.ref.id) &&
         (record.sequence > segment.from || carried.has(record.ref.id)) &&
         (record.kind === 'assistant' ||
           /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title))
@@ -384,28 +426,10 @@ export class RecentContext implements RecentContextApi {
     let response = ''
     let responsePrograms: readonly string[] = []
     const nativeResponses = new Map<string, { exchange: ModelToolExchange; body: string }>()
-    for (const record of state?.records ?? []) {
-      if (
-        record.kind !== 'audit' ||
-        record.title !== 'model-tool-exchange' ||
-        record.sequence <= reset
-      )
-        continue
-      const source = record.sources.find((ref) => ref.sessionId === this.id)
-      if (
-        !source ||
-        !candidates.some(
-          (item) =>
-            item.ref.id === source.id &&
-            item.kind === 'assistant' &&
-            item.sequence < record.sequence
-        )
-      )
-        continue
-      const raw = await this.storage.get(this.id, record.objectId)
-      if (isNull(raw)) throw new AppError('NOT_FOUND', '原生工具往返记录缺失')
-      const exchange = modelRequestEncoder.toolExchange(JSON.parse(raw))
-      nativeResponses.set(source.id, {
+    for (const [source, value] of exchanges.regular) {
+      if (!candidates.some((item) => item.ref.id === source && item.kind === 'assistant')) continue
+      const exchange = modelRequestEncoder.toolExchange(value)
+      nativeResponses.set(source, {
         exchange,
         body: JSON.stringify({ text: exchange.text, calls: exchange.calls }),
       })
@@ -775,6 +799,7 @@ export class RecentContext implements RecentContextApi {
     const state = await this.snapshot([
       { kind: 'user', after: from, through },
       { kind: 'assistant', after: from, through },
+      { kind: 'audit', title: 'model-tool-exchange', after: from },
       { titlePrefix: 'script:', titleSuffix: ':result', after: from, through },
       { titlePrefix: 'workspace:note:', after: from, through },
     ])
@@ -832,8 +857,12 @@ export class RecentContext implements RecentContextApi {
     through: number,
     signal: AbortSignal
   ): Promise<ContextVolume> {
+    const exchanges = await this.exchanges(state.records, from, signal)
     const records = state.records.filter(
-      (record) => record.sequence > from && record.sequence <= through
+      (record) =>
+        record.sequence > from &&
+        record.sequence <= through &&
+        !exchanges.dynamic.has(record.ref.id)
     )
     const lines: string[] = []
     const notes = new Map<string, string>()
@@ -976,13 +1005,16 @@ export class RecentContext implements RecentContextApi {
     signal.throwIfAborted()
     const state = await this.snapshot([
       { kind: 'assistant', after: segment.from },
+      { kind: 'audit', title: 'model-tool-exchange', after: segment.from },
       { titlePrefix: 'script:', titleSuffix: ':result', after: segment.from },
     ])
     const reset = this.reset(state)
+    const exchanges = await this.exchanges(state?.records ?? [], reset, signal)
     const records = []
     for (const record of state?.records ?? []) {
       if (
         record.sequence <= Math.max(reset, segment.from) ||
+        exchanges.dynamic.has(record.ref.id) ||
         !(
           record.kind === 'assistant' ||
           /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)

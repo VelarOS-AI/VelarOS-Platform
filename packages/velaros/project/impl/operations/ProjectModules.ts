@@ -1,5 +1,5 @@
 import { isEmpty } from '@velaros-ai/core'
-import type { OperationModuleDefinition } from '@velaros-ai/kernel'
+import { OperationLimits, type OperationModuleDefinition } from '@velaros-ai/kernel'
 import { createCapabilityModule } from '@velaros-ai/velaros'
 import { imageOperations, VelarImagesModule } from '@velaros-ai/velaros/images'
 
@@ -35,6 +35,8 @@ class ProjectModules implements ProjectModulesApi {
         project: options.project,
         resolveProject: options.resolveProject,
         invocationId: call.invocation.id,
+        observationChars:
+          call.invocation.mode === 'observe' ? OperationLimits.observationChars : undefined,
         sessionId: call.invocation.sessionId,
         abortSignal: call.signal,
         recordProjectCommit: (fact) => {

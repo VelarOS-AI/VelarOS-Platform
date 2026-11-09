@@ -15,7 +15,12 @@ import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isTrue, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage, ModelImage, ModelTurnRequest } from '@velaros-ai/kernel'
+import type {
+  ModelDynamicInput,
+  ModelHistoryMessage,
+  ModelImage,
+  ModelTurnRequest,
+} from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
@@ -57,6 +62,7 @@ import {
   memoryMaterialKind,
   memoryMaterialReference,
   memoryMessageKey,
+  memoryObservation,
   memoryOutput,
   memoryOutputRefs,
   memoryPolicy,
@@ -141,6 +147,7 @@ export interface ContextMemoryApi {
     body: string
     images: readonly ModelImage[]
     prompt: string
+    dynamic?: ModelDynamicInput
     history: readonly ModelHistoryMessage[]
     segment: SegmentStatus
   }>
@@ -156,7 +163,7 @@ export interface ContextMemoryApi {
     history: readonly ModelHistoryMessage[],
     previous: Optional<string>,
     signal: AbortSignal
-  ): Promise<{ body: string; prompt: string }>
+  ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }>
   /** 把段内较早的历史封成一卷并开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
   fold(reason: SegmentReason, maxChars: number, signal: AbortSignal): Promise<boolean>
   /**
@@ -401,6 +408,7 @@ export class ContextMemory implements ContextMemoryApi {
             .includes(input.query.toLowerCase()))
       )
         continue
+      if (await this.observationMaterial(record, signal)) continue
       const note = latest.get(record.ref.id)
       items.push({ ...record, ...(note ? noteEntry(note.note, record) : {}) })
       if (items.length > limit) break
@@ -421,6 +429,8 @@ export class ContextMemory implements ContextMemoryApi {
     const { snapshot, record } = await this.materialSnapshot(ref, signal)
     if (ref.sessionId !== this.id || !record)
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
+    if (await this.observationMaterial(record, signal))
+      throw new AppError('PERMISSION', '观察历史只能通过 observe 的有界历史选择读取')
     await this.fault(ref, signal)
     const result = /^script:[^:]+:result$/u.test(record.title ?? '')
     const stateDetails = record.title.startsWith('context:decision-state:')
@@ -1482,6 +1492,9 @@ export class ContextMemory implements ContextMemoryApi {
       title: `context:frame:${material.programFrame.id}`,
       body: JSON.stringify({
         frameId: material.programFrame.id,
+        taskId: snapshot?.task?.id,
+        taskStartedSequence: snapshot?.task?.startedSequence,
+        authorizationReset: reset,
         input: latestGoal
           ? {
               latest: latestGoal.record.ref,
@@ -1538,6 +1551,7 @@ export class ContextMemory implements ContextMemoryApi {
         ? memoryTaskHistory(goals, history, base)
         : [{ role: 'user' as const, content: base, cacheBreakpoint: true }, ...history.messages],
       prompt: memoryPrompt(body),
+      dynamic: memoryObservation(body).dynamic,
       segment: status,
     }
   }
@@ -1891,6 +1905,16 @@ export class ContextMemory implements ContextMemoryApi {
     )
   }
 
+  /** 通用执行材料召回不承担观察历史读取，防止正文经 exec 回流增量区。 */
+  private async observationMaterial(record: ContextRecord, signal: AbortSignal): Promise<boolean> {
+    if (record.title.startsWith('observation:') || /^script:[^:]+:capture$/u.test(record.title))
+      return true
+    if (!/^script:[^:]+:result$/u.test(record.title)) return false
+    const raw = await this.storage.get(this.id, record.objectId)
+    signal.throwIfAborted()
+    return !isNull(raw) && JSON.parse(raw).mode === 'observe'
+  }
+
   public async reconcile(
     body: string,
     history: readonly ModelHistoryMessage[],
@@ -1900,7 +1924,7 @@ export class ContextMemory implements ContextMemoryApi {
       audit: Parameters<ContextRuntime['append']>[0]
       save(input: Parameters<ContextRuntime['append']>[0]): void
     }
-  ): Promise<{ body: string; prompt: string }> {
+  ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }> {
     const projected = JSON.parse(body)
     const selected = await this.snapshot(signal, [
       { title: `context:frame:${projected.frameId}`, latest: true },
@@ -1913,7 +1937,12 @@ export class ContextMemory implements ContextMemoryApi {
     const saved = JSON.parse(
       draft ? draft.audit.body : (await this.storage.get(this.id, record!.objectId))!
     )
-    if (!saved.proof) return { body, prompt: memoryPrompt(body, previous) }
+    if (!saved.proof)
+      return {
+        body,
+        prompt: memoryPrompt(body, previous),
+        dynamic: memoryObservation(body).dynamic,
+      }
     const delivered = selected?.records.findLast((item) => item.title === 'context:delivered')
     const accepted = delivered
       ? JSON.parse((await this.storage.get(this.id, delivered.objectId))!).accepted
@@ -1985,6 +2014,28 @@ export class ContextMemory implements ContextMemoryApi {
       }
     )
     projected.memoryStatus.footprint.runtime = JSON.stringify(projected.partitions.runtime).length
+    const observation = memoryObservation(JSON.stringify(projected))
+    saved.observation = {
+      ...saved.observation,
+      snapshotId: projected.partitions.observation.snapshotId,
+      historySelectionRef: projected.partitions.observation.history?.selectionRef,
+      dynamicExchangeRefs: projected.partitions.observation.dynamicExchangeRefs,
+    }
+    for (const entry of saved.entries ?? []) {
+      if (entry.key === 'observation')
+        entry.bodyIncluded =
+          Boolean(projected.partitions.observation.bodyIncluded) && !observation.limited
+    }
+    if (draft) Object.assign(draft.audit, { body: JSON.stringify(saved) })
+    if (observation.limited && projected.partitions.observation.text) {
+      const gap = {
+        key: 'observation',
+        ref: projected.partitions.observation.resultRef,
+        reason: 'observation-display-limit',
+      }
+      missing.push(gap)
+      projected.partitions.runtime.decision.missing.push(gap)
+    }
     const resolved = JSON.stringify(projected)
     const prompt = memoryPrompt(resolved, previous)
     const proof: Parameters<ContextRuntime['append']>[0] = {
@@ -1997,15 +2048,22 @@ export class ContextMemory implements ContextMemoryApi {
         bodyHash: scriptOutputs.hash(resolved),
         promptHash: scriptOutputs.hash(prompt),
         promptChars: prompt.length,
+        dynamicHash: scriptOutputs.hash(toNullable(observation.dynamic)),
+        dynamicChars: observation.dynamic?.text.length ?? 0,
         carriers: authorized,
         current: currentProofs,
-        missing: saved.proof.missing,
+        missing: [
+          ...saved.proof.missing,
+          ...missing.filter(
+            (item: { reason: string }) => item.reason === 'observation-display-limit'
+          ),
+        ],
       }),
       sources: record ? [record.ref] : [],
     }
     if (draft) draft.save(proof)
     else await this.context.append(proof, signal)
-    return { body: resolved, prompt }
+    return { body: resolved, prompt, dynamic: observation.dynamic }
   }
 
   public async acknowledge(
@@ -2080,7 +2138,9 @@ export class ContextMemory implements ContextMemoryApi {
         material &&
         scriptOutputs.hash(material.text) === candidate.bodyHash &&
         scriptOutputs.hash(request.compiledPrompt?.slice(0, candidate.promptChars)) ===
-          candidate.promptHash
+          candidate.promptHash &&
+        (!candidate.dynamicHash ||
+          scriptOutputs.hash(toNullable(request.dynamic)) === candidate.dynamicHash)
       const history = new Set(
         (request.history ?? []).filter((item) => item.role === 'user').map(memoryMessageKey)
       )
@@ -2093,7 +2153,8 @@ export class ContextMemory implements ContextMemoryApi {
           if (!history.has(carrier.message)) continue
           carriers.push(carrier)
         }
-        const message = modelRequestEncoder.messages(request).at(-1)
+        const layout = modelRequestEncoder.layout(request)
+        const message = layout.messages[layout.retainablePrefixLength - 1]
         if (!isEmpty(candidate.current) && message?.role === 'user')
           carriers.push({ message: memoryMessageKey(message), proofs: candidate.current })
       }

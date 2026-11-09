@@ -8,6 +8,7 @@ import type {
 } from '@velaros-ai/context'
 import type {
   ModelDriver,
+  ModelDynamicInput,
   ModelHistoryMessage,
   ModelImage,
   ModelResponseFormat,
@@ -55,10 +56,20 @@ export interface ActExecutionPort {
     acceptedTurnId: string,
     calls?: readonly ModelToolCall[],
     waitSignal?: AbortSignal
-  ): Promise<void | boolean | { succeeded: boolean; results: readonly ModelToolResult[] }>
+  ): Promise<
+    | void
+    | boolean
+    | {
+        succeeded: boolean
+        results: readonly ModelToolResult[]
+        delivery?: 'history' | 'dynamic'
+      }
+  >
 }
 /** 上下文策略独立于协议解码和执行调度。 */
 export interface ActContextPort {
+  /** 原生观察往返只在动态区交付；由会话 owner 持有并按响应接纳水位消费。 */
+  stageDynamicExchange?(ref: ContextRef, signal: AbortSignal): Promise<void>
   /** 专项原生工具的最终产物已受理；成功执行后可进入普通完成核查。缺省仍由模型声明完成。 */
   deliveryReady?(): boolean
   /** 安全轮边界的独立整理口；pressure 也用于机械回收收益不足或短期再次受阻，不执行业务脚本、不消费业务租约。返回值仅表示发布，循环仍重新核对容量。 */
@@ -111,6 +122,7 @@ export interface ActContextPort {
     project(maxChars: number): Promise<{
       body: string
       images: readonly ModelImage[]
+      dynamic?: ModelDynamicInput
       history?: readonly ModelHistoryMessage[]
       segment?: ActFrameSegment
     }>
@@ -120,7 +132,7 @@ export interface ActContextPort {
       history: readonly ModelHistoryMessage[],
       previous: Optional<string>,
       signal: AbortSignal
-    ): Promise<{ body: string; prompt: string }>
+    ): Promise<{ body: string; prompt: string; dynamic?: ModelDynamicInput }>
     /** 只发布选中的最终正文与证明；租约仍在响应接纳后消费。 */
     publish(body: string, signal: AbortSignal): Promise<void | ContextRef>
   }>

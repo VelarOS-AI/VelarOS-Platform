@@ -19,6 +19,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { OperationLimits } from '@velaros-ai/kernel'
 
 import {
   CodeSurfaceLimits,
@@ -54,6 +55,15 @@ class NodeCodeRunner implements CodeRunnerApi {
     return this.options.cwd
   }
 
+  public observationSupport(): ReturnType<NonNullable<CodeRunnerApi['observationSupport']>> {
+    return (
+      this.options.observationSupport?.() ?? {
+        available: false,
+        reason: '宿主未声明只读程序约束支持',
+      }
+    )
+  }
+
   public async run(
     request: CodeRunRequest,
     dispatch: CodeRunDispatch,
@@ -81,6 +91,10 @@ class NodeCodeRunner implements CodeRunnerApi {
     let socketDirectory: string | undefined
     let log: number | undefined
     let logBytes = 0
+    const logLimit =
+      request.mode === 'observe'
+        ? OperationLimits.observationChars * 4
+        : NodeExecutionLimits.logBytes
     let logTruncated = false
     const timers = new TimerScope({ name: 'NodeCodeRunner' })
     let timer: Optional<TimerLease>
@@ -502,7 +516,7 @@ class NodeCodeRunner implements CodeRunnerApi {
           if (stopping || isUndefined(log)) return
           try {
             const buffer = Buffer.from(text)
-            const stored = buffer.subarray(0, Math.max(0, NodeExecutionLimits.logBytes - logBytes))
+            const stored = buffer.subarray(0, Math.max(0, logLimit - logBytes))
             if (stored.length) writeSync(log, stored)
             logBytes += stored.length
             if (stored.length < buffer.length) {

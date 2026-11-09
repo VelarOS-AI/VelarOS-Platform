@@ -324,7 +324,7 @@ function surfaceOwnership(state) {
     }
     if (
       state.path === NativeSurfacePath &&
-      /^Native(?:Execution|Observation|Blob|Done)Schema$/u.test(constant)
+      /^Native(?:Execution|Observation|ObservationControl|Blob|Done)Schema$/u.test(constant)
     ) {
       if (
         !ts.isAsExpression(declaration.initializer) ||
@@ -1404,24 +1404,28 @@ if (!OutputOption && IncludeNative) {
   const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
   const program = createSourceProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
   const checker = program.getTypeChecker()
-  const declarations = ['NativeExecution', 'NativeObservation', 'NativeBlob', 'NativeDone'].map(
-    (name) => {
-      const declaration = program
-        .getSourceFile(path)
-        .statements.find(
-          (node) => ts.isInterfaceDeclaration(node) && node.name.text === `${name}Input`
-        )
-      if (!declaration) throw new Error(`Missing native tool contract: ${name}Input`)
-      const generatedSchema = operationSchema(checker, checker.getTypeAtLocation(declaration))
-      const schema = generatedSchema.$ref
-        ? {
-            ...generatedSchema.definitions[generatedSchema.$ref.slice('#/definitions/'.length)],
-            definitions: generatedSchema.definitions,
-          }
-        : generatedSchema
-      return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(schema)} as const\n`
-    }
-  )
+  const declarations = [
+    'NativeExecution',
+    'NativeObservation',
+    'NativeObservationControl',
+    'NativeBlob',
+    'NativeDone',
+  ].map((name) => {
+    const declaration = program
+      .getSourceFile(path)
+      .statements.find(
+        (node) => ts.isInterfaceDeclaration(node) && node.name.text === `${name}Input`
+      )
+    if (!declaration) throw new Error(`Missing native tool contract: ${name}Input`)
+    const generatedSchema = operationSchema(checker, checker.getTypeAtLocation(declaration))
+    const schema = generatedSchema.$ref
+      ? {
+          ...generatedSchema.definitions[generatedSchema.$ref.slice('#/definitions/'.length)],
+          definitions: generatedSchema.definitions,
+        }
+      : generatedSchema
+    return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(schema)} as const\n`
+  })
   nativeSurfaceBlocks.set(NativeSurfacePath, [declarations.join('\n').trimEnd()])
 }
 // 先收旧所有权，再生成内存计划；任何校验或暂存失败都不先发布一部分产物。

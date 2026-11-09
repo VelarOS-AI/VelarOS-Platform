@@ -179,7 +179,7 @@ test('INV-48 plain text and native done without a completion claim preserve an a
           assert.equal(request.response.type, 'tools')
           if (frames.length === 2) {
             assert.equal(runtimeGoal(request).status, 'active')
-            assert(request.compiledPrompt.includes('GOAL_ACTIVE'))
+            assert(request.protocol.includes('GOAL_ACTIVE'))
             yield {
               type: 'tool-call',
               value: {

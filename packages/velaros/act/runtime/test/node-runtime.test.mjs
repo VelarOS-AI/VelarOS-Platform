@@ -1322,7 +1322,7 @@ test('runtime delivers native output to the next model turn with a small standar
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
         requests.push(req)
-        const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+        const marker = req.protocol.match(/(@@s\w+) execute/)[1]
         yield {
           type: 'text',
           text:
@@ -1702,7 +1702,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
         inspect?.(req)
-        const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+        const marker = req.protocol.match(/(@@s\w+) execute/)[1]
         assert.match(req.instructions, /Node.js/)
         assert.match(req.instructions, /process.env.VELAROS_HOST_DIR/)
         assert.match(req.instructions, /documentationPath/)
@@ -1913,7 +1913,7 @@ test('runtime observation uses real Node and retains structured input and output
     async *stream(req) {
       observed = JSON.parse(req.materials.find((item) => item.origin === 'runtime-view').text)
         .partitions.observation.text
-      const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+      const marker = req.protocol.match(/(@@s\w+) execute/)[1]
       yield { type: 'text', text: `${marker} done\nVerified.` }
       yield { type: 'finish', reason: 'stop' }
     },

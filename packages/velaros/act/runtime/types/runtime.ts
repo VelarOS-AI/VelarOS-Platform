@@ -1,6 +1,7 @@
 import type { ProgramDescriptor } from '../../system/types/programs.js'
 
 import type { ExecutionOutputState } from './execution-output.js'
+import type { ObservationDynamicState } from './observation.js'
 import type { ScriptRetention } from './results.js'
 
 /** 领域登记的声明式纯快照计划；input 由指定提供者按固定合同核对。 */
@@ -123,6 +124,9 @@ export interface ScriptProtocolOptions {
   readonly transport?: 'text' | 'tools'
   /** 宿主选择面向标准 Node 的精简执行说明。 */
   readonly presentation?: 'node'
+  /** 宿主核验后的持续程序可用性；false 时 observe 仍可选择已有授权历史。 */
+  readonly observationPrograms?: boolean
+  readonly observationUnavailableReason?: string
   /** 当前运行配置允许的控制声明。 */
   readonly allowed?: ReadonlyArray<'blobs' | 'observe' | 'execute' | 'done'>
   /** 模型发起执行的缺省可见期限，文本与原生工具共用；默认随历史封段退役，仍受展示预算约束。 */
@@ -152,7 +156,7 @@ export interface ScriptDeclaration {
 }
 
 /** 会话记录里的程序与结果引用，不保存第二份正文。 */
-export interface ProgramLeaseState {
+export interface ProgramLeaseState extends ObservationDynamicState {
   readonly completedTurns: number
   /** 新进入租约集合的结果代次，区分新到达材料与容量省略。 */
   readonly resultsRevision?: number
@@ -263,7 +267,9 @@ export interface ScriptProgramVersion {
 
 /** 控制层检查与提交的可召回回执，执行结果仍使用 ScriptAct 原有结果。 */
 export interface ScriptControlReceipt {
-  readonly status: 'updated' | 'unchanged' | 'cleared' | 'rejected' | 'prepared' | 'completed'
+  readonly status:
+    'updated' | 'unchanged' | 'cleared' | 'rejected' | 'prepared' | 'completed' | 'selected'
+  readonly selectionRef?: string
   readonly sourceRef?: string
   readonly parentRef?: string
   readonly draftRef?: string

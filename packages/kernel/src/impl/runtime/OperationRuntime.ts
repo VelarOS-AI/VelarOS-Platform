@@ -1,12 +1,12 @@
 import { Ajv, type ValidateFunction } from 'ajv'
 
 import { Log } from '@velaros-ai/core'
-import { isTrue, isUndefined } from '@velaros-ai/core'
+import { isPresent, isTrue, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError, createAbortError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { KernelVersionAxes } from '../../contract/constants.js'
+import { KernelVersionAxes, OperationLimits } from '../../contract/constants.js'
 import type { OperationRuntimeApi } from '../../contract/provides.js'
 import type {
   InvocationJournal,
@@ -53,6 +53,8 @@ class OperationRuntime implements OperationRuntimeApi {
   private readonly active = new Map<string, AbortController>()
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly phases = new Map<string, PendingInvocation>()
+  /** 只保留业务载荷计数；执行内跨调用累计，直到会话租约和物理调用都已释放。 */
+  private readonly observationBudgets = new Map<string, Map<string, number>>()
   private draining?: Promise<void>
   private readonly settlementFailures: unknown[] = []
   private readonly validators = new Map<
@@ -363,12 +365,30 @@ class OperationRuntime implements OperationRuntimeApi {
 
   public release(sessionId: string, moduleId: string): void {
     this.leases.get(sessionId)?.delete(moduleId)
+    this.releaseObservationBudget(sessionId)
+  }
+
+  private releaseObservationBudget(sessionId: string): void {
+    if (
+      this.leases.get(sessionId)?.size ||
+      [...this.phases.values()].some((call) => call.sessionId === sessionId)
+    )
+      return
+    this.leases.delete(sessionId)
+    this.observationBudgets.delete(sessionId)
   }
 
   public invoke(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt> {
     if (this.closing) return Promise.reject(new AppError('CLOSED', '运行时已经关闭'))
     if (signal?.aborted) return Promise.reject(signal.reason ?? createAbortError())
     const frozen = immutableOperationJson(call)
+    if (
+      frozen.mode === 'observe' &&
+      (JSON.stringify(frozen.input) ?? '').length > OperationLimits.observationChars
+    )
+      return Promise.reject(
+        new AppError('LIMIT', '观察入参超过小型状态上限，请缩小查询或请求摘要、差异、引用')
+      )
     const id = JSON.stringify([frozen.sessionId, frozen.id])
     const key = canonicalOperationJson(frozen)
     const existing = this.dispatches.get(id)
@@ -402,6 +422,7 @@ class OperationRuntime implements OperationRuntimeApi {
         this.active.delete(id)
         this.phases.delete(id)
         signal?.removeEventListener('abort', cancel)
+        this.releaseObservationBudget(frozen.sessionId)
       })
       .catch(() => {
         Log.tag('ActRuntime').debug('OperationRuntime 调用未能完整结算')
@@ -460,6 +481,12 @@ class OperationRuntime implements OperationRuntimeApi {
       inputFingerprint: await operationFingerprint(original),
       requestFingerprint,
     })
+    if (
+      call.mode === 'observe' &&
+      (this.observationBudgets.get(call.sessionId)?.get(call.executionId) ?? 0) >=
+        OperationLimits.observationChars
+    )
+      throw new AppError('LIMIT', '本次执行的观察载荷预算已耗尽，请缩小观察或请求摘要、差异、引用')
     const existing = await this.journal.claim(prepared)
     if (existing) {
       if (existing.prepared.requestFingerprint !== prepared.requestFingerprint)
@@ -490,6 +517,14 @@ class OperationRuntime implements OperationRuntimeApi {
       this.phase(call, 'prepare')
       const input = prepare ? immutableOperationJson(await prepare(original, { signal })) : original
       signal.throwIfAborted()
+      if (call.mode === 'observe') {
+        const chars = (JSON.stringify(input) ?? '').length
+        if (chars > OperationLimits.observationChars)
+          throw new AppError(
+            'LIMIT',
+            `观察准备后的入参共 ${chars} 字符，超过 ${OperationLimits.observationChars} 字符上限，未派发处理器`
+          )
+      }
       if (!validators.input(input))
         throw new AppError(
           'VALIDATION',
@@ -521,8 +556,7 @@ class OperationRuntime implements OperationRuntimeApi {
         },
       }
       this.phase(call, 'settle')
-      await this.settle(receipt)
-      return immutableOperationJson(receipt)
+      return immutableOperationJson(await this.settle(receipt))
     }
     this.phase(call, 'journal')
     await this.journal.prepare(prepared)
@@ -598,8 +632,7 @@ class OperationRuntime implements OperationRuntimeApi {
         if (error) Object.assign(receipt, { error })
       }
       this.phase(call, 'settle')
-      await this.settle(receipt)
-      return immutableOperationJson(receipt)
+      return immutableOperationJson(await this.settle(receipt))
     } finally {
       signal?.removeEventListener('abort', cancel)
     }
@@ -635,6 +668,7 @@ class OperationRuntime implements OperationRuntimeApi {
         this.active.delete(key)
         this.phases.delete(key)
         signal.removeEventListener('abort', cancel)
+        this.releaseObservationBudget(sessionId)
       })
       .catch(() => {
         Log.tag('ActRuntime').debug('OperationRuntime 核对已结束')
@@ -689,9 +723,60 @@ class OperationRuntime implements OperationRuntimeApi {
     return this.journal.read(sessionId, id)
   }
 
-  private async settle(receipt: InvocationReceipt): Promise<void> {
+  /** 所有观察终态在写 journal 前统一裁剪；同步计数也覆盖已经受理的并发处理器。 */
+  private limitObservationReceipt(receipt: InvocationReceipt): InvocationReceipt {
+    if (receipt.invocation.mode !== 'observe') return receipt
+    const { invocation, value, observation, attachments, diagnostic, error, ...metadata } = receipt
+    const budgets = this.observationBudgets.get(invocation.sessionId) ?? new Map<string, number>()
+    const used = budgets.get(invocation.executionId) ?? 0
+    let chars: Optional<number>
     try {
-      await this.journal.settle(receipt)
+      const business = JSON.stringify({ value, observation, attachments, diagnostic })
+      chars = business === '{}' ? 0 : business.length
+    } catch (error) {
+      Log.tag('OperationRuntime').warn('观察业务载荷无法编码，已移除正文并结算小型 LIMIT 回执', {
+        message: AppError.getMessage(error).slice(0, OperationLimits.observationErrorChars),
+      })
+    }
+    const limited = isUndefined(chars) || used + chars > OperationLimits.observationChars
+    budgets.set(invocation.executionId, limited ? OperationLimits.observationChars : used + chars!)
+    this.observationBudgets.set(invocation.sessionId, budgets)
+    const failure =
+      error ??
+      (limited
+        ? {
+            code: 'LIMIT',
+            message: '观察载荷超过本次执行的小型状态预算，请请求摘要、差异、引用或更小片段',
+          }
+        : undefined)
+    let boundedError: InvocationReceipt['error']
+    if (failure) {
+      const message = failure.message
+      boundedError = {
+        code: failure.code,
+        message: `${message.slice(0, OperationLimits.observationErrorChars)}${message.length > OperationLimits.observationErrorChars ? ` [truncated; totalChars=${message.length}]` : ''}${limited && error ? ` [LIMIT; observationChars=${chars ?? 'unencodable'}]` : ''}`,
+      }
+    }
+    const bounded: InvocationReceipt = {
+      ...metadata,
+      invocation,
+      outcome: limited && receipt.outcome === 'succeeded' ? 'failed' : receipt.outcome,
+    }
+    if (!limited) {
+      if (!isUndefined(value)) Object.assign(bounded, { value })
+      if (isPresent(observation)) Object.assign(bounded, { observation })
+      if (isPresent(attachments)) Object.assign(bounded, { attachments })
+      if (isPresent(diagnostic)) Object.assign(bounded, { diagnostic })
+    }
+    if (isPresent(boundedError)) Object.assign(bounded, { error: boundedError })
+    return bounded
+  }
+
+  private async settle(receipt: InvocationReceipt): Promise<InvocationReceipt> {
+    const bounded = this.limitObservationReceipt(receipt)
+    try {
+      await this.journal.settle(bounded)
+      return bounded
     } catch (error) {
       // 处理器已真实结束，不能伪造持久化成功；后台失败必须在关闭时可观察。
       this.settlementFailures.push(error)
@@ -731,6 +816,7 @@ class OperationRuntime implements OperationRuntimeApi {
 
   private async finishClose(): Promise<void> {
     await Promise.allSettled([...this.inFlight])
+    this.observationBudgets.clear()
     await this.kernel.dispose()
     this.leases.clear()
     if (!isEmpty(this.settlementFailures))
