@@ -504,16 +504,48 @@ test('Node hints expose only available collaboration and search capabilities wit
   for (const agents of [false, true]) {
     for (const search of [false, true]) {
       let instructions
+      const model = driver(async function* (request) {
+        instructions = request.instructions
+        yield* done(request)
+      })
       const f = await fixture(
         t,
         await withProjectFixture(
           {
-            agents,
-            search,
-            model: driver(async function* (request) {
-              instructions = request.instructions
-              yield* done(request)
-            }),
+            model,
+            ...(agents
+              ? {
+                  agents: {
+                    profiles: { worker: { model, modules: [] } },
+                    concurrency: 1,
+                    maxChildren: 1,
+                  },
+                }
+              : {}),
+            ...(search
+              ? {
+                  search: {
+                    model,
+                    defaultProfile: 'standard',
+                    profiles: {
+                      standard: {
+                        modelCalls: 4,
+                        modelTokens: 120000,
+                        finalizationTokens: 20000,
+                        timeoutMs: 20000,
+                        callTimeoutMs: 2000,
+                        finalizationMs: 3000,
+                        outputTokens: 2048,
+                        projectionChars: 48000,
+                        sourceQueries: 8,
+                        candidates: 32,
+                        reads: 8,
+                        readBytes: 64000,
+                      },
+                    },
+                  },
+                }
+              : {}),
           },
           { root: workspace, codeIndex: unavailableCodeIndex }
         ),
