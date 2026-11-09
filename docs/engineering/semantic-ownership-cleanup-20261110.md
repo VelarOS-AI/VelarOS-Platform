@@ -31,5 +31,5 @@ Agent 旧实现的 start/resume 返回初始 job，后续交互、回答和终�
 | --- | --- | --- |
 | R2 owner 纠正 | `3529a98e` | 9 |
 | A1 元数据 | `accd6231` | 5 |
-| S1 控制准入 | 本批 `fix(runtime): register control reads before invoking storage` | 2 |
-| C1 恢复释放 | 待提交 | 3 |
+| S1 控制准入 | `4595d4fd` | 2 |
+| C1 恢复释放 | 本批 `fix(context): retain recovery release ownership across retries` | 3 |
