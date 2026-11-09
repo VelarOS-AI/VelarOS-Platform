@@ -18,6 +18,7 @@ import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'bun:test'
 import { execa } from 'execa'
 
+import { AppError } from '@velaros-ai/core/error'
 import { createExclusiveSqliteLock } from '@velaros-ai/core/utils/ExclusiveSqliteLock'
 import {
   createOperationRuntime,
@@ -1091,8 +1092,14 @@ test('INV-7 多个 Skill 共用宿主绑定，一份撤销后另一份仍可授�
   let lastContext: OperationContext | undefined
   const records = await f.registry.list()
   const lease = await f.registry.acquire(skillComposition.select(records, [], ['one', 'two']))
+  const authorizationFailures = new Map<string, unknown>()
   const modules = await skillCapabilityModules.create({
-    registry: f.registry,
+    registry: {
+      assertGranted: async (name, generation, module) => {
+        if (authorizationFailures.has(name)) throw authorizationFailures.get(name)
+        return f.registry.assertGranted(name, generation, module)
+      },
+    },
     lease,
     node: await nodeOptions(f.root),
     hostModules: {
@@ -1157,8 +1164,15 @@ test('INV-7 多个 Skill 共用宿主绑定，一份撤销后另一份仍可授�
       source: "import {identity} from 'velaros:browser';export default await identity({});",
     })
   try {
+    const unavailable = new AppError('UNAVAILABLE', 'Skill 索引读取失败')
+    authorizationFailures.set('one', unavailable)
     const first = await invoke('first')
-    expect(first.checked && first.rawValue).toBe('bound-page')
+    expect(first).toMatchObject({ checked: true, rawValue: 'bound-page' })
+    authorizationFailures.set('two', new AppError('PERMISSION', 'Skill 授权已撤销'))
+    await expect(
+      modules[0]!.operations.identity!.prepare!({}, { signal: new AbortController().signal })
+    ).rejects.toBe(unavailable)
+    authorizationFailures.clear()
     await f.registry.remove('one')
     const second = await invoke('second')
     expect(second.checked && second.rawValue).toBe('bound-page')

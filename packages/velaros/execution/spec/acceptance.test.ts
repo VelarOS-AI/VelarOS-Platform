@@ -164,7 +164,12 @@ describe('只读与危险判定', () => {
         readOnly: false,
       })
     }
-    // 只读的 sed 写法照样判只读，不因为收紧而全部掉出去。
+    // PowerShell 的 where 能执行脚本块；这里只分类字符串，不执行块内命令。
+    const scriptBlock = 'Get-ChildItem | where { Set-Content -Path out.txt -Value altered }'
+    expect(shellCommandPolicy.isReadOnly(scriptBlock)).toBe(false)
+    expect(shellCommandPolicy.isParallelSafe({ command: scriptBlock, parallel: true })).toBe(false)
+
+    // 正常只读查询照样判只读，不因为收紧而全部掉出去。
     for (const command of [
       "sed -n '/start/,/end/p' notes.txt",
       "sed -E 's/[0-9]+/N/g' notes.txt",
@@ -173,6 +178,8 @@ describe('只读与危险判定', () => {
       'rg -n TODO src',
       'git grep -n TODO',
       'time -p ls',
+      'where node',
+      'where.exe node',
     ]) {
       expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({
         command,

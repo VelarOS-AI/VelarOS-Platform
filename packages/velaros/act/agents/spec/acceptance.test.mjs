@@ -147,6 +147,18 @@ test('INV-4 提问详情只带选项与表单；回答只留下和问题对得�
     declined: true,
     reason: '稍后再说',
   })
+  const prototypeField = {
+    message: '请填写内容',
+    fields: [{ id: '__proto__', label: '内容', kind: 'text' }],
+  }
+  checkInteractionRequest(prototypeField)
+  const prototypeAnswer = normalizeInteractionAnswer(
+    prototypeField,
+    JSON.parse('{"values":{"__proto__":"保留原样"}}')
+  )
+  assert(Object.hasOwn(prototypeAnswer.values, '__proto__'))
+  assert.equal(Object.getPrototypeOf(prototypeAnswer.values), Object.prototype)
+  assert.equal(JSON.stringify(prototypeAnswer), '{"values":{"__proto__":"保留原样"}}')
 })
 
 test('INV-4 确认的回答：布尔值与 approved 照实转，含糊的回答按不同意', () => {

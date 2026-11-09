@@ -102,12 +102,12 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
   }
 
   public listOperationalManifests(): ModelProviderOperationalManifest[] {
-    return [
+    return structuredClone([
       ...asOperationalManifests(ModelProviderOperationalManifests),
       ...this.providerScripts
         .listProviderManifests()
         .map((manifest) => createScriptOperationalManifest(manifest)),
-    ]
+    ])
   }
 
   public listPresets(): ModelProviderPreset[] {
@@ -125,10 +125,10 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     const builtIn = asOperationalManifests(ModelProviderOperationalManifests).find(
       (manifest) => manifest.id === provider
     )
-    if (builtIn) return builtIn
+    if (builtIn) return structuredClone(builtIn)
 
     const script = this.providerScripts.getProviderScript(provider)
-    if (script) return createScriptOperationalManifest(script.manifest)
+    if (script) return structuredClone(createScriptOperationalManifest(script.manifest))
 
     throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
   }
@@ -142,7 +142,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
   public requireCatalog(provider: ChatProviderId): SharedProviderCatalog {
     const script = this.providerScripts.getProviderScript(provider)
     if (script)
-      return {
+      return structuredClone({
         provider,
         defaultModel: script.manifest.defaultModel,
         models: script.manifest.models.map((model) => ({
@@ -150,18 +150,14 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
           contextWindow: model.contextWindow,
           inputModalities: model.inputModalities,
         })),
-      }
+      })
 
     const catalog = getSharedProviderCatalogOrNull(provider)
     if (!catalog) {
       throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
     }
     this.requireOperationalManifest(provider)
-    return {
-      provider: catalog.provider,
-      defaultModel: catalog.defaultModel,
-      models: catalog.models.map((model) => ({ ...model })),
-    }
+    return structuredClone(catalog)
   }
 
   public resolveModelSelection(

@@ -60,12 +60,12 @@ export function normalizeInteractionAnswer(
     answer.choices = request.multiple ? choices : choices.slice(0, 1)
   }
   if (request.fields && isPlainObject(value.values)) {
-    const values: Record<string, InteractionFieldValue> = {}
+    const values: Array<[string, InteractionFieldValue]> = []
     for (const field of request.fields) {
       const picked = fieldValue(field, value.values[field.id])
-      if (!isUndefined(picked)) values[field.id] = picked
+      if (!isUndefined(picked)) values.push([field.id, picked])
     }
-    answer.values = values
+    answer.values = Object.fromEntries(values)
   }
   if (isTrue(value.declined)) answer.declined = true
   const reason = readReason(value)

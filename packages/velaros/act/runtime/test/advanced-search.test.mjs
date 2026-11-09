@@ -11,6 +11,7 @@ import {
   createEvidenceAccess,
 } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError, createAbortError } from '@velaros-ai/core/error'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { BudgetedModelDriver } from '../../../dist/act/runtime/impl/BudgetedModelDriver.js'
@@ -1183,6 +1184,90 @@ test('equal-size source replacement clears candidates and records the current hi
   assert.equal(JSON.parse(await f.storage.get(id, reset.objectId)).reason, 'authorization-changed')
   assert.equal(f.queries, 1)
   assert.equal(f.reads, 0)
+  assert.equal(opens, 2)
+})
+
+test('candidate-only revocation resets live and resumed history without hiding authorization faults', async (t) => {
+  const f = await lifecycle(t)
+  const secret = 'private-candidate-preview'
+  const authorize = f.source.authorize
+  const fault = new AppError('UNAVAILABLE', 'fixture authorization backend failed')
+  const failAuthorization = async () => {
+    throw fault
+  }
+  f.source.search = async () => {
+    f.queries++
+    return [{ target, preview: secret, forms: ['excerpt'] }]
+  }
+  let opens = 0
+  let previousHistory
+  f.dependencies.open = async (id, activation) => {
+    f.searchSessionId = id
+    return {
+      async *submit(_input, signal) {
+        const context = createContextRuntime({ sessionId: id, storage: f.storage })
+        if (++opens === 1) {
+          await activation.query('project', 'auth', 1, signal)
+          const history = await context.append({ kind: 'note', body: secret })
+          assert.equal(activation.snapshot().evidence.length, 0)
+          assert(JSON.stringify(activation.material(profile.projectionChars)).includes(secret))
+          f.source.authorize = failAuthorization
+          await assert.rejects(activation.refresh(signal), (error) => error === fault)
+          assert.equal(activation.snapshot().candidates.length, 1)
+          const controller = new AbortController()
+          const cancellation = createAbortError('fixture refresh cancelled')
+          controller.abort(cancellation)
+          await assert.rejects(
+            activation.refresh(controller.signal),
+            (error) => error === cancellation
+          )
+          f.source.authorize = authorize
+          f.allowed = false
+          await activation.refresh(signal)
+          assert.equal(activation.snapshot().candidates.length, 0)
+          assert(!JSON.stringify(activation.material(profile.projectionChars)).includes(secret))
+          await assert.rejects(activation.authorizeReference(history.ref, signal), {
+            code: 'DENIED',
+          })
+          // 再留一份只含候选的检查点，独立验证下一次续查的预检。
+          f.allowed = true
+          await activation.query('project', 'auth', 1, signal)
+          previousHistory = (await context.append({ kind: 'note', body: secret })).ref
+        } else {
+          assert.equal(activation.snapshot().evidence.length, 0)
+          assert.equal(activation.snapshot().candidates.length, 0)
+          assert(!JSON.stringify(activation.material(profile.projectionChars)).includes(secret))
+          await assert.rejects(activation.authorizeReference(previousHistory, signal), {
+            code: 'DENIED',
+          })
+        }
+        await activation.report({ findings: [], gaps: [], nextSteps: [] }, signal)
+        yield { type: 'state', status: 'completed' }
+      },
+    }
+  }
+  const first = await f.search.run({ query: 'auth' }, f.call)
+  assert.equal(first.status, 'completed', JSON.stringify(first))
+  f.source.authorize = failAuthorization
+  await assert.rejects(f.search.run({ resume: first.ref }, f.call), (error) => error === fault)
+  assert.equal(opens, 1)
+  assert.equal((await f.state()).candidates.length, 1)
+  f.source.authorize = authorize
+  f.allowed = false
+  const resumed = await f.search.run({ resume: first.ref }, f.call)
+  assert.equal(resumed.status, 'completed', JSON.stringify(resumed))
+  assert.equal(resumed.searchId, first.searchId)
+  assert.equal((await f.state()).candidates.length, 0)
+  const snapshot = await f.storage.load(f.searchSessionId)
+  const resets = snapshot.records.filter((record) => record.title === 'search:history-reset')
+  assert.equal(resets.length, 2)
+  assert.equal(
+    JSON.parse(await f.storage.get(f.searchSessionId, resets.at(-1).objectId)).reason,
+    'authorization-changed'
+  )
+  assert.equal(f.queries, 2)
+  assert.equal(f.reads, 0)
+  assert.equal(f.calls, 0)
   assert.equal(opens, 2)
 })
 

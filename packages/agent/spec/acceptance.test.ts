@@ -2274,6 +2274,74 @@ test('closing a consumer during thinking releases the view without accepting lat
   await service.close()
 })
 
+test('interaction allocation cannot outlive its cancelled run or attach to the next run', async () => {
+  const f = runFixture()
+  const finish = Promise.withResolvers<void>()
+  const allocation = Promise.withResolvers<string>()
+  const allocating = Promise.withResolvers<void>()
+  const allocate = f.store.allocateReferenceId.bind(f.store)
+  const delayedId = await allocate('fault')
+  const open = f.options.protocol.open
+  f.options.protocol.open = () => ({
+    ...open(),
+    push: (text) => [{ type: 'text', text }],
+  })
+  f.options.model.stream = async function* () {
+    yield { type: 'text', text: 'preview' }
+    await finish.promise
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const events: Array<{ type: string; runId: string }> = []
+  const consume = async (
+    input: string,
+    started: ReturnType<typeof Promise.withResolvers<string>>
+  ) => {
+    for await (const event of service.submit(input)) {
+      events.push(event)
+      if (event.type === 'text') started.resolve(event.runId)
+    }
+  }
+  let running: Promise<void> | undefined
+  try {
+    const first = Promise.withResolvers<string>()
+    running = consume('first run', first)
+    const firstRunId = await first.promise
+    let delayNext = true
+    f.store.allocateReferenceId = (sessionId) => {
+      if (delayNext) {
+        delayNext = false
+        allocating.resolve()
+        return allocation.promise
+      }
+      return allocate(sessionId)
+    }
+    const rejected = service.request('input', 'old question', new AbortController().signal).then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    await allocating.promise
+    service.cancel()
+    await running
+
+    const second = Promise.withResolvers<string>()
+    running = consume('second run', second)
+    expect(await second.promise).not.toBe(firstRunId)
+    allocation.resolve(delayedId)
+    finish.resolve()
+    await running
+    expect(await rejected).toMatchObject({ name: 'AbortError' })
+    expect(events.some((event) => event.type === 'interaction')).toBe(false)
+    expect((await service.inspect()).pending).toEqual([])
+  } finally {
+    allocation.resolve(delayedId)
+    finish.resolve()
+    service.cancel()
+    await running
+    await service.close()
+  }
+})
+
 test('INV-36 a fault persisting a child result reaches wait even after the live slot has been released', async () => {
   const store = storage()
   const put = store.put
@@ -2854,6 +2922,82 @@ test('INV-31 child quota and parent identity survive reopen and resume does not 
     expect(ids).toEqual([job.sessionId, job.sessionId])
   } finally {
     await next.close()
+  }
+})
+test('INV-31 equal short child ids keep independent parent lifecycles and failure accounts', async () => {
+  const store = storage()
+  const references = new Map<string, number>()
+  store.allocateReferenceId = async (sessionId) => {
+    const next = (references.get(sessionId) ?? 0) + 1
+    references.set(sessionId, next)
+    return next.toString(16).padStart(8, '0')
+  }
+  const finishes = new Map<string, () => void>()
+  const failures = new Map([
+    ['fail-a', new AppError('UNAVAILABLE', 'parent a cleanup failed')],
+    ['fail-b', new AppError('UNAVAILABLE', 'parent b cleanup failed')],
+  ])
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 2,
+    maxChildren: 2,
+    async open(job) {
+      let finish!: () => void
+      const ending = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      finishes.set(job.parentSessionId, finish)
+      return {
+        ...child(),
+        async *submit(_input, signal) {
+          yield { type: 'state', runId: job.sessionId, status: 'thinking' }
+          await ending
+          yield {
+            type: 'state',
+            runId: job.sessionId,
+            status: signal?.aborted ? 'cancelled' : 'completed',
+          }
+        },
+        cancel: finish,
+        async close() {
+          const failure = failures.get(job.profile)
+          if (failure) throw failure
+        },
+      }
+    },
+  })
+  const signal = new AbortController().signal
+  try {
+    const a = await supervisor.start('a', { task: 'first', profile: 'read' }, signal)
+    const b = await supervisor.start('b', { task: 'second', profile: 'fail-b' }, signal)
+    expect(a.id).toBe('00000001')
+    expect(b.id).toBe(a.id)
+    expect(a.sessionId).not.toBe(b.sessionId)
+    finishes.get('a')!()
+    expect((await supervisor.wait('a', a.id, signal)).status).toBe('completed')
+    expect((await supervisor.status('b', b.id)).status).toBe('running')
+    expect((await supervisor.status('a', a.id)).status).toBe('completed')
+    await supervisor.resume('a', a.id, { input: 'fail independently', profile: 'fail-a' }, signal)
+    finishes.get('a')!()
+    await expect(supervisor.wait('a', a.id, signal)).rejects.toBe(failures.get('fail-a'))
+    expect((await supervisor.status('b', b.id)).status).toBe('running')
+    finishes.get('b')!()
+    await expect(supervisor.wait('b', b.id, signal)).rejects.toBe(failures.get('fail-b'))
+    await expect(supervisor.wait('a', a.id, signal)).rejects.toBe(failures.get('fail-a'))
+    // 清掉 a 的失败账不能同时清掉同短 id 的 b；随后两者各自恢复。
+    for (const [parent, job] of [
+      ['a', a],
+      ['b', b],
+    ] as const) {
+      await supervisor.resume(parent, job.id, { input: 'recover', profile: 'read' }, signal)
+      finishes.get(parent)!()
+      expect((await supervisor.wait(parent, job.id, signal)).status).toBe('completed')
+      if (parent === 'a')
+        await expect(supervisor.wait('b', b.id, signal)).rejects.toBe(failures.get('fail-b'))
+    }
+  } finally {
+    for (const finish of finishes.values()) finish()
+    await supervisor.close()
   }
 })
 test('INV-32 parent cancellation reaches children and leaves a readable partial result', async () => {

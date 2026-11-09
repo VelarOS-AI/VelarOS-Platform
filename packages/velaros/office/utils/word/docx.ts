@@ -62,7 +62,7 @@ export function buildTextRun(run: WordTextRun): TextRun | ExternalHyperlink {
     strike: run.strike,
     color: run.color,
     highlight: run.highlight,
-    size: run.fontSize,
+    size: run.fontSize === undefined ? undefined : run.fontSize * 2,
     font: optionalWhenLazy(run.font, () => ({ name: run.font! })),
     superScript: run.superScript,
     subScript: run.subScript,

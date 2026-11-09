@@ -31,7 +31,7 @@ VelarOS Platform 包含 9 个 package workspace，各自独立发布。公开包
 
 ## 环境要求
 
-- [Bun](https://bun.sh/) 1.3.13
+- [Bun](https://bun.sh/) 1.4.3
 - 完整工作区（含 JS/TS Skill）要求 Node.js 22.15 或更新版本；当前 Windows 核验使用 Node.js 24.22.0。默认 SQLite 适配器单独要求 Node.js 22.13 或更新版本。
 - 单包消费者还需遵守各包 engines 及宿主依赖要求
 

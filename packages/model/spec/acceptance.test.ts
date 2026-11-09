@@ -42,7 +42,7 @@ module.exports = {
     baseURLConfigurable: false,
     enabledByDefault: true,
     defaultModel: 'spec-chat',
-    models: [{ id: 'spec-chat', label: 'Spec Chat' }]
+    models: [{ id: 'spec-chat', label: 'Spec Chat', inputModalities: ['text', 'image'] }]
   },
   createLanguageModelFactory() {
     return function createLanguageModel() {
@@ -315,6 +315,62 @@ describe('model 不变量验收', () => {
     for (const manifest of ModelProviderOperationalManifests) {
       expect(`${manifest.id}:${!!modelCatalog.manifest(manifest.id)}`).toBe(`${manifest.id}:true`)
     }
+
+    const first = createIsolatedComposition()
+    const second = createIsolatedComposition()
+    const expectedCatalog = structuredClone(modelCatalog.catalog('openai')!)
+    const catalog = modelCatalog.catalog('openai')!
+    catalog.defaultModel = 'snapshot-only'
+    catalog.models[0].contextWindow = 1
+    catalog.models.push({ id: 'snapshot-only', contextWindow: 1 })
+    expect(modelCatalog.catalog('openai')).toEqual(expectedCatalog)
+    const collectionCatalog = first.providerCollection.requireCatalog('openai')
+    collectionCatalog.models[0].id = 'snapshot-only'
+    expect(first.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
+    expect(second.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
+
+    const expectedManifest = structuredClone(modelCatalog.manifest('openai')!)
+    modelCatalog.manifest('openai')!.label = 'snapshot-only'
+    first.providerCollection.requireOperationalManifest('openai').label = 'snapshot-only'
+    first.providerCollection.listOperationalManifests().find((row) => row.id === 'openai')!.label =
+      'snapshot-only'
+    expect(modelCatalog.manifest('openai')).toEqual(expectedManifest)
+    expect(first.providerCollection.requireOperationalManifest('openai')).toEqual(expectedManifest)
+    expect(second.providerCollection.requireOperationalManifest('openai')).toEqual(expectedManifest)
+
+    first.providerScriptRegistry.registerSource({
+      source: InjectedProviderSource,
+      scriptPath: '/tmp/velaros-model-spec-provider.cjs',
+    })
+    const expectedScript = structuredClone(
+      first.providerCollection.requireOperationalManifest(InjectedProviderId)
+    )
+    const script = first.providerCollection.requireOperationalManifest(InjectedProviderId)
+    script.providerScript!.models[0].label = 'snapshot-only'
+    const modalities = script.providerScript!.models[0].inputModalities as string[]
+    modalities[0] = 'audio'
+    const listed = first.providerCollection
+      .listOperationalManifests()
+      .find((row) => row.id === InjectedProviderId)!
+    listed.providerScript!.models[0].id = 'snapshot-only'
+    const preset = first.providerCollection
+      .listPresets()
+      .find((row) => row.id === InjectedProviderId)!
+    preset.providerScript!.models.length = 0
+    first.providerCollection.getDefaultRuntimeConfig(InjectedProviderId).providerScript!.label =
+      'snapshot-only'
+    const scriptCatalog = first.providerCollection.requireCatalog(InjectedProviderId)
+    const catalogModalities = scriptCatalog.models[0].inputModalities as string[]
+    catalogModalities[0] = 'audio'
+    expect(first.providerCollection.requireOperationalManifest(InjectedProviderId)).toEqual(
+      expectedScript
+    )
+    expect(first.providerScriptRegistry.getProviderScript(InjectedProviderId)?.manifest).toEqual(
+      expectedScript.providerScript
+    )
+    expect(
+      first.providerCollection.requireCatalog(InjectedProviderId).models[0].inputModalities
+    ).toEqual(['text', 'image'])
   })
 
   test('INV-9 账本永远非负，查不到单价就不算钱', () => {
@@ -422,13 +478,19 @@ async function streamedReasoning(parts: readonly unknown[]): Promise<string[]> {
     limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
   })
   const reasoning: string[] = []
+  const terminal: unknown[] = []
   let text = ''
   for await (const delta of driver.stream(request, new AbortController().signal)) {
     if (delta.type === 'reasoning') reasoning.push(delta.text)
     if (delta.type === 'text') text += delta.text
+    if (delta.type === 'usage' || delta.type === 'finish') terminal.push(delta)
     if (delta.type === 'error') throw Error(delta.message)
   }
   expect(text).toBe('ok')
+  expect(terminal).toEqual([
+    expect.objectContaining({ type: 'usage', inputTokens: 10, outputTokens: 2 }),
+    { type: 'finish', reason: 'stop' },
+  ])
   return reasoning
 }
 
@@ -467,11 +529,23 @@ test('INV-13 思考摘要只转给宿主展示：一条响应只认一路来源�
   expect(
     await streamedReasoning([
       { type: 'reasoning-start', id: 'r:0' },
-      { type: 'reasoning-delta', id: 'r:0', delta: long },
+      { type: 'reasoning-delta', id: 'r:0', delta: `${long}超出部分` },
       { type: 'reasoning-delta', id: 'r:0', delta: '更多' },
       { type: 'reasoning-end', id: 'r:0' },
     ])
   ).toEqual([long])
+  const nearLimit = long.slice(0, -3)
+  expect(
+    await streamedReasoning([
+      { type: 'reasoning-start', id: 'r:0' },
+      { type: 'reasoning-delta', id: 'r:0', delta: nearLimit },
+      { type: 'reasoning-end', id: 'r:0' },
+      { type: 'reasoning-start', id: 'r:1' },
+      { type: 'reasoning-delta', id: 'r:1', delta: '末段' },
+      { type: 'reasoning-delta', id: 'r:1', delta: '更多' },
+      { type: 'reasoning-end', id: 'r:1' },
+    ])
+  ).toEqual([nearLimit, '\n\n末'])
 })
 
 test('INV-14 型号不认思考参数时往下退档重发、退到底不带思考参数，并在同一份运行时里记住；与思考无关的 400 原样交出', async () => {

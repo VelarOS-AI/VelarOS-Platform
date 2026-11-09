@@ -28,6 +28,8 @@ def record(payload: dict, capture: Callable) -> dict:
     # 在目标目录创建临时文件；完成编码后用硬链接原子发布，已有目标绝不覆盖。
     descriptor, temporary = tempfile.mkstemp(prefix=".velaros-record-", suffix=".mp4", dir=output.parent)
     os.close(descriptor)
+    failure: BaseException | None = None
+    published = False
     try:
         image = capture()
         width, height = image.size
@@ -58,11 +60,30 @@ def record(payload: dict, capture: Callable) -> dict:
                     time.sleep(min(remaining, max(0, started + duration_ms / 1000 - time.monotonic())))
             for packet in stream.encode():
                 container.mux(packet)
-        if os.path.getsize(temporary) == 0:
+        encoded_bytes = os.path.getsize(temporary)
+        if encoded_bytes == 0:
             raise ComputerHelperError("UNAVAILABLE", "Encoder produced no recording")
+        result = {"path": str(output), "width": encoded_size[0], "height": encoded_size[1],
+                  "frames": frames, "fps": fps, "durationMs": round((time.monotonic() - started) * 1000),
+                  "bytes": encoded_bytes}
         os.link(temporary, output)
-        return {"path": str(output), "width": encoded_size[0], "height": encoded_size[1],
-                "frames": frames, "fps": fps, "durationMs": round((time.monotonic() - started) * 1000),
-                "bytes": output.stat().st_size}
+        published = True
+        return result
+    except BaseException as error:
+        failure = error
+        raise
     finally:
-        os.unlink(temporary)
+        try:
+            os.unlink(temporary)
+        except Exception as cleanup_error:
+            publication = f"录像已保存到 {output}；" if published else ""
+            if failure is None:
+                raise ComputerHelperError(
+                    "UNAVAILABLE", f"{publication}暂存清理失败（{temporary}）：{cleanup_error}"
+                ) from cleanup_error
+            if not isinstance(failure, Exception):
+                raise failure from cleanup_error
+            code = failure.code if isinstance(failure, ComputerHelperError) else "helper_error"
+            raise ComputerHelperError(
+                code, f"{publication}{failure}；暂存清理失败（{temporary}）：{cleanup_error}"
+            ) from failure

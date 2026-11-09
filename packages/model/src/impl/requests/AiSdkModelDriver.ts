@@ -204,7 +204,10 @@ class AiSdkModelDriver implements ModelDriver {
           if (reasoning) reasoningSource = 'raw'
         }
         if (reasoning && reasoningChars < ModelTuning.stream.reasoningChars) {
-          const text = (reasoningBreak ? '\n\n' : '') + reasoning
+          const text = ((reasoningBreak ? '\n\n' : '') + reasoning).slice(
+            0,
+            ModelTuning.stream.reasoningChars - reasoningChars
+          )
           reasoningBreak = false
           reasoningChars += text.length
           yield { type: 'reasoning', text }

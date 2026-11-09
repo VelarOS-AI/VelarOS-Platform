@@ -1073,7 +1073,7 @@ function hasMutatingGitArguments(subcommand: string, args: readonly string[]): b
 /** 判断一条 shell 命令在任何参数组合下都不会写盘：白名单命令加整体否决，拿不准一律判为非只读。 */
 export function isShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
-  if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
+  if (!trimmed || /[\r\n><`$(){}]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
   return trimmed.split(/&&|\|\||;|\|/).every((segment) => {
     // env、xargs 这类前缀命令后面才是真正要跑的程序，按它判断；前缀本身在只读白名单里也不能放行。提权的一律不算只读。
     if (/(?:^|\s)(?:sudo|doas|runas)\b/i.test(segment)) return false
