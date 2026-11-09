@@ -264,6 +264,7 @@ describe('读写', () => {
       ['save', { ...entry('a'), tags: '发版' }],
       ['save', { ...entry('a'), tags: ['发版,提交'] }],
       ['save', { ...entry('a'), tags: ['x'.repeat(MemoryLimits.tagChars + 1)] }],
+      ['save', { ...entry('a'), tags: ['İ'.repeat(Math.floor(MemoryLimits.tagChars / 2) + 1)] }],
       ['save', { ...entry('a'), tags: tooManyTags }],
       ['remove', {}],
       ['remove', { id: 42 }],
@@ -275,6 +276,15 @@ describe('读写', () => {
       ).toBe('VALIDATION')
     }
     expect(await readdir(root)).toEqual([])
+    const tags = [
+      'x'.repeat(MemoryLimits.tagChars),
+      'İ'.repeat(Math.floor(MemoryLimits.tagChars / 2)),
+    ]
+    const normalizedTags = tags.map((tag) => tag.toLowerCase())
+    await space.call('save', entry('tag-boundary', { tags }))
+    expect((await space.call('list'))[0].tags).toEqual(normalizedTags)
+    await space.call('save', entry('tag-boundary'))
+    expect((await space.call('list'))[0].tags).toEqual(normalizedTags)
   })
 
   test('INV-6 prepareRemove 在宿主写屏障前同步核对唯一删除规范，返回独立快照但不承诺 CAS', async () => {

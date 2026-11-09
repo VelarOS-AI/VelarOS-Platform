@@ -856,7 +856,7 @@ export function sandboxApplyFailure(error: unknown, applied: readonly string[]):
   const listed = applied.slice(0, SandboxTuning.listedPaths).join('、')
   return new AppError(
     failure.code,
-    `已经落回了 ${applied.length} 个路径（${listed}），后面的没落：${failure.message}`,
+    `已经落回了 ${applied.length} 个路径（${listed}），操作未完成：${failure.message}`,
     error,
     { executionOutcome: 'failed', applied: [...applied] }
   )
@@ -880,6 +880,7 @@ export async function applyMirrorChanges(
 ): Promise<Omit<SandboxApplyResult, 'sandboxId'>> {
   const applied: string[] = []
   let stage: Nullable<string> = null
+  let failure: Optional<AppError>
   const { root, source } = manifest.record
   try {
     signal?.throwIfAborted()
@@ -1038,8 +1039,23 @@ export async function applyMirrorChanges(
     await removeEmptiedDirectories(root, source, deleted)
     return { created, modified, deleted, skippedGit }
   } catch (error) {
-    throw sandboxApplyFailure(error, applied)
+    failure = sandboxApplyFailure(error, applied)
+    throw failure
   } finally {
-    if (stage) await rm(stage, { recursive: true, force: true })
+    if (stage) {
+      await rm(stage, { recursive: true, force: true }).catch((error: unknown) => {
+        // 清理失败也必须保留已提交路径；已有落回错误时同时保留原因，不让 finally 覆盖它。
+        const cleanupError = AppError.from(error)
+        const outcome = failure ?? sandboxApplyFailure(cleanupError, applied)
+        throw new AppError(
+          outcome.code,
+          failure
+            ? `${outcome.message}；暂存目录清理失败：${cleanupError.message}`
+            : `${outcome.message}（暂存目录清理失败）`,
+          outcome,
+          { ...outcome.context, cleanupError, stagingDirectory: stage }
+        )
+      })
+    }
   }
 }

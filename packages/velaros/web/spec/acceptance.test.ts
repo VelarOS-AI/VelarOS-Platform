@@ -1005,6 +1005,12 @@ describe('读网页', () => {
       ['search', { query: 'x', engine: 'bing' }],
       ['read', { url: '' }],
       ['read', { url: 'file:///etc/hosts' }],
+      ['read', { url: 'file:/etc/hosts' }],
+      ['read', { url: 'file:1234' }],
+      ['read', { url: 'mailto:user@example.com' }],
+      ['read', { url: 'mailto:1234' }],
+      ['read', { url: 'tel:12345' }],
+      ['read', { url: 'custom:1234' }],
       ['read', { url: 'javascript:alert(1)' }],
       ['read', { url: 'https://' }],
       ['read', { url: `https://example.com/${'x'.repeat(WebLimits.urlChars)}` }],
@@ -1029,13 +1035,23 @@ describe('读网页', () => {
 
     // 没写协议的网址按 https 读；null 当作没给
     const page = webSpace({
-      sites: sitesOf({ pages: { 'https://example.com/a': pageSite('正文') } }),
+      sites: sitesOf({
+        pages: {
+          'https://example.com/a': pageSite('正文'),
+          'https://example.com:8080/a': pageSite('端口正文'),
+          'https://localhost:8080/a': pageSite('本机端口正文'),
+        },
+      }),
     })
     const read = await page.operations.read(
       { url: ' example.com/a ', offset: null, maxChars: null } as never,
       page.context
     )
     expect([read.url, read.text]).toEqual(['https://example.com/a', '正文'])
+    const port = await page.operations.read({ url: 'Example.com:8080/a' }, page.context)
+    expect([port.url, port.text]).toEqual(['https://example.com:8080/a', '端口正文'])
+    const local = await page.operations.read({ url: 'localhost:8080/a' }, page.context)
+    expect([local.url, local.text]).toEqual(['https://localhost:8080/a', '本机端口正文'])
   })
 })
 
