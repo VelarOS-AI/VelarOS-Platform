@@ -57,7 +57,7 @@ if (result.checked) console.log(result.result.process)
 - `output` 调用时拍 JSON 快照，原值在 `outcome.output`，没调 `output` 时完整返回值在 `outcome.rawValue`；按 key 调展示、重新投影用 `scriptOutputs`，规则见 [脚本输出观察](../../docs/architecture/script-output-observation.md)。
 - 展示目录的 `totalChars` 与字段引用的 `chars` 按 JSON Pointer 召回正文的 UTF-16 长度计算：字符串为解码原文，其他值为紧凑 JSON。采集计量 `block.chars` 仍按原 JSON 编码大小计算；分页使用读取回执的 `offset + text.length`，到该页 `totalChars` 停止。
 - 输出展示按实际交付编码把正文、目录、问题与省略说明计入整体预算；默认 JSON 保持结构化表示，text 对所有类型独立选择能完整放下的正文。未配置整体上限时，显式 `view.mode: 'full'` 且无数字块上限，按完整选中表示的有界编码申请份额，再由宿主分配；放不下仍交引用。`required` 的自动视图、数字块上限（含零）、整体配置、引用、摘要及选择视图保持原语义。text 在共享份额中先分配 required 和 high，再分配普通块；超出时在该预算内选择完整行或完整条目；短块用不完的份额按既定优先级返还给尚未完整展示的块。结构化结果保留短字段，长文本字段共享剩余预算，片段标明完整行范围与原值 JSON Pointer。块优先级、显式展示上限与原值归档保持各自语义。
-- `nodeSubprocessCodeRunner` 是 POSIX Node 宿主的便利入口，使用当前目录和本机 Node；Electron、Windows 以及受限权限执行通过 `NodeCodeRunnerOptions` 注入实际进程端口。`NodeSubprocessRunnerIsReleaseReady` 保持 false，部署权限仍由宿主验收。
+- `createNodeCodeRunner` 返回的 `NodeCodeRunnerApi` 始终提供 `observationSupport()`；Node/npm 装饰器实时转发原宿主查询并保留 receiver，不缓存状态或按 OS 猜测。`nodeSubprocessCodeRunner` 同样转发内部查询，是 POSIX Node 宿主的便利入口，使用当前目录和本机 Node；Electron、Windows 以及受限权限执行通过 `NodeCodeRunnerOptions` 注入实际进程端口。`NodeSubprocessRunnerIsReleaseReady` 保持 false，部署权限仍由宿主验收。
 
 `NodeCodeRunnerOptions.acquireRuntime` 可在每次执行前获取 `NodeRuntimeLease`，其不可变环境优先于静态 `runtime`。租约的命令目录随 `NodeProcessRequest.binDirectories` 交给进程宿主；内置宿主会将其加入本次 PATH。进程树完整结束后释放，回收不完整时调用可选 retain 保留文件。
 

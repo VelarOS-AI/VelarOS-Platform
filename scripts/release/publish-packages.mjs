@@ -314,6 +314,7 @@ const assertCandidateReceipt = async () => {
     assert.equal(trace.local.archive, candidateReceipt.local.archives[base.fileName])
     assert.equal(trace.validation.javascript, true)
     assert.equal(trace.validation.strictDeclarations, true)
+    assert.equal(trace.validation.nodeEnvironmentQuery, true)
     assert.deepEqual(JSON.parse(await readFile(trace.local.receiptPath, 'utf8')), trace)
   }
 }

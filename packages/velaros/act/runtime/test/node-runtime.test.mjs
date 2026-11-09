@@ -15,14 +15,20 @@ import {
   createNodeCodeRunner,
   NodeDefaultPackages,
   nodeRuntimePackages,
+  nodeSubprocessCodeRunner,
 } from '@velaros-ai/script'
 
 import { ObservationLimits } from '../../../dist/act/runtime/contract/constants.js'
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
-import { createNodeExecutionEnvironment } from '../../../dist/act/runtime/node.js'
+import { runtimeBootstrap } from '../../../dist/act/runtime/impl/RuntimeBootstrap.js'
+import {
+  createNodeExecutionEnvironment,
+  createNodeRuntime,
+} from '../../../dist/act/runtime/node.js'
 import { memoryObservation, memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { executionPolicy } from '../../../dist/act/runtime/utils/execution-policy.js'
+import { createEnvironmentRegistry } from '../../../dist/act/system/index.js'
 import { createLocalShellHost } from '../../../dist/execution/local.js'
 import { skillCapabilityModules } from '../../../dist/skills/index.js'
 import {
@@ -106,6 +112,112 @@ const nativeDone = (message) => ({
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+test('package environment assembly forwards live observation support with its original receiver', async (t) => {
+  const f = await fixture(t)
+  assert.deepEqual(
+    nodeSubprocessCodeRunner.observationSupport(),
+    createNodeCodeRunner({
+      cwd: f.cwd,
+      directory: join(f.root, 'default-query'),
+      execute: noCalls,
+    }).observationSupport()
+  )
+  class QueryHost {
+    #support = { available: false, reason: 'initial host restriction' }
+    queries = 0
+    commands = 0
+    constructor(base) {
+      this.base = base
+    }
+    setSupport(value) {
+      this.#support = value
+    }
+    observationSupport() {
+      this.queries++
+      return this.#support
+    }
+    runCommand(...args) {
+      this.commands++
+      return this.base.runCommand(...args)
+    }
+    runObservationCommand(...args) {
+      this.commands++
+      return this.base.runObservationCommand(...args)
+    }
+  }
+  const host = new QueryHost(f.shell)
+  const environment = createNodeExecutionEnvironment({
+    cwd: f.cwd,
+    directory: join(f.root, 'query-runs'),
+    host,
+  })
+  const registry = createEnvironmentRegistry({
+    directory: join(f.root, 'package-environment'),
+    npm: environment.npm,
+  })
+  const node = Object.assign(
+    Object.create({
+      observationSupport() {
+        assert.equal(this, node)
+        return environment.observationSupport()
+      },
+      execute(...args) {
+        assert.equal(this, node)
+        return environment.execute(...args)
+      },
+    }),
+    { cwd: environment.cwd, directory: environment.directory, npm: environment.npm }
+  )
+  assert.equal(Object.hasOwn(node, 'observationSupport'), false)
+  const storage = localContextStorage({ path: join(f.root, 'query-context.sqlite') })
+  const options = {
+    node,
+    storage,
+    packageEnvironment: registry,
+    binding: { executionIdentity: 'query-host', authorizationScope: 'query-scope' },
+  }
+  const prepared = await runtimeBootstrap.prepare(options)
+  const runtime = await createRuntime(options)
+  const native = await createNodeRuntime({
+    cwd: f.cwd,
+    stateDirectory: join(f.root, 'native-query-state'),
+    host,
+    packageEnvironment: registry,
+    binding: options.binding,
+  })
+  t.after(async () => {
+    await runtime.close()
+    await native.close()
+  })
+  const session = await runtime.openSession('package-query')
+  const nativeSession = await native.openSession('native-package-query')
+  const commands = host.commands
+  for (const support of [
+    { available: false, reason: 'backend refused this policy' },
+    { available: true },
+    { available: false, reason: 'backend policy changed' },
+  ]) {
+    host.setSupport(support)
+    const queries = host.queries
+    assert.equal(prepared.runner.observationSupport(), support)
+    assert.equal(session.executionRunner.observationSupport(), support)
+    assert.equal(nativeSession.executionRunner.observationSupport(), support)
+    assert.equal(host.queries, queries + 3)
+  }
+  const replacement = { available: false, reason: 'replacement query is live' }
+  node.observationSupport = function () {
+    assert.equal(this, node)
+    return replacement
+  }
+  assert.equal(prepared.runner.observationSupport(), replacement)
+  assert.equal(session.executionRunner.observationSupport(), replacement)
+  assert.equal(
+    host.commands,
+    commands,
+    'support queries must not start ordinary or read-only commands'
+  )
+})
 
 for (const explicit of [false, true])
   test(`INV-74 bounded state windows rebuild without losing real Node results or repeating executions (policy=${explicit ? 'explicit' : 'default'})`, async (t) => {

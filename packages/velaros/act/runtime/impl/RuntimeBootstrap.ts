@@ -139,6 +139,9 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             directory: node.directory,
             packageDirectory: node.packageDirectory,
             runtime: node.runtime,
+            get observationSupport() {
+              return node.observationSupport?.bind(node)
+            },
             acquireRuntime: 'acquireRuntime' in node ? node.acquireRuntime : undefined,
             execute: (request, output, signal) =>
               node.execute({ ...request, mode: 'observe' }, output, signal),

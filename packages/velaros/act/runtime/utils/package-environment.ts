@@ -15,6 +15,9 @@ export function withPackageEnvironment(
     packageDirectory: node.packageDirectory,
     runtime: node.runtime,
     npm: node.npm,
+    get observationSupport() {
+      return node.observationSupport?.bind(node)
+    },
     authorize: node.authorize ? (request, signal) => node.authorize!(request, signal) : undefined,
     execute: (request, output, signal) => node.execute(request, output, signal),
     acquireRuntime: async (signal) => {

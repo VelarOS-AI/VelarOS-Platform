@@ -65,7 +65,7 @@ export async function validateSessionTraceArchive({
       arch: process.arch,
     },
     fixtures: {},
-    validation: { javascript: false, strictDeclarations: false },
+    validation: { javascript: false, strictDeclarations: false, nodeEnvironmentQuery: false },
     local: { archive: archivePath, consumer, receiptPath },
   }
   const saveReceipt = () => writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
@@ -95,6 +95,7 @@ export async function validateSessionTraceArchive({
     for (const [kind, file] of [
       ['javascript', 'session-trace-consumer.mjs'],
       ['declarations', 'session-trace-consumer.mts'],
+      ['nodeEnvironment', 'node-package-environment-consumer.mjs'],
     ]) {
       receipt.fixtures[kind] = {
         fileName: file,
@@ -130,6 +131,18 @@ export async function validateSessionTraceArchive({
     receipt.local.javascriptOutput = javascript.stdout
     receipt.validation.javascriptOutputSha256 = digest(javascript.stdout)
     receipt.validation.javascript = true
+    await saveReceipt()
+    const nodeEnvironment = await runGuardedCommand({
+      command: process.execPath,
+      args: ['node-package-environment-consumer.mjs'],
+      cwd: consumer,
+      env: environment,
+      timeoutMs: 60_000,
+      operation: 'Consume the same release archive through real Node/package-environment factories',
+    })
+    receipt.local.nodeEnvironmentOutput = nodeEnvironment.stdout
+    receipt.validation.nodeEnvironmentQuery = true
+    receipt.validation.nodeEnvironmentOutputSha256 = digest(nodeEnvironment.stdout)
     await saveReceipt()
     await runGuardedCommand({
       command: process.execPath,

@@ -264,6 +264,10 @@ export default outcome`,
   })
 
   test('INV-5 这个运行器不许发版', () => {
+    expect(nodeSubprocessCodeRunner.observationSupport?.()).toEqual({
+      available: false,
+      reason: '宿主未声明只读程序约束支持',
+    })
     expect(NodeSubprocessRunnerIsReleaseReady).toBe(false)
   })
 
