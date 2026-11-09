@@ -178,6 +178,51 @@ test('旧格式和缺失内容版本的清单都拒绝，原文件保持不变',
   }
 })
 
+test('恢复清单只接受 ignored 的三个字符串枚举值', async () => {
+  const f = await site()
+  try {
+    const record = await f.host.createSandbox({ source: f.source })
+    const path = join(f.base, record.id, 'manifest.json')
+    const original = JSON.parse(await readFile(path, 'utf8'))
+    const cases = [
+      { ignored: ['link'], valid: false },
+      { ignored: ['copy'], valid: false },
+      { ignored: ['skip'], valid: false },
+      { ignored: {}, valid: false },
+      { ignored: { toString: 'copy' }, valid: false },
+      { ignored: 1, valid: false },
+      { ignored: 'unknown', valid: false },
+      { ignored: 'link', valid: true },
+      { ignored: 'copy', valid: true },
+      { ignored: 'skip', valid: true },
+    ]
+    for (const { ignored, valid } of cases) {
+      const changed = structuredClone(original)
+      changed.record.ignored = ignored
+      await writeFile(path, JSON.stringify(changed))
+      // 每次用新宿主恢复，确保读取盘上清单而不是已登记记录的内存快照。
+      const restarted = ioHost(f.base)
+      try {
+        if (valid) {
+          expect(await restarted.getSandboxRecord(record.id)).toMatchObject({
+            id: record.id,
+            ignored,
+          })
+        } else {
+          await expect(restarted.getSandboxRecord(record.id)).rejects.toMatchObject({
+            code: 'NOT_FOUND',
+          })
+          expect(restarted.listSandboxes()).toEqual([])
+        }
+      } finally {
+        await restarted.dispose()
+      }
+    }
+  } finally {
+    await f.close()
+  }
+})
+
 test('丢弃等待操作排空，清理失败保留 owner 和目录，重试成功才删除', async () => {
   const f = await site()
   const entered = Promise.withResolvers<void>()

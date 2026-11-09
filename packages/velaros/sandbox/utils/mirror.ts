@@ -150,7 +150,8 @@ export async function readSandboxManifest(
     !Number.isFinite(parsed.record.createdAt) ||
     typeof parsed.record.network !== 'boolean' ||
     typeof parsed.record.git !== 'boolean' ||
-    !['link', 'copy', 'skip'].includes(String(parsed.record.ignored)) ||
+    !isString(parsed.record.ignored) ||
+    !['link', 'copy', 'skip'].includes(parsed.record.ignored) ||
     !Number.isSafeInteger(parsed.record.fileCount) ||
     Number(parsed.record.fileCount) < 0 ||
     !Number.isSafeInteger(parsed.record.bytes) ||
