@@ -48,8 +48,15 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
               options.registry.assertGranted(owner.manifest.name, owner.generation, name)
             )
           )
-          if (!grants.some((grant) => grant.status === 'fulfilled'))
+          if (!grants.some((grant) => grant.status === 'fulfilled')) {
+            for (const grant of grants)
+              if (
+                grant.status === 'rejected' &&
+                !(grant.reason instanceof AppError && grant.reason.code === 'PERMISSION')
+              )
+                throw grant.reason
             throw new AppError('PERMISSION', `Skill 能力授权已失效：${name}`)
+          }
           if (options.session) {
             const available = owners.filter((_, index) => grants[index]!.status === 'fulfilled')
             const owner =

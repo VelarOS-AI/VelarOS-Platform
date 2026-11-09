@@ -12,6 +12,7 @@ import type {
   CompletedCall,
 } from '../types/script.js'
 
+import { foldCalls } from './calls.js'
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'
 
@@ -34,7 +35,7 @@ export function fitLogsToBudget(logs: readonly string[], notices: CodeCallNotice
 }
 
 /**
- * 执行账按预算收拢：连着的同名同结果折成一条带 `times`，还是太长就保留结尾并说明。
+ * 执行账按预算收拢：带改动引用的逐笔保留；普通调用连着的同名同结果折成一条带 `times`，还是太长就保留结尾并说明。
  *
  * 保留结尾与日志同口径：中断现场在尾部，「最后做成的是哪件」比「第一件是哪件」有用得多。
  */
@@ -42,15 +43,7 @@ export function fitJournalToBudget(
   completed: readonly CompletedCall[],
   notices: CodeCallNotice[]
 ): CompletedCall[] {
-  const folded: CompletedCall[] = []
-  for (const entry of completed) {
-    const last = folded.at(-1)
-    if (isUndefined(last) || last.call !== entry.call || last.ok !== entry.ok) {
-      folded.push({ call: entry.call, ok: entry.ok })
-      continue
-    }
-    last.times = (last.times ?? 1) + 1
-  }
+  const folded = foldCalls(completed)
 
   if (folded.length <= CodeSurfaceTuning.journalEntries) return folded
   const dropped = folded.length - CodeSurfaceTuning.journalEntries

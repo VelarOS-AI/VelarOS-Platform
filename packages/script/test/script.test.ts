@@ -63,12 +63,24 @@ void describe('预算裁剪', () => {
     expect(notices).toHaveLength(0)
   })
 
-  test('执行账只折连着的那几笔，隔开的同名调用仍然分成两条', () => {
+  test('执行账保留独立改动引用，只折连着的普通调用，隔开的同名调用仍分开', () => {
     const notices: unknown[] = []
     const folded = fitJournalToBudget(
       [
         { call: 'demo.read', ok: true },
         { call: 'demo.read', ok: true },
+        {
+          call: 'velaros:project.commit',
+          ok: true,
+          changeRef: 'change:first',
+          changedFiles: ['first.ts'],
+        },
+        {
+          call: 'velaros:project.commit',
+          ok: true,
+          changeRef: 'change:second',
+          changedFiles: ['second.ts'],
+        },
         { call: 'demo.read', ok: false },
         { call: 'demo.read', ok: true },
       ],
@@ -76,6 +88,18 @@ void describe('预算裁剪', () => {
     )
     expect(folded).toEqual([
       { call: 'demo.read', ok: true, times: 2 },
+      {
+        call: 'velaros:project.commit',
+        ok: true,
+        changeRef: 'change:first',
+        changedFiles: ['first.ts'],
+      },
+      {
+        call: 'velaros:project.commit',
+        ok: true,
+        changeRef: 'change:second',
+        changedFiles: ['second.ts'],
+      },
       { call: 'demo.read', ok: false },
       { call: 'demo.read', ok: true },
     ])

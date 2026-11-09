@@ -5,16 +5,19 @@ Skill 环境适配器持有固定 npm 依赖、说明资源与授权租约。产
 ## 用法
 
 ```ts
-import { createSkillRegistry, type SkillRegistryOptions } from '@velaros-ai/velaros/skills'
+import { createSkillRegistry, type SkillEnvironmentLease, type SkillRegistryOptions } from '@velaros-ai/velaros/skills'
 
-async function openEnvironment(options: SkillRegistryOptions) {
+async function withEnvironment<T>(
+  options: SkillRegistryOptions,
+  consume: (environment: SkillEnvironmentLease['environment']) => T | Promise<T>
+) {
   const skills = createSkillRegistry(options)
   const installed = await skills.list()
   const lease = await skills.acquire(installed.map((skill) => ({
     name: skill.manifest.name, generation: skill.generation, grants: [],
   })))
   try {
-    return lease.environment
+    return await consume(lease.environment)
   } finally {
     await lease.release()
   }

@@ -147,7 +147,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       )
       this.assertAvailable(job)
       await this.save(job)
-      this.failures.delete(id)
+      this.failures.delete(job.sessionId)
       this.launch(
         job,
         { text: input.input, origin: { kind: 'parent', sessionId: parent } },
@@ -158,7 +158,7 @@ class AgentSupervisor implements AgentSupervisorApi {
     })
   }
   public async status(parent: string, id: string): Promise<AgentJob> {
-    const live = this.active.get(id)
+    const live = this.active.get(`agent:${parent}:${id}`)
     if (live) {
       if (live.job.parentSessionId !== parent)
         throw new AppError('PERMISSION', '子运行不属于当前父任务')
@@ -166,35 +166,43 @@ class AgentSupervisor implements AgentSupervisorApi {
     }
     const snapshot = await this.options.storage.load(parent)
     const record = snapshot?.records.findLast((r) => r.title === `act:child:${id}`)
-    if (!record) throw new AppError('NOT_FOUND', '子运行不存在或不在当前范围')
+    if (!record) {
+      // 先找本父会话的持久记录；另一个父会话的同名短 id 不能遮住它。
+      if ([...this.active.values()].some((item) => item.job.id === id))
+        throw new AppError('PERMISSION', '子运行不属于当前父任务')
+      throw new AppError('NOT_FOUND', '子运行不存在或不在当前范围')
+    }
     const job = JSON.parse((await this.options.storage.get(parent, record.objectId))!) as AgentJob
     return job.status === 'running' || job.status === 'waiting'
       ? { ...job, status: 'interrupted' }
       : job
   }
   public async wait(parent: string, id: string, signal: AbortSignal): Promise<AgentJob> {
-    await this.status(parent, id)
-    const live = this.active.get(id)
-    const failure = this.failures.get(id)
+    const job = await this.status(parent, id)
+    const live = this.active.get(job.sessionId)
+    const failure = this.failures.get(job.sessionId)
     if (failure?.parent === parent) throw failure.error
-    while (live && this.active.has(id) && !live.job.pending?.length) {
+    while (live && this.active.has(job.sessionId) && !live.job.pending?.length) {
       const revision = this.revisions.get(parent) ?? 0
       await this.waitChange(parent, revision, signal)
-      const failed = this.failures.get(id)
+      const failed = this.failures.get(job.sessionId)
       if (failed) throw failed.error
     }
     signal.throwIfAborted()
     return this.status(parent, id)
   }
   public async reply(parent: string, id: string, requestId: string, value: unknown): Promise<void> {
-    await this.status(parent, id)
-    const live = this.active.get(id)
+    const job = await this.status(parent, id)
+    const live = this.active.get(job.sessionId)
     const request = live?.job.pending?.find((item) => item.id === requestId)
     if (!live?.session || !request)
       throw new AppError('CONFLICT', '子运行请求已结束、被回答或需要中断恢复')
     await live.session.answer({ id: request.id, runId: request.runId, value })
     // 等到原事件流把回答持久化到父任务，随后 wait 不会再次返回同一请求。
-    while (this.active.has(id) && live.job.pending?.some((item) => item.id === requestId))
+    while (
+      this.active.has(job.sessionId) &&
+      live.job.pending?.some((item) => item.id === requestId)
+    )
       await this.waitChange(parent, this.revisions.get(parent) ?? 0, live.controller.signal)
   }
   public async send(
@@ -205,14 +213,14 @@ class AgentSupervisor implements AgentSupervisorApi {
   ): Promise<void> {
     signal?.throwIfAborted()
     const job = await this.status(parent, id)
-    const live = this.active.get(id)
+    const live = this.active.get(job.sessionId)
     if (!live) throw guidanceUnavailable(job)
     const waiting = signal
       ? AbortSignal.any([signal, live.controller.signal])
       : live.controller.signal
     await boundedModelOperation(live.ready, waiting)
     waiting.throwIfAborted()
-    if (!live.accepting || !live.session || this.active.get(id) !== live)
+    if (!live.accepting || !live.session || this.active.get(job.sessionId) !== live)
       throw guidanceUnavailable(await this.status(parent, id))
     await live.session.steer({
       ...(isString(input) ? { text: input } : input),
@@ -220,8 +228,8 @@ class AgentSupervisor implements AgentSupervisorApi {
     })
   }
   public async cancel(parent: string, id: string): Promise<AgentJob> {
-    await this.status(parent, id)
-    const live = this.active.get(id)
+    const job = await this.status(parent, id)
+    const live = this.active.get(job.sessionId)
     if (live) {
       live.controller.abort()
       live.session?.cancel()
@@ -252,7 +260,11 @@ class AgentSupervisor implements AgentSupervisorApi {
       throw new AggregateError(failures, `子运行收尾失败：${failures.map(String).join('; ')}`)
   }
   private assertAvailable(job: AgentJob): void {
-    if (this.closed || this.active.size >= this.options.concurrency || this.active.has(job.id))
+    if (
+      this.closed ||
+      this.active.size >= this.options.concurrency ||
+      this.active.has(job.sessionId)
+    )
       throw new AppError('CONFLICT', '子运行并发额度耗尽或重复激活')
   }
   private launch(
@@ -276,7 +288,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       accepting: false,
       promise: Promise.resolve(),
     }
-    this.active.set(job.id, live)
+    this.active.set(job.sessionId, live)
     live.promise = (async () => {
       const context = createContextRuntime({
         sessionId: job.parentSessionId,
@@ -370,11 +382,11 @@ class AgentSupervisor implements AgentSupervisorApi {
             Object.assign(live.job, { delivery: await this.options.deliver(live.job, result.ref) })
           await this.save(live.job)
         } catch (error) {
-          this.failures.set(job.id, { parent: job.parentSessionId, error })
+          this.failures.set(job.sessionId, { parent: job.parentSessionId, error })
           throw error
         } finally {
           signal.removeEventListener('abort', abort)
-          this.active.delete(job.id)
+          this.active.delete(job.sessionId)
           this.notify(job.parentSessionId)
         }
       }

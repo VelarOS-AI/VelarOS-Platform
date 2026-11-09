@@ -81,13 +81,13 @@ export interface ModelCatalogApi {
 
 export class ModelCatalog implements ModelCatalogApi {
   public manifest(providerId: ChatProviderId): Nullable<ModelProviderOperationalManifest> {
-    return toNullable(
-      ModelProviderOperationalManifests.find((manifest) => manifest.id === providerId)
+    return structuredClone(
+      toNullable(ModelProviderOperationalManifests.find((manifest) => manifest.id === providerId))
     )
   }
 
   public catalog(providerId: ChatProviderId): Nullable<SharedProviderCatalog> {
-    return getSharedProviderCatalogOrNull(providerId)
+    return structuredClone(getSharedProviderCatalogOrNull(providerId))
   }
 
   public models(providerId: ChatProviderId): string[] {

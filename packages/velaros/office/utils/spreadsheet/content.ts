@@ -25,7 +25,9 @@ import type {
   OfficeSpreadsheetInput,
   SpreadsheetSheetInput,
 } from '../../types/office.js'
+import { officeError } from '../errors.js'
 import { isMarkdownTableSeparator, parseMarkdownTableRow } from '../markdown.js'
+import { OfficeTuning } from '../tuning.js'
 
 const log = Log.tag('OfficeSpreadsheetContent')
 
@@ -125,29 +127,36 @@ export const spreadsheetSheetArraySchema = z
  * 模型高频把结构化 sheets 序列化成 JSON 字符串传入（union 收字符串，完全合法）；曾被文本
  * 行解析分支当行数据处理，行内容与 showGridLines/freeze 等字段全部静默丢弃且报成功
  * （真机取证）。铁律⑦：自动解析不得静默否决显式结构——能解析出「每项都带 rows 数组的对象
- * 数组」就按结构化 sheets 校验使用，缺 name 自动补齐。
+ * 数组」就按结构化 sheets 校验使用，缺 name 自动补齐；结构不合法直接拒绝，不再回退成普通行数据。
  */
 export function parseStringifiedSpreadsheetSheets(
   content: string
 ): Nullable<SpreadsheetSheetInput[]> {
   if (!content.trim().startsWith('[')) return null
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(content)
-    if (!isArray(parsed) || isEmpty(parsed)) return null
-    const looksLikeSheets = parsed.every((item) => isPlainObject(item) && isArray(item.rows))
-    if (!looksLikeSheets) return null
-
-    const withNames = parsed.map((item, index) => ({
-      name: `Sheet ${index + 1}`,
-      ...(item as Record<string, unknown>),
-    }))
-    const validated = spreadsheetSheetArraySchema.safeParse(withNames)
-    return validated.success ? (validated.data as SpreadsheetSheetInput[]) : null
+    parsed = JSON.parse(content)
   } catch (error) {
     // JSON 不合法说明这段内容本来就不是序列化 sheets，回落到文本表格解析路径。
     log.debug('解析序列化 sheets JSON 失败，回落文本表格解析', { error })
     return null
   }
+  if (!isArray(parsed) || isEmpty(parsed)) return null
+  const looksLikeSheets = parsed.every((item) => isPlainObject(item) && isArray(item.rows))
+  if (!looksLikeSheets) return null
+
+  const withNames = parsed.map((item, index) => ({
+    name: `Sheet ${index + 1}`,
+    ...(item as Record<string, unknown>),
+  }))
+  const validated = spreadsheetSheetArraySchema.safeParse(withNames)
+  if (!validated.success) {
+    const issues = validated.error.issues
+      .slice(0, OfficeTuning.input.reportedIssues)
+      .map((issue) => `${['content', ...issue.path].join('.')}：${issue.message}`)
+    throw officeError('VALIDATION', `createSpreadsheet 的序列化 sheets 不对——${issues.join('；')}`)
+  }
+  return validated.data as SpreadsheetSheetInput[]
 }
 
 /** 将工具入口的 sheets/content 统一整理成工作表数组，执行阶段只处理这一种结构。 */
