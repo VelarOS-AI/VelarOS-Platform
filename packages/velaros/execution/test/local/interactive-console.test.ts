@@ -5,6 +5,8 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { createPlatform } from '@velaros-ai/core/platform'
+
 import type {
   ShellTerminalExit,
   ShellTerminalFactory,
@@ -13,7 +15,9 @@ import type {
 } from '../../contract/requires.js'
 import type { LocalShellHostApi } from '../../impl/local/LocalShellHost.js'
 import { createLocalShellHost } from '../../impl/local/LocalShellHost.js'
+import { ShellCommandRunner } from '../../impl/local/ShellCommandRunner.js'
 import { shellProcessManager } from '../../impl/local/ShellProcessManager.js'
+import type { ShellResolverApi } from '../../impl/local/ShellResolver.js'
 import type {
   ShellBackgroundTaskRecord,
   ShellConsoleOutputEvent,
@@ -133,6 +137,93 @@ async function waitUntilExited(
 }
 
 describe('交互式命令的控制台', () => {
+  test('dispose reentered by the terminal factory checks the late owner and permits cleanup retry', async () => {
+    let exited: ((event: ShellTerminalExit) => void) | undefined
+    let managed: ReturnType<typeof shellProcessManager.manageTerminal> | undefined
+    let closing: Promise<void> | undefined
+    let kills = 0
+    const terminal: ShellTerminalProcess = {
+      pid: 2_147_483_000,
+      onData: () => ({ dispose: () => {} }),
+      onExit: (listener) => {
+        exited = listener
+        return { dispose: () => {} }
+      },
+      write: () => {},
+      resize: () => {},
+      kill: () => {
+        kills++
+      },
+    }
+    const shells: ShellResolverApi = {
+      resolve: () => ({
+        shellPath: 'fixture-shell',
+        kind: 'cmd',
+        name: 'fixture',
+        args: [],
+        env: {},
+        readiness: 'ready',
+        version: 'fixture',
+        recommendation: null,
+      }),
+      resolveReady: async () => shells.resolve(),
+      resolveCommand: async (name) => ({ name, available: false, path: null, kind: null }),
+      inspectPath: async () => [],
+      refreshWindowsEnvironment: async () => ({ env: {}, revision: '', refreshed: true }),
+    }
+    const runner = new ShellCommandRunner({
+      platform: 'win32',
+      platformTools: createPlatform({ platform: 'win32', env: {} }),
+      confinement: { mode: 'danger-full-access', workspaceRoot: process.cwd() },
+      shells,
+      processes: {
+        manage: shellProcessManager.manage.bind(shellProcessManager),
+        manageTerminal: (process, options) => {
+          managed = shellProcessManager.manageTerminal(process, {
+            ...options,
+            terminationDeadlineMs: 10,
+            terminateGraceMs: 1,
+          })
+          return managed
+        },
+        find: shellProcessManager.find.bind(shellProcessManager),
+        captureIdentity: shellProcessManager.captureIdentity.bind(shellProcessManager),
+        resolveStatus: shellProcessManager.resolveStatus.bind(shellProcessManager),
+      },
+      terminal: {
+        spawn: () => {
+          closing = runner.dispose()
+          void closing.catch(() => {})
+          return terminal
+        },
+      },
+    })
+    try {
+      await expect(
+        runner.run('fixture terminal', process.cwd(), {
+          nativeCommand: { file: process.execPath, args: [] },
+          background: true,
+          interactive: true,
+        })
+      ).rejects.toMatchObject({ name: 'AbortError' })
+      expect(closing).toBeDefined()
+      await expect(closing!).rejects.toMatchObject({ code: 'PLATFORM' })
+      expect(kills).toBeGreaterThan(0)
+      expect(managed?.result?.cleanupIncomplete).toBe(true)
+      const incomplete = managed!.result
+      exited!({ exitCode: 0 })
+      await runner.dispose()
+      expect(incomplete?.cleanupIncomplete).toBe(true)
+      expect(managed?.result?.cleanupIncomplete).toBe(false)
+      await expect(runner.run('closed', process.cwd(), {})).rejects.toMatchObject({
+        code: 'CLOSED',
+      })
+    } finally {
+      exited?.({ exitCode: 0 })
+      await runner.dispose()
+    }
+  })
+
   test.skipIf(process.platform !== 'win32')(
     'INV-19 Windows 管道中断终止真实父子进程并等待继承的输出管道关闭',
     async () => {

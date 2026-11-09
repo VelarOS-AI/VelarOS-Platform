@@ -561,6 +561,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   }
 
   private async disposeOwned(): Promise<void> {
+    // 启动工厂可能重入关闭；先排空已受理的启动路径，再核对它们实际交回的 owner。
+    await Promise.allSettled([...this.running])
     const outcomes = await Promise.allSettled(
       [...new Set([...this.owned, ...this.executions.values()])].map(async (owned) => {
         const stopped = await owned.stop('SIGKILL')
@@ -575,7 +577,6 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         }
       })
     )
-    await Promise.allSettled([...this.running])
     const failures = outcomes.flatMap((outcome) =>
       outcome.status === 'rejected' ? [outcome.reason] : []
     )
