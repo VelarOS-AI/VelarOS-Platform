@@ -221,6 +221,7 @@
     "@velaros-ai/model": "workspace:*",
     "@velaros-ai/script": "workspace:*",
     "@velaros-ai/skill-jsts": "workspace:*",
+    "@xmldom/xmldom": "0.8.15",
     "diff": "^8.0.4",
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",

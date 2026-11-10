@@ -1,8 +1,9 @@
-import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
+import JSZip from 'jszip'
 
 import type { OfficeOperationContext } from '../index.js'
 import { officeOperations } from '../index.js'
@@ -55,6 +56,49 @@ async function createRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'velaros-office-truncation-'))
   createdRoots.push(root)
   return root
+}
+
+/** 从真实生成产物改包清单，保留普通部件名字，模拟编辑器重排与合法命名空间写法。 */
+async function createPptxFixture(root: string): Promise<JSZip> {
+  const written = await officeOperations.createPresentation(
+    {
+      outputPath: 'source.pptx',
+      content: '# 第一页\n正文一 & 证据\n# 第二页\n正文二\n# 第三页\n正文三',
+    },
+    createContext(root)
+  )
+  return JSZip.loadAsync(await readFile(written.path))
+}
+
+/** 只改真实夹具的标准 URI 和前缀；生产解析器不参与夹具构造。 */
+function remapPptxFixtureNamespaces(xml: string, strict: boolean): string {
+  const namespaces = strict
+    ? xml
+        .replaceAll(
+          'http://schemas.openxmlformats.org/presentationml/2006/main',
+          'http://purl.oclc.org/ooxml/presentationml/main'
+        )
+        .replaceAll(
+          'http://schemas.openxmlformats.org/drawingml/2006/main',
+          'http://purl.oclc.org/ooxml/drawingml/main'
+        )
+        .replaceAll(
+          'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+          'http://purl.oclc.org/ooxml/officeDocument/relationships'
+        )
+    : xml
+  return namespaces
+    .replaceAll('xmlns:p=', 'xmlns=')
+    .replace(/(<\/?)(?:p):/g, '$1')
+    .replaceAll('xmlns:a=', 'xmlns:draw=')
+    .replace(/(<\/?)a:/g, '$1draw:')
+    .replaceAll('xmlns:r=', 'xmlns:link=')
+    .replaceAll(' r:', ' link:')
+    .replace(
+      'xmlns="http://schemas.openxmlformats.org/package/2006/relationships"',
+      'xmlns:pkg="http://schemas.openxmlformats.org/package/2006/relationships"'
+    )
+    .replace(/(<\/?)(Relationships?)(?=[\s/>])/g, '$1pkg:$2')
 }
 
 /** 造一份「已安装」的 MarkItDown 资源包；命令本身不会被执行（runCommand 是替身）。 */
@@ -177,6 +221,161 @@ describe('预览页数与 Markdown 截断的如实上报', () => {
     expect(preview.summary.slides).toBe(5)
     expect(preview.summary.previewedSlides).toBe(2)
     expect(preview.slides).toHaveLength(2)
+  })
+
+  test('pptx 预览按清单重排并排除孤立页，空演示文稿如实报零页', async () => {
+    const root = await createRoot()
+    const context = createContext(root)
+    const zip = await createPptxFixture(root)
+    const presentation = await zip.file('ppt/presentation.xml')!.async('string')
+    const slideIds = [...presentation.matchAll(/<p:sldId\s[^>]*\/>/g)].map((match) => match[0])
+    expect(slideIds).toHaveLength(3)
+    zip.file(
+      'ppt/presentation.xml',
+      presentation.replace(
+        /<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/,
+        `<p:sldIdLst>${slideIds[2]}${slideIds[0]}${slideIds[1]}</p:sldIdLst>`
+      )
+    )
+    zip.file('ppt/slides/slide99.xml', await zip.file('ppt/slides/slide2.xml')!.async('string'))
+    zip.file(
+      'ppt/slides/_rels/slide99.xml.rels',
+      await zip.file('ppt/slides/_rels/slide2.xml.rels')!.async('string')
+    )
+    zip.file(
+      '[Content_Types].xml',
+      (await zip.file('[Content_Types].xml')!.async('string')).replace(
+        '</Types>',
+        '<Override PartName="/ppt/slides/slide99.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>'
+      )
+    )
+    await writeFile(join(root, 'reordered.pptx'), await zip.generateAsync({ type: 'nodebuffer' }))
+    const preview = await officeOperations.preview(
+      { inputPath: 'reordered.pptx', maxItems: 2 },
+      context
+    )
+    expect(preview.summary).toMatchObject({ slides: 3, previewedSlides: 2 })
+    expect(preview.title).toBe('第三页')
+    expect(preview.slides?.map(({ index, title }) => ({ index, title }))).toEqual([
+      { index: 1, title: '第三页' },
+      { index: 2, title: '第一页' },
+    ])
+
+    zip.remove('ppt/_rels/presentation.xml.rels')
+    for (const list of ['', '<p:sldIdLst/>']) {
+      zip.file(
+        'ppt/presentation.xml',
+        `<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">${list}<p:sldSz cx="9144000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`
+      )
+      await writeFile(join(root, 'empty.pptx'), await zip.generateAsync({ type: 'nodebuffer' }))
+      const empty = await officeOperations.preview({ inputPath: 'empty.pptx' }, context)
+      expect(empty.summary).toMatchObject({ slides: 0, previewedSlides: 0 })
+      expect(empty.slides).toEqual([])
+    }
+  })
+
+  test('pptx 预览通过包级关系读取改名主部件，兼容两套标准命名空间与任意前缀', async () => {
+    for (const strict of [false, true]) {
+      const root = await createRoot()
+      const zip = await createPptxFixture(root)
+      const presentation = await zip.file('ppt/presentation.xml')!.async('string')
+      const relationships = (
+        await zip.file('ppt/_rels/presentation.xml.rels')!.async('string')
+      ).replace(/Target="([^"]+)"/g, 'Target="../../ppt/$1"')
+      zip.remove('ppt/presentation.xml')
+      zip.remove('ppt/_rels/presentation.xml.rels')
+      zip.file('custom/presentation/show.xml', presentation)
+      zip.file('custom/presentation/_rels/show.xml.rels', relationships)
+      zip.file(
+        '_rels/.rels',
+        (await zip.file('_rels/.rels')!.async('string')).replace(
+          'Target="ppt/presentation.xml"',
+          'Target="/custom/presentation/show.xml"'
+        )
+      )
+      zip.file(
+        '[Content_Types].xml',
+        (await zip.file('[Content_Types].xml')!.async('string')).replace(
+          'PartName="/ppt/presentation.xml"',
+          'PartName="/custom/presentation/show.xml"'
+        )
+      )
+      for (const part of Object.values(zip.files)) {
+        if (part.dir || (!part.name.endsWith('.xml') && !part.name.endsWith('.rels'))) continue
+        const xml = remapPptxFixtureNamespaces(await part.async('string'), strict)
+        zip.file(
+          part.name,
+          xml.replace('<draw:t>第一页</draw:t>', '<draw:t><![CDATA[第一<页>]]></draw:t>')
+        )
+      }
+      await writeFile(
+        join(root, 'namespaced.pptx'),
+        await zip.generateAsync({ type: 'nodebuffer' })
+      )
+      const preview = await officeOperations.preview(
+        { inputPath: 'namespaced.pptx', maxItems: 1 },
+        createContext(root)
+      )
+      expect(preview.summary).toMatchObject({ slides: 3, previewedSlides: 1 })
+      expect(preview.title).toBe('第一<页>')
+      expect(preview.slides?.[0]?.bullets).toContain('正文一 & 证据')
+    }
+  })
+
+  test('pptx 预览拒绝损坏关系、DOCTYPE 与 XML 诊断且不发布预览', async () => {
+    const root = await createRoot()
+    const context = createContext(root)
+    const source = await (await createPptxFixture(root)).generateAsync({ type: 'nodebuffer' })
+    for (const broken of [
+      'package',
+      'relationship',
+      'external',
+      'part',
+      'rels',
+      'doctype',
+      'xml',
+    ]) {
+      const zip = await JSZip.loadAsync(source)
+      if (broken === 'package') zip.remove('_rels/.rels')
+      else if (broken === 'relationship') {
+        const xml = await zip.file('ppt/presentation.xml')!.async('string')
+        zip.file(
+          'ppt/presentation.xml',
+          xml.replace(/(<p:sldId\s[^>]*r:id=")[^"]+("[^>]*\/?>)/, '$1missing$2')
+        )
+      } else if (broken === 'external') {
+        const xml = await zip.file('ppt/_rels/presentation.xml.rels')!.async('string')
+        zip.file(
+          'ppt/_rels/presentation.xml.rels',
+          xml.replace(
+            'Target="slides/slide1.xml"',
+            'Target="https://example.invalid/slide.xml" TargetMode="External"'
+          )
+        )
+      } else if (broken === 'part') zip.remove('ppt/slides/slide3.xml')
+      else if (broken === 'rels') zip.remove('ppt/_rels/presentation.xml.rels')
+      else if (broken === 'doctype') {
+        const xml = await zip.file('_rels/.rels')!.async('string')
+        zip.file(
+          '_rels/.rels',
+          xml.replace(
+            /(<\?xml[^?]*\?>)/,
+            '$1<!DOCTYPE Relationships SYSTEM "https://example.invalid/external.dtd">'
+          )
+        )
+      } else {
+        const xml = await zip.file('ppt/slides/slide1.xml')!.async('string')
+        zip.file('ppt/slides/slide1.xml', xml.replace('第一页', '&unknown;'))
+      }
+      await writeFile(join(root, 'broken.pptx'), await zip.generateAsync({ type: 'nodebuffer' }))
+      await expect(
+        officeOperations.preview(
+          { inputPath: 'broken.pptx', maxItems: 1, outputPath: 'broken.html' },
+          context
+        )
+      ).rejects.toMatchObject({ code: 'VALIDATION', context: { executionOutcome: 'not-applied' } })
+      await expect(stat(join(root, 'broken.html'))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
   })
 
   test('命令输出窗口截掉开头时，结果如实标 truncated 并说明返回的是结尾', async () => {
