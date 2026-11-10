@@ -311,7 +311,8 @@ async function definition(
       })
     target = declarationTarget(items[0]!)
   }
-  const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
+  // 先确认目标可读；这次读取与符号后端不是同一份快照，不能拿它的 revision 绑定后端给的位置。
+  await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
   let symbol: ProjectSymbol
   try {
     symbol = await locate(target, context)
@@ -329,13 +330,12 @@ async function definition(
     bodyRange?: ProjectSymbol['range']
     statementRange?: ProjectSymbol['range']
   }
-  // 声明位置绑在解析时看到的那个版本上：文件在这之后被改过，行号就只是候选了。
-  const revision = before.snapshot.revision
+  // listSymbols 没有提供同源的快照版本；前后另读相同内容也不能证明中间解析的是那一版。
   const coverage: CodeResultCoverage = {
     path: symbol.path,
     truncated: false,
-    versioned: isString(revision),
-    revisions: isString(revision) ? [{ revision, scope: symbol.adapterId ?? 'host' }] : [],
+    versioned: false,
+    revisions: [],
   }
   return envelope(
     input,
@@ -348,6 +348,7 @@ async function definition(
       body: detail.bodyRange,
       statement: detail.statementRange,
       coverage,
+      degraded: ['符号后端未提供绑定的源码版本；声明与 body 是此次查询的位置候选。'],
     }
   )
 }

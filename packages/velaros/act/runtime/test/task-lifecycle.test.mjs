@@ -314,6 +314,335 @@ test('completed task snapshot keeps accepted turns and a fixed archive boundary'
   assert.equal(first.completedTurns, 1)
 })
 
+for (const [name, barrierMethod] of [
+  ['completedTask', 'load'],
+  ['taskMaterials', 'records'],
+  ['readTaskMaterial', 'get'],
+  ['trace', 'load'],
+  ['runtime.trace', 'load'],
+  ['runtime.traceBranches', 'selectSnapshot'],
+])
+  test(`host material reads drain before storage closes and reject new admission (${name})`, async (t) => {
+    const storage = localContextStorage({ path: ':memory:' })
+    const entered = Promise.withResolvers()
+    const release = Promise.withResolvers()
+    const order = []
+    let armed = false
+    let closed = false
+    let reads = 0
+    let closing
+    for (const method of ['load', 'records', 'get', 'selectSnapshot']) {
+      const read = storage[method].bind(storage)
+      storage[method] = async (...args) => {
+        reads++
+        if (armed && method === barrierMethod) {
+          armed = false
+          closing = runtime.close({ timeoutMs: 20 })
+          entered.resolve()
+          await release.promise
+          order.push('read-resumed')
+        }
+        assert.equal(closed, false, 'accepted reads retain the live storage owner')
+        return read(...args)
+      }
+    }
+    const close = storage.close.bind(storage)
+    storage.close = async () => {
+      order.push('storage-close')
+      closed = true
+      await close()
+    }
+    // eslint-disable-next-line prefer-const -- 初始化前登记清理；初始化拒绝时也必须关闭存储。
+    let runtime
+    t.after(async () => {
+      release.resolve()
+      await runtime?.close()
+      if (!closed) await storage.close()
+    })
+    runtime = await createRuntime({
+      storage,
+      runner: { run: async () => assert.fail('host material reads must not execute programs') },
+      context: { maintenance: false },
+      model: {
+        id: 'material-read-lifecycle',
+        limits,
+        estimate,
+        async *stream(request) {
+          yield* done(request)
+        },
+      },
+    })
+    const session = await runtime.openSession('material-read')
+    await submit(session, 'completed source task')
+    const task = await session.completedTask()
+    assert.ok(task)
+    const state = await storage.load(session.id)
+    const turn = state.records.find((record) => record.title === 'model-request').ref.id
+    await session.close()
+    assert.equal(
+      runtime.getSession(session.id),
+      undefined,
+      'history reads do not reactivate a session'
+    )
+    const lookups = {
+      completedTask: () => session.completedTask(),
+      taskMaterials: () => session.taskMaterials(task),
+      readTaskMaterial: () => session.readTaskMaterial(task, task.inputs[0]),
+      trace: () => session.trace(turn),
+      'runtime.trace': () => runtime.trace(session.id, { limit: 1 }),
+      'runtime.traceBranches': () => runtime.traceBranches(session.id),
+    }
+    armed = true
+    const pending = lookups[name]()
+    try {
+      await Promise.race([
+        entered.promise,
+        pending.then(() => assert.fail('the accepted read did not reach its storage barrier')),
+      ])
+      await assert.rejects(closing, {
+        code: 'TIMEOUT',
+        phase: 'sessions',
+      })
+      assert.equal(closed, false)
+      const before = reads
+      for (const lookup of Object.values(lookups)) await assert.rejects(lookup, { code: 'CLOSED' })
+      assert.equal(reads, before, 'closed admission must not reach the storage port')
+      release.resolve()
+      const value = await pending
+      if (name === 'completedTask') assert.equal(value.taskId, task.taskId)
+      else if (name === 'taskMaterials')
+        assert.ok(value.length && value.every((record) => record.sequence <= task.through))
+      else if (name === 'readTaskMaterial') assert.equal(value.text, 'completed source task')
+      else if (name === 'trace') assert.equal(value.turnId, turn)
+      else if (name === 'runtime.trace') assert.equal(value.turns[0].turnId, turn)
+      else assert.deepEqual(value, [])
+      assert.equal(runtime.getSession(session.id), undefined)
+    } finally {
+      release.resolve()
+      await Promise.allSettled([pending])
+      await runtime.close()
+    }
+    assert.equal(closed, true)
+    assert.deepEqual(order, ['read-resumed', 'storage-close'])
+  })
+
+test('host material reads keep closed session history bound to the live Runtime authority', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  let modelCalls = 0
+  const runtime = await createRuntime({
+    storage,
+    runner: { run: async () => assert.fail('history reads must not execute programs') },
+    context: { maintenance: false },
+    model: {
+      id: 'closed-session-history',
+      limits,
+      estimate,
+      async *stream(request) {
+        modelCalls++
+        yield* done(request)
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('closed-history')
+  await submit(session, 'first fixed task')
+  const first = await session.completedTask()
+  const turn = (await storage.load(session.id)).records.find(
+    (record) => record.title === 'model-request'
+  ).ref.id
+  await submit(session, { text: 'second current task', task: 'new' })
+  const current = await session.completedTask()
+  await session.close()
+  const calls = modelCalls
+  assert.equal(runtime.getSession(session.id), undefined)
+  assert.equal((await session.completedTask()).taskId, current.taskId)
+  const materials = await session.taskMaterials(first)
+  assert.ok(materials.length && materials.every((record) => record.sequence <= first.through))
+  assert.equal((await session.readTaskMaterial(first, first.inputs[0])).text, 'first fixed task')
+  await assert.rejects(session.readTaskMaterial(first, current.inputs[0]), { code: 'VALIDATION' })
+  await assert.rejects(
+    session.readTaskMaterial(first, { ...first.inputs[0], sessionId: 'foreign' }),
+    { code: 'VALIDATION' }
+  )
+  assert.equal((await session.trace(turn)).turnId, turn)
+  assert.equal((await runtime.trace(session.id, { limit: 1 })).turns[0].turnId, turn)
+  assert.deepEqual(await runtime.traceBranches(session.id), [])
+  await assert.rejects(session.execute({ source: 'export default 1;' }), { code: 'CLOSED' })
+  const original = await storage.load(session.id)
+  const record = original.records.find((item) => item.title === 'runtime:binding')
+  const binding = JSON.parse(await storage.get(session.id, record.objectId))
+  const replaceBinding = async (document) => {
+    const state = await storage.load(session.id)
+    const body = JSON.stringify(document)
+    const objectId = await storage.put(session.id, body)
+    assert.ok(
+      await storage.compareAndSwap(session.id, state.version, {
+        ...state,
+        version: state.version + 1,
+        records: state.records.map((item) =>
+          item.ref.id === record.ref.id ? { ...item, objectId, chars: body.length } : item
+        ),
+      })
+    )
+  }
+  const lookups = [
+    () => session.completedTask(),
+    () => session.taskMaterials(first),
+    () => session.readTaskMaterial(first, first.inputs[0]),
+    () => session.trace(turn),
+    () => runtime.trace(session.id),
+    () => runtime.traceBranches(session.id),
+  ]
+  for (const field of ['executionIdentity', 'authorizationScope']) {
+    await replaceBinding({ ...binding, [field]: `${binding[field]}:changed` })
+    for (const lookup of lookups) await assert.rejects(lookup, { code: 'CONFLICT' })
+    await replaceBinding(binding)
+    assert.equal((await session.completedTask()).taskId, current.taskId)
+  }
+  assert.deepEqual((await runtime.trace('missing')).turns, [])
+  assert.deepEqual(await runtime.traceBranches('missing'), [])
+  assert.equal(await storage.load('missing'), null)
+  assert.equal(modelCalls, calls)
+  assert.equal(runtime.getSession(session.id), undefined, 'history reads never reopen execution')
+})
+
+test('host material reads reject admission from a synchronous model cancellation callback', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  const entered = Promise.withResolvers()
+  const selectSnapshot = storage.selectSnapshot.bind(storage)
+  let authorityReads = 0
+  storage.selectSnapshot = (sessionId, selections) => {
+    if (selections.some((item) => item.title === 'runtime:binding')) authorityReads++
+    return selectSnapshot(sessionId, selections)
+  }
+  // eslint-disable-next-line prefer-const -- 模型取消回调先声明，再绑定实际打开的会话句柄。
+  let session
+  let attempted
+  const runtime = await createRuntime({
+    storage,
+    runner: { run: async () => assert.fail('cancellation must not execute programs') },
+    context: { maintenance: false },
+    model: {
+      id: 'close-admission-reentrancy',
+      limits,
+      estimate,
+      async *stream(request, signal) {
+        const stopped = Promise.withResolvers()
+        const cancel = () => {
+          attempted = session.completedTask().then(
+            (value) => ({ value }),
+            (error) => ({ error })
+          )
+          stopped.resolve()
+        }
+        signal.addEventListener('abort', cancel, { once: true })
+        try {
+          entered.resolve()
+          await stopped.promise
+          signal.throwIfAborted()
+          yield* done(request)
+        } finally {
+          signal.removeEventListener('abort', cancel)
+        }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  session = await runtime.openSession('close-admission')
+  const running = submit(session, 'wait for Runtime close')
+  const settled = Promise.allSettled([running])
+  try {
+    await entered.promise
+    const before = authorityReads
+    await runtime.close()
+    assert.ok(attempted, 'the real model cancellation listener must run')
+    assert.equal((await attempted).error?.code, 'CLOSED')
+    assert.equal(authorityReads, before, 'reentrant history admission must not read storage')
+  } finally {
+    await runtime.close()
+    await settled
+  }
+})
+
+for (const method of ['inspect', 'events'])
+  test(`run archive reads retain storage through reentrant Runtime close (${method})`, async (t) => {
+    const storage = localContextStorage({ path: ':memory:' })
+    const entered = Promise.withResolvers()
+    const release = Promise.withResolvers()
+    const order = []
+    let storageClosed = false
+    let modelCalls = 0
+    const runtime = await createRuntime({
+      storage,
+      runner: { run: async () => assert.fail('archive reads must not execute programs') },
+      context: { maintenance: false },
+      model: {
+        id: 'run-archive-owner',
+        limits,
+        estimate,
+        async *stream(request) {
+          modelCalls++
+          yield* done(request)
+        },
+      },
+    })
+    t.after(async () => {
+      release.resolve()
+      await runtime.close()
+    })
+    const session = await runtime.openSession('run-archive')
+    await submit(session, 'archive one run')
+    await session.close()
+    const read = method === 'inspect' ? () => session.inspect() : () => session.events(0, 2)
+    const expected = await read()
+    const calls = modelCalls
+    assert.equal(runtime.getSession(session.id), undefined)
+    const load = storage.load.bind(storage)
+    let armed = true
+    let closing
+    let reads = 0
+    storage.load = async (id) => {
+      reads++
+      if (armed) {
+        armed = false
+        closing = runtime.close({ timeoutMs: 20 })
+        entered.resolve()
+        await release.promise
+        order.push('read-resumed')
+      }
+      assert.equal(storageClosed, false, 'accepted run archives retain their live storage owner')
+      return load(id)
+    }
+    const close = storage.close.bind(storage)
+    storage.close = async () => {
+      order.push('storage-close')
+      storageClosed = true
+      await close()
+    }
+    const pending = read()
+    try {
+      await Promise.race([
+        entered.promise,
+        pending.then(() => assert.fail('the archive read did not reach storage')),
+      ])
+      await assert.rejects(closing, { code: 'TIMEOUT' })
+      const before = reads
+      await assert.rejects(session.inspect(), { code: 'CLOSED' })
+      await assert.rejects(session.events(), { code: 'CLOSED' })
+      assert.equal(reads, before)
+      assert.equal(storageClosed, false)
+      release.resolve()
+      assert.deepEqual(await pending, expected)
+    } finally {
+      release.resolve()
+      await Promise.allSettled([pending])
+      await runtime.close()
+    }
+    assert.equal(modelCalls, calls)
+    assert.equal(runtime.getSession(session.id), undefined)
+    assert.deepEqual(order, ['read-resumed', 'storage-close'])
+  })
+
 test('memory consolidation reads materials over multiple rounds and stages knowledge without writing', async () => {
   const { createMemoryConsolidation } = await import('../../../dist/act/runtime/index.js')
   let calls = 0

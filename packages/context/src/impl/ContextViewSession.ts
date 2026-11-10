@@ -180,11 +180,9 @@ export class ContextViewSession implements ContextViewApi {
     this.recoveryId = id
     return async () => {
       if (this.recoveryId !== id) return
-      try {
-        await this.end()
-      } finally {
-        if (this.recoveryId === id) this.recoveryId = undefined
-      }
+      // 只释放本代恢复租约；持久提交失败时保留身份，调用方仍可重试。
+      if (this.leaseId === id) await this.end()
+      if (this.recoveryId === id) this.recoveryId = undefined
     }
   }
 

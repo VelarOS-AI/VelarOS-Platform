@@ -766,6 +766,8 @@ class FakeBrowser {
     this.running = true
     this.sockets = []
     this.tabs = new Map([['start', { url: 'about:blank', title: '', browserContextId: 'default' }]])
+    this.targetContextId = 'default'
+    this.hiddenTargets = new Set()
     this.sessions = new Map()
     this.calls = []
     this.downloadBehavior = null
@@ -801,7 +803,9 @@ class FakeBrowser {
       case 'Target.getTargets':
         return reply({
           targetInfos: [
-            ...[...this.tabs].map(([targetId, tab]) => ({ targetId, type: 'page', ...tab })),
+            ...[...this.tabs]
+              .filter(([targetId]) => !this.hiddenTargets.has(targetId))
+              .map(([targetId, tab]) => ({ targetId, type: 'page', ...tab })),
             {
               targetId: 'incognito-tab',
               type: 'page',
@@ -820,7 +824,11 @@ class FakeBrowser {
         })
       case 'Target.createTarget': {
         const targetId = `tab-${this.nextId++}`
-        this.tabs.set(targetId, { url: params.url, title: '', browserContextId: 'default' })
+        this.tabs.set(targetId, {
+          url: params.url,
+          title: '',
+          ...(this.targetContextId ? { browserContextId: this.targetContextId } : {}),
+        })
         return reply({ targetId })
       }
       case 'Target.attachToTarget': {
@@ -1184,6 +1192,68 @@ describe('浏览器级连接上的标签页会话', () => {
 })
 
 describe('外部浏览器启动器', () => {
+  test('browser context ownership keeps default and named contexts exact when listing and switching', async () => {
+    for (const contextId of ['', 'named-context']) {
+      const machine = createMachine()
+      const browser = machine.runUserChrome()
+      browser.targetContextId = contextId
+      browser.tabs.set('start', { url: 'about:blank', title: '', browserContextId: contextId })
+      browser.tabs.set('incognito-tab', {
+        url: 'https://secret.test/',
+        title: 'Private page',
+        browserContextId: 'incognito',
+      })
+      let session
+      let switched
+      try {
+        session = await machine.launcher.launch({ url: 'https://owned.test/', platform: 'darwin' })
+        const targets = await session.driver.listPageTargets()
+        assert.deepEqual(
+          targets.map((target) => target.url),
+          ['about:blank', 'https://owned.test/']
+        )
+        const attaches = browser.commands('Target.attachToTarget').length
+        await assert.rejects(session.driver.switchPageTarget({ targetId: 'incognito-tab' }), {
+          code: 'NOT_FOUND',
+        })
+        assert.equal(browser.commands('Target.attachToTarget').length, attaches)
+        switched = await session.driver.switchPageTarget({ targetId: 'start' })
+        assert.equal(switched.getURL(), 'about:blank')
+        assert.deepEqual(
+          (await switched.listPageTargets()).map((target) => target.url),
+          ['about:blank', 'https://owned.test/']
+        )
+      } finally {
+        switched?.dispose()
+        session?.dispose()
+        machine.launcher.dispose()
+      }
+    }
+  })
+
+  test('browser context ownership rejects a missing created target before attaching any page', async () => {
+    const machine = createMachine()
+    const browser = machine.runUserChrome()
+    browser.hiddenTargets.add('tab-1')
+    try {
+      await assert.rejects(
+        machine.launcher.launch({ url: 'https://owned.test/', platform: 'darwin' }),
+        { code: 'NOT_FOUND' }
+      )
+      await settle()
+      assert.equal(browser.commands('Target.attachToTarget').length, 0)
+      assert.deepEqual(
+        browser.commands('Target.closeTarget').map((call) => call.params.targetId),
+        ['tab-1']
+      )
+      assert.equal(browser.tabs.has('tab-1'), false)
+      assert.equal(browser.tabs.has('start'), true)
+      assert.deepEqual(machine.kills, [])
+    } finally {
+      machine.launcher.dispose()
+    }
+  })
+
   test('同步spawn失败和Node error事件都拒绝启动并回收未启动的临时profile', async () => {
     for (const mode of ['throw', 'error']) {
       const failure = new Error('ENOENT: browser executable missing')

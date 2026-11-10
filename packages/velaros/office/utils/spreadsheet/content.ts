@@ -188,16 +188,10 @@ export function parseSpreadsheetContentRows(content: string): ExcelCellInput[][]
   if (jsonRows) return jsonRows
   const markdownRows = parseMarkdownSpreadsheetRows(trimmed)
   if (markdownRows) return markdownRows
-  const delimiter = trimmed.includes('\t') ? '\t' : ','
-  return trimmed
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .slice(0, OfficeInputLimits.spreadsheet.rows)
-    .map((line) =>
-      parseDelimitedSpreadsheetLine(line, delimiter)
-        .slice(0, OfficeInputLimits.spreadsheet.columns)
-        .map(coerceSpreadsheetTextCell)
-    )
+  const delimiter = detectSpreadsheetDelimiter(trimmed)
+  return parseDelimitedSpreadsheetRows(trimmed, delimiter).map((row) =>
+    row.map(coerceSpreadsheetTextCell)
+  )
 }
 
 /** 支持 JSON 数组，或形如 { rows: [...] } 的对象，便于工具调用方直接传结构化行数据。 */
@@ -248,15 +242,39 @@ export function parseMarkdownSpreadsheetRows(content: string): Nullable<ExcelCel
   return !isEmpty(rows) ? rows : null
 }
 
-/** 轻量 CSV/TSV 行解析器，处理双引号包裹字段和 "" 转义。 */
-export function parseDelimitedSpreadsheetLine(line: string, delimiter: string): string[] {
-  const cells: string[] = []
+/** 引号外出现制表符时按 TSV 读取，否则沿用 CSV；字段正文里的制表符不改变格式。 */
+function detectSpreadsheetDelimiter(content: string): string {
+  let inQuotes = false
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index]
+    if (char === '"') {
+      if (inQuotes && content[index + 1] === '"') index += 1
+      else inQuotes = !inQuotes
+    } else if (char === '\t' && !inQuotes) return '\t'
+  }
+  return ','
+}
+
+/** 按引号状态解析 CSV/TSV 记录，保留字段里的换行、空行、分隔符和双引号转义。 */
+export function parseDelimitedSpreadsheetRows(content: string, delimiter: string): string[][] {
+  const rows: string[][] = []
+  let cells: string[] = []
   let current = ''
   let inQuotes = false
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index]
+  let recordStart = 0
+  const pushRecord = (recordEnd: number): void => {
+    if (
+      content.slice(recordStart, recordEnd).trim() &&
+      rows.length < OfficeInputLimits.spreadsheet.rows
+    )
+      rows.push([...cells, current].slice(0, OfficeInputLimits.spreadsheet.columns))
+    cells = []
+    current = ''
+  }
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index]
     if (char === '"') {
-      if (inQuotes && line[index + 1] === '"') {
+      if (inQuotes && content[index + 1] === '"') {
         current += '"'
         index += 1
       } else {
@@ -265,14 +283,25 @@ export function parseDelimitedSpreadsheetLine(line: string, delimiter: string): 
       continue
     }
     if (char === delimiter && !inQuotes) {
-      cells.push(current)
+      if (cells.length < OfficeInputLimits.spreadsheet.columns) cells.push(current)
       current = ''
+      continue
+    }
+    if ((char === '\r' || char === '\n') && !inQuotes) {
+      pushRecord(index)
+      if (char === '\r' && content[index + 1] === '\n') index += 1
+      recordStart = index + 1
       continue
     }
     current += char
   }
-  cells.push(current)
-  return cells
+  if (inQuotes)
+    throw officeError(
+      'VALIDATION',
+      'createSpreadsheet 的 content 含未闭合的双引号，请补齐 CSV/TSV 字段引号。'
+    )
+  pushRecord(content.length)
+  return rows
 }
 
 /** JSON 输入里的动态值会被尽量转换成 Excel 可接受的简单值或对象单元格。 */

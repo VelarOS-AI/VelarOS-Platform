@@ -97,6 +97,18 @@ class ActRunService implements ActRunServiceApi {
             turnSignal.throwIfAborted()
             if (!restored) {
               const state = await this.options.storage.load(this.options.sessionId)
+              const startedSequence = state?.task?.startedSequence ?? 0
+              // 按原始受理记录归属核对任务边界，旧事件的未消费身份不能进入显式新任务。
+              const taskInputs = new Set(
+                state?.records
+                  .filter(
+                    (record) =>
+                      record.kind === 'user' &&
+                      record.ref.sessionId === this.options.sessionId &&
+                      record.sequence > startedSequence
+                  )
+                  .map((record) => record.ref.id)
+              )
               const applied = new Set<string>()
               const events: ActRunEvent[] = []
               for (const record of state?.records ?? [])
@@ -110,6 +122,8 @@ class ActRunService implements ActRunServiceApi {
               for (const event of events)
                 if (
                   event.type === 'input' &&
+                  event.ref.sessionId === this.options.sessionId &&
+                  taskInputs.has(event.ref.id) &&
                   !(event.source === 'submit' && event.runId === this.runId) &&
                   !applied.has(event.ref.id) &&
                   !this.inputs.some((item) => item.ref.id === event.ref.id)
@@ -308,7 +322,8 @@ class ActRunService implements ActRunServiceApi {
       Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支')
     })
     try {
-      await this.emit({ type: 'interaction', runId, request })
+      // 交互身份由本运行持有；detail 仍是不透明宿主值，不新增深复制要求。
+      await this.emit({ type: 'interaction', runId, request: { ...request } })
       return await waiting
     } finally {
       this.pending.delete(request.id)
@@ -393,7 +408,7 @@ class ActRunService implements ActRunServiceApi {
       id: this.runId,
       sessionId: this.options.sessionId,
       status: this.status,
-      pending: [...this.pending.values()].map((item) => item.request),
+      pending: [...this.pending.values()].map((item) => ({ ...item.request })),
     }
   }
   private async saveState(): Promise<void> {

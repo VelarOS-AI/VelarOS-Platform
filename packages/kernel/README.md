@@ -140,6 +140,8 @@ await client.dispose()
 - 错误类不出包：一律按 `error.code` 对常量表判断（能力调用 `KernelCallErrorCodes` 进程内与 wire 同码，模块宿主 `KernelErrorCodes`，客户端 `KernelClientErrorCodes`，更新器 `KernelUpdaterErrorCodes`，远程节点 `RemoteNodeErrorCodes`），`message` 只给人看，出事的能力、操作与权限挂在 `details` 上。
 - 不给 `permissionBroker` 就是全拒；操作要的权限位必须同时写进模块清单的 `permissions`，没写的一律拒绝；未知操作在求权限之前就失败，任何一条被拒 provider 代码都不会运行。
 - 模块只能在 `start()` 之前登记；`start()` 与 `dispose()` 只真正跑一次，启动先按依赖序全部激活、再全部就绪，任一步失败按逆序回滚；`lifecycleFailureMode: 'degrade'` 时失败不抛，只交给 `onLifecycleFailure`。
+- 启动中关闭先通知已受理的模块取消，再等待真实激活与回滚结束；迟到的生命周期仍须释放。Launcher 的并发连接串行点火、各自持有客户端，子进程未确认退出前保留原归属。
+- 远程节点撤销信任后，旧调用仍完成真实收尾与审计，结果不进入新信任代的回放缓存；取消同时核对已认证客户端身份。
 - 模块、能力令牌与更新清单共用严格 SemVer：`major.minor.patch[-prerelease][+build]`，核心数字必须是可精确表示的整数，数字预发布标识不带前导零，不接受前导 `v` 或外侧空白；预发布逐段排序，build 不参与比较。依赖范围支持精确版本、`*`、`^`、`~`、比较符交集与 `||`，缺席表示任意，显式空串、空分句和 `x` 写法拒绝；所有显式范围在登记时完整校验，包括没有提供方的可选依赖。
 - `describeComposition()` 是只读观测面：能力的 `active: false` 表示只是声明了、这一代还没注册服务，依赖图解析不了的原因在 `resolutionError`；没有反向改写运行时的入口。
 - 模块健康度采样为独立、递归冻结的 JSON 诊断快照；模块继续修改自己的诊断原件不会改变旧快照。非法 JSON 诊断按本次健康检查失败标记 `unhealthy`，不影响组合诊断或其他模块。

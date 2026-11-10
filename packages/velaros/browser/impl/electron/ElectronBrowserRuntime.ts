@@ -585,6 +585,8 @@ export interface ElectronBrowserRuntimeApi {
 
 class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   private readonly log = Log.tag('ElectronBrowserRuntime')
+  /** 永久释放的准入状态；closeAllSessions 只退休当前页面，不改变它。 */
+  private disposal: 'open' | 'disposing' | 'failed' | 'disposed' = 'open'
   /** 串行化同一个 session 的 WebContents 操作。 */
   private readonly actionQueue = new BrowserSessionActionQueue()
   /** 收集 console/load/render 诊断。 */
@@ -687,6 +689,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
   /** 更新运行时回调。 */
   public setOptions(options: ElectronBrowserRuntimeOptions): void {
+    this.assertOpen()
     if (options.createPageDriver) {
       this.createPageDriver = options.createPageDriver
     }
@@ -696,6 +699,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     ) {
       // 换下来的启动器没人再用：它拉起的浏览器一并收掉（挂在上面的外部页面随连接断开作废）。
       this.externalBrowserLauncher.dispose?.()
+      this.assertOpen()
       this.externalBrowserLauncher = options.externalBrowserLauncher
     }
     if ('systemPointerDriver' in options) {
@@ -710,11 +714,13 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     abortSignal?: AbortSignal,
     onWaitStateChange?: (sessionId: string, state: BrowserUserActivityWaitState) => void
   ): Promise<{ waited: boolean; waitedMs: number }> {
+    this.assertOpen()
     return this.activityCoordinator.waitForUserIdle(sessionId, abortSignal, onWaitStateChange)
   }
 
   /** 标记模型浏览器动作租约，避免把模型自身动作记录成用户活动。 */
   public withModelAction<T>(sessionId: string, action: () => Promise<T>): Promise<T> {
+    this.assertOpen()
     return this.activityCoordinator.withModelAction(sessionId, action)
   }
 
@@ -740,6 +746,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       failedAt: number
     }>
   }> {
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       async () => {
@@ -837,6 +844,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageTargetsResult> {
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       async () => {
@@ -881,6 +889,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserSwitchPageTargetOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserSwitchPageTargetResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -943,6 +952,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<void> {
+    this.assertOpen()
     await this.actionQueue.run(
       sessionId,
       async () => {
@@ -964,6 +974,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -995,6 +1006,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     navigationHistory?: BrowserNavigationHistoryRestore,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
+    this.assertOpen()
     this.latestPresentationTargets.set(sessionId, {
       context,
       webContentsId,
@@ -1060,6 +1072,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: CdpExternalBrowserLaunchOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
+    this.assertOpen()
     return this.launchBrowserPageWithLauncher(
       sessionId,
       context,
@@ -1078,6 +1091,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     behavior: { activate: boolean; visible: boolean },
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -1088,6 +1102,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
           url: launchUrl,
         })
         try {
+          this.assertOpen()
           this.actionQueue.assertAvailable(sessionId)
         } catch (error) {
           launchSession.dispose()
@@ -1127,6 +1142,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
   /** 这个会话眼下有没有活着的外部浏览器页面：不进动作队列、不抛；驱动已经作废的顺手收掉。 */
   public hasExternalPage(sessionId: string): boolean {
+    if (this.disposal !== 'open') return false
     try {
       return !!this.getExternalPageSession(sessionId)
     } catch (error) {
@@ -1147,6 +1163,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       disposePreviousHost?: LooseOptional<boolean>
     } = {}
   ): ExternalBrowserPageSession {
+    this.assertOpen()
     this.actionQueue.assertAvailable(sessionId)
     const previous = this.externalPageSessions.get(sessionId)
     if (previous?.driver === driver) {
@@ -1159,11 +1176,13 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         error: AppError.getMessage(error),
       })
     })
+    this.assertOpen()
     if (previous?.driver !== driver) {
       disposeExternalPageSession(previous, {
         disposeHost: options.disposePreviousHost ?? true,
       })
     }
+    this.assertOpen()
     const disposeHost =
       options.disposeHost ?? (previous?.driver === driver ? previous.disposeHost : null)
     const session: ExternalBrowserPageSession = {
@@ -1174,13 +1193,19 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       title: toNullable(driver.getTitle()),
       disposeHost,
     }
+    this.assertOpen()
     session.unsubscribeDownloads = this.registerExternalDownloadEvents(sessionId, session)
+    if (this.disposal !== 'open') {
+      disposeExternalPageSession(session)
+      this.assertOpen()
+    }
     this.externalPageSessions.set(sessionId, session)
     return session
   }
 
   /** 隐藏会话但不销毁 WebContents。 */
   public async hideSession(sessionId: string): Promise<BrowserPageWindowState> {
+    this.assertOpen()
     return this.actionQueue.run(sessionId, async () => {
       const externalSession = this.getExternalPageSession(sessionId)
       if (externalSession) {
@@ -1244,10 +1269,23 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
   /** 主进程退出时永久释放浏览器 runtime。 */
   public dispose(): void {
+    if (this.disposal === 'disposing' || this.disposal === 'disposed') return
+    this.disposal = 'disposing'
     // 先关会话（各自关掉自己的标签页），再收启动器：连接断开、我们拉起的浏览器杀掉，用户自己的 Chrome 不关。
-    this.closeAllSessions()
-    this.sessionManager.dispose()
-    this.externalBrowserLauncher.dispose?.()
+    try {
+      this.closeAllSessions()
+      this.sessionManager.dispose()
+      this.externalBrowserLauncher.dispose?.()
+      this.disposal = 'disposed'
+    } catch (error) {
+      this.disposal = 'failed'
+      throw error
+    }
+  }
+
+  /** 页面与宿主操作不再向已永久释放的 owner 受理；缓存查询和幂等清理保留原语义。 */
+  private assertOpen(): void {
+    if (this.disposal !== 'open') throw new AppError('CLOSED', '浏览器 runtime 已永久释放。')
   }
 
   private withActivityCallbacks(
@@ -1372,6 +1410,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserCaptureScreenshotOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotArtifact> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.screenshot.captureScreenshot(sessionId, context, options, abortSignal),
@@ -1386,6 +1425,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: { maxWidth?: number; quality?: number } = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPagePreviewFrame> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.screenshot.capturePreviewFrame(sessionId, context, options, abortSignal),
@@ -1401,6 +1441,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     onEvent: (event: BrowserPagePreviewStreamEvent) => void,
     abortSignal?: AbortSignal
   ): Promise<void> {
+    this.assertOpen()
     return this.screenshot.startPreviewFrameStream(
       sessionId,
       context,
@@ -1421,6 +1462,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserTargetActionOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserTargetActionResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.performTargetAction(sessionId, context, options, abortSignal),
@@ -1434,6 +1476,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserInsertTextOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserInsertTextResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.insertText(sessionId, context, options, abortSignal),
@@ -1447,6 +1490,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserKeyInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.keyDown(sessionId, context, input, abortSignal),
@@ -1460,6 +1504,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserKeyInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.keyUp(sessionId, context, input, abortSignal),
@@ -1473,6 +1518,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserMouseButtonInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.mouseDown(sessionId, context, input, abortSignal),
@@ -1486,6 +1532,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserMouseButtonInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.mouseUp(sessionId, context, input, abortSignal),
@@ -1499,6 +1546,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: BrowserWheelInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.mouseWheel(sessionId, context, input, abortSignal),
@@ -1512,6 +1560,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPressKeyOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPressKeyResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.pressKey(sessionId, context, options, abortSignal),
@@ -1525,6 +1574,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserClickCoordinatesOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserClickCoordinatesResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.clickCoordinates(sessionId, context, options, abortSignal),
@@ -1538,6 +1588,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserDragOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserDragResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.dragTargets(sessionId, context, options, abortSignal),
@@ -1551,6 +1602,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserMoveMouseOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.moveMouse(sessionId, context, options, abortSignal),
@@ -1564,6 +1616,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserViewportOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserViewportResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.applyViewport(sessionId, context, options, abortSignal),
@@ -1601,6 +1654,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageZoomOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageZoomResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.interaction.setPageZoom(sessionId, context, options, abortSignal),
@@ -1615,6 +1669,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserPageInspection> {
     // inspectPage 会触碰共享 WebContents，需要通过 runReadOnly 跟导航保持顺序。
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       () => this.pageData.inspectPage(sessionId, context, options, abortSignal),
@@ -1628,6 +1683,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserEvaluateScriptOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserScriptOutcome> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.evaluateScript(sessionId, context, options, abortSignal),
@@ -1640,6 +1696,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserFrameInfo[]> {
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       () => this.pageData.listFrames(sessionId, context, abortSignal),
@@ -1653,6 +1710,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     command: CdpSendInput,
     abortSignal?: AbortSignal
   ): Promise<unknown> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () =>
@@ -1671,6 +1729,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     query: CdpEventsInput,
     abortSignal?: AbortSignal
   ): Promise<BrowserProtocolEvents> {
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       () =>
@@ -1688,6 +1747,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     _context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<void> {
+    this.assertOpen()
     return this.actionQueue.run(sessionId, () => this.protocolSessions.close(sessionId), {
       signal: abortSignal,
       label: 'resetProtocolSession',
@@ -1717,6 +1777,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     input: { script: BrowserUserScriptRecord; code: string; force?: boolean },
     abortSignal?: AbortSignal
   ): Promise<BrowserUserScriptLastRun> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -1786,6 +1847,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserFetchResourceOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserFetchResourceResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.fetchResource(sessionId, context, options, abortSignal),
@@ -1799,6 +1861,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageDiagnosticsOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPageDiagnostics> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.getPageDiagnostics(sessionId, context, options, abortSignal),
@@ -1812,6 +1875,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserUploadFileOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserUploadFileResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.uploadFile(sessionId, context, options, abortSignal),
@@ -1825,6 +1889,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserExportPagePdfOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserExportPagePdfResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.exportPagePdf(sessionId, context, options, abortSignal),
@@ -1838,6 +1903,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkControlOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkControlResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.configureNetwork(sessionId, context, options, abortSignal),
@@ -1851,6 +1917,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkResponseBodyOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkResponseBodyResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.readNetworkResponseBody(sessionId, context, options, abortSignal),
@@ -1864,6 +1931,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserNetworkRequestDetailsOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserNetworkRequestDetailsResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.readNetworkRequestDetails(sessionId, context, options, abortSignal),
@@ -1877,6 +1945,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageWaitOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWaitResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.pageData.waitForPage(sessionId, context, options, abortSignal),
@@ -1891,6 +1960,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPageNavigationOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageNavigationResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -2010,6 +2080,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     _context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPendingEventsResult> {
+    this.assertOpen()
     return this.actionQueue.runReadOnly(
       sessionId,
       async () => {
@@ -2035,6 +2106,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandleDialogOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandleDialogResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -2062,6 +2134,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandleDownloadOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandleDownloadResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -2095,6 +2168,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHandlePermissionOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserHandlePermissionResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       async () => {
@@ -2126,6 +2200,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserPerformanceTraceStartOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserPerformanceTraceStartResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.performance.startTrace(sessionId, context, options, abortSignal),
@@ -2139,6 +2214,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPerformanceTraceStopResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.performance.stopTrace(sessionId, context, abortSignal),
@@ -2164,6 +2240,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserHeapSnapshotOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserHeapSnapshotResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.performance.captureHeapSnapshot(sessionId, context, options, abortSignal),
@@ -2178,6 +2255,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserScreencastStartOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreencastStartResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.screenshot.startScreencast(sessionId, context, options, abortSignal),
@@ -2192,6 +2270,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     options: BrowserScreencastStopOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreencastStopResult> {
+    this.assertOpen()
     return this.actionQueue.run(
       sessionId,
       () => this.screenshot.stopScreencast(sessionId, context, options, abortSignal),

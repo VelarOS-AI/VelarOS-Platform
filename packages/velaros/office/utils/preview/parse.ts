@@ -10,9 +10,16 @@ import { isArray, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 
 import type { PreviewOutlineItem, PreviewSheet, PreviewSlide } from '../../types/office.js'
 import type { MammothModule, OfficePreviewKind, ParsedOfficePreview } from '../../types/preview.js'
+import { officeError } from '../errors.js'
 
 import { buildSheetPreviewHtml, buildSlidePreviewHtml } from './html.js'
-import { countMatches, decodeHtmlText, htmlToText, sanitizePreviewHtml } from './sanitize.js'
+import {
+  extractPptxDrawingText,
+  pptxPresentationPath,
+  pptxRelationshipsPath,
+  pptxSlidePaths,
+} from './pptx.js'
+import { countMatches, htmlToText, sanitizePreviewHtml } from './sanitize.js'
 
 /** 静态导入确保独立 Host bundle 收入该依赖；这里只保留工具实际使用的窄接口，避免泄漏 Mammoth 全量 API。 */
 export const mammoth = mammothPackage as MammothModule
@@ -80,17 +87,24 @@ export async function parsePptxPreview(
   maxItems: number
 ): Promise<ParsedOfficePreview> {
   const zip = await JSZip.loadAsync(await readFile(inputPath))
+  const presentationPath = pptxPresentationPath(await readPptxXmlPart(zip, '_rels/.rels'))
   // 先数全量再截取：summary 报的是文档事实（共几页），previewedSlides 才是本次预览了几页。
-  // 两者合一的话，maxItems 一小，模型看到的「共 2 页」就是假的（xlsx 一直是分开报的）。
-  const allSlideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort(compareOfficeXmlPartNames)
+  // 页序取自主清单与关系，物理部件名不代表当前页序，孤立的 slide 文件也不算页。
+  const allSlideFiles = pptxSlidePaths(
+    await readPptxXmlPart(zip, presentationPath),
+    await zip.file(pptxRelationshipsPath(presentationPath))?.async('string'),
+    presentationPath
+  )
+  for (const partPath of allSlideFiles) {
+    if (!zip.file(partPath))
+      throw officeError('VALIDATION', `PPTX 的幻灯片部件 ${partPath} 不存在。`)
+  }
   const slideFiles = allSlideFiles.slice(0, maxItems)
 
   const slides: PreviewSlide[] = []
   for (const [index, fileName] of slideFiles.entries()) {
-    const xml = await zip.file(fileName)?.async('string')
-    const texts = xml ? extractDrawingText(xml).filter(Boolean) : []
+    const xml = await readPptxXmlPart(zip, fileName)
+    const texts = extractPptxDrawingText(xml, fileName).filter(Boolean)
     slides.push({
       index: index + 1,
       title: texts[0] ?? `第 ${index + 1} 页`,
@@ -118,6 +132,13 @@ export async function parsePptxPreview(
     slides,
     htmlBody,
   }
+}
+
+/** PPTX 清单与被引用部件必须实际存在，不以空页或物理文件排序掩盖损坏关系。 */
+async function readPptxXmlPart(zip: JSZip, partPath: string): Promise<string> {
+  const part = zip.file(partPath)
+  if (!part) throw officeError('VALIDATION', `PPTX 部件 ${partPath} 不存在。`)
+  return part.async('string')
 }
 
 /** 解析 .xlsx：按 maxItems 取前几张表，每张抽样前若干行列。 */
@@ -189,13 +210,6 @@ export function extractHtmlTagText(html: string, tagName: string): string[] {
   return [...html.matchAll(expression)].map((match) => htmlToText(match[1] ?? '').trim())
 }
 
-/** 抽出 DrawingML（幻灯片正文）里的文本片段。 */
-export function extractDrawingText(xml: string): string[] {
-  return [...xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)].map((match) =>
-    decodeHtmlText(match[1] ?? '').trim()
-  )
-}
-
 /** 把 ExcelJS 的单元格值压成可展示的文本：日期、公式、富文本各有各的形状。 */
 export function cellValueToText(value: CellValue): string {
   if (!isPresent(value)) return ''
@@ -209,14 +223,4 @@ export function cellValueToText(value: CellValue): string {
       .map((part) => (isPlainObject(part) ? String(part.text ?? '') : ''))
       .join('')
   return JSON.stringify(value)
-}
-
-/** 按部件名里的序号排序，slide2.xml 排在 slide10.xml 前面。 */
-export function compareOfficeXmlPartNames(a: string, b: string): number {
-  return getOfficePartNumber(a) - getOfficePartNumber(b)
-}
-
-/** 取部件名末尾的序号。 */
-export function getOfficePartNumber(name: string): number {
-  return Number(name.match(/(\d+)\.xml$/)?.[1] ?? 0)
 }

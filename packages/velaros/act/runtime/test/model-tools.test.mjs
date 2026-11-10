@@ -330,13 +330,20 @@ test('durable model-tool quotas survive coordinator replacement; resume retains 
 
 test('maintenance retains a leaf slot after business quota exhaustion and cannot recurse', async (t) => {
   const f = await coordinatorFixture(t, { maxDepth: 2, maxChildren: 1, maxSessions: 1 })
+  assert.equal(f.tools.rootSessionId('root'), 'root')
+  assert.throws(() => f.tools.rootSessionId('unknown'), { code: 'MODEL_TOOL_SCOPE' })
   const business = await f.tools.begin('tool:a', 'root', 'agent', 10000, f.signal)
   const maintenance = await f.tools.begin('context:tool:a', 'tool:a', 'context', 10000, f.signal)
+  assert.equal(f.tools.rootSessionId('tool:a'), 'root')
+  assert.equal(f.tools.rootSessionId('context:tool:a'), 'root')
   await assert.rejects(f.tools.begin('tool:bad', 'context:tool:a', 'search', 10000, f.signal), {
     code: 'MODEL_TOOL_LEAF',
   })
   await maintenance.close()
+  assert.throws(() => f.tools.rootSessionId('context:tool:a'), { code: 'MODEL_TOOL_SCOPE' })
   await business.close()
+  f.tools.releaseRoot('root')
+  assert.throws(() => f.tools.rootSessionId('root'), { code: 'MODEL_TOOL_SCOPE' })
 })
 
 test('search is a leaf even when an internal caller attempts to open another model tool', async (t) => {

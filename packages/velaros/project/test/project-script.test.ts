@@ -55,16 +55,57 @@ describe('九个 intent 的代码查询', () => {
     const detail = await query({ intent: 'definition', target: symbol.target })
     expect(detail.declaration).toMatchObject({ startLine: 1, endLine: 3 })
     expect(detail.body).toBeDefined()
-    // 覆盖范围照声明的形状给：绑在解析时的版本上，版本记在 revisions 里。
+    // 后端没有给符号绑定的版本，单独读盘的 revision 不能作为解析位置的版本证明。
     expect(detail.coverage).toEqual({
       path: 'service.ts',
       truncated: false,
-      versioned: true,
-      revisions: [{ revision: expect.any(String), scope: 'velaros.typescript.ast' }],
+      versioned: false,
+      revisions: [],
     })
+    expect(detail.degraded.join('')).toContain('未提供绑定的源码版本')
     expect(detail.sources).toEqual([{ backend: 'velaros.typescript.ast' }])
     // 回执提供范围，由调用方按需读取对应正文。
     expect(JSON.stringify(detail)).not.toContain('return')
+  })
+
+  test('definition 首读之后发生外部编辑时，后续声明位置不冒充绑定首读版本', async () => {
+    const space = await projectToolFixture({ root, plugins: [typescriptPlugin()] })
+    const read = space.kernel.read.bind(space.kernel)
+    let firstRead!: () => void
+    let resume!: () => void
+    const entered = new Promise<void>((resolve) => {
+      firstRead = resolve
+    })
+    const barrier = new Promise<void>((resolve) => {
+      resume = resolve
+    })
+    let captured = false
+    space.kernel.read = async (input) => {
+      const result = await read(input)
+      if (!captured) {
+        captured = true
+        firstRead()
+        await barrier
+      }
+      return result
+    }
+    const querying = space.call('code', 'query', { intent: 'definition', target })
+    await entered
+    try {
+      await writeFile(join(root, 'service.ts'), '\n\nexport function Service() {\n  return 2\n}\n')
+    } finally {
+      resume()
+    }
+    const detail = await querying
+    expect(detail.declaration).toMatchObject({ startLine: 3, endLine: 5 })
+    expect(detail.body).toBeDefined()
+    expect(detail.coverage).toEqual({
+      path: 'service.ts',
+      truncated: false,
+      versioned: false,
+      revisions: [],
+    })
+    expect(detail.degraded.join('')).toContain('未提供绑定的源码版本')
   })
 
   test('definition 在这个文件里找不到声明时给按名字找到的候选，而不是空手回去', async () => {

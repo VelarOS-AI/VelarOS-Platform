@@ -96,10 +96,12 @@ export class SandboxOperations implements SandboxOperationsApi {
   ): Promise<SandboxRunResult> {
     ctx.abortSignal.throwIfAborted()
     const id = sandboxIdOf(input?.id)
-    if (!isString(input.command) || isEmpty(input.command.trim()))
+    const command = input.command
+    if (!isString(command) || isEmpty(command.trim()))
       throw new AppError('VALIDATION', 'run 要一条命令（command）')
+    const timeoutMs = sandboxTimeoutOf(input.timeoutMs)
     // 危险命令在镜像里照常先问（ADR 0006）：写不出镜像，但用户要看得到脚本在做什么；被拒就抛错，宿主一个进程都不起。
-    const request = this.rules.prepareRun(id, input.command)
+    const request = this.rules.prepareRun(id, command)
     if (request)
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     ctx.abortSignal.throwIfAborted()
@@ -107,13 +109,13 @@ export class SandboxOperations implements SandboxOperationsApi {
     const outcome = await ctx.sandbox.runInSandbox(
       {
         sandboxId: id,
-        command: input.command,
-        timeoutMs: sandboxTimeoutOf(input.timeoutMs),
+        command,
+        timeoutMs,
         maxOutputChars: ShellLimits.outputChars,
       },
       ctx.abortSignal
     )
-    return { ...outcome, id, command: input.command }
+    return { ...outcome, id, command }
   }
 
   public async diff(input: SandboxDiffInput, ctx: SandboxOperationContext): Promise<SandboxDiff> {

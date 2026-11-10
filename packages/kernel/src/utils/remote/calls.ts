@@ -12,6 +12,11 @@ import { permissionDeniedFailure, RemoteNodeClientError } from '../errors'
 import { KernelTuning } from '../tuning'
 import type { RemoteNodeError, RemoteNodeInvoke } from '../wire/remote-node'
 
+/** 回放、取消与在途去重共用已认证身份和信任代，不把调用号当授权凭据。 */
+export function remoteNodeCallKey(generation: number, clientId: string, callId: string): string {
+  return JSON.stringify([generation, clientId, callId])
+}
+
 /** 一次调用的可读名字 `<能力>.<操作>`;只进日志与失败文案。 */
 export function describeRemoteNodeCall(request: RemoteNodeInvokeRequest): string {
   return `${request.capabilityId}.${request.operation}`

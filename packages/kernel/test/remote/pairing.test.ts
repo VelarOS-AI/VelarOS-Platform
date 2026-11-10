@@ -1,16 +1,172 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import { KernelVersionAxes } from '../../src/contract/constants'
 import type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } from '../../src/contract/requires'
 import type { RemoteNodeServerCredentialStore as NodeCredentialStore } from '../../src/contract/requires'
 import { RemoteNodeClient } from '../../src/impl/remote-client/RemoteNodeClient'
 import { RemoteNodeModuleApiVersion } from '../../src/impl/remote-client/RemoteNodeProjection'
+import { RemoteNodeCallRunner } from '../../src/impl/remote-node/RemoteNodeCallRunner'
 import { RemoteNodeServer } from '../../src/impl/remote-node/RemoteNodeServer'
 import type { RemoteNodeCredentials } from '../../src/types/remote-client'
-import type { RemoteNodePairedCredential } from '../../src/types/remote-node'
+import type { RemoteNodeAuditEntry, RemoteNodePairedCredential } from '../../src/types/remote-node'
+import type { RemoteNodeInvoke, RemoteNodeResult } from '../../src/types/wire'
 import { computeManifestRevision, createManifest } from '../../src/utils/remote/manifest'
 
 const PairingCode = '123456'
+
+for (const nextClientId of ['client-b', 'client-a']) {
+  test(`remote trust retirement isolates late calls for ${nextClientId}`, async () => {
+    const timers = new TimerScope({ name: 'remote-trust-test' })
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const nextDone = Promise.withResolvers<void>()
+    const oldIdDone = Promise.withResolvers<void>()
+    const deliveries: Array<{ clientId: string; result: RemoteNodeResult }> = []
+    const audit: RemoteNodeAuditEntry[] = []
+    const executed: unknown[] = []
+    let oldSignal: AbortSignal | undefined
+    const runner = new RemoteNodeCallRunner({
+      timers,
+      now: Date.now,
+      maxConcurrent: 1,
+      invoker: {
+        invoke: async (request, signal) => {
+          executed.push(request.input)
+          if (request.input === 'old-private-output') {
+            oldSignal = signal
+            entered.resolve()
+            await release.promise
+          }
+          return { status: 'success', output: request.input }
+        },
+      },
+      audit: {
+        record: (entry) => {
+          audit.push(entry)
+        },
+      },
+      deliver: (clientId, result) => {
+        deliveries.push({ clientId, result })
+        if (result.callId === 'next') nextDone.resolve()
+        if (result.callId === 'old' && result.output === 'new-public-output') oldIdDone.resolve()
+      },
+    })
+    const frame = (callId: string, input: string): RemoteNodeInvoke => ({
+      type: 'invoke',
+      callId,
+      input,
+      manifestRevision: 'current',
+      capabilityId: 'test.remote',
+      operation: 'read',
+      scope: null,
+      deadlineMs: 60_000,
+    })
+    runner.submit(frame('old', 'old-private-output'), 'client-a', 'A', 'current')
+    await entered.promise
+    try {
+      runner.forgetCompleted()
+      runner.submit(frame('next', 'next-public-output'), nextClientId, 'Next', 'current')
+      runner.cancel({ type: 'cancel', callId: 'old', reason: 'not my old call' }, nextClientId)
+      expect(oldSignal?.aborted).toBe(false)
+      expect(executed).toEqual(['old-private-output'])
+      release.resolve()
+      await nextDone.promise
+      expect(audit.some((entry) => entry.callId === 'old' && entry.status === 'success')).toBe(true)
+      expect(deliveries).toEqual([
+        {
+          clientId: nextClientId,
+          result: expect.objectContaining({ callId: 'next', output: 'next-public-output' }),
+        },
+      ])
+      // 旧信任的晚到结果没有重新进入回放；同一 id 在新信任下是独立真实调用。
+      runner.submit(frame('old', 'new-public-output'), nextClientId, 'Next', 'current')
+      await oldIdDone.promise
+      expect(executed).toEqual(['old-private-output', 'next-public-output', 'new-public-output'])
+      const executionCount = executed.length
+      const auditCount = audit.length
+      runner.submit(frame('old', 'new-public-output'), nextClientId, 'Next', 'current')
+      expect(executed.length).toBe(executionCount)
+      expect(audit.length).toBe(auditCount)
+      expect(deliveries.at(-1)).toMatchObject({
+        clientId: nextClientId,
+        result: { callId: 'old', output: 'new-public-output' },
+      })
+    } finally {
+      release.resolve()
+      await nextDone.promise
+      runner.abortAll('test cleanup')
+      timers.dispose()
+    }
+  })
+}
+
+test('remote trust retirement keys replay and cancellation by authenticated client', async () => {
+  const timers = new TimerScope({ name: 'remote-client-owner-test' })
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const finished = Promise.withResolvers<void>()
+  const otherFinished = Promise.withResolvers<void>()
+  const deliveries: Array<{ clientId: string; result: RemoteNodeResult }> = []
+  let signal: AbortSignal | undefined
+  let executions = 0
+  const runner = new RemoteNodeCallRunner({
+    timers,
+    now: Date.now,
+    maxConcurrent: 1,
+    invoker: {
+      invoke: async (request, callSignal) => {
+        executions++
+        signal = callSignal
+        entered.resolve()
+        await release.promise
+        return { status: 'success', output: request.input }
+      },
+    },
+    audit: { record: () => undefined },
+    deliver: (clientId, result) => {
+      deliveries.push({ clientId, result })
+      finished.resolve()
+      if (clientId === 'client-b') otherFinished.resolve()
+    },
+  })
+  const frame: RemoteNodeInvoke = {
+    type: 'invoke',
+    callId: 'shared',
+    manifestRevision: 'current',
+    capabilityId: 'test.remote',
+    operation: 'read',
+    scope: null,
+    input: 'private-a',
+    deadlineMs: 60_000,
+  }
+  runner.submit(frame, 'client-a', 'A', 'current')
+  await entered.promise
+  try {
+    runner.cancel({ type: 'cancel', callId: 'shared', reason: 'foreign' }, 'client-b')
+    expect(signal?.aborted).toBe(false)
+    release.resolve()
+    await finished.promise
+    runner.submit(frame, 'client-a', 'A reconnected', 'current')
+    expect(executions).toBe(1)
+    expect(deliveries).toHaveLength(2)
+    expect(deliveries.every((item) => item.clientId === 'client-a')).toBe(true)
+    runner.submit({ ...frame, input: 'public-b' }, 'client-b', 'B', 'current')
+    expect(deliveries).toHaveLength(2)
+    // pool名额只在物理完成时归还；让同一个真实执行队尾继续处理B。
+    await otherFinished.promise
+    expect(executions).toBe(2)
+    expect(deliveries.at(-1)).toMatchObject({
+      clientId: 'client-b',
+      result: { output: 'public-b' },
+    })
+  } finally {
+    release.resolve()
+    runner.abortAll('test cleanup')
+    timers.dispose()
+  }
+})
 
 class MemoryClientCredentialStore implements RemoteNodeCredentialStore {
   private stored: Nullable<RemoteNodeCredentials> = null

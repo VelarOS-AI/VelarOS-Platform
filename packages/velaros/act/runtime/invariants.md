@@ -88,9 +88,9 @@
 
 ## INV-47 有界关闭保留真实收束与存储
 
-Runtime.close 的等待期限覆盖 openings、会话关闭、模块和存储。超时返回 TIMEOUT 与 pending/phase，继续拒绝新会话；后台只在真实处理器与 journal 收束后关闭存储。取消观察者不能释放仍在执行的写操作锁，迟到提交必须保留 committed。
+Runtime.close 的等待期限覆盖 openings、会话关闭、模块和存储。超时返回 TIMEOUT 与 pending/phase，继续拒绝新会话；后台只在真实处理器、journal 及已受理的任务材料、trace、inspect、events 读取收束后关闭存储。Session.close 只结束执行与交互；历史读取由仍活动 Runtime 的存储 owner 逐次核验原根身份与授权，包括已移出活动表的 Session 句柄。Runtime 关闭才停止新历史读取并排空已受理操作，不为读取激活执行环境。取消观察者不能释放仍在执行的写操作锁，迟到提交必须保留 committed。
 
-验证：`test/foundation-lifecycle.test.mjs`，包括会话在 Kernel.dispose 前挂起的反例；`test/effect-scheduler.test.mjs` 覆盖排队取消与独立资源。
+验证：`test/foundation-lifecycle.test.mjs`，包括会话在 Kernel.dispose 前挂起的反例；`test/effect-scheduler.test.mjs` 覆盖排队取消与独立资源；`test/task-lifecycle.test.mjs` 的 host material reads 与 run archive reads 覆盖历史只读入口、关闭准入与存储排空顺序。
 
 ## INV-71 当前历史里的跨载体原文覆盖与紧凑召回
 
@@ -158,7 +158,7 @@ Trace 的模型请求覆盖只统计本页，核查总账按指定会话快照�
 
 ## INV-81 程序目录复用不可变源码，并保留每次真实执行
 
-默认 Runtime 的 programs 成员复用 ProgramContext 当前会话归档；发布先检查语法与真实可达 import，再按名称 revision CAS 保存不可变 source/modules。参数说明、名称版本与 source 内容版本分别表达，发布不执行用户程序。目录查询核对当前模块授权、完整绑定与任务/授权重置水位；绑定相同沿用发布时检查事实，变动后重新检查。旧 sourceRef 不因别名更新改变，目录元数据不授予代码读取或效果权限；每次 execute 仍使用现有执行链、新 input/blobs、新调用身份与真实回执。
+默认 Runtime 的 programs 成员复用 ProgramContext 当前会话归档；发布先检查语法与真实可达 import，再按名称 revision CAS 保存不可变 source/modules。参数说明、名称版本与 source 内容版本分别表达，发布不执行用户程序。目录查询核对当前模块授权、完整绑定与任务/授权重置水位；绑定相同沿用发布时检查事实，变动后重新检查。明确的授权、挂载缺失与源码/import 拒绝使目录项不可用；存储、归档解析及其他检查后端故障原样抛出，不伪装为空目录。旧 sourceRef 不因别名更新改变，目录元数据不授予代码读取或效果权限；每次 execute 仍使用现有执行链、新 input/blobs、新调用身份与真实回执。
 
 验证：`test/program-catalog.test.mjs` 的真实 programs 发布与 sourceRef 执行、可达附属模块、CAS 并发、错误候选、重启、目录检查成本、当前权限、绑定变化与授权重置。
 

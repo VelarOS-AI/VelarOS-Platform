@@ -12,6 +12,24 @@ import { TextFileErrorCodes } from '../contract/constants.js'
 import { encodeText, gb18030CharWidth } from './encoding.js'
 import { TextFileTuning } from './tuning.js'
 
+/** 按明确的 GB18030 严格解码核对原文；字节宽度相同也不能代替内容相同。 */
+export function assertGb18030Source(original: Uint8Array, before: string): void {
+  let decoded: string
+  try {
+    decoded = new TextDecoder('gb18030', { fatal: true }).decode(original)
+  } catch (error) {
+    throw new AppError(TextFileErrorCodes.lossy, '原始字节不是合法的 GB18030 文本。', error, {
+      bytes: original.length,
+      chars: before.length,
+    })
+  }
+  if (decoded !== before)
+    throw new AppError(TextFileErrorCodes.lossy, '原始字节与文本内容不一致。', undefined, {
+      bytes: original.length,
+      chars: before.length,
+    })
+}
+
 /**
  * 把改过的正文按 GB18030 写成字节，没改的片段沿用原字节：先把原字节按 GB18030 的字符切开、对上 before 的每个 UTF-16 下标，
  * 再用有界的字符级差异找出没改的片段；差异在上限内算不出来就退回按公共前后缀对齐。original 与 before 对不上时抛 lossy。

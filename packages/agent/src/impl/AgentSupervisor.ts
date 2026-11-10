@@ -45,7 +45,7 @@ export interface AgentSupervisorApi {
 /** 同一工厂和存储上的子运行调度；资源冲突在实际启动之前拒绝。 */
 class AgentSupervisor implements AgentSupervisorApi {
   private readonly active = new Map<string, ActiveAgentJob>()
-  private readonly failures = new Map<string, { parent: string; error: unknown }>()
+  private readonly failures = new Map<string, { parent: string; errors: readonly unknown[] }>()
   private readonly revisions = new Map<string, number>()
   private readonly seen = new Map<string, number>()
   private readonly listeners = new Map<string, Set<() => void>>()
@@ -64,14 +64,14 @@ class AgentSupervisor implements AgentSupervisorApi {
   }
   public async waitAny(parent: string, signal: AbortSignal, includeFuture = false): Promise<void> {
     signal.throwIfAborted()
-    const failure = [...this.failures.values()].find((x) => x.parent === parent)
-    if (failure) throw failure.error
+    const failure = [...this.failures].find(([, x]) => x.parent === parent)
+    if (failure) this.assertNoFailure(failure[0])
     const revision = this.revisions.get(parent) ?? 0
     if (revision === (this.seen.get(parent) ?? 0) && (includeFuture || this.pending(parent)))
       await this.waitChange(parent, revision, signal)
     this.seen.set(parent, this.revisions.get(parent) ?? 0)
-    const next = [...this.failures.values()].find((x) => x.parent === parent)
-    if (next) throw next.error
+    const next = [...this.failures].find(([, x]) => x.parent === parent)
+    if (next) this.assertNoFailure(next[0])
   }
   public async start(parent: string, input: AgentStart, signal: AbortSignal): Promise<AgentJob> {
     return this.lock(async () => {
@@ -111,7 +111,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       this.assertAvailable(job)
       await this.save(job)
       this.launch(job, input.task, input, signal)
-      return job
+      return structuredClone(job)
     })
   }
   public async resume(
@@ -154,7 +154,7 @@ class AgentSupervisor implements AgentSupervisorApi {
         { task: input.input, profile: job.profile, materials: input.materials },
         signal
       )
-      return job
+      return structuredClone(job)
     })
   }
   public async status(parent: string, id: string): Promise<AgentJob> {
@@ -181,12 +181,12 @@ class AgentSupervisor implements AgentSupervisorApi {
     const job = await this.status(parent, id)
     const live = this.active.get(job.sessionId)
     const failure = this.failures.get(job.sessionId)
-    if (failure?.parent === parent) throw failure.error
+    if (failure?.parent === parent) this.assertNoFailure(job.sessionId)
     while (live && this.active.has(job.sessionId) && !live.job.pending?.length) {
       const revision = this.revisions.get(parent) ?? 0
       await this.waitChange(parent, revision, signal)
       const failed = this.failures.get(job.sessionId)
-      if (failed) throw failed.error
+      if (failed) this.assertNoFailure(job.sessionId)
     }
     signal.throwIfAborted()
     return this.status(parent, id)
@@ -230,22 +230,22 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async cancel(parent: string, id: string): Promise<AgentJob> {
     const job = await this.status(parent, id)
     const live = this.active.get(job.sessionId)
-    if (live) {
-      live.controller.abort()
-      live.session?.cancel()
-      await live.promise
-    }
+    if (live) await this.stop(live)
+    this.assertNoFailure(job.sessionId)
     return this.status(parent, id)
   }
   public async cancelParent(parent: string): Promise<void> {
-    await Promise.allSettled(
+    await this.gate
+    await Promise.all(
       [...this.active.values()]
         .filter((x) => x.job.parentSessionId === parent)
-        .map((x) => this.cancel(parent, x.job.id))
+        .map((x) => this.stop(x))
     )
-    const failures = [...this.failures.values()]
-      .filter((x) => x.parent === parent)
-      .map((x) => x.error)
+    const failures = [
+      ...new Set(
+        [...this.failures.values()].filter((x) => x.parent === parent).flatMap((x) => x.errors)
+      ),
+    ]
     if (!isEmpty(failures))
       throw AppError.withFields(
         'UNAVAILABLE',
@@ -258,10 +258,8 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async close(): Promise<void> {
     this.closed = true
     await this.gate
-    await Promise.allSettled(
-      [...this.active.values()].map((x) => this.cancel(x.job.parentSessionId, x.job.id))
-    )
-    const failures = [...this.failures.values()].map((x) => x.error)
+    await Promise.all([...this.active.values()].map((x) => this.stop(x)))
+    const failures = [...new Set([...this.failures.values()].flatMap((x) => x.errors))]
     if (!isEmpty(failures))
       throw AppError.withFields(
         'UNAVAILABLE',
@@ -270,6 +268,37 @@ class AgentSupervisor implements AgentSupervisorApi {
           errors: [...failures],
         }
       )
+  }
+  private async stop(live: ActiveAgentJob): Promise<void> {
+    live.controller.abort()
+    try {
+      live.session?.cancel()
+    } catch (error) {
+      this.recordFailure(live.job, error)
+    }
+    try {
+      await live.promise
+    } catch (error) {
+      this.recordFailure(live.job, error)
+    }
+  }
+  private recordFailure(job: AgentJob, error: unknown): void {
+    const prior = this.failures.get(job.sessionId)
+    if (prior?.errors.includes(error)) return
+    this.failures.set(job.sessionId, {
+      parent: job.parentSessionId,
+      errors: [...(prior?.errors ?? []), error],
+    })
+  }
+  private assertNoFailure(sessionId: string): void {
+    const failure = this.failures.get(sessionId)
+    if (!failure) return
+    if (failure.errors.length === 1) throw failure.errors[0]
+    throw AppError.withFields(
+      'UNAVAILABLE',
+      `子运行收尾失败：${failure.errors.map(String).join('; ')}`,
+      { errors: [...failure.errors] }
+    )
   }
   private assertAvailable(job: AgentJob): void {
     if (
@@ -310,7 +339,7 @@ class AgentSupervisor implements AgentSupervisorApi {
       let omittedEvents = 0
       let diagnostic: Optional<string>
       try {
-        live.session = await this.options.open(job, request, controller.signal)
+        live.session = await this.options.open(structuredClone(job), request, controller.signal)
         controller.signal.throwIfAborted()
         let ended = false
         for await (const event of live.session.submit(input, controller.signal)) {
@@ -391,10 +420,12 @@ class AgentSupervisor implements AgentSupervisorApi {
           })
           live.job = { ...live.job, result: result.ref }
           if (this.options.deliver)
-            Object.assign(live.job, { delivery: await this.options.deliver(live.job, result.ref) })
+            Object.assign(live.job, {
+              delivery: await this.options.deliver(structuredClone(live.job), { ...result.ref }),
+            })
           await this.save(live.job)
         } catch (error) {
-          this.failures.set(job.sessionId, { parent: job.parentSessionId, error })
+          this.recordFailure(job, error)
           throw error
         } finally {
           signal.removeEventListener('abort', abort)

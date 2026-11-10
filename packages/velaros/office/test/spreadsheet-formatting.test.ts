@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,8 +7,99 @@ import ExcelJS from 'exceljs'
 
 import type { OfficeOperationContext } from '../index.js'
 import { officeOperations } from '../index.js'
+import { parseSpreadsheetContentRows } from '../utils/spreadsheet/content.js'
 
 describe('spreadsheet formatting', () => {
+  for (const { name, content, notes } of [
+    {
+      name: 'CSV',
+      content: 'name,notes,count,active\nA,"line1, ""quoted""\n\nline2\tinside",12,true',
+      notes: 'line1, "quoted"\n\nline2\tinside',
+    },
+    {
+      name: 'TSV',
+      content: 'name\tnotes\tcount\tactive\r\nA\t"line1\t""quoted""\r\n\r\nline2"\t12\ttrue',
+      notes: 'line1\t"quoted"\r\n\r\nline2',
+    },
+  ]) {
+    test(`preserves quoted multiline ${name} records in the written workbook`, async () => {
+      const root = await mkdtemp(join(tmpdir(), 'velaros-office-multiline-spreadsheet-'))
+      try {
+        const context: OfficeOperationContext = {
+          abortSignal: new AbortController().signal,
+          office: {
+            getRootPath: () => root,
+            inspectEnvironment: async () => ({ commands: [] }),
+            runCommand: async () => {
+              throw new Error('spreadsheet generation does not run commands')
+            },
+          },
+        }
+        // 进入 XLSX 写入前，CSV/TSV 解析必须精确保留字段里的原始 CRLF。
+        expect(parseSpreadsheetContentRows(content)[1]?.[1]).toBe(notes)
+        const written = await officeOperations.createSpreadsheet(
+          { outputPath: 'multiline.xlsx', content },
+          context
+        )
+        const workbook = new ExcelJS.Workbook()
+        await workbook.xlsx.readFile(written.path)
+        const sheet = workbook.worksheets[0]!
+        expect(sheet.rowCount).toBe(2)
+        expect(sheet.columnCount).toBe(4)
+        expect(sheet.getCell('A2').value).toBe('A')
+        // ExcelJS 原样写入 sharedStrings XML，XML 读取会将 CRLF 行尾规范化成 LF。
+        expect(sheet.getCell('B2').value).toBe(notes.replace(/\r\n/g, '\n'))
+        expect(sheet.getCell('C2').value).toBe(12)
+        expect(sheet.getCell('D2').value).toBe(true)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  test('rejects unterminated CSV and TSV quotes before workspace access or file writes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-office-invalid-spreadsheet-'))
+    const calls: string[] = []
+    const context: OfficeOperationContext = {
+      abortSignal: new AbortController().signal,
+      office: {
+        getRootPath: () => {
+          calls.push('getRootPath')
+          return root
+        },
+        resolvePath: (path) => {
+          calls.push('resolvePath')
+          return join(root, path)
+        },
+        inspectEnvironment: async () => {
+          calls.push('inspectEnvironment')
+          return { commands: [] }
+        },
+        runCommand: async () => {
+          calls.push('runCommand')
+          throw new Error('invalid spreadsheet input must not run commands')
+        },
+      },
+    }
+    try {
+      for (const content of [
+        'name,notes\nA,"unfinished\n\ntext',
+        'name\tnotes\r\nA\t"unfinished',
+      ]) {
+        await expect(
+          officeOperations.createSpreadsheet({ outputPath: 'invalid.xlsx', content }, context)
+        ).rejects.toMatchObject({
+          code: 'VALIDATION',
+          context: { executionOutcome: 'not-applied' },
+        })
+      }
+      expect(calls).toEqual([])
+      expect(await readdir(root)).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('column styles use the same color translation as cells, and ISO dates accept the documented date-only form', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-office-column-style-'))
     try {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -19,6 +19,7 @@ import { ModelToolRuntime } from '../../../dist/act/runtime/impl/ModelToolRuntim
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
 import { AdvancedSearch } from '../../../dist/act/search/impl/AdvancedSearch.js'
 import { SearchActivation } from '../../../dist/act/search/impl/SearchActivation.js'
+import { createProjectContextSource, createProjectKernel } from '../../../dist/project/index.js'
 
 import { done, historyEntries, marker, modelText, runtimeFrame } from './support/model-turn.mjs'
 import { createTestRuntime as createRuntime } from './support/runtime-fixture.mjs'
@@ -1568,6 +1569,60 @@ async function activationFixture(t) {
   )
   return { fixture: f, activation, counters, dependencies, request: { outputTokens: 1000 } }
 }
+
+test('project source IO failure preserves live search evidence and history instead of revoking it', async (t) => {
+  const f = await activationFixture(t)
+  t.after(() => f.activation.close())
+  await writeFile(join(f.fixture.root, 'auth.ts'), 'export function logout() {}\n')
+  const project = await createProjectKernel({ root: f.fixture.root })
+  const stat = project.stat.bind(project)
+  const entered = Promise.withResolvers()
+  const resume = Promise.withResolvers()
+  let paused = false
+  let fault
+  project.stat = async (input) => {
+    if (paused) {
+      entered.resolve()
+      await resume.promise
+    }
+    if (fault) throw fault
+    return stat(input)
+  }
+  const source = createProjectContextSource({ id: 'project', kernel: project })
+  f.dependencies.evidence = createEvidenceAccess([source])
+  const signal = new AbortController().signal
+  const evidence = await f.activation.inspect(target, 8000, signal)
+  await f.dependencies.context.append({ kind: 'note', body: 'retained search history' })
+  const state = f.activation.snapshot()
+  const saves = f.counters.saved
+  paused = true
+  const refreshing = f.activation.refresh(signal)
+  await entered.promise
+  fault = Object.assign(new Error('project stat temporarily failed'), { code: 'EIO' })
+  resume.resolve()
+  await assert.rejects(refreshing, (error) => error === fault)
+  assert.equal(f.activation.snapshot(), state)
+  assert.deepEqual(f.activation.snapshot().evidence, [evidence])
+  assert.equal(f.counters.saved, saves)
+  const snapshot = await f.fixture.storage.load(state.sessionId)
+  assert(!snapshot.records.some((record) => record.title === 'search:history-reset'))
+  paused = false
+  fault = undefined
+  await f.activation.refresh(signal)
+  assert.deepEqual(f.activation.snapshot().evidence, [evidence])
+  await assert.rejects(
+    f.dependencies.evidence.authorize(
+      f.dependencies.scope,
+      { ...target, resourceId: '../foreign.ts' },
+      signal
+    ),
+    { code: 'DENIED' }
+  )
+  assert.equal(
+    await source.authorize(f.dependencies.scope, { ...target, resourceId: 'missing.ts' }, signal),
+    true
+  )
+})
 
 test('cancellation during search model estimation prevents dispatch and close releases only once', async (t) => {
   const f = await activationFixture(t)

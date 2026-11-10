@@ -105,6 +105,108 @@ test('all project sandbox handle operations reject a known foreign source', asyn
   expect(effects).toBe(0)
 })
 
+test('sandbox reads and runs dispatch the request whose source was authorized', async () => {
+  let resume!: () => void
+  const authorized = new Promise<void>((resolve) => {
+    resume = resolve
+  })
+  let entered!: () => void
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const checked: string[] = []
+  const calls: Array<Record<string, unknown>> = []
+  const host = {
+    getSandboxRecord: async (sandboxId: string) => {
+      checked.push(sandboxId)
+      if (checked.length === 2) entered()
+      await authorized
+      return { source: sandboxId === 'inside' ? root : join(root, '..', 'foreign') }
+    },
+    diffSandbox: async (options: unknown) => {
+      calls.push({ diff: options })
+      return {}
+    },
+    runInSandbox: async (options: unknown) => {
+      calls.push({ run: options })
+      return {}
+    },
+  } as unknown as RehearsalSandboxHostPort
+  const port = projectCapabilityPorts.sandbox(
+    { getRootPath: () => root, sandbox: host } as ProjectHostPort,
+    new AbortController().signal
+  )
+  const diff = { sandboxId: 'inside', paths: ['a.txt'], textDiffs: true }
+  const run = {
+    sandboxId: 'inside',
+    command: 'echo approved',
+    timeoutMs: 1000,
+    maxOutputChars: 200,
+  }
+  const pending = [port.diffSandbox(diff), port.runInSandbox(run)]
+  await waiting
+  diff.sandboxId = 'foreign'
+  diff.paths[0] = 'private.txt'
+  diff.textDiffs = false
+  run.sandboxId = 'foreign'
+  run.command = 'echo changed'
+  run.timeoutMs = 1
+  run.maxOutputChars = 1
+  resume()
+  await Promise.all(pending)
+  expect(checked).toEqual(['inside', 'inside'])
+  expect(calls.find((call) => 'diff' in call)).toEqual({
+    diff: { sandboxId: 'inside', paths: ['a.txt'], textDiffs: true },
+  })
+  expect(calls.find((call) => 'run' in call)).toEqual({
+    run: { sandboxId: 'inside', command: 'echo approved', timeoutMs: 1000, maxOutputChars: 200 },
+  })
+})
+
+test('sandbox apply captures its identity and paths before waiting for the write gate', async () => {
+  const gate = new ProjectExecutionGate()
+  const signal = new AbortController().signal
+  let resume!: () => void
+  let entered!: () => void
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const blocked = gate.run(root, true, signal, async () => {
+    entered()
+    await new Promise<void>((resolve) => {
+      resume = resolve
+    })
+  })
+  await waiting
+  const checked: string[] = []
+  const applied: unknown[] = []
+  const host = {
+    getSandboxRecord: async (sandboxId: string) => {
+      checked.push(sandboxId)
+      return { source: sandboxId === 'inside' ? root : join(root, '..', 'foreign') }
+    },
+    applySandbox: async (options: unknown) => {
+      applied.push(options)
+      return {}
+    },
+  } as unknown as RehearsalSandboxHostPort
+  const port = new ProjectCapabilityPorts(gate).sandbox(
+    { getRootPath: () => root, sandbox: host } as ProjectHostPort,
+    signal
+  )
+  const input = { sandboxId: 'inside', paths: ['a.txt'], fingerprint: 'approved-diff' }
+  const pending = port.applySandbox(input)
+  input.sandboxId = 'foreign'
+  input.paths[0] = 'private.txt'
+  input.fingerprint = 'changed-diff'
+  expect(checked).toEqual([])
+  resume()
+  await blocked
+  await pending
+  expect(checked).toEqual(['inside'])
+  expect(applied).toEqual([{ sandboxId: 'inside', paths: ['a.txt'], fingerprint: 'approved-diff' }])
+})
+
 test('sandbox cancellation while diffing prevents apply', async () => {
   const abort = new AbortController()
   let applied = false

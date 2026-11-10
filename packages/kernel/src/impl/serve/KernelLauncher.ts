@@ -11,6 +11,7 @@ import { createDefaultKernelDaemonPaths } from '../../utils/rpc/descriptor'
 import {
   hasChildProcessExited,
   isKernelDaemonProcessAlive,
+  launcherDisposedFailure,
   meansKernelDaemonIsNotRunning,
 } from '../../utils/serve/daemon-process'
 import { KernelTuning } from '../../utils/tuning'
@@ -85,6 +86,11 @@ export class KernelLauncher implements KernelLauncherApi {
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
   private child?: ChildProcess
+  private startupQueue: Promise<void> = Promise.resolve()
+  private startupGeneration = 0
+  private stopping?: Promise<void>
+  private disposing?: Promise<void>
+  private childStop?: { readonly child: ChildProcess; readonly promise: Promise<void> }
   private disposed = false
 
   public constructor(private readonly options: KernelLauncherOptions) {
@@ -119,20 +125,41 @@ export class KernelLauncher implements KernelLauncherApi {
    *
    * 复用活着的守护进程是常态：几个产品共用一个 Kernel，第一个进来的把它起起来，其余的附着上去。
    */
-  public async ensureRunning(): Promise<KernelLauncherResult> {
-    this.assertUsable()
+  public ensureRunning(): Promise<KernelLauncherResult> {
+    if (this.disposed) return Promise.reject(launcherDisposedFailure())
+    const generation = this.startupGeneration
+    const stopping = this.stopping
+    // 每个调用都重新连接，只有点火串行；不共享可被某个调用方 dispose 的客户端。
+    const starting = this.startupQueue.then(async () => {
+      await stopping
+      return this.ensureOnce(generation)
+    })
+    this.startupQueue = starting.then(
+      () => undefined,
+      () => undefined
+    )
+    return starting
+  }
+
+  private async ensureOnce(generation: number): Promise<KernelLauncherResult> {
+    this.assertStartupActive(generation)
     const existing = await this.tryConnect()
-    if (this.disposed && isNotUndefined(existing)) await existing.client.dispose()
-    this.assertUsable()
+    if (!this.isStartupActive(generation) && isNotUndefined(existing))
+      await existing.client.dispose()
+    this.assertStartupActive(generation)
     if (isNotUndefined(existing)) return { ...existing, started: false }
 
+    if (this.child && !hasChildProcessExited(this.child))
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.kernelStartFailed,
+        message: '先前的 Kernel 进程仍未退出，不能覆盖它的启动归属',
+      })
+    this.child = undefined
+
     const target = await this.options.resolver.resolveActiveVersion()
-    this.assertUsable()
+    this.assertStartupActive(generation)
     const child = this.spawnKernel(target)
     this.child = child
-    // 注入的 spawn 也可能同步触发宿主关闭；迟到进程仍交回同一停止路径。
-    if (this.disposed) await this.stop()
-    this.assertUsable()
 
     let exitFailure: KernelClientError | undefined
     child.once('exit', (code, signal) => {
@@ -144,9 +171,13 @@ export class KernelLauncher implements KernelLauncherApi {
       })
     })
 
+    // spawn 可以同步重入 stop/dispose；内部只等待真实 child，不能等待自己的启动队尾。
+    if (!this.isStartupActive(generation)) await this.stopOwnedChild(child)
+    this.assertStartupActive(generation)
+
     const deadline = this.now() + this.startTimeoutMs
     while (this.now() < deadline) {
-      this.assertUsable()
+      this.assertStartupActive(generation)
       // 子进程可能在监听器挂载前退出，因此循环内也要检查退出状态。
       if (isUndefined(exitFailure) && hasChildProcessExited(child)) {
         exitFailure = new KernelClientError({
@@ -158,14 +189,15 @@ export class KernelLauncher implements KernelLauncherApi {
       }
       if (isNotUndefined(exitFailure)) throw exitFailure
       const connected = await this.tryConnect()
-      if (this.disposed && isNotUndefined(connected)) await connected.client.dispose()
-      this.assertUsable()
+      if (!this.isStartupActive(generation) && isNotUndefined(connected))
+        await connected.client.dispose()
+      this.assertStartupActive(generation)
       if (isNotUndefined(connected)) return { ...connected, process: child, started: true }
       await this.sleep(this.pollIntervalMs)
     }
 
-    this.assertUsable()
-    await this.stop()
+    this.assertStartupActive(generation)
+    await this.stopOwnedChild(child)
     throw new KernelClientError({
       code: KernelClientErrorCodes.kernelStartTimeout,
       message: `Kernel 在 ${this.startTimeoutMs}ms 内没有发布端点`,
@@ -189,10 +221,41 @@ export class KernelLauncher implements KernelLauncherApi {
    * `await new Promise(resolve => child.once('exit', resolve))` 无限等——一个卡住不退的
    * 守护进程能把调用方的停机流程永远挂在这里。
    */
-  public async stop(): Promise<void> {
-    const child = this.child
-    if (isUndefined(child)) return
-    this.child = undefined
+  public stop(): Promise<void> {
+    if (this.stopping) return this.stopping
+    this.startupGeneration++
+    const pending = this.startupQueue
+    const stopping: Promise<void> = Promise.resolve().then(async () => {
+      try {
+        const child = this.child
+        await this.stopOwnedChild(child)
+        await pending
+        // 同步 spawn 重入关闭时，child 会在原回调返回后才交给本 owner。
+        if (this.child !== child) await this.stopOwnedChild(this.child)
+      } finally {
+        if (this.stopping === stopping) this.stopping = undefined
+      }
+    })
+    this.stopping = stopping
+    return stopping
+  }
+
+  private stopOwnedChild(child?: ChildProcess): Promise<void> {
+    if (isUndefined(child)) return Promise.resolve()
+    if (this.childStop?.child === child) return this.childStop.promise
+    const stopping: Promise<void> = Promise.resolve().then(async () => {
+      try {
+        await this.stopChildOnce(child)
+      } finally {
+        if (hasChildProcessExited(child) && this.child === child) this.child = undefined
+        if (this.childStop?.promise === stopping) this.childStop = undefined
+      }
+    })
+    this.childStop = { child, promise: stopping }
+    return stopping
+  }
+
+  private async stopChildOnce(child: ChildProcess): Promise<void> {
     if (hasChildProcessExited(child)) return
 
     child.kill('SIGTERM')
@@ -221,10 +284,12 @@ export class KernelLauncher implements KernelLauncherApi {
     return this.ensureRunning()
   }
 
-  public async dispose(): Promise<void> {
-    if (this.disposed) return
-    this.disposed = true
-    await this.stop()
+  public dispose(): Promise<void> {
+    if (!this.disposing) {
+      this.disposed = true
+      this.disposing = Promise.resolve().then(() => this.stop())
+    }
+    return this.disposing
   }
 
   public getDescriptor(): Promise<KernelDaemonEndpointDescriptor> {
@@ -268,13 +333,17 @@ export class KernelLauncher implements KernelLauncherApi {
     }
   }
 
-  /** 回收之后不许再起 Kernel。 */
-  private assertUsable(): void {
-    if (!this.disposed) return
-    throw new KernelClientError({
-      code: KernelClientErrorCodes.launcherDisposed,
-      message: '已回收的 Kernel 启动器不能再启动 Kernel',
-    })
+  private isStartupActive(generation: number): boolean {
+    return !this.disposed && generation === this.startupGeneration
+  }
+
+  private assertStartupActive(generation: number): void {
+    if (this.disposed) throw launcherDisposedFailure()
+    if (generation !== this.startupGeneration)
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.kernelStartFailed,
+        message: 'Kernel 启动已被停止',
+      })
   }
 }
 

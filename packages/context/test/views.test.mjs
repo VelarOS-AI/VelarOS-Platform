@@ -357,6 +357,56 @@ test('INV-18 one recovering owner fences both another recovery and a new executi
   await loser.begin(f.user.ref)
 })
 
+test('INV-18 recovery release retries the same lease after a metadata commit failure', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  await f.view.startStep('interrupted')
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const recovery = createContextView(f.options)
+  const release = await recovery.acquireRecovery()
+  await recovery.recover([])
+  const before = await recovery.inspect()
+  const failure = new AppError('UNAVAILABLE', 'recovery release storage unavailable')
+  const commit = f.storage.compareAndSwapMetadata.bind(f.storage)
+  let attempts = 0
+  t.mock.method(f.storage, 'compareAndSwapMetadata', async (...args) => {
+    if (++attempts === 1) throw failure
+    return commit(...args)
+  })
+  await assert.rejects(release(), (error) => error === failure)
+  assert.deepEqual(await recovery.inspect(), before)
+  const contender = createContextView(f.options)
+  await assert.rejects(contender.acquireRecovery(), { code: 'TASK_BUSY' })
+  await release()
+  assert.equal(attempts, 2, 'the same release callback must retry the durable commit')
+  assert.equal((await recovery.inspect()).lease, null)
+  await contender.begin(f.user.ref)
+})
+
+test('INV-18 stale recovery release cannot revoke a later lease on the same view', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  await f.view.startStep('interrupted')
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const recovery = createContextView(f.options)
+  const release = await recovery.acquireRecovery()
+  await recovery.recover([])
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const nextLease = await recovery.begin(f.user.ref)
+  await release()
+  assert.equal((await recovery.inspect()).lease.id, nextLease)
+  await recovery.renew()
+  await release()
+  assert.equal((await recovery.inspect()).lease.id, nextLease)
+  await recovery.end()
+  const releaseCurrent = await recovery.acquireRecovery()
+  const currentLease = (await recovery.inspect()).lease.id
+  await release()
+  assert.equal((await recovery.inspect()).lease.id, currentLease)
+  await releaseCurrent()
+  assert.equal((await recovery.inspect()).lease, null)
+})
+
 test('INV-4: recovery revokes an interrupted execution before another owner begins', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 0 })
   const f = await fixture(t)

@@ -121,3 +121,4 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 启用 Responses 显式断点时，文本与 JSON 工具结果统一表示为内容块；断点移到后面的结果时，已有正文表示保持稳定。
 - `ModelInputEstimate.composition` 给出估算编码文本的 UTF-8 字节分项：系统指令、工具、assistant 历史、user 历史、工具回执、当前材料和包装；各项相加等于 total。图片和不透明推理另外预留容量，费用继续使用供应商真实用量。
 - 已知 OpenAI Chat/Responses 型号按公开编码映射延迟加载 `gpt-tokenizer`。同一驱动收到无图请求的真实输入用量后，以 BPE 文本和最近 32 份样本校准后续请求：在已见输入长度范围内，比较覆盖全部样本的线性增长上界与最大固定开销，选择较小值且不低于 BPE 文本计数；范围外或趋势不可用时沿用固定开销，统一保留 10% 余量；主线与借用该驱动的专项会话共用这些数字。冷启动、未知路由或未知型号沿用字节估算；供应商超窗后重置，旧代迟到响应不恢复旧校准。图片请求不参与取样，不透明状态独立预留，估算不充当账单。
+- 用户 JS adapter 的导出 getter、Proxy、结果序列化与 console 格式化均在同一次受限 VM 执行中运行；越墙异常只读取安全的原始诊断，不送回用户 VM。合法 named/default 导出与 hook receiver 保留。

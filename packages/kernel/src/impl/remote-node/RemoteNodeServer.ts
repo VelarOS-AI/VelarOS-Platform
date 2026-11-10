@@ -412,7 +412,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
       this.runner.submit(frame, clientId, connection.clientName ?? clientId, this.manifest.revision)
       return
     }
-    this.runner.cancel(frame)
+    this.runner.cancel(frame, clientId)
   }
 
   private handleHello(connection: RemoteNodeConnection, frame: RemoteNodeHello): void {

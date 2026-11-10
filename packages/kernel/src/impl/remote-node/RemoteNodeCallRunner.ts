@@ -14,6 +14,7 @@ import type {
 } from '../../contract/requires'
 import type { RemoteNodeInFlightCall } from '../../types/remote'
 import type { RemoteNodeActivityEvent } from '../../types/remote-node'
+import { remoteNodeCallKey } from '../../utils/remote/calls'
 import type {
   RemoteNodeCancel,
   RemoteNodeError,
@@ -65,7 +66,7 @@ export interface RemoteNodeCallRunnerApi {
     manifestRevision: string
   ): void
   /** 收一帧 cancel:best-effort 中止后立刻回终态;未知或已终态的 callId 静默。 */
-  cancel(frame: RemoteNodeCancel): void
+  cancel(frame: RemoteNodeCancel, clientId: string): void
   /** 停机:中止全部在途调用并写一条产品执行流终态,但**不**写安全审计。 */
   abortAll(reason: string): void
   /** 丢弃终态回放缓存。仅用于解除配对——缓存属于上一段信任关系。 */
@@ -76,6 +77,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
   private readonly pool: RemoteNodeInvocationPool
   private readonly completed = new RemoteNodeResultCache()
   private readonly calls = new Map<string, RemoteNodeInFlightCall>()
+  private trustGeneration = 0
 
   public constructor(private readonly options: RemoteNodeCallRunnerOptions) {
     this.pool = new RemoteNodeInvocationPool(options.maxConcurrent)
@@ -91,14 +93,16 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     clientName: string,
     manifestRevision: string
   ): void {
-    const replay = this.completed.get(frame.callId)
+    const generation = this.trustGeneration
+    const key = remoteNodeCallKey(generation, clientId, frame.callId)
+    const replay = this.completed.get(key)
     if (isNotNull(replay)) {
       // 回放不重记审计:审计记录的是「执行」,不是「Client 重试了几次」。
       this.options.deliver(clientId, replay)
       return
     }
     // 在途重复绝不启动第二次执行;那一份终态到达时自然会发出去,这里什么都不做才是对的。
-    if (this.calls.has(frame.callId)) return
+    if (this.calls.has(key)) return
     const startedAt = this.options.now()
     this.recordActivity({
       type: 'started',
@@ -111,11 +115,12 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       input: frame.input,
     })
     if (frame.manifestRevision !== manifestRevision) {
-      this.rejectStale(frame, clientId, clientName, startedAt)
+      this.rejectStale(frame, clientId, clientName, startedAt, generation)
       return
     }
 
     const call: RemoteNodeInFlightCall = {
+      trustGeneration: generation,
       callId: frame.callId,
       clientId,
       clientName,
@@ -126,7 +131,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       deadline: null,
       settled: false,
     }
-    this.calls.set(call.callId, call)
+    this.calls.set(key, call)
     // deadline 从**收帧**起算而不是从开始执行起算:Client 那头的等待是从发出去就开始的,
     // 把排队时间藏起来只会让两端对同一次调用的耐心不一致。
     call.deadline = this.options.timers.after(
@@ -174,8 +179,8 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       })
   }
 
-  public cancel(frame: RemoteNodeCancel): void {
-    const call = this.calls.get(frame.callId)
+  public cancel(frame: RemoteNodeCancel, clientId: string): void {
+    const call = this.calls.get(remoteNodeCallKey(this.trustGeneration, clientId, frame.callId))
     // 未知或已终态的 callId 一律静默:一个 callId 只有一帧终态,这里补发就破了那条不变量。
     if (isUndefined(call)) return
     call.controller.abort(new AppError('CANCELLED', `远程节点调用被取消：${frame.reason}`))
@@ -219,6 +224,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
 
   /** 丢弃终态回放缓存。仅用于解除配对——缓存属于上一段信任关系。 */
   public forgetCompleted(): void {
+    this.trustGeneration++
     this.completed.clear()
   }
 
@@ -226,7 +232,8 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     frame: RemoteNodeInvoke,
     clientId: string,
     clientName: string,
-    startedAt: number
+    startedAt: number,
+    generation: number
   ): void {
     const result: RemoteNodeResult = {
       type: 'result',
@@ -240,7 +247,8 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       },
     }
     // 仍进回放缓存:一个 callId 一帧终态的不变量不因拒绝而例外。
-    this.completed.set(frame.callId, result)
+    if (generation === this.trustGeneration)
+      this.completed.set(remoteNodeCallKey(generation, clientId, frame.callId), result)
     this.options.audit.record({
       at: this.options.now(),
       callId: frame.callId,
@@ -263,7 +271,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       durationMs: this.options.now() - startedAt,
       error: result.error,
     })
-    this.options.deliver(clientId, result)
+    if (generation === this.trustGeneration) this.options.deliver(clientId, result)
   }
 
   private settle(
@@ -276,12 +284,13 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     call.settled = true
     call.deadline?.cancel()
     call.deadline = null
-    this.calls.delete(call.callId)
+    const key = remoteNodeCallKey(call.trustGeneration, call.clientId, call.callId)
+    this.calls.delete(key)
     const result: RemoteNodeResult =
       status === 'success'
         ? { type: 'result', callId: call.callId, status, output, error: null }
         : { type: 'result', callId: call.callId, status, error }
-    this.completed.set(call.callId, result)
+    if (call.trustGeneration === this.trustGeneration) this.completed.set(key, result)
     // 审计只记元数据:input / output 一律不进这条线,跨机链路上流过的可能是 PIN 或 token。
     this.options.audit.record({
       at: this.options.now(),
@@ -306,7 +315,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
       output: optionalWhen(status === 'success', output),
       error,
     })
-    this.options.deliver(call.clientId, result)
+    if (call.trustGeneration === this.trustGeneration) this.options.deliver(call.clientId, result)
   }
 
   /** Product projection is observability only; it must never affect execution. */

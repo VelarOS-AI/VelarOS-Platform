@@ -2429,6 +2429,64 @@ test('closing a consumer during thinking releases the view without accepting lat
   await service.close()
 })
 
+test('interaction views preserve pending identity while retaining opaque detail', async () => {
+  const f = runFixture()
+  const finish = Promise.withResolvers<void>()
+  const preview = Promise.withResolvers<void>()
+  const interacting = Promise.withResolvers<{ id: string; runId: string }>()
+  const open = f.options.protocol.open
+  f.options.protocol.open = () => ({
+    ...open(),
+    push: (text) => [{ type: 'text', text }],
+  })
+  f.options.model.stream = async function* () {
+    yield { type: 'text', text: 'preview' }
+    await finish.promise
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const running = (async () => {
+    for await (const event of service.submit('interaction')) {
+      if (event.type === 'text') preview.resolve()
+      if (event.type === 'interaction') {
+        interacting.resolve({ id: event.request.id, runId: event.request.runId })
+        Object.assign(event.request, { id: 'event-mutation', runId: 'foreign-run' })
+      }
+    }
+  })()
+  let answer: Promise<unknown> | undefined
+  try {
+    await preview.promise
+    const detail = { render: () => 'opaque host value' }
+    answer = service.request(
+      'input',
+      'Confirm the current run',
+      new AbortController().signal,
+      detail
+    )
+    void answer.catch(() => {})
+    const identity = await interacting.promise
+    const state = await service.inspect()
+    expect(state.pending[0]).toMatchObject(identity)
+    expect(state.pending[0]!.detail).toBe(detail)
+    Object.assign(state.pending[0]!, { id: 'snapshot-mutation', runId: 'foreign-run' })
+    await service.answer({ ...identity, value: 'accepted' })
+    expect(await answer).toBe('accepted')
+    expect((await service.inspect()).pending).toEqual([])
+    expect(
+      (await service.events()).find((item) => item.event.type === 'interaction')?.event
+    ).toMatchObject({
+      type: 'interaction',
+      request: identity,
+    })
+  } finally {
+    service.cancel()
+    finish.resolve()
+    await Promise.allSettled([running, answer])
+    await service.close()
+  }
+})
+
 test('interaction allocation cannot outlive its cancelled run or attach to the next run', async () => {
   const f = runFixture()
   const finish = Promise.withResolvers<void>()
@@ -2521,6 +2579,155 @@ test('INV-36 a fault persisting a child result reaches wait even after the live 
   while (!failed) await new Promise((r) => setTimeout(r, 1))
   await expect(supervisor.wait('p', job.id, signal)).rejects.toThrow('child result disk failure')
   await expect(supervisor.close()).rejects.toThrow('child result disk failure')
+})
+
+test.each(['cancel', 'cancelParent', 'close'] as const)(
+  'supervisor cancellation drains the real child and preserves original cleanup failures (%s)',
+  async (mode) => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const cancelled = Promise.withResolvers<void>()
+    const cancelFailure = new AppError('UNAVAILABLE', 'cancel transport failed')
+    const finalFailure = new AppError('UNAVAILABLE', `${mode} finalization failed`)
+    let childClosed = false
+    const supervisor = createAgentSupervisor({
+      storage: storage(),
+      concurrency: 1,
+      maxChildren: 1,
+      ...(mode === 'cancelParent'
+        ? {
+            deliver: async () => {
+              throw finalFailure
+            },
+          }
+        : {}),
+      async open() {
+        return {
+          ...child(),
+          async *submit(_input, signal) {
+            entered.resolve()
+            yield { type: 'state', runId: 'cancel-fault', status: 'thinking' }
+            await release.promise
+            yield {
+              type: 'state',
+              runId: 'cancel-fault',
+              status: signal?.aborted ? 'cancelled' : 'completed',
+            }
+          },
+          cancel() {
+            cancelled.resolve()
+            throw cancelFailure
+          },
+          async close() {
+            childClosed = true
+            if (mode === 'close') throw finalFailure
+          },
+        }
+      },
+    })
+    try {
+      const job = await supervisor.start(
+        'p',
+        { task: 'keep the child owner until actual settlement', profile: 'read' },
+        new AbortController().signal
+      )
+      await entered.promise
+      const stopping =
+        mode === 'cancel'
+          ? supervisor.cancel('p', job.id)
+          : mode === 'cancelParent'
+            ? supervisor.cancelParent('p')
+            : supervisor.close()
+      let settled = false
+      const outcome = stopping.then(
+        () => {
+          settled = true
+          return { error: undefined as unknown }
+        },
+        (error: unknown) => {
+          settled = true
+          return { error }
+        }
+      )
+      await cancelled.promise
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(settled).toBe(false)
+      expect(childClosed).toBe(false)
+      expect(supervisor.pending('p')).toBe(true)
+      release.resolve()
+      const { error } = await outcome
+      expect(childClosed).toBe(true)
+      if (mode === 'cancel') {
+        expect(error).toBe(cancelFailure)
+        await expect(supervisor.wait('p', job.id, new AbortController().signal)).rejects.toBe(
+          cancelFailure
+        )
+      } else {
+        expect(error).toMatchObject({ code: 'UNAVAILABLE' })
+        const errors = (error as { errors: readonly unknown[] }).errors
+        expect(errors).toHaveLength(2)
+        expect(errors[0]).toBe(cancelFailure)
+        expect(errors[1]).toBe(finalFailure)
+      }
+    } finally {
+      release.resolve()
+      await Promise.allSettled([supervisor.close()])
+    }
+  }
+)
+
+test('supervisor cancellation waits for parent admissions and permits a later explicit start', async () => {
+  const store = storage()
+  const put = store.put
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let first = true
+  store.put = async (id, body) => {
+    if (first) {
+      first = false
+      entered.resolve()
+      await release.promise
+    }
+    return put(id, body)
+  }
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 1,
+    maxChildren: 2,
+    async open() {
+      return child(true)
+    },
+  })
+  const signal = new AbortController().signal
+  const starting = supervisor.start(
+    'p',
+    { task: 'accepted before parent cancellation', profile: 'read' },
+    signal
+  )
+  try {
+    await entered.promise
+    let settled = false
+    const cancelled = supervisor.cancelParent('p').then(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    release.resolve()
+    const job = await starting
+    await cancelled
+    expect(supervisor.pending('p')).toBe(false)
+    expect((await supervisor.status('p', job.id)).status).toBe('cancelled')
+    const next = await supervisor.start(
+      'p',
+      { task: 'new explicit dispatch', profile: 'read' },
+      signal
+    )
+    expect((await supervisor.cancel('p', next.id)).status).toBe('cancelled')
+  } finally {
+    release.resolve()
+    await starting
+    await supervisor.close()
+  }
 })
 
 test('INV-37 steering preserves the current response while slow input persistence queues the next turn', async () => {
@@ -2885,6 +3092,93 @@ function child(block = false): ActChildSession {
     async close() {},
   }
 }
+
+test('INV-31 child handles and host callbacks cannot rewrite supervisor ownership', async () => {
+  const store = storage()
+  const signal = new AbortController().signal
+  let deliveries = 0
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 1,
+    maxChildren: 1,
+    async open(job) {
+      Object.assign(job, {
+        id: 'open-mutation',
+        parentSessionId: 'foreign-open',
+        sessionId: 'foreign-open',
+      })
+      Object.assign(job.collaboration!, { plannedWrites: ['open-mutation'] })
+      return child(true)
+    },
+    async deliver(job, payload) {
+      deliveries++
+      const producer = job.sessionId
+      const original = { ...payload }
+      Object.assign(job, {
+        id: 'delivery-mutation',
+        parentSessionId: 'foreign-delivery',
+        sessionId: 'foreign-delivery',
+      })
+      Object.assign(job.collaboration!, { plannedWrites: ['delivery-mutation'] })
+      Object.assign(payload, { sessionId: 'foreign-payload', id: 'payload-mutation' })
+      return {
+        ref: { sessionId: 'p', id: `delivery-${deliveries}` },
+        schemaVersion: 1,
+        kind: 'agent',
+        sessionId: producer,
+        status: 'partial',
+        payload: original,
+        artifacts: [],
+        omittedScripts: 0,
+      }
+    },
+  })
+  try {
+    const started = await supervisor.start(
+      'p',
+      {
+        task: 'first phase',
+        profile: 'read',
+        collaboration: { root: 'C:/Repo', plannedWrites: ['src'] },
+      },
+      signal
+    )
+    const id = started.id
+    const sessionId = started.sessionId
+    for (const phase of ['start', 'resume']) {
+      const handle =
+        phase === 'start'
+          ? started
+          : await supervisor.resume('p', id, { input: 'second phase' }, signal)
+      expect(handle.parentSessionId).toBe('p')
+      Object.assign(handle, {
+        id: 'handle-mutation',
+        parentSessionId: 'foreign-handle',
+        sessionId: 'foreign-handle',
+      })
+      Object.assign(handle.collaboration!, { plannedWrites: ['handle-mutation'] })
+      expect(await supervisor.status('p', id)).toMatchObject({
+        id,
+        sessionId,
+        parentSessionId: 'p',
+        collaboration: { plannedWrites: ['src'] },
+      })
+      expect(await supervisor.cancel('p', id)).toMatchObject({
+        id,
+        sessionId,
+        parentSessionId: 'p',
+        status: 'cancelled',
+        result: { sessionId: 'p' },
+      })
+    }
+    expect(deliveries).toBe(2)
+    expect(supervisor.pending('p')).toBe(false)
+    for (const foreign of ['foreign-open', 'foreign-delivery', 'foreign-payload', 'foreign-handle'])
+      expect(await store.load(foreign)).toBeNull()
+  } finally {
+    await supervisor.close()
+  }
+})
 
 test('INV-38 child delivery bounds embedded history and never turns an unfinished end into completion', async () => {
   const store = storage()
@@ -3546,6 +3840,57 @@ test('cancellation before a model request retains the input and restart consumes
   for await (const event of reopened.submit('one more')) again.push(event)
   expect(
     again.some((event) => event.type === 'input-applied' && event.inputId === 'retained-root')
+  ).toBe(false)
+  await reopened.close()
+})
+
+test('INV-39 an explicit new task excludes retained earlier input across a later reopen', async () => {
+  const f = runFixture()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  f.options.frames.prepare = () => gate
+  const service = createActRunService(f.options)
+  const old = []
+  for await (const event of service.submit({ text: 'old goal', inputId: 'same-host-id' })) {
+    old.push(event)
+    if (event.type === 'input') {
+      service.cancel()
+      release()
+    }
+  }
+  const oldInput = old.find((event) => event.type === 'input')!
+  expect(old.some((event) => event.type === 'turn')).toBe(false)
+  expect(old.find((event) => event.type === 'input-retained')).toMatchObject({
+    ref: oldInput.ref,
+  })
+  const oldTask = await f.view.inspect()
+  f.options.frames.prepare = async () => {}
+  const fresh = []
+  for await (const event of service.submit({
+    text: 'independent goal',
+    task: 'new',
+    inputId: 'same-host-id',
+  }))
+    fresh.push(event)
+  const freshInput = fresh.find((event) => event.type === 'input')!
+  expect((await f.view.inspect())!.id).not.toBe(oldTask!.id)
+  expect((await f.view.inspect())!.goals).toEqual([freshInput.ref])
+  expect(fresh.filter((event) => event.type === 'input-applied')).toEqual([
+    expect.objectContaining({ ref: freshInput.ref }),
+  ])
+  await service.close()
+
+  const reopened = createActRunService(f.options)
+  const continued = []
+  for await (const event of reopened.submit('continue independent goal')) continued.push(event)
+  expect((await f.view.inspect())!.goals).not.toContainEqual(oldInput.ref)
+  expect(
+    continued.some((event) => event.type === 'input-applied' && event.ref.id === oldInput.ref.id)
+  ).toBe(false)
+  const durable = (await reopened.events()).map((item) => item.event)
+  expect(durable).toContainEqual(oldInput)
+  expect(
+    durable.some((event) => event.type === 'input-applied' && event.ref.id === oldInput.ref.id)
   ).toBe(false)
   await reopened.close()
 })

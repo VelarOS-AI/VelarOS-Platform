@@ -68,12 +68,14 @@ export type UserAdapterConsoleLogLevel = 'debug' | 'error' | 'info' | 'warn'
 /** 沙箱里可调的函数；参数类型有意写成 never，逼调用方经搬运层递参数。 */
 export type UserAdapterVmCallable = (...args: never[]) => unknown
 
-/** 一次跨边界调用的载荷：函数、至多两个参数与返回值。 */
+/** 一次跨边界调用的数据载荷：函数、至多两个参数、返回值及原始字符串失败回执。 */
 export interface UserAdapterVmCall {
-  fn: UserAdapterVmCallable
+  fn?: UserAdapterVmCallable
   arg0?: unknown
   arg1?: unknown
   result?: unknown
+  failed?: boolean
+  error?: unknown
 }
 
 /** 沙箱上下文：空原型 global 加上本包放进去的那几样东西。 */
@@ -85,6 +87,7 @@ export type UserAdapterVmContext = Context & {
   __velarosUserAdapterCall__?: UserAdapterVmCall
   __velarosUserAdapterJson__?: string
   __velarosUserAdapterValue__?: unknown
+  readonly __velarosUserAdapterLog__?: (method: unknown, message: unknown) => boolean
 }
 
 /** 一份已求值的用户 adapter：沙箱上下文、导出面与 helpers。 */

@@ -16,6 +16,7 @@ import {
   readRunArchiveDirectory,
   runArchivePath,
   writeJsonAtomically,
+  writeJsonOnceAtomically,
   writeTextAtomically,
 } from '../utils/archive-files.js'
 import { renderRealTaskReportHtml } from '../utils/render/real-task-report.js'
@@ -27,11 +28,11 @@ import {
 } from '../utils/wire/workload.js'
 
 /**
- * 归档的读写口。写一律是原子的（先写同目录临时文件再改名），写之前一律先严格校验；
- * 读取只接受当前格式，不补字段、不回写。实例归本包，进程里只有一份。
+ * 归档的读写口。写之前一律先严格校验，同目录临时文件完整写好才原子发布；运行归档只首次发布，其余文件改名覆盖。
+ * 读取只接受当前格式，不补字段、不回写；已发布后的临时文件收尾错误仍如实抛出，不回滚目标。实例归本包，进程里只有一份。
  */
 export interface LabArchivesApi {
-  /** 校验并原子写一份 v3 归档到 `<root>/<runId>/report.json`，返回写到哪；run id 不能当目录名时当场报错。 */
+  /** 校验并原子首次发布 v3 归档到 `<root>/<runId>/report.json`，返回写到哪；同 id 仅序列化字节完全相同可幂等，差异报错并保留原件；run id 不能当目录名时当场报错。 */
   writeRunArchive: (root: string, archive: RunArchive) => Promise<string>
   /** 读取并严格校验一份当前 v3 归档；错误保留原件并向调用方报告。 */
   readRunArchive: (path: string) => Promise<RunArchive>
@@ -64,7 +65,7 @@ class LabArchives implements LabArchivesApi {
   public async writeRunArchive(root: string, archive: RunArchive): Promise<string> {
     const parsed = runArchiveSchema.parse(archive)
     const target = runArchivePath(root, parsed.manifest.runId)
-    await writeJsonAtomically(target, parsed)
+    await writeJsonOnceAtomically(target, parsed)
     return target
   }
 

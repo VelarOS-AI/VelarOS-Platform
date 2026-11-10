@@ -9,7 +9,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { TextEncodings, TextFileErrorCodes } from '../contract/constants.js'
 import type { DecodedText, TextEncoding } from '../types/text-files.js'
 import { encodeText, findLoneSurrogate } from '../utils/encoding.js'
-import { spliceGb18030Bytes } from '../utils/preserving.js'
+import { assertGb18030Source, spliceGb18030Bytes } from '../utils/preserving.js'
 
 import type { TextEncodingProbeApi } from './TextEncodingProbe.js'
 import { TextEncodingProbe } from './TextEncodingProbe.js'
@@ -35,7 +35,7 @@ export interface TextCodecApi {
   encode(content: string, encoding: TextEncoding): Buffer
   /**
    * 改过的正文按原文件的编码写成字节，尽量沿用没改的片段的原字节：GB18030 里同一个字可能有两种写法（别名字节），没改的片段按原字节拼回；
-   * 其余编码等同 encode。before 与 after 一样时原样返回 original；GB18030 下 original 与 before 对不上、或拼出的字节读回来不是 after 时抛 lossy。
+   * 其余编码等同 encode。before 与 after 一样时原样返回 original；GB18030 下先核对 original 与 before（包括正文未改时），对不上或拼出的字节读回来不是 after 时抛 lossy。
    */
   encodePreserving(
     original: Uint8Array,
@@ -81,6 +81,7 @@ export class TextCodec implements TextCodecApi {
     after: string,
     encoding: TextEncoding
   ): Buffer {
+    if (encoding === 'gb18030') assertGb18030Source(original, before)
     if (before === after) return Buffer.from(original)
     if (encoding !== 'gb18030') return this.encode(after, encoding)
     const result = spliceGb18030Bytes(original, before, after)

@@ -212,7 +212,7 @@ export const DevelopmentTuning = Object.freeze({
     defaultLimit: 100,
     /** 目录遍历缺省最深几层：调用方不给 maxDepth 时用它。 */
     maxDepth: 12,
-    /** 单个源文件最多读多少字节；再大的文件按不可读跳过。 */
+    /** 单个源文件最多读多少字节；读不完整时明确拒绝，避免前缀冒充全文。 */
     maxReadableSourceBytes: 1_000_000,
     /** 指定路径以外的整体选文件上限：内核遍历最多带回这么多候选源文件。 */
     maxSelectedFiles: 2_500,

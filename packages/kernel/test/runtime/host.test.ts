@@ -43,7 +43,160 @@ function moduleDefinition(options: {
   }
 }
 
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 describe('KernelModuleHost', () => {
+  for (const phase of ['activate', 'ready'] as const) {
+    test(`startup cancellation waits for cooperative ${phase} cleanup`, async () => {
+      const host = new KernelModuleHost({ apiVersion: 1 })
+      let enter!: () => void
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve
+      })
+      let release!: () => void
+      const cleanup = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let closing: Promise<void> | undefined
+      let cancelled = false
+      let disposed = 0
+      let laterReady = 0
+      host.registerModule(
+        moduleDefinition({
+          id: 'module.startup-cancellation',
+          activate: async (context) => {
+            const cooperate = async () => {
+              enter()
+              // 同步重入关闭也必须看见完整的 start Promise。
+              if (phase === 'activate') closing = host.dispose()
+              await new Promise<void>((resolve) => {
+                context.signal.addEventListener(
+                  'abort',
+                  () => {
+                    cancelled = true
+                    resolve()
+                  },
+                  { once: true }
+                )
+                if (context.signal.aborted) {
+                  cancelled = true
+                  resolve()
+                }
+              })
+              await cleanup
+            }
+            if (phase === 'activate') await cooperate()
+            return {
+              ready: phase === 'ready' ? cooperate : undefined,
+              dispose: () => {
+                disposed++
+              },
+            }
+          },
+        })
+      )
+      host.registerModule(
+        moduleDefinition({
+          id: 'module.zz-later',
+          activate: () => ({
+            ready: () => {
+              laterReady++
+            },
+          }),
+        })
+      )
+      const starting = host.start().catch((error: unknown) => error)
+      await entered
+      closing ??= host.dispose()
+      let closed = false
+      void closing.then(() => {
+        closed = true
+      })
+      try {
+        await Promise.resolve()
+        expect(cancelled).toBe(true)
+        expect(closed).toBe(false)
+      } finally {
+        release()
+        await closing
+      }
+      expect(await starting).toMatchObject({ code: 'MODULE_STATE' })
+      expect(disposed).toBe(1)
+      expect(laterReady).toBe(0)
+    })
+  }
+
+  test('startup cancellation owns a late lifecycle and never activates the next module', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    let enter!: () => void
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    let releaseActivate!: () => void
+    const activating = new Promise<void>((resolve) => {
+      releaseActivate = resolve
+    })
+    let enterDispose!: () => void
+    const disposing = new Promise<void>((resolve) => {
+      enterDispose = resolve
+    })
+    let releaseDispose!: () => void
+    const cleanup = new Promise<void>((resolve) => {
+      releaseDispose = resolve
+    })
+    let disposals = 0
+    let laterActivations = 0
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.late-start',
+        activate: async () => {
+          enter()
+          await activating
+          return {
+            dispose: async () => {
+              disposals++
+              enterDispose()
+              await cleanup
+            },
+          }
+        },
+      })
+    )
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.zz-later',
+        activate: () => {
+          laterActivations++
+        },
+      })
+    )
+    const starting = host.start().catch((error: unknown) => error)
+    await entered
+    const closing = host.dispose()
+    let closed = false
+    void closing.then(() => {
+      closed = true
+    })
+    try {
+      releaseActivate()
+      await disposing
+      expect(closed).toBe(false)
+      expect(laterActivations).toBe(0)
+    } finally {
+      releaseActivate()
+      releaseDispose()
+      await closing
+    }
+    expect(await starting).toMatchObject({ code: 'MODULE_STATE' })
+    expect(disposals).toBe(1)
+  })
+
   test('captures the registered activate function with its original definition receiver', async () => {
     const host = new KernelModuleHost({ apiVersion: 1 })
     const calls: string[] = []
@@ -883,6 +1036,260 @@ describe('KernelModuleHost', () => {
     expect(() =>
       replacementContext?.registerService(ValueCapability, { read: () => 'resurrected' })
     ).toThrow(KernelError)
+  })
+
+  test('replacement admission captures its manifest and activate receiver before deferring', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    host.registerModule(
+      moduleDefinition({ id: 'module.captured-replacement', provides: [ValueCapability] })
+    )
+    await host.start()
+    let original = 0
+    let changed = 0
+    const definition = {
+      ...moduleDefinition({
+        id: 'module.captured-replacement',
+        version: '2.0.0',
+        provides: [ValueCapability],
+      }),
+      activate(this: KernelModuleDefinition, context: KernelModuleActivateContext) {
+        expect(this).toBe(definition)
+        expect(context.moduleId).toBe('module.captured-replacement')
+        original++
+        context.registerService(ValueCapability, { read: () => 'captured' })
+      },
+    }
+    const replacing = host.replaceModule(definition)
+    Reflect.set(definition.manifest, 'id', 'module.changed-replacement')
+    Reflect.set(definition.manifest, 'version', '9.0.0')
+    Reflect.set(definition.manifest.provides, '0', DerivedCapability)
+    Reflect.set(definition, 'activate', () => {
+      changed++
+    })
+    try {
+      await replacing
+      expect(original).toBe(1)
+      expect(changed).toBe(0)
+      expect(host.getModule('module.changed-replacement')).toBeUndefined()
+      expect(host.getModule('module.captured-replacement')).toMatchObject({
+        generation: 2,
+        manifest: { version: '2.0.0' },
+      })
+      expect(host.getService(ValueCapability).read()).toBe('captured')
+    } finally {
+      await host.dispose()
+    }
+  })
+
+  test('same-module replacement conflicts until ready, rollback and old disposal really settle', async () => {
+    for (const phase of ['ready', 'rollback', 'old-dispose'] as const) {
+      const entered = deferred()
+      const cleanup = deferred()
+      const host = new KernelModuleHost({ apiVersion: 1 })
+      let oldDisposed = 0
+      let replacementDisposed = 0
+      let duplicateActivations = 0
+      let settled = false
+      host.registerModule(
+        moduleDefinition({
+          id: 'module.exclusive-replacement',
+          provides: [ValueCapability],
+          activate(context) {
+            context.registerService(ValueCapability, { read: () => 'old' })
+            return {
+              async dispose() {
+                if (phase === 'old-dispose') {
+                  entered.resolve()
+                  await cleanup.promise
+                }
+                oldDisposed++
+              },
+            }
+          },
+        })
+      )
+      await host.start()
+      const originalHandle = host.getServiceHandle(ValueCapability)
+      const replacing = host
+        .replaceModule(
+          moduleDefinition({
+            id: 'module.exclusive-replacement',
+            version: '2.0.0',
+            provides: [ValueCapability],
+            activate(context) {
+              context.registerService(ValueCapability, { read: () => 'accepted' })
+              return {
+                async ready() {
+                  if (phase === 'ready') {
+                    entered.resolve()
+                    await cleanup.promise
+                  }
+                  if (phase === 'rollback') throw new Error('fixture replacement rejected')
+                },
+                async dispose() {
+                  if (phase === 'rollback') {
+                    entered.resolve()
+                    await cleanup.promise
+                  }
+                  replacementDisposed++
+                },
+              }
+            },
+          })
+        )
+        .then(
+          () => {
+            settled = true
+            return undefined
+          },
+          (error: unknown) => {
+            settled = true
+            return error
+          }
+        )
+      const duplicate = () =>
+        host.replaceModule(
+          moduleDefinition({
+            id: 'module.exclusive-replacement',
+            version: '3.0.0',
+            provides: [ValueCapability],
+            activate() {
+              duplicateActivations++
+              throw new Error('duplicate must not activate')
+            },
+          })
+        )
+      try {
+        // 还没进入 activate 的微任务时就已经占有同一 moduleId。
+        await expect(duplicate()).rejects.toMatchObject({ code: 'CONFLICT' })
+        await entered.promise
+        expect(settled).toBe(false)
+        await expect(duplicate()).rejects.toMatchObject({ code: 'CONFLICT' })
+        expect(duplicateActivations).toBe(0)
+        expect(originalHandle.isActive()).toBe(phase !== 'old-dispose')
+        expect(host.getService(ValueCapability).read()).toBe(
+          phase === 'old-dispose' ? 'accepted' : 'old'
+        )
+        cleanup.resolve()
+        const outcome = await replacing
+        if (phase === 'rollback') expect(outcome).toBeInstanceOf(KernelError)
+        else expect(outcome).toBeUndefined()
+        await host.replaceModule(
+          moduleDefinition({
+            id: 'module.exclusive-replacement',
+            version: '4.0.0',
+            provides: [ValueCapability],
+            activate(context) {
+              context.registerService(ValueCapability, { read: () => 'final' })
+            },
+          })
+        )
+        expect(host.getModule('module.exclusive-replacement')!.generation).toBe(
+          phase === 'rollback' ? 2 : 3
+        )
+        expect(host.getService(ValueCapability).read()).toBe('final')
+        expect(oldDisposed).toBe(1)
+        expect(replacementDisposed).toBe(1)
+      } finally {
+        cleanup.resolve()
+        await replacing
+        await host.dispose()
+      }
+    }
+  })
+
+  test('different-module replacements run together and dispose drains every real rollback', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    const replacements = [ValueCapability, DerivedCapability].map((capability, index) => ({
+      capability,
+      id: `module.parallel-replacement-${index}`,
+      ready: deferred(),
+      releaseReady: deferred(),
+      cleanup: deferred(),
+      releaseCleanup: deferred(),
+      context: undefined as KernelModuleActivateContext | undefined,
+      oldDisposed: 0,
+      newDisposed: 0,
+    }))
+    for (const item of replacements)
+      host.registerModule(
+        moduleDefinition({
+          id: item.id,
+          provides: [item.capability],
+          activate(context) {
+            context.registerService(item.capability, { read: () => 'old' })
+            return {
+              dispose() {
+                item.oldDisposed++
+              },
+            }
+          },
+        })
+      )
+    await host.start()
+    const running = replacements.map((item) =>
+      host
+        .replaceModule(
+          moduleDefinition({
+            id: item.id,
+            version: '2.0.0',
+            provides: [item.capability],
+            activate(context) {
+              item.context = context
+              context.registerService(item.capability, { read: () => 'new' })
+              return {
+                async ready() {
+                  item.ready.resolve()
+                  await item.releaseReady.promise
+                },
+                async dispose() {
+                  item.cleanup.resolve()
+                  await item.releaseCleanup.promise
+                  item.newDisposed++
+                },
+              }
+            },
+          })
+        )
+        .catch((error: unknown) => error)
+    )
+    let closing: Promise<void> | undefined
+    let closed = false
+    try {
+      await Promise.all(replacements.map((item) => item.ready.promise))
+      expect(replacements.map((item) => host.getService(item.capability).read())).toEqual([
+        'old',
+        'old',
+      ])
+      closing = host.dispose().then(() => {
+        closed = true
+      })
+      await Promise.resolve()
+      expect(replacements.every((item) => item.context!.signal.aborted)).toBe(true)
+      expect(closed).toBe(false)
+      for (const item of replacements) item.releaseReady.resolve()
+      await Promise.all(replacements.map((item) => item.cleanup.promise))
+      expect(closed).toBe(false)
+      replacements[0]!.releaseCleanup.resolve()
+      expect(await running[0]).toBeInstanceOf(KernelError)
+      expect(closed).toBe(false)
+      replacements[1]!.releaseCleanup.resolve()
+      expect(await running[1]).toBeInstanceOf(KernelError)
+      await closing
+      expect(replacements.map((item) => [item.oldDisposed, item.newDisposed])).toEqual([
+        [1, 1],
+        [1, 1],
+      ])
+      expect(host.getOptionalService(ValueCapability)).toBeUndefined()
+      expect(host.getOptionalService(DerivedCapability)).toBeUndefined()
+    } finally {
+      for (const item of replacements) {
+        item.releaseReady.resolve()
+        item.releaseCleanup.resolve()
+      }
+      await Promise.all(running)
+      await (closing ?? host.dispose())
+    }
   })
 
   test('dispose drains admitted replacements during ready and old-generation cleanup', async () => {

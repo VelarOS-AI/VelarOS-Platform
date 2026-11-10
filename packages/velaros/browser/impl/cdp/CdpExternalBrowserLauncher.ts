@@ -485,7 +485,9 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       // 标签页目录只列这一页所在的浏览器上下文：用户自己的 Chrome 里别的配置、无痕窗口的标签页不给模型看。
       const pages = await connection.listPageTargets()
       this.requireBrowserPages(browser)
-      const browserContextId = pages.find((page) => page.targetId === targetId)?.browserContextId
+      const page = pages.find((page) => page.targetId === targetId)
+      if (!page) throw new AppError('NOT_FOUND', '新建浏览器标签页已不在目标目录中。')
+      const browserContextId = page.browserContextId
       transport = await connection.attach(targetId)
       this.requireBrowserPages(browser)
       const ownedTargetId = targetId

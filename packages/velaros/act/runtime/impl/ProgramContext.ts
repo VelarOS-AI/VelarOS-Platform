@@ -301,26 +301,40 @@ export class ProgramContext implements ProgramContextApi {
     signal: AbortSignal
   ): Promise<boolean> {
     if (!this.catalogValidator) return false
+    const snapshot = await this.snapshot([
+      { refId: descriptor.sourceRef },
+      { title: 'search:history-reset', latest: true },
+    ])
+    const source = snapshot?.records.find((item) => item.ref.id === descriptor.sourceRef)
+    const reset = Math.max(
+      snapshot?.metadata.task?.startedSequence ?? 0,
+      snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+    )
+    if (!source || source.sequence <= reset) return false
+    const material = await this.readProgram(descriptor.sourceRef, 0, 1)
     try {
-      const snapshot = await this.snapshot([
-        { refId: descriptor.sourceRef },
-        { title: 'search:history-reset', latest: true },
-      ])
-      const source = snapshot?.records.find((item) => item.ref.id === descriptor.sourceRef)
-      const reset = Math.max(
-        snapshot?.metadata.task?.startedSequence ?? 0,
-        snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
-      )
-      if (!source || source.sequence <= reset) return false
-      const material = await this.readProgram(descriptor.sourceRef, 0, 1)
       if (await this.catalogValidator.unchanged(descriptor.dependencies, signal)) return true
-      const raw = await this.storage.get(this.sessionId, material.record.objectId)
-      if (isNull(raw)) return false
-      await this.catalogValidator.validate(JSON.parse(raw), signal)
+    } catch (error) {
+      signal.throwIfAborted()
+      if (!(error instanceof AppError) || !['PERMISSION', 'NOT_FOUND'].includes(error.code))
+        throw error
+      Log.tag('ActRuntime').debug('程序目录项失去当前授权或依赖挂载', { error })
+      return false
+    }
+    const raw = await this.storage.get(this.sessionId, material.record.objectId)
+    if (isNull(raw)) return false
+    const program = JSON.parse(raw) as CodeProgramRequest
+    try {
+      await this.catalogValidator.validate(program, signal)
       return true
     } catch (error) {
       signal.throwIfAborted()
-      Log.tag('ActRuntime').debug('程序目录项未通过当前授权检查', { error })
+      if (
+        !(error instanceof AppError) ||
+        !['VALIDATION', 'PERMISSION', 'NOT_FOUND'].includes(error.code)
+      )
+        throw error
+      Log.tag('ActRuntime').debug('程序目录项未通过当前源码与 import 检查', { error })
       return false
     }
   }

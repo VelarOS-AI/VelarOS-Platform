@@ -1,4 +1,5 @@
 import { isEmpty, isTrue, isUndefined, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelErrorCodes } from '../../contract/constants'
 import type {
@@ -79,6 +80,7 @@ export interface KernelModuleHostApi {
    *
    * 新代在暂存门后面激活并就绪，其间旧代照常提供服务；就绪之后同步切换可见性与事件归属，
    * 再释放旧代。替换失败只丢掉新代，现有图不受影响。
+   * 同一模块尚未完成替换及收尾时再次替换抛 CONFLICT；不同模块仍可并行。
    */
   replaceModule(definition: KernelModuleDefinition): Promise<void>
   /** 按激活的逆序挂起全部模块；有模块挂起失败时收齐再一起抛。 */
@@ -142,7 +144,10 @@ export class KernelModuleHost implements KernelModuleHostApi {
   private activationOrder: readonly string[] = []
   private startPromise?: Promise<void>
   private disposePromise?: Promise<void>
-  private readonly replacements = new Map<AbortController, Promise<void>>()
+  private readonly replacements = new Map<
+    string,
+    { readonly controller: AbortController; readonly promise: Promise<void> }
+  >()
   private disposed = false
 
   public constructor(private readonly options: KernelModuleHostOptions) {
@@ -194,11 +199,12 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
   public start(): Promise<void> {
     this.assertNotDisposed()
-    this.startPromise ??= this.startOnce()
+    this.startPromise ??= Promise.resolve().then(() => this.startOnce())
     return this.startPromise
   }
 
   private async startOnce(): Promise<void> {
+    this.assertNotDisposed()
     this.assertStartable()
     const plan = this.resolvePlan()
     this.activationOrder = plan.order
@@ -206,19 +212,21 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
     for (const moduleId of plan.order) {
       const record = this.modules.get(moduleId)!
-      record.status = 'activating'
-      record.error = undefined
-      record.controller = new AbortController()
-      record.contextActive = true
       try {
+        this.assertNotDisposed()
+        record.status = 'activating'
+        record.error = undefined
+        record.controller = new AbortController()
+        record.contextActive = true
         const lifecycle = await this.activateRecord(record)
         record.lifecycle = lifecycle ?? {}
         record.status = 'active'
         activatedModuleIds.push(moduleId)
+        this.assertNotDisposed()
       } catch (error) {
         failModuleRecord(record, error)
-        this.cleanupModule(record)
-        const rollbackErrors = await this.rollback(activatedModuleIds)
+        if (!activatedModuleIds.includes(moduleId)) this.cleanupModule(record)
+        const rollbackErrors = await this.rollback(activatedModuleIds, moduleId)
         throw startupFailure({
           moduleId,
           phase: 'activate',
@@ -230,9 +238,11 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
     for (const moduleId of plan.order) {
       const record = this.modules.get(moduleId)!
-      record.status = 'readying'
       try {
+        this.assertNotDisposed()
+        record.status = 'readying'
         await record.lifecycle?.ready?.()
+        this.assertNotDisposed()
         record.status = 'ready'
         record.health = HealthyModuleHealth
       } catch (error) {
@@ -258,24 +268,12 @@ export class KernelModuleHost implements KernelModuleHostApi {
    */
   public async replaceModule(definition: KernelModuleDefinition): Promise<void> {
     this.assertNotDisposed()
-    const controller = new AbortController()
-    // 先登记整次替换，再进入模块代码；关闭也要等暂存回滚和旧代释放实际结束。
-    const replacing = Promise.resolve().then(() => this.replaceOnce(definition, controller))
-    this.replacements.set(controller, replacing)
-    try {
-      await replacing
-    } finally {
-      this.replacements.delete(controller)
-    }
-  }
-
-  private async replaceOnce(
-    definition: KernelModuleDefinition,
-    controller: AbortController
-  ): Promise<void> {
-    this.assertNotDisposed()
     const manifest = cloneManifest(definition.manifest)
     validateManifest(manifest, this.options.apiVersion)
+    if (this.replacements.has(manifest.id))
+      throw AppError.withFields('CONFLICT', `模块 "${manifest.id}" 的替换尚未收束`, {
+        moduleId: manifest.id,
+      })
     const previous = this.modules.get(manifest.id)
     if (isUndefined(previous)) {
       throw new KernelError(
@@ -296,7 +294,26 @@ export class KernelModuleHost implements KernelModuleHostApi {
       )
     }
 
+    // 在排微任务前捕获清单、代际与 activate；调用方改原件不改变已受理的替换。
     const replacement = createModuleRecord(definition, manifest, previous.generation + 1)
+    const controller = new AbortController()
+    // 同 id 的占有覆盖暂存回滚与旧代释放；不同 id 保持并行，关闭只认这份完整承诺。
+    const replacing = Promise.resolve()
+      .then(() => this.replaceOnce(previous, replacement, controller))
+      .finally(() => {
+        this.replacements.delete(manifest.id)
+      })
+    this.replacements.set(manifest.id, { controller, promise: replacing })
+    await replacing
+  }
+
+  private async replaceOnce(
+    previous: ModuleRecord,
+    replacement: ModuleRecord,
+    controller: AbortController
+  ): Promise<void> {
+    this.assertNotDisposed()
+    const { manifest } = replacement.definition
     const tentativeDefinitions = new Map(
       [...this.modules].map(([moduleId, record]) => [
         moduleId,
@@ -396,14 +413,16 @@ export class KernelModuleHost implements KernelModuleHostApi {
   }
 
   public dispose(): Promise<void> {
-    this.disposePromise ??= this.disposeOnce()
+    if (!this.disposePromise) {
+      this.disposed = true
+      this.disposePromise = Promise.resolve().then(() => this.disposeOnce())
+    }
     return this.disposePromise
   }
 
   private async disposeOnce(): Promise<void> {
-    if (this.disposed) return
-    this.disposed = true
-    for (const controller of this.replacements.keys()) controller.abort()
+    for (const record of this.modules.values()) record.controller?.abort()
+    for (const replacement of this.replacements.values()) replacement.controller.abort()
     if (this.startPromise) {
       try {
         await this.startPromise
@@ -416,7 +435,9 @@ export class KernelModuleHost implements KernelModuleHostApi {
     }
     // 替换不等待宿主关闭：取消后自行回滚暂存代，或完成已提交替换的旧代收尾。
     // 替换失败仍交给原调用方（含回滚错误）；旧代释放失败保持已提交替换的既有日志语义。
-    await Promise.allSettled([...this.replacements.values()])
+    await Promise.allSettled(
+      [...this.replacements.values()].map((replacement) => replacement.promise)
+    )
     const failures: Array<{ moduleId: string; error: Error }> = []
     const orderedIds = new Set(this.activationOrder)
     const remainingIds = [...this.modules.keys()]

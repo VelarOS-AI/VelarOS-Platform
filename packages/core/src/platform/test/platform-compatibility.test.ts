@@ -103,9 +103,16 @@ describe('PlatformCompatibility', () => {
         platform: 'win32',
         env: { ComSpec: 'C:\\Users\\attacker\\cmd.exe' },
       }).getOpenExternalFallbackSpec('https://example.com')
-    ).toEqual({
-      file: 'C:\\Windows\\System32\\cmd.exe',
-      args: ['/c', 'start', '', 'https://example.com'],
+    ).toMatchObject({
+      file: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      args: [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-EncodedCommand',
+        expect.any(String),
+      ],
     })
     expect(
       createPlatform({
@@ -128,7 +135,7 @@ describe('PlatformCompatibility', () => {
         platform: 'win32',
         env: { ComSpec: 'E:\\Tools\\not-cmd.exe' },
       }).getOpenApplicationCommandSpec('notepad.exe').file
-    ).toBe('C:\\Windows\\System32\\cmd.exe')
+    ).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
     expect(windows.getDirectorySymlinkType()).toBe('junction')
     expect(windows.shouldUseDetachedProcessGroup()).toBe(false)
     expect(windows.getInteractiveShellArgs()).toEqual(['--noprofile', '--norc', '-i'])
