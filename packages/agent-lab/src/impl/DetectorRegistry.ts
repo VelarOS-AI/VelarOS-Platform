@@ -64,12 +64,20 @@ class DetectorRegistry implements DetectorRegistryApi {
   }
 
   public registerBuiltins(options: BuiltinDetectorOptions = {}): void {
-    this.settings = {
+    const settings: ResolvedDetectorSettings = {
       thresholds: { ...DefaultLoopThresholds, ...options.thresholds },
       catalogToolNames: options.catalogToolNames ?? [],
       interactiveToolNames: options.interactiveToolNames ?? [],
     }
-    for (const detector of createBuiltinDetectors(this.settings)) this.register(detector)
+    const detectors = createBuiltinDetectors(settings)
+    const ids = new Set(this.detectors.keys())
+    for (const detector of detectors) {
+      if (ids.has(detector.definition.id))
+        throw new Error(`这个探测器已经注册过了: ${detector.definition.id}`)
+      ids.add(detector.definition.id)
+    }
+    for (const detector of detectors) this.detectors.set(detector.definition.id, detector)
+    this.settings = settings
   }
 
   public get(id: string): RegisteredDetector | null {

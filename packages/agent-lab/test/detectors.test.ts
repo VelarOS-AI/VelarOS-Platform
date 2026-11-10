@@ -7,7 +7,7 @@ import type {
   ToolCallRecord,
   TranscriptBlock,
 } from '../src/index.js'
-import { DefaultLoopThresholds } from '../src/index.js'
+import { createDetectorRegistry, DefaultLoopThresholds } from '../src/index.js'
 import { createBuiltinDetectors } from '../src/utils/measure/detectors.js'
 
 /** 宿主给的两份工具名单：本包核心里不写任何产品的工具名，测试自己提供。 */
@@ -85,6 +85,74 @@ describe('built-in detectors', () => {
       'toolmap-read-loop',
       'turn-tool-density',
     ])
+  })
+
+  test('rejects duplicate builtins without changing detector or watchdog settings', () => {
+    const registry = createDetectorRegistry()
+    registry.registerBuiltins({
+      thresholds: {
+        retryWarn: 2,
+        retryAbort: 3,
+        toolMapReadWarn: 2,
+        toolMapReadAbort: 3,
+      },
+      ...HostToolNames,
+    })
+    const registered = registry.list()
+    expect(() =>
+      registry.registerBuiltins({
+        thresholds: { retryWarn: 1, retryAbort: 1, toolMapReadWarn: 1, toolMapReadAbort: 1 },
+        catalogToolNames: ['other:catalog'],
+        interactiveToolNames: [],
+      })
+    ).toThrow('stuck-streaming-block')
+    expect(registry.list()).toEqual(registered)
+    for (const detector of registered) expect(registry.get(detector.definition.id)).toBe(detector)
+
+    const calls = Array.from({ length: 3 }, (_, index) =>
+      call(`catalog-${index}`, HostToolNames.catalogToolNames[0]!, { op: 'read', ids: ['write'] })
+    )
+    const active = new Set(['tool-retry-loop', 'toolmap-read-loop'])
+    const baseline = registry.watchdogBaseline(withCalls([]), [], active)
+    const current = withCalls(calls.slice(0, 2))
+    const findings = registry.detect(current, context)
+    expect(
+      findings
+        .filter((finding) => active.has(finding.detectorId))
+        .map((finding) => ({
+          detectorId: finding.detectorId,
+          abortAt: finding.evidence.abortAt,
+        }))
+    ).toEqual([
+      { detectorId: 'tool-retry-loop', abortAt: 3 },
+      { detectorId: 'toolmap-read-loop', abortAt: 3 },
+    ])
+    expect(registry.watchdogAbort(current, findings, baseline, active)).toBeNull()
+    const reached = withCalls(calls)
+    expect(
+      registry.watchdogAbort(
+        reached,
+        registry.detect(reached, context),
+        baseline,
+        new Set(['toolmap-read-loop'])
+      )?.detectorId
+    ).toBe('toolmap-read-loop')
+  })
+
+  test('preflights a later custom detector conflict before registering any builtin', () => {
+    const registry = createDetectorRegistry()
+    const custom = {
+      definition: {
+        ...builtins().find((item) => item.definition.id === 'turn-tool-density')!.definition,
+      },
+      detect: () => [],
+    }
+    registry.register(custom)
+    expect(() => registry.registerBuiltins()).toThrow(custom.definition.id)
+    expect(registry.list()).toEqual([custom])
+    expect(registry.get(custom.definition.id)).toBe(custom)
+    expect(registry.get('stuck-streaming-block')).toBeNull()
+    expect(registry.get('tool-retry-loop')).toBeNull()
   })
 
   test('preserves calibrated loop boundaries and ignores unknown empty arguments', () => {
