@@ -12,4 +12,4 @@
 
 正式发布沿用 `release-packages.yml` 与安全发布器：固定 tag/HEAD、冻结安装、现有五分钟质量检查内的新构建、安全独占临时目录打包、同字节 SHA-256/SHA-512、基础归档独立 JS 与严格声明消费、draft 完整上传后公布。所有最终 URL、sourceSha、integrity 和 SHA-256 以 Release 的 `release-manifest.json` 为单源，归档验证见 `release-validation.json`。不把确定性消费测试声明为供应商连通或跨 OS 全路径验收。
 
-原 D 工作区、用户文件与 index 不参与合并或发布操作。分支清理在 main 推送及正式发布完成后进行；在用且有未提交用户改动的分支保留并向协调报告具体阻碍，不 reset 或 stash 用户数据。
+原 D 用户文件与 index 不参与合并或发布操作。后续按明确授权，在原 commit 仅脱离退役分支，文件、index 字节及状态均不变；旧分支完整备份并恢复验证后退役，本地与远端最终仅保留 main。后续 0.9.7 的正式交付与整理结果见 [普通依赖发行修正](plain-dependency-release-20261110.md)。

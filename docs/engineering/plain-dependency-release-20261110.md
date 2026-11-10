@@ -17,3 +17,16 @@
 实现差量只包括发行声明/暂存器、普通 pair 验收和 publisher 晋升，以及版本/生成目录和文档。基础执行实现未再改动；既有 53 个场景与各模块绿色证明保留。新正式包的摘要和验证身份以本 tag 的 `release-manifest.json`、`release-validation.json` 为准；源码基准与发行实际安装证明分别记录。
 
 源码交付核验：新增相关 17 项测试、改动发行脚本 lint、`bun run format`、离线 lockfile/catalog 刷新、`release:preflight` 与 26 模块 `check:module-ownership` 全部通过。严格声明与 Project 事务夹具已用同 API 的既有本地候选预检通过；这只验证夹具可运行，正式普通 pair 结论仍由本次实际发布流水线的收据决定。
+
+## 正式交付结果
+
+[发布流水线 42747321692](https://github.com/VelarOS-AI/VelarOS-Platform/actions/runs/42747321692) 成功，源码固定为 `30982bfc1ae92912aa734ea5be2acf01687d87ed`，`v0.7.8` 已为 stable/latest。相同源码的 [main CI](https://github.com/VelarOS-AI/VelarOS-Platform/actions/runs/42747292541) 通过。实际官方 pair 的普通安装、冻结安装、单一基础实例、严格声明、真实 Project 事务、来源和 SRI 六项均通过；随后独立公开下载两份归档，再核大小、SHA-256/SHA-512、内部清单与公开收据一致。
+
+| 归档 | 字节数 | SHA-256 |
+| --- | ---: | --- |
+| [基础 0.9.7](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-velaros-0.9.7.tgz) | 2265406 | `d4f3e502eb59e4a3d42e5ca66a8aa55d3da06586e7ce79e699644cdbe51a9d69` |
+| [能力 0.9.7](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-capabilities-0.9.7.tgz) | 7170390 | `8bf90825f5f4a40b7ead3320ac0bdde1331d49546a44a2f6a39342bb124c25f9` |
+
+正式摘要见 [release-manifest.json](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/release-manifest.json)，实际消费证明见 [release-validation.json](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/release-validation.json)。产品交接已发送机器收据，未等待分支整理，也未向产品交付临时改写包。
+
+分支整理已完成：本地与远端 heads 仅保留 main，默认分支 main；未采纳的 Dependabot PR #3/#4 关闭且未合入。删除前所有旧 refs 已存入完整 Git bundle，逐 ref 隔离恢复验证通过；bundle SHA-256 为 `07b1214cbbded509401090cd5f3746f506205ae5b33d739a7a40d6dbcc915a15`，另留持久备份。原 D 与旧发布 checkout 仅在原 commit 脱离已退役分支，保留目录；原 D 用户文件、index 物理字节、index blob 和状态前后相同。tags 与旧 releases 保留。本文收尾提交只记录交付结果，不改变发布源码或资产身份。
