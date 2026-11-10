@@ -12,6 +12,14 @@ import { KernelTuning } from '../tuning'
 
 const log = Log.tag('KernelDaemonProcess')
 
+/** 已释放的启动器拒绝点火，统一交回既有客户端错误码。 */
+export function launcherDisposedFailure(): KernelClientError {
+  return new KernelClientError({
+    code: KernelClientErrorCodes.launcherDisposed,
+    message: '已回收的 Kernel 启动器不能再启动 Kernel',
+  })
+}
+
 /**
  * 运行目录必须归自己所有、且只有自己能进。
  *

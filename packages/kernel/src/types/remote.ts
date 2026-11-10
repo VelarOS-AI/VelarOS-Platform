@@ -230,6 +230,8 @@ export interface RemoteNodeConnection {
 
 /** Node 侧一次正在执行的能力调用。 */
 export interface RemoteNodeInFlightCall {
+  /** 受理时的信任代；旧真实调用可以收束，但不能回填新信任关系的回放或连接。 */
+  readonly trustGeneration: number
   /** 调用 id,与终态回放缓存同键。 */
   readonly callId: string
   /** 发起方 clientId,终态只发给它当前那条 ready 连接。 */

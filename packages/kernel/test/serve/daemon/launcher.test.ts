@@ -81,6 +81,127 @@ function fakeSpawn(child: FakeChildProcess) {
 }
 
 describe('KernelLauncher', () => {
+  test('launcher startup ownership serializes ignition and gives each caller an independent client', async () => {
+    const directory = await temporaryDirectory()
+    const paths = createDefaultKernelDaemonPaths('launcher-owned', directory)
+    const daemon = new KernelLocalDaemon({ paths, service: createService() })
+    runningDaemons.push(daemon)
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const child = new FakeChildProcess()
+    let resolutions = 0
+    let spawns = 0
+    const launcher = new KernelLauncher({
+      paths,
+      resolver: {
+        resolveActiveVersion: async () => {
+          resolutions++
+          entered.resolve()
+          await release.promise
+          await daemon.start()
+          return resolverFor().resolveActiveVersion()
+        },
+      },
+      spawnProcess: (() => {
+        spawns++
+        return child
+      }) as unknown as typeof import('node:child_process').spawn,
+    })
+    const first = launcher.ensureRunning()
+    await entered.promise
+    const second = launcher.ensureRunning()
+    try {
+      expect(resolutions).toBe(1)
+      release.resolve()
+      const [a, b] = await Promise.all([first, second])
+      try {
+        expect(spawns).toBe(1)
+        expect(resolutions).toBe(1)
+        expect(a.started).toBe(true)
+        expect(b.started).toBe(false)
+        expect(a.client).not.toBe(b.client)
+        await a.client.dispose()
+        expect((await b.client.handshake()).kernelVersion).toBe('0.3.0')
+      } finally {
+        await a.client.dispose()
+        await b.client.dispose()
+      }
+    } finally {
+      release.resolve()
+      await Promise.allSettled([first, second])
+      await launcher.dispose()
+    }
+    expect(child.signals).toEqual(['SIGTERM'])
+  })
+
+  test('launcher startup ownership drains spawn and kill callbacks that reenter disposal', async () => {
+    const directory = await temporaryDirectory()
+    const child = new FakeChildProcess()
+    let closing: Promise<void> | undefined
+    let reentered: Promise<void> | undefined
+    const kill = child.kill.bind(child)
+    child.kill = (signal) => {
+      reentered = launcher.dispose()
+      return kill(signal)
+    }
+    const launcher = new KernelLauncher({
+      paths: createDefaultKernelDaemonPaths('launcher-reentrant', directory),
+      resolver: resolverFor(),
+      spawnProcess: (() => {
+        closing = launcher.dispose()
+        return child
+      }) as unknown as typeof import('node:child_process').spawn,
+    })
+    const starting = launcher.ensureRunning().catch((error: unknown) => error)
+    try {
+      expect(await starting).toMatchObject({ code: 'LAUNCHER_DISPOSED' })
+      await closing
+      expect(reentered).toBe(closing)
+      expect(closing).toBe(launcher.dispose())
+      expect(child.signals).toEqual(['SIGTERM'])
+    } finally {
+      await launcher.dispose()
+    }
+  })
+
+  test('launcher startup ownership retains a child after stop deadlines until it really exits', async () => {
+    const directory = await temporaryDirectory()
+    const child = new FakeChildProcess()
+    child.ignoreSignals = true
+    let now = 0
+    let spawns = 0
+    const launcher = new KernelLauncher({
+      paths: createDefaultKernelDaemonPaths('launcher-still-alive', directory),
+      resolver: resolverFor(),
+      spawnProcess: (() => {
+        spawns++
+        return child
+      }) as unknown as typeof import('node:child_process').spawn,
+      startTimeoutMs: 0,
+      stopGraceMs: 1,
+      stopKillGraceMs: 1,
+      pollIntervalMs: 1,
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms
+      },
+    })
+    try {
+      await expect(launcher.ensureRunning()).rejects.toMatchObject({ code: 'KERNEL_START_TIMEOUT' })
+      expect(child.signals).toEqual(['SIGTERM', 'SIGKILL'])
+      await expect(launcher.ensureRunning()).rejects.toMatchObject({ code: 'KERNEL_START_FAILED' })
+      expect(spawns).toBe(1)
+      child.ignoreSignals = false
+      const stopping = launcher.stop()
+      expect(launcher.stop()).toBe(stopping)
+      await stopping
+      expect(child.signalCode).toBe('SIGTERM')
+    } finally {
+      child.ignoreSignals = false
+      await launcher.dispose()
+    }
+  })
+
   test('attaches to an already running Kernel instead of starting a second one', async () => {
     const directory = await temporaryDirectory()
     const paths = createDefaultKernelDaemonPaths('launcher-kernel', directory)
@@ -272,7 +393,7 @@ describe('KernelLauncher', () => {
     })
   })
 
-  test('a version resolved after disposal cannot spawn a Kernel', async () => {
+  test('launcher startup ownership drains a late version resolution without spawning', async () => {
     const directory = await temporaryDirectory()
     let enter!: () => void
     let release!: () => void
@@ -298,9 +419,15 @@ describe('KernelLauncher', () => {
     const starting = launcher.ensureRunning().catch((error: unknown) => error)
     try {
       await entered
-      await launcher.dispose()
+      let closed = false
+      const closing = launcher.dispose().then(() => {
+        closed = true
+      })
+      await Promise.resolve()
+      expect(closed).toBe(false)
       release()
       expect(await starting).toMatchObject({ code: 'LAUNCHER_DISPOSED' })
+      await closing
       expect(child.unrefCalls).toBe(0)
       expect(child.signals).toEqual([])
     } finally {
