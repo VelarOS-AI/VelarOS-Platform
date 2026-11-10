@@ -1633,7 +1633,8 @@ export class RuntimeSession implements VelarosSession {
   }
   public async inspect() {
     if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
-    return this.agent.inspect()
+    const agent = this.agent
+    return this.dependencies.readHistory(() => agent.inspect())
   }
   public async waitForChanges(signal: AbortSignal): Promise<void> {
     if (this.closed || !this.dependencies.stores)
@@ -1642,7 +1643,8 @@ export class RuntimeSession implements VelarosSession {
   }
   public async events(after?: number, limit?: number) {
     if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
-    return this.agent.events(after, limit)
+    const agent = this.agent
+    return this.dependencies.readHistory(() => agent.events(after, limit))
   }
   public async trace(turnId: string, maxChars?: number) {
     return this.dependencies.readHistory(() =>

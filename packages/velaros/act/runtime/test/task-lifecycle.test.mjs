@@ -564,6 +564,85 @@ test('host material reads reject admission from a synchronous model cancellation
   }
 })
 
+for (const method of ['inspect', 'events'])
+  test(`run archive reads retain storage through reentrant Runtime close (${method})`, async (t) => {
+    const storage = localContextStorage({ path: ':memory:' })
+    const entered = Promise.withResolvers()
+    const release = Promise.withResolvers()
+    const order = []
+    let storageClosed = false
+    let modelCalls = 0
+    const runtime = await createRuntime({
+      storage,
+      runner: { run: async () => assert.fail('archive reads must not execute programs') },
+      context: { maintenance: false },
+      model: {
+        id: 'run-archive-owner',
+        limits,
+        estimate,
+        async *stream(request) {
+          modelCalls++
+          yield* done(request)
+        },
+      },
+    })
+    t.after(async () => {
+      release.resolve()
+      await runtime.close()
+    })
+    const session = await runtime.openSession('run-archive')
+    await submit(session, 'archive one run')
+    await session.close()
+    const read = method === 'inspect' ? () => session.inspect() : () => session.events(0, 2)
+    const expected = await read()
+    const calls = modelCalls
+    assert.equal(runtime.getSession(session.id), undefined)
+    const load = storage.load.bind(storage)
+    let armed = true
+    let closing
+    let reads = 0
+    storage.load = async (id) => {
+      reads++
+      if (armed) {
+        armed = false
+        closing = runtime.close({ timeoutMs: 20 })
+        entered.resolve()
+        await release.promise
+        order.push('read-resumed')
+      }
+      assert.equal(storageClosed, false, 'accepted run archives retain their live storage owner')
+      return load(id)
+    }
+    const close = storage.close.bind(storage)
+    storage.close = async () => {
+      order.push('storage-close')
+      storageClosed = true
+      await close()
+    }
+    const pending = read()
+    try {
+      await Promise.race([
+        entered.promise,
+        pending.then(() => assert.fail('the archive read did not reach storage')),
+      ])
+      await assert.rejects(closing, { code: 'TIMEOUT' })
+      const before = reads
+      await assert.rejects(session.inspect(), { code: 'CLOSED' })
+      await assert.rejects(session.events(), { code: 'CLOSED' })
+      assert.equal(reads, before)
+      assert.equal(storageClosed, false)
+      release.resolve()
+      assert.deepEqual(await pending, expected)
+    } finally {
+      release.resolve()
+      await Promise.allSettled([pending])
+      await runtime.close()
+    }
+    assert.equal(modelCalls, calls)
+    assert.equal(runtime.getSession(session.id), undefined)
+    assert.deepEqual(order, ['read-resumed', 'storage-close'])
+  })
+
 test('memory consolidation reads materials over multiple rounds and stages knowledge without writing', async () => {
   const { createMemoryConsolidation } = await import('../../../dist/act/runtime/index.js')
   let calls = 0
