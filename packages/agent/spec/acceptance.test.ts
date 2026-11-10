@@ -3844,6 +3844,57 @@ test('cancellation before a model request retains the input and restart consumes
   await reopened.close()
 })
 
+test('INV-39 an explicit new task excludes retained earlier input across a later reopen', async () => {
+  const f = runFixture()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  f.options.frames.prepare = () => gate
+  const service = createActRunService(f.options)
+  const old = []
+  for await (const event of service.submit({ text: 'old goal', inputId: 'same-host-id' })) {
+    old.push(event)
+    if (event.type === 'input') {
+      service.cancel()
+      release()
+    }
+  }
+  const oldInput = old.find((event) => event.type === 'input')!
+  expect(old.some((event) => event.type === 'turn')).toBe(false)
+  expect(old.find((event) => event.type === 'input-retained')).toMatchObject({
+    ref: oldInput.ref,
+  })
+  const oldTask = await f.view.inspect()
+  f.options.frames.prepare = async () => {}
+  const fresh = []
+  for await (const event of service.submit({
+    text: 'independent goal',
+    task: 'new',
+    inputId: 'same-host-id',
+  }))
+    fresh.push(event)
+  const freshInput = fresh.find((event) => event.type === 'input')!
+  expect((await f.view.inspect())!.id).not.toBe(oldTask!.id)
+  expect((await f.view.inspect())!.goals).toEqual([freshInput.ref])
+  expect(fresh.filter((event) => event.type === 'input-applied')).toEqual([
+    expect.objectContaining({ ref: freshInput.ref }),
+  ])
+  await service.close()
+
+  const reopened = createActRunService(f.options)
+  const continued = []
+  for await (const event of reopened.submit('continue independent goal')) continued.push(event)
+  expect((await f.view.inspect())!.goals).not.toContainEqual(oldInput.ref)
+  expect(
+    continued.some((event) => event.type === 'input-applied' && event.ref.id === oldInput.ref.id)
+  ).toBe(false)
+  const durable = (await reopened.events()).map((item) => item.event)
+  expect(durable).toContainEqual(oldInput)
+  expect(
+    durable.some((event) => event.type === 'input-applied' && event.ref.id === oldInput.ref.id)
+  ).toBe(false)
+  await reopened.close()
+})
+
 test('guidance cancellation reports exactly the accepted input left outside a model request', async () => {
   const f = runFixture()
   let started!: () => void

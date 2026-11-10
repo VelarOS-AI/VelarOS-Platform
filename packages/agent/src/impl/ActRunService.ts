@@ -97,6 +97,18 @@ class ActRunService implements ActRunServiceApi {
             turnSignal.throwIfAborted()
             if (!restored) {
               const state = await this.options.storage.load(this.options.sessionId)
+              const startedSequence = state?.task?.startedSequence ?? 0
+              // 按原始受理记录归属核对任务边界，旧事件的未消费身份不能进入显式新任务。
+              const taskInputs = new Set(
+                state?.records
+                  .filter(
+                    (record) =>
+                      record.kind === 'user' &&
+                      record.ref.sessionId === this.options.sessionId &&
+                      record.sequence > startedSequence
+                  )
+                  .map((record) => record.ref.id)
+              )
               const applied = new Set<string>()
               const events: ActRunEvent[] = []
               for (const record of state?.records ?? [])
@@ -110,6 +122,8 @@ class ActRunService implements ActRunServiceApi {
               for (const event of events)
                 if (
                   event.type === 'input' &&
+                  event.ref.sessionId === this.options.sessionId &&
+                  taskInputs.has(event.ref.id) &&
                   !(event.source === 'submit' && event.runId === this.runId) &&
                   !applied.has(event.ref.id) &&
                   !this.inputs.some((item) => item.ref.id === event.ref.id)
