@@ -11,6 +11,7 @@ import type {
   SourceFileSelection,
   SourceFileSelectionResult,
 } from '../../types/language.js'
+import { ProjectError } from '../errors.js'
 import { DevelopmentTuning } from '../tuning.js'
 
 import { normalizeSeparators } from './project-paths.js'
@@ -115,7 +116,7 @@ export async function collectSourceFiles(
   return { files: files.slice(0, maxFiles), truncated: entries.length > maxFiles }
 }
 
-/** 经只读内核读一个源文件；二进制或超出读取上限时按缺席处理。 */
+/** 经只读内核读一个完整源文件；二进制按缺席处理，正文超过读取上限时明确拒绝，不能把前缀当作全文查询。 */
 export async function readSourceFile(
   ctx: LanguageToolContext,
   path: string
@@ -128,6 +129,13 @@ export async function readSourceFile(
     maxBytes: DevelopmentTuning.navigation.maxReadableSourceBytes,
   })
   ctx.abortSignal.throwIfAborted()
+  if (result.truncated || result.hasMore)
+    throw new ProjectError(
+      'NOT_SUPPORTED',
+      `${path} 的完整源码超过语言查询的 ${DevelopmentTuning.navigation.maxReadableSourceBytes} 字节读取上限，未查询不完整正文。`,
+      { path, maxBytes: DevelopmentTuning.navigation.maxReadableSourceBytes },
+      '请用有界文本搜索定位所需片段，或将源码拆分后再查询。'
+    )
   if (result.snapshot.isBinary || !result.content) return null
   return result.content
 }

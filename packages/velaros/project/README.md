@@ -92,3 +92,5 @@ export function closeProject() {
 `undo` 回执给出 `status:'rolled_back'`、`changed`、实际文件和反向 `diff`，同样按 8192 字符截断并标记 `diffTruncated`。重复撤回返回 `changed:false`、`alreadyUndone:true` 与空差量。遇到后续修改时错误文字指出冲突路径，整批保持现场。常用提交、检查与撤回合同随 Node 指令提供，其余能力按需定向发现。
 
 事务请求归属会话和项目，Node 客户端自动分配请求号，连接中断后用同号重试一次；其他宿主默认取调用号。持久历史保留期内，`inspect({requestId})` 可在重启后定位请求，`inspect({})` 取当前会话在目标根最近的一笔，previousChangeRef 可向前浏览。相同请求并发或重试只返回留存事务；同号异内容拒绝。快照继续供只读观察计划使用。宿主的语言服务、文件浏览和历史记录使用各自的公开端口。
+- 沙箱调用在授权与排队前固定本次目标和路径；项目证据源只将明确的无权或目标不存在判为不可访问，后端读取故障原样交回。
+- 语言查询需要完整源码；达到读取边界时明确报 `NOT_SUPPORTED`，不把截断尾部的结果当完整答案。`definition` 的符号位置没有解析快照版本时交回 `coverage.versioned: false` 与降级原因，不绑定到另一次独立读取的版本。

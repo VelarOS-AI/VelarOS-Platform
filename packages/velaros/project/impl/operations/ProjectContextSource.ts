@@ -11,11 +11,11 @@ import type {
   ContextTime,
   ContextViewForm,
 } from '@velaros-ai/context'
-import { Log } from '@velaros-ai/core'
 import { toOptional } from '@velaros-ai/core'
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { ProjectErrorCodes } from '../../contract/constants.js'
 import type { ProjectContextSourceOptions } from '../../contract/requires.js'
 import type { Range } from '../../types/common.js'
 
@@ -51,10 +51,15 @@ export class ProjectContextSource implements ProjectContextSourceApi {
       await this.options.kernel.stat({ path: target.resourceId })
       signal.throwIfAborted()
       return true
-    } catch {
-      Log.tag('ActRuntime').debug('ProjectContextSource 已进入异常处理或降级分支')
+    } catch (error) {
       signal.throwIfAborted()
-      return false
+      const reason = (error as { reason?: unknown } | null)?.reason
+      if (
+        reason === ProjectErrorCodes.permissionDenied ||
+        reason === ProjectErrorCodes.targetNotFound
+      )
+        return false
+      throw error
     }
   }
 

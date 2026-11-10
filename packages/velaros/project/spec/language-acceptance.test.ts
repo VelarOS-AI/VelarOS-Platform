@@ -19,6 +19,7 @@ import {
   type LanguageToolContext,
   typeScriptProjects,
 } from '../index'
+import { DevelopmentTuning } from '../utils/tuning'
 
 // 用例跑真实类型检查，机器繁忙时会超过默认的 5 秒。
 setDefaultTimeout(30_000)
@@ -159,6 +160,46 @@ describe('@velaros-ai/velaros/project 验收', () => {
     expect(result.diagnosticCount).toBe(0)
     expect(result.scannedFiles).toBe(0)
     expect(String(result.note)).toContain('这不代表代码没有错误')
+  })
+
+  test('语言查询拒绝超过读取上限的 JS/TS 和 Python 源码，不把尾部唯一导入与引用报成不存在', async () => {
+    const boundedRoot = await mkdtemp(join(tmpdir(), 'project-language-bounded-source-'))
+    try {
+      for (const sample of [
+        {
+          extension: 'ts',
+          comment: '// padding\n',
+          source: "import { boundedTarget } from './target'\nboundedTarget()\n",
+        },
+        {
+          extension: 'py',
+          comment: '# padding\n',
+          source: 'from target import boundedTarget\nboundedTarget()\n',
+        },
+      ]) {
+        const large = `large.${sample.extension}`
+        const small = `small.${sample.extension}`
+        const prefix = sample.comment.repeat(
+          Math.ceil(
+            (DevelopmentTuning.navigation.maxReadableSourceBytes + 1) / sample.comment.length
+          )
+        )
+        await writeFile(join(boundedRoot, large), prefix + sample.source)
+        await writeFile(join(boundedRoot, small), sample.source)
+        for (const action of ['find_imports', 'find_references']) {
+          await expect(
+            run({ action, path: large, symbol: 'boundedTarget' }, boundedRoot)
+          ).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: large } })
+          const complete = await run({ action, path: small, symbol: 'boundedTarget' }, boundedRoot)
+          expect(complete.truncated).toBe(false)
+          expect(
+            action === 'find_imports' ? complete.importCount : complete.referenceCount
+          ).toBeGreaterThan(0)
+        }
+      }
+    } finally {
+      await rm(boundedRoot, { recursive: true, force: true })
+    }
   })
 
   test('INV-33 目录诊断与单文件诊断给出同一份结果', async () => {

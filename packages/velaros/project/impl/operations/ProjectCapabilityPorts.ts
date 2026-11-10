@@ -62,19 +62,35 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
       getSandboxRecord: async (sandboxId, signal = abortSignal) =>
         (await authorize(sandboxId, signal)).record,
       createSandbox: async (options, signal = abortSignal) => {
-        const resolved = await source(options?.source)
+        const request = {
+          source: options?.source,
+          ...(options?.network === undefined ? {} : { network: options.network }),
+          ...(options?.ignored === undefined ? {} : { ignored: options.ignored }),
+        }
+        const resolved = await source(request.source)
         signal.throwIfAborted()
-        return sandbox().createSandbox({ ...options, source: resolved }, signal)
+        return sandbox().createSandbox({ ...request, source: resolved }, signal)
       },
       diffSandbox: async (options, signal = abortSignal) => {
-        const { host } = await authorize(options.sandboxId, signal)
-        return host.diffSandbox(options, signal)
+        const request = {
+          sandboxId: options.sandboxId,
+          ...(options.paths === undefined ? {} : { paths: [...options.paths] }),
+          ...(options.textDiffs === undefined ? {} : { textDiffs: options.textDiffs }),
+        }
+        const { host } = await authorize(request.sandboxId, signal)
+        return host.diffSandbox(request, signal)
       },
-      applySandbox: (options, signal = abortSignal) =>
-        this.gate.run(project.getRootPath(), true, signal, async () => {
-          const { host } = await authorize(options.sandboxId, signal)
-          return host.applySandbox(options, signal)
-        }),
+      applySandbox: (options, signal = abortSignal) => {
+        const request = {
+          sandboxId: options.sandboxId,
+          ...(options.paths === undefined ? {} : { paths: [...options.paths] }),
+          ...(options.fingerprint === undefined ? {} : { fingerprint: options.fingerprint }),
+        }
+        return this.gate.run(project.getRootPath(), true, signal, async () => {
+          const { host } = await authorize(request.sandboxId, signal)
+          return host.applySandbox(request, signal)
+        })
+      },
       discardSandbox: async (sandboxId, signal = abortSignal) => {
         let host: RehearsalSandboxHostPort
         try {
@@ -87,8 +103,16 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
         return host.discardSandbox(sandboxId, signal)
       },
       runInSandbox: async (options, signal = abortSignal) => {
-        const { host } = await authorize(options.sandboxId, signal)
-        return host.runInSandbox(options, signal)
+        const request = {
+          sandboxId: options.sandboxId,
+          command: options.command,
+          ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+          ...(options.maxOutputChars === undefined
+            ? {}
+            : { maxOutputChars: options.maxOutputChars }),
+        }
+        const { host } = await authorize(request.sandboxId, signal)
+        return host.runInSandbox(request, signal)
       },
       resolveSource: (requested) => source(requested),
     }
