@@ -11,10 +11,15 @@ import type {
   ModelAdapterConfig,
 } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
-import type { EvaluatedUserAdapter, UserAdapterFactoryInput } from '../../types/user-adapter'
+import type {
+  EvaluatedUserAdapter,
+  UserAdapterFactoryInput,
+  UserAdapterVmCallable,
+} from '../../types/user-adapter'
 import {
   buildUserAdapterCacheKey,
   callUserAdapterFunction,
+  captureUserAdapter,
   cloneValueForVm,
   cloneValueFromVm,
   createLanguageModelFromDescriptor,
@@ -22,9 +27,13 @@ import {
   createUserAdapterVmContext,
   normalizeLanguageModelDescriptor,
   normalizeUserAdapterEmbeddingRequest,
+  readUserAdapterErrorMessage,
+  readUserAdapterExport,
   runUserAdapterScript,
   UserAdapterCallSources,
+  UserAdapterCaptureSource,
   UserAdapterContextSetupSource,
+  UserAdapterExportSource,
   UserAdapterFilename,
   UserAdapterJsonCloneSource,
   UserAdapterJsonStringifySource,
@@ -49,6 +58,8 @@ import { ModelAdapter } from './ModelAdapter'
  *    直接传对象引用会把宿主原型链一起递过去。
  * 4. **执行墙**——上传适配器的工厂与 embedding hook 都是同步合同；上下文的 `afterEvaluate`
  *    让排队的 Promise jobs 与同步代码共用 `Script.runInContext` 的 timeout，返回后再复核实际时长。
+ *    导出读取、结果序列化与受控操作的原地诊断也在墙内；越墙异常不送回 VM。
+ *    console 先在 VM 格式化，宿主只接原始字符串并返回布尔回执。
  *
  * **与 `ProviderScriptRegistry` 的对照（别把两者混为一谈）**：那边是开发者显式登记的脚本，
  * 用 `runInThisContext` 以**宿主全权**执行；这边是普通用户上传的，所以必须沙箱。
@@ -79,6 +90,14 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
     filename: UserAdapterFilename,
   })
 
+  /** 导出捕获、named/default 选择与原地抛值诊断也归同一执行墙。 */
+  private static readonly CaptureScript = new Script(UserAdapterCaptureSource, {
+    filename: UserAdapterFilename,
+  })
+  private static readonly ExportScript = new Script(UserAdapterExportSource, {
+    filename: UserAdapterFilename,
+  })
+
   private readonly evaluatedAdapterCache = new Map<string, EvaluatedUserAdapter>()
 
   constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollectionApi) {
@@ -87,9 +106,12 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
 
   public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
     const adapter = this.evaluateAdapter(config)
-    const createFactory =
-      adapter.exports.createLanguageModelFactory ??
-      adapter.exports.default?.createLanguageModelFactory
+    const createFactory = readUserAdapterExport(
+      adapter,
+      'createLanguageModelFactory',
+      'Custom adapter 初始化失败',
+      UserJsModelAdapter.ExportScript
+    )
 
     if (!isFunction(createFactory)) {
       throw new AppError(
@@ -100,7 +122,7 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
 
     const factory = callUserAdapterFunction<LanguageModelFactory>(
       adapter,
-      createFactory,
+      createFactory as UserAdapterVmCallable,
       [
         createUserAdapterFactoryInput(
           adapter,
@@ -154,8 +176,12 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
     texts: string[]
   ): EmbeddingRequest {
     const adapter = this.evaluateAdapter(config)
-    const createEmbeddingRequest =
-      adapter.exports.createEmbeddingRequest ?? adapter.exports.default?.createEmbeddingRequest
+    const createEmbeddingRequest = readUserAdapterExport(
+      adapter,
+      'createEmbeddingRequest',
+      'Custom adapter embedding 初始化失败',
+      UserJsModelAdapter.ExportScript
+    )
 
     if (!isFunction(createEmbeddingRequest))
       return super.createEmbeddingRequest(config, model, texts)
@@ -181,7 +207,7 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
       adapter,
       callUserAdapterFunction(
         adapter,
-        createEmbeddingRequest,
+        createEmbeddingRequest as UserAdapterVmCallable,
         [input],
         'Custom adapter embedding 初始化失败',
         UserJsModelAdapter.CallScripts
@@ -212,17 +238,13 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
       })
       runUserAdapterScript(script, context)
 
-      const evaluated = {
-        context,
-        exports: context.module.exports,
-        helpers: context.helpers,
-      }
+      const evaluated = captureUserAdapter(context, UserJsModelAdapter.CaptureScript)
       this.rememberEvaluatedAdapter(cacheKey, evaluated)
       return evaluated
     } catch (error) {
       throw new AppError(
         ModelErrorCodes.customAdapterInvalid,
-        `Custom adapter 加载失败：${AppError.getMessage(error)}`
+        `Custom adapter 加载失败：${readUserAdapterErrorMessage(error)}`
       )
     }
   }
