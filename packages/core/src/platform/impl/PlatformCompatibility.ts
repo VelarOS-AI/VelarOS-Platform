@@ -21,6 +21,7 @@ import type {
 import {
   buildShellCommandSpec,
   buildWindowsExecutableCandidates,
+  buildWindowsOpenCommandSpec,
   buildWindowsPowerShellCommandSpec,
   getShellKind,
   isPathTextSeparator,
@@ -137,7 +138,7 @@ export interface PlatformCompatibilityApi {
 
   // 打开文件与应用、目录约定
 
-  /** 用系统默认方式打开一个路径或网址的启动规格：macOS 用 open，Windows 用 start，Linux 用 xdg-open。 */
+  /** 用系统默认方式打开一个路径或网址的启动规格：macOS 用 open，Windows 经系统 PowerShell 调图形 shell 关联，Linux 用 xdg-open。 */
   getOpenExternalFallbackSpec(target: string): CommandSpec
   /** 启动一个应用的启动规格，可带要打开的路径和启动参数。 */
   getOpenApplicationCommandSpec(
@@ -418,11 +419,7 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
 
   public getOpenExternalFallbackSpec(target: string): CommandSpec {
     if (this.isMacOS()) return { file: 'open', args: [target] }
-    if (this.isWindows())
-      return {
-        file: WindowsCommandShellPath,
-        args: ['/c', 'start', '', target],
-      }
+    if (this.isWindows()) return buildWindowsOpenCommandSpec(target)
     return { file: 'xdg-open', args: [target] }
   }
 
@@ -442,10 +439,10 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
         ],
       }
     if (this.isWindows())
-      return {
-        file: WindowsCommandShellPath,
-        args: ['/c', 'start', '', application, ...(targetPath ? [targetPath] : []), ...args],
-      }
+      return buildWindowsOpenCommandSpec(application, [
+        ...(targetPath ? [targetPath] : []),
+        ...args,
+      ])
     return {
       file: application,
       args: [...(targetPath ? [targetPath] : []), ...args],

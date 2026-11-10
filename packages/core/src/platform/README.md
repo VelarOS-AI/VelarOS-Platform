@@ -38,5 +38,6 @@ const resourcesRoot = velarosSharedResources.resourcesRoot()
 
 - 兼容层只按构造时给的平台与环境变量回答，缺省取当前进程；没有 `process` 的渲染进程里按 `linux`、空环境回答，要准就显式传 `platform`。
 - CMD 下带换行、NUL 或 `%` 的参数，`quoteShellArg` 抛 `VALIDATION`，要改用原生 file + argv 执行；本平台没有的命令规格（非 Windows 要 taskkill、未知平台要系统指标）返回 `null`，不猜。
+- Windows 的文件/网址关联和应用打开经系统 Windows PowerShell 的隐藏、无 profile 进程调用图形 shell（`ProcessStartInfo.UseShellExecute`），数据以 UTF-16LE/Base64 传输；不经 CMD 解析，保留应用参数的空串、引号、反斜线及目标先于参数的顺序。Windows PowerShell 必须可用且获宿主允许；启动失败直接交给调用方，不绕执行策略或回落 CMD。NUL 不是合法的原生参数，构造规格时拒绝。
 - 路径包含判断折叠 `.` 与 `..` 不越过根，win32 认两种分隔符、其他平台只认 `/`，大小写缺省按平台惯例（Windows、macOS 不区分）；不是完整绝对路径一律判不在里面。
 - 读的环境变量都登记在 `PlatformEnvironmentVariables`：`VELAROS_SHELL_PATH`、`VELAROS_GIT_BASH` 定 Windows 默认 shell，`VELAROS_SHARED_DATA_ROOT` 整体覆盖共享数据根；资源与账号目录固定在它下面的 `shared/resources`、`shared/account/v1`。

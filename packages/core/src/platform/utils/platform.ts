@@ -8,8 +8,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { CommandSpec, RuntimePlatform, ShellKind } from '../types/platform.js'
 
-/** Windows 上可信的 CMD 路径；打开文件、启动应用都用它，不信任 PATH 或 ComSpec 里的值。 */
+/** Windows 上可信的默认 CMD 路径，不信任 PATH 或 ComSpec 里的值。 */
 export const WindowsCommandShellPath = 'C:\\Windows\\System32\\cmd.exe'
+
+/** Windows 关联打开使用系统 PowerShell，输入数据不经过 CMD 的二次解析。 */
+const WindowsPowerShellPath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
 
 /** PATHEXT 缺席时 Windows 默认认作可执行文件的后缀。 */
 const DefaultWindowsExecutableExtensions = ['.EXE', '.CMD', '.BAT', '.COM']
@@ -126,6 +129,60 @@ export function buildWindowsPowerShellCommandSpec(command: string): CommandSpec 
       '-NonInteractive',
       '-Command',
       `[Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`,
+    ],
+  }
+}
+
+/** 编码原生 Windows 参数，保留空串、引号以及引号前和结尾的反斜线；不套 CMD 语法。 */
+function quoteWindowsProcessArgument(value: string): string {
+  let quoted = '"'
+  let slashes = 0
+  for (const character of value) {
+    if (character === '\\') {
+      slashes++
+      continue
+    }
+    quoted += '\\'.repeat(character === '"' ? slashes * 2 + 1 : slashes) + character
+    slashes = 0
+  }
+  return `${quoted + '\\'.repeat(slashes * 2)}"`
+}
+
+/** UTF-16LE/Base64 是 PowerShell EncodedCommand 的传输格式，纯文本实现也能在浏览器里构造规格。 */
+function encodePowerShellCommand(command: string): string {
+  let bytes = ''
+  for (let index = 0; index < command.length; index++) {
+    const unit = command.charCodeAt(index)
+    bytes += String.fromCharCode(unit & 0xff, unit >>> 8)
+  }
+  return btoa(bytes)
+}
+
+/** 通过 Windows 图形 shell 打开关联目标或应用；FileName 与参数只作为数据，不交给命令解释器。 */
+export function buildWindowsOpenCommandSpec(
+  file: string,
+  args: readonly string[] = []
+): CommandSpec {
+  if ([file, ...args].some((value) => value.includes('\0')))
+    throw new AppError('VALIDATION', 'Windows 打开目标与参数不能包含 NUL。')
+  const literal = (value: string) => quoteShellArgument(value, 'powershell')
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    '$startInfo = [System.Diagnostics.ProcessStartInfo]::new()',
+    '$startInfo.UseShellExecute = $true',
+    `$startInfo.FileName = ${literal(file)}`,
+    `$startInfo.Arguments = ${literal(args.map(quoteWindowsProcessArgument).join(' '))}`,
+    '$null = [System.Diagnostics.Process]::Start($startInfo)',
+  ].join('; ')
+  return {
+    file: WindowsPowerShellPath,
+    args: [
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-EncodedCommand',
+      encodePowerShellCommand(command),
     ],
   }
 }
