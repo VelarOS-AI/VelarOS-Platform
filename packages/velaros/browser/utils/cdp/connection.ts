@@ -1,6 +1,6 @@
 /** 浏览器级 CDP 连接里用不着实例状态的那部分：Target 域回包的归一。 */
 
-import { isArray, isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isNonBlankString, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 
 import type { CdpPageTarget, CdpTargetInfoEntry } from '../../types/cdp.js'
 
@@ -17,7 +17,7 @@ export function normalizePageTargets(
     const target = entry as CdpTargetInfoEntry
     if (target.type !== 'page' || !isNonBlankString(target.targetId)) continue
     const contextId = isString(target.browserContextId) ? target.browserContextId : ''
-    if (browserContextId && contextId !== browserContextId) continue
+    if (isPresent(browserContextId) && contextId !== browserContextId) continue
     pages.push({
       targetId: target.targetId,
       url: isString(target.url) ? target.url : '',

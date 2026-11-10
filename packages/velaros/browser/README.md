@@ -92,3 +92,5 @@ export const browserModules = [
 - 外部 Chrome（CDP）与内嵌页面（Electron partition）的登录态互不相通，不桥接；外部浏览器做不到的能力如实回报不支持。
 - `./browser/contracts` 与 `./browser/renderer` 不碰 Node 内置模块，渲染进程可以直接加载；`./browser/electron` 要装 `electron`（可选 peer），只在 Electron 主进程加载。
 - `createBrowserKernelModule({ runtime })` 挂进内核后运行时仍归产品，`disposeInjectedRuntime: true` 才由内核卸载时释放。
+- `closeAllSessions()` 关闭当前页面后仍可复用 runtime；`dispose()` 永久停止接纳页面与宿主操作。清理失败原样报告，再次 `dispose()` 可重试清理。
+- 外部浏览器的高层页面目录与切换限定在本次目标所属的 browser context，显式空 context 表示默认 context；原始 CDP 命令继续保留其既有权限边界。

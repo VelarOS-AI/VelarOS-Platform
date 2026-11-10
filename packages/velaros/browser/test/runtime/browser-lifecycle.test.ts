@@ -13,12 +13,180 @@ import type { BrowserPageDriver } from '../../contract/requires.js'
 import { BrowserPageDataEngine } from '../../impl/electron/BrowserPageDataEngine.js'
 import { BrowserPageWaiter } from '../../impl/electron/BrowserPageWaiter.js'
 import { BrowserScreenshotEngine } from '../../impl/electron/BrowserScreenshotEngine.js'
+import { ElectronBrowserRuntime } from '../../impl/electron/ElectronBrowserRuntime.js'
 import { electronDebuggerHolds } from '../../impl/electron/ElectronDebuggerHolds.js'
 import { ElectronWebContentsBrowserPageDriver } from '../../impl/electron/ElectronWebContentsBrowserPageDriver.js'
 import { BrowserPerformanceOrchestrator } from '../../impl/engines/BrowserPerformanceOrchestrator.js'
 import { CdpPageDataEngine } from '../../impl/engines/CdpPageDataEngine.js'
 import { BrowserPendingEventsBroker } from '../../impl/session/BrowserPendingEventsBroker.js'
 import { writeScreenshotModelImage } from '../../utils/electron/screenshot-image.js'
+
+test('browser runtime disposal rejects new work while closeAllSessions permits reopening', async () => {
+  let pageHooks = 0
+  let subscriptions = 0
+  let releases = 0
+  let launches = 0
+  const context = { url: 'https://example.test/', workspaceRoot: '/unused' }
+  const driver = (): BrowserPageDriver =>
+    ({
+      isDestroyed: () => false,
+      getURL: () => context.url,
+      getTitle: () => '',
+      refreshPageState: async () => {
+        pageHooks += 1
+        return { url: context.url, title: '' }
+      },
+      bringToFront: async () => {
+        pageHooks += 1
+      },
+      onDownload: () => {
+        subscriptions += 1
+        return () => {
+          releases += 1
+        }
+      },
+      dispose: () => undefined,
+    }) as unknown as BrowserPageDriver
+  const runtime = new ElectronBrowserRuntime({
+    externalBrowserLauncher: {
+      launch: async () => {
+        launches += 1
+        return { driver: driver(), dispose: () => undefined }
+      },
+    },
+  })
+  try {
+    runtime.attachExternalPageDriver('first', driver())
+    await runtime.showPage('first', context)
+    runtime.closeAllSessions()
+    assert.equal(releases, 1)
+    runtime.attachExternalPageDriver('second', driver())
+    await runtime.showPage('second', context)
+    runtime.dispose()
+    assert.equal(releases, 2)
+    const hooksBefore = pageHooks
+    assert.throws(() => runtime.attachExternalPageDriver('fresh', driver()), { code: 'CLOSED' })
+    assert.throws(() => runtime.setOptions({}), { code: 'CLOSED' })
+    assert.throws(
+      () =>
+        runtime.withModelAction('fresh', async () => {
+          pageHooks += 1
+        }),
+      { code: 'CLOSED' }
+    )
+    const requests: Array<() => Promise<unknown>> = [
+      () => runtime.openPage('fresh', context),
+      () => runtime.showPage('fresh', context),
+      () => runtime.presentPage('fresh', context, 1),
+      () => runtime.launchExternalBrowserPage('fresh', context),
+      () => runtime.getPageState('fresh', context),
+      () => runtime.listPageTargets('fresh', context),
+      () => runtime.capturePreviewFrame('fresh', context, {}),
+      () => runtime.startPreviewFrameStream('fresh', context, {}, () => undefined),
+      () => runtime.readProtocolEvents('fresh', context, {}),
+      () => runtime.inspectPage('fresh', context),
+    ]
+    for (const request of requests)
+      await assert.rejects(Promise.resolve().then(request), { code: 'CLOSED' })
+    assert.equal(runtime.hasExternalPage('fresh'), false)
+    assert.equal(runtime.getTurnContextSnapshot('fresh'), null)
+    await runtime.stopPreviewFrameStream('fresh')
+    await runtime.closeSession('fresh')
+    assert.equal(pageHooks, hooksBefore)
+    assert.equal(subscriptions, 2)
+    assert.equal(launches, 0)
+  } finally {
+    runtime.dispose()
+  }
+})
+
+test('browser runtime disposal publishes terminal admission before cleanup callbacks reenter', () => {
+  let disposals = 0
+  let launchDisposals = 0
+  let subscriptionCalls = 0
+  const runtime = new ElectronBrowserRuntime({
+    externalBrowserLauncher: {
+      launch: async () => {
+        throw new Error('closed owner must never launch')
+      },
+      dispose: () => {
+        launchDisposals += 1
+        runtime.dispose()
+        assert.throws(() => runtime.setOptions({}), { code: 'CLOSED' })
+      },
+    },
+  })
+  const driver = {
+    getURL: () => 'https://example.test/',
+    getTitle: () => '',
+    isDestroyed: () => false,
+    onDownload: () => {
+      subscriptionCalls += 1
+      return () => undefined
+    },
+    dispose: () => {
+      disposals += 1
+      runtime.dispose()
+      assert.throws(() => runtime.attachExternalPageDriver('reentrant', driver), { code: 'CLOSED' })
+    },
+  } as unknown as BrowserPageDriver
+  runtime.attachExternalPageDriver('s', driver)
+  runtime.dispose()
+  runtime.dispose()
+  assert.equal(disposals, 1)
+  assert.equal(launchDisposals, 1)
+  assert.equal(subscriptionCalls, 1)
+  assert.equal(runtime.hasExternalPage('reentrant'), false)
+  assert.equal(runtime.getTurnContextSnapshot('s'), null)
+})
+
+test('browser runtime disposal retries failed host cleanup without reopening admission', () => {
+  for (const failingOwner of ['page', 'launcher']) {
+    const failure = new Error(`${failingOwner} cleanup failed`)
+    let failing = true
+    let pageDisposals = 0
+    let launcherDisposals = 0
+    const runtime = new ElectronBrowserRuntime({
+      externalBrowserLauncher: {
+        launch: async () => {
+          throw new Error('closed owner must never launch')
+        },
+        dispose: () => {
+          launcherDisposals += 1
+          if (failing && failingOwner === 'launcher') throw failure
+        },
+      },
+    })
+    const driver = {
+      getURL: () => 'https://example.test/',
+      getTitle: () => '',
+      isDestroyed: () => false,
+      dispose: () => {
+        pageDisposals += 1
+        if (failing && failingOwner === 'page') throw failure
+      },
+    } as unknown as BrowserPageDriver
+    try {
+      runtime.attachExternalPageDriver('s', driver)
+      assert.throws(
+        () => runtime.dispose(),
+        (error) => error === failure
+      )
+      assert.throws(() => runtime.attachExternalPageDriver('new', driver), { code: 'CLOSED' })
+      assert.throws(() => runtime.setOptions({}), { code: 'CLOSED' })
+      failing = false
+      runtime.dispose()
+      assert.equal(pageDisposals, failingOwner === 'page' ? 2 : 1)
+      assert.equal(launcherDisposals, failingOwner === 'launcher' ? 2 : 1)
+      runtime.dispose()
+      assert.equal(launcherDisposals, failingOwner === 'launcher' ? 2 : 1)
+      assert.equal(runtime.getTurnContextSnapshot('s'), null)
+    } finally {
+      failing = false
+      runtime.dispose()
+    }
+  }
+})
 
 function contents() {
   const debuggerEvents = new EventEmitter()
