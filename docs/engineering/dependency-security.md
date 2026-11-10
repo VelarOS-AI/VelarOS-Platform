@@ -2,6 +2,8 @@
 
 VelarOS Platform treats the lockfile, dependency overrides, and Bun patches as reviewed source. The default rule is to upgrade to a non-vulnerable version. An audit exception is allowed only when the repository also contains a narrow justification and a mechanical regression check.
 
+The root overrides govern this development workspace only. Formal distribution manifests and formal consumers must use ordinary dependencies without overrides or resolutions; the release stager removes these development fields from distribution manifests.
+
 ## Current security pins
 
 The root and Velaros development manifests pin Electron to 42.11.16. This fixes the compromised eMudhra intermediate-certificate mitigation advisory [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9), which appeared as two alerts because both manifests declared the older Electron. This changes Platform's development/test host; separately shipped products must update their own Electron distribution.

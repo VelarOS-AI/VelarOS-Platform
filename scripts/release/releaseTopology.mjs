@@ -224,7 +224,8 @@ export async function collectReleasePackages(root, { includeDistributions = true
   }
 
   const velaros = packages.find((item) => item.manifest.name === '@velaros-ai/velaros')
-  if (velaros && includeDistributions) packages.push(capabilityDistributionItem(velaros))
+  if (velaros && includeDistributions)
+    packages.push(capabilityDistributionItem(velaros, rootManifest))
   return { rootManifest, platformGeneration, ordered: orderByDependencies(packages) }
 }
 

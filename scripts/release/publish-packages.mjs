@@ -65,7 +65,8 @@ import {
 } from './releaseTopology.mjs'
 import { safePackPackage } from './safe-package-pack.mjs'
 import { normalizeTarEntryPaths } from './tar-entry-paths.mjs'
-import { platformModules } from './platform-distributions.mjs'
+import { platformModules, platformReleaseAssetUrl } from './platform-distributions.mjs'
+import { validatePlatformRelease } from './validate-platform-release.mjs'
 import { validateSessionTraceArchive } from './validate-session-trace-archive.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
@@ -109,6 +110,14 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
     throw new Error(
       `${item.manifest.name} tarball identity is ${packedManifest.name}@${packedManifest.version}, expected ${item.manifest.name}@${item.manifest.version}`
     )
+  }
+  if (item.manifest.name === '@velaros-ai/capabilities') {
+    const base = artifacts.find((artifact) => artifact.name === '@velaros-ai/velaros')
+    assert(base, 'Capabilities publication requires the same candidate base archive')
+    assert.equal(packedManifest.version, base.version)
+    assert.equal(packedManifest.dependencies?.[base.name], base.url)
+    assert.equal(packedManifest.peerDependencies?.[base.name], undefined)
+    assert.equal(packedManifest.optionalDependencies?.[base.name], undefined)
   }
 
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
@@ -171,6 +180,14 @@ const selected = selectReleasedPackages(
     : onlySelectors
 ).packages
 const releaseTag = tagSelection.tag
+const basePackage = selected.find((item) => item.manifest.name === '@velaros-ai/velaros')
+const capabilityPackage = selected.find((item) => item.manifest.name === '@velaros-ai/capabilities')
+const platformPair = Boolean(capabilityPackage)
+if (platformPair) {
+  assert(basePackage, 'Capabilities cannot publish without the same candidate base')
+  assert.equal(capabilityPackage.manifest.version, basePackage.manifest.version)
+  assert(dryRun || githubRelease, 'Platform pairs require canonical GitHub release assets')
+}
 
 // —— ① 身份 ——
 const sourceSha = runForOutput('git', ['rev-parse', 'HEAD'], root)
@@ -283,6 +300,7 @@ const candidateReceipt = {
   sourceValidation: { command: 'bun run release:check', passed: !dryRun },
   packages: artifacts,
   traceValidation: null,
+  platformValidation: null,
   local: { directory: candidateDirectory, archives: {} },
 }
 const saveCandidateReceipt = () =>
@@ -291,15 +309,22 @@ await saveCandidateReceipt()
 console.info(`Preserved release candidate: ${candidateDirectory}`)
 
 // 公布前同时核对存盘收据与保留字节，不用上一候选或仅源码级的结果代替本次消费。
-const assertCandidateReceipt = async () => {
+const assertCandidateReceipt = async ({ requirePlatformValidation = false } = {}) => {
   assert.deepEqual(JSON.parse(await readFile(candidateReceiptPath, 'utf8')), candidateReceipt)
   for (const artifact of artifacts) {
-    const retained = candidateReceipt.local.archives[artifact.fileName]
+    assert.equal(artifact.sourceSha, sourceSha)
+    assert.equal(artifact.releaseTag, releaseTag)
     assert.equal(
-      createHash('sha256')
-        .update(await readFile(retained))
-        .digest('hex'),
-      artifact.sha256
+      artifact.url,
+      platformReleaseAssetUrl(rootManifest.repository, releaseTag, artifact.fileName)
+    )
+    const retained = candidateReceipt.local.archives[artifact.fileName]
+    const bytes = await readFile(retained)
+    assert.equal(bytes.length, artifact.sizeBytes)
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), artifact.sha256)
+    assert.equal(
+      `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+      artifact.integrity
     )
   }
   const base = artifacts.find((artifact) => artifact.name === '@velaros-ai/velaros')
@@ -317,6 +342,42 @@ const assertCandidateReceipt = async () => {
     assert.equal(trace.validation.nodeEnvironmentQuery, true)
     assert.deepEqual(JSON.parse(await readFile(trace.local.receiptPath, 'utf8')), trace)
   }
+  if (requirePlatformValidation) {
+    assert(platformPair, 'Pair validation cannot apply to another release selection')
+    assert.equal(candidateReceipt.sourceValidation.passed, true)
+    const capabilities = artifacts.filter(
+      (artifact) => artifact.name === '@velaros-ai/capabilities'
+    )
+    assert.equal(artifacts.filter((artifact) => artifact.name === '@velaros-ai/velaros').length, 1)
+    assert.equal(capabilities.length, 1)
+    assert.equal(capabilities[0].version, base.version)
+    assertRegistryManifest(
+      capabilityPackage,
+      candidateReceipt.local.archives[capabilities[0].fileName],
+      workspaceVersions
+    )
+    const proof = candidateReceipt.platformValidation
+    assert(proof, 'Stable Platform publication requires ordinary pair consumption')
+    assert.equal(proof.schemaVersion, 1)
+    assert.equal(proof.kind, 'platform-release-pair-consumer')
+    assert.equal(proof.sourceSha, sourceSha)
+    assert.equal(proof.releaseTag, releaseTag)
+    assert.deepEqual(proof.packages, [base, capabilities[0]])
+    for (const flag of [
+      'ordinaryInstall',
+      'frozenInstall',
+      'sameBaseInstance',
+      'strictDeclarations',
+      'actualProjectMutation',
+      'sourceIntegrity',
+    ])
+      assert.equal(proof.validation[flag], true, `Platform pair requires ${flag}`)
+    assert.equal(
+      proof.local.receiptPath,
+      path.join(candidateDirectory, 'platform-release-pair-receipt.json')
+    )
+    assert.deepEqual(JSON.parse(await readFile(proof.local.receiptPath, 'utf8')), proof)
+  }
 }
 
 if (githubRelease) {
@@ -328,13 +389,14 @@ if (githubRelease) {
       'create',
       releaseTag,
       '--draft',
+      ...(platformPair ? ['--prerelease'] : []),
       '--verify-tag',
       '--target',
       sourceSha,
       '--title',
       `Platform ${releaseTag}`,
       '--notes',
-      `Release source: ${sourceSha}; tag: ${releaseTag}. When this release includes the base archive, that exact archive must pass isolated JavaScript and strict declaration consumption before this draft becomes public. Package hashes and validation results are recorded in release-manifest.json and release-validation.json.`,
+      `Release source: ${sourceSha}; tag: ${releaseTag}. The exact base archive must pass isolated JavaScript and strict declaration consumption. Platform pairs become a non-latest prerelease candidate so canonical URLs can be consumed without overrides; stable promotion requires ordinary pair installation and Project validation. Package hashes and validation results are recorded in release-manifest.json and release-validation.json.`,
     ],
     root
   )
@@ -383,6 +445,7 @@ for (const item of selected) {
       sourceSha,
       releaseTag,
       fileName: tarballs[0],
+      url: platformReleaseAssetUrl(rootManifest.repository, releaseTag, tarballs[0]),
       sizeBytes: (await stat(tarballPath)).size,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
@@ -447,10 +510,33 @@ for (const item of selected) {
 
 await assertCandidateReceipt()
 if (githubRelease) {
-  const manifestDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-manifest-'))
+  let publicPairCandidate = false
   try {
+    if (platformPair) {
+      assert.equal(artifacts.length, selected.length)
+      assertLocalIdentity()
+      await assertCandidateReceipt()
+      // 标记本次公开尝试；命令失败也可能已生效，失败路径仍须尝试恢复 draft。
+      publicPairCandidate = true
+      run(
+        'gh',
+        ['release', 'edit', releaseTag, '--draft=false', '--prerelease', '--latest=false'],
+        root
+      )
+      candidateReceipt.platformValidation = await validatePlatformRelease({
+        rootManifest,
+        releaseTag,
+        sourceSha,
+        artifacts,
+        receiptDirectory: candidateDirectory,
+        bunVersion: candidateReceipt.toolchain.bun,
+      })
+      await saveCandidateReceipt()
+      await assertCandidateReceipt({ requirePlatformValidation: true })
+    }
     // 公开版仅列身份、哈希及验证结果；机器路径和原始命令输出留在本地候选收据。
     const { local: _traceLocal, ...publicTrace } = candidateReceipt.traceValidation ?? {}
+    const { local: _platformLocal, ...publicPlatform } = candidateReceipt.platformValidation ?? {}
     const validationPath = path.join(candidateDirectory, 'release-validation.json')
     const validationBytes = `${JSON.stringify(
       {
@@ -462,43 +548,66 @@ if (githubRelease) {
         sourceValidation: candidateReceipt.sourceValidation,
         packages: artifacts,
         traceValidation: candidateReceipt.traceValidation ? publicTrace : null,
+        platformValidation: candidateReceipt.platformValidation ? publicPlatform : null,
       },
       null,
       2
     )}\n`
     await writeFile(validationPath, validationBytes, { flag: 'wx' })
     const validationSha256 = createHash('sha256').update(validationBytes).digest('hex')
-    const manifestPath = path.join(manifestDirectory, 'release-manifest.json')
-    await writeFile(
-      manifestPath,
-      `${JSON.stringify({ sourceSha, releaseTag, packages: artifacts, validationReceipt: { fileName: path.basename(validationPath), sha256: validationSha256 } }, null, 2)}\n`
-    )
-    await copyFile(
-      manifestPath,
-      path.join(candidateDirectory, 'release-manifest.json'),
-      fsConstants.COPYFILE_EXCL
-    )
+    const manifestPath = path.join(candidateDirectory, 'release-manifest.json')
+    const manifestBytes = `${JSON.stringify({ sourceSha, releaseTag, packages: artifacts, validationReceipt: { fileName: path.basename(validationPath), sha256: validationSha256 } }, null, 2)}\n`
+    const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex')
+    await writeFile(manifestPath, manifestBytes, { flag: 'wx' })
     assertLocalIdentity()
-    await assertCandidateReceipt()
+    await assertCandidateReceipt({ requirePlatformValidation: platformPair })
     assert.equal(
       createHash('sha256')
         .update(await readFile(validationPath))
         .digest('hex'),
       validationSha256
+    )
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(manifestPath))
+        .digest('hex'),
+      manifestSha256
     )
     run('gh', ['release', 'upload', releaseTag, validationPath], root)
     run('gh', ['release', 'upload', releaseTag, manifestPath], root)
     assertLocalIdentity()
-    await assertCandidateReceipt()
+    await assertCandidateReceipt({ requirePlatformValidation: platformPair })
     assert.equal(
       createHash('sha256')
         .update(await readFile(validationPath))
         .digest('hex'),
       validationSha256
     )
-    run('gh', ['release', 'edit', releaseTag, '--draft=false'], root)
-  } finally {
-    await rm(manifestDirectory, { recursive: true, force: true })
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(manifestPath))
+        .digest('hex'),
+      manifestSha256
+    )
+    if (platformPair) {
+      run('gh', ['release', 'edit', releaseTag, '--prerelease=false', '--latest'], root)
+    } else run('gh', ['release', 'edit', releaseTag, '--draft=false'], root)
+  } catch (error) {
+    if (publicPairCandidate) {
+      try {
+        run(
+          'gh',
+          ['release', 'edit', releaseTag, '--draft=true', '--prerelease', '--latest=false'],
+          root
+        )
+      } catch (restoreError) {
+        throw new AggregateError(
+          [error, restoreError],
+          'Platform candidate validation and draft restoration failed'
+        )
+      }
+    }
+    throw error
   }
 }
 

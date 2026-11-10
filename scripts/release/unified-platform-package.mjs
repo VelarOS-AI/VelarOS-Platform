@@ -8,6 +8,7 @@ import ts from 'typescript'
 import { CodeSurfaces } from '../script/surfaces.mjs'
 
 import {
+  baseDistributionDependencies,
   compositeModelSourceAssets,
   distributionExports,
   distributionForVelarosPath,
@@ -178,7 +179,7 @@ function capabilityReadme(manifest) {
   return [
     '# @velaros-ai/capabilities',
     '',
-    `VelarOS 的可选领域能力，与同版本 @velaros-ai/velaros@${manifest.version} 共享唯一 Runtime、Kernel、Agent 和 Context。宿主显式安装两个归档；基础包是必需的精确版本 peer，扩展不会另装一份基础运行时。`,
+    `VelarOS 的可选领域能力，与同版本 @velaros-ai/velaros@${manifest.version} 共享唯一 Runtime、Kernel、Agent 和 Context。基础包是必需依赖，固定到同一正式 tag 的官方归档；宿主显式声明基础包时使用相同官方 URL。扩展不内嵌基础运行时。`,
     '',
     '## 用法',
     '',
@@ -296,6 +297,8 @@ export async function stageUnifiedPlatformPackage(directory, manifest, distribut
       'peerDependencies',
       'peerDependenciesMeta',
       'optionalDependencies',
+      'overrides',
+      'resolutions',
     ])
       delete result[field]
     result.name = configuration.name
@@ -304,9 +307,14 @@ export async function stageUnifiedPlatformPackage(directory, manifest, distribut
     result.exports = distributionExports(manifest, distribution)
     result.exports['./package.json'] = './package.json'
     result.files = ['dist', 'README.md', ...configuration.resources, 'modules', 'node_modules']
-    result.dependencies = {}
-    result.peerDependencies =
-      distribution === 'capabilities' ? { '@velaros-ai/velaros': manifest.version } : {}
+    result.dependencies =
+      distribution === 'capabilities'
+        ? baseDistributionDependencies(
+            JSON.parse(await readFile(path.resolve(directory, '../..', 'package.json'), 'utf8')),
+            manifest.version
+          )
+        : {}
+    result.peerDependencies = {}
     result.bundledDependencies = []
     result.velaros.distribution = distribution
     const owners = [{ source: directory, manifest }]

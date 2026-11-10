@@ -59,6 +59,8 @@ Workbench 的 listNotes/readNote/getGoal/controlGoal：活跃时借现有 Velaro
 
 0.9.2 集中版本使用基础 `@velaros-ai/velaros@0.9.2` 和扩展 `@velaros-ai/capabilities@0.9.2`，扩展仍精确 required peer 基础 0.9.2；旧两包继续成对使用，不能把不同版本拼接。Bun 根 dependencies/overrides 使用同一固定基础资产来源。Desktop 的独立改动聚合 worker 与空闲调试只需本存储 lease，不恢复 dataDir/false 预设，也不装配空执行器。Workbench 已有调用无需额外合同。
 
+以上记录 0.9.2 的历史安装方式。自 0.9.7 起，扩展通过普通必需依赖指向同 tag 的基础官方 URL；正式消费不使用 overrides/resolutions，组合根也直接声明同一精确 URL。根因与验证见 [普通依赖发行修正](../engineering/plain-dependency-release-20261110.md)。
+
 宿主 UI peer 只属于能力扩展：Electron `>=41.0.0`、React `^19.0.0`、React 声明 `^19.0.0` 继承源码已声明支持范围和 optional 标记。0.9.0 发行器错误地把开发机版本写成精确 peer；0.9.1 修正发行投影，不扩写源码支持范围。基础 Node 包不声明这些 peer，普通第三方 dependencies 继续精确固定安装版本。
 
 `sessions.tell` 没有新增核心缺口：现有能力只向宿主 SessionsSpacePort.tell 转发，合同要求活动 run 接纳 guidance 后返回 queued，空闲拒绝。产品完成成员与授权核验后取得已加载目标句柄并 `await target.steer(message)`；无活动时沿用 UNAVAILABLE，不回退 openSession/submit。Workbench 旧 tell→deliver→untilIdle→submit 的另开新轮行为应在产品 Host 迁移，不加入底座产品分支。

@@ -14,9 +14,9 @@
 
 每个包使用 `safePackPackage` 在独占临时目录打包，保留路径边界、超时和进程组回收。发布前核对 tarball 内包名、版本、可安装依赖及 dist，并重新确认 SHA-256。GitHub Release 上传的是已核验的同一份 tarball。
 
-所有归档先上传到 draft。`release-manifest.json` 记录 sourceSha、releaseTag、每包版本、文件名、大小、SHA-256 和 SHA-512 integrity，最后才把 draft 公布。失败不会公开不完整版本；留下的 draft 可供维护者检查，重跑前需明确清理失败 draft，发布器不会覆盖已有 release 或资产。检查和打包日志保留在对应 Actions run。
+所有归档先完整上传到 draft。基础与能力的真实 URL 互相闭合后，候选才以 prerelease/non-latest 供验证器普通下载；实际已上传两份字节通过无覆盖安装、冻结、摘要/锁来源、唯一基础、严格声明和真实项目事务后，上传 `release-manifest.json` 与 `release-validation.json` 并再次核对，最后晋升 stable/latest。清单记录 sourceSha、releaseTag、每包版本、canonical URL、文件名、大小、SHA-256 和 SHA-512 integrity。待验失败尝试恢复 draft，不晋升正式；恢复失败与验证原错同时保留。重跑前需明确处理失败候选，发布器不覆盖已有 release 或资产。检查和打包日志保留在对应 Actions run。
 
-GitHub Release 资产可匿名下载，不依赖 GitHub Packages 的读取令牌。消费者应按发布清单更新源码身份、下载地址和所有摘要，再完成冻结安装与消费验证。此次入口不修改消费者仓库，也不声称旧 GitHub Packages 同版本 tarball 与新资产相同。旧 `release:local` 注册表入口仅为兼容保留，正式工作流不调用它。
+GitHub Release 资产可匿名下载，不依赖 GitHub Packages 的读取令牌。消费者按清单更新源码身份、两份 canonical URL 和摘要，再完成冻结安装与消费验证。能力包对基础是固定官方 URL 的普通必需依赖；成对消费不把宿主改成另一 file 来源，不写 overrides/resolutions。覆盖只供开发，不进入正式清单。正式基础/能力成对发布走 GitHub 工作流；独立工具包保留自身发布路径，不用 registry 发布伪代两份 URL 的真实消费证明。
 
 ## 权限与回归
 

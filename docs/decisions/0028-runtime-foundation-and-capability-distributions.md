@@ -52,9 +52,9 @@ createNodeRuntime(options: NodeRuntimeOptions): Promise<VelarosRuntime>
 
 Desktop 显式选择基础与专项扩展，自己拥有 People/Team、成员、目录及产品恢复。Workbench 显式选择 IDE、项目与自身工作区/会话。Server 使用基础 Node 与自己装配的运维端口，终端由同一个真实 Host 注入；不新增 Server Agent 循环。Termel、Labs 同步新入口及能力清单。各产品只消费固定归档身份，不能引用兄弟仓私有源码或添加临时兼容。
 
-发行器分别计算 exports、声明和 JS 闭包、依赖与资源。基础不携带专项 vendor/二进制/resources 或重依赖；扩展以必需的精确版本 peer 借用宿主唯一基础实例。不使用动态 import 或 optionalDependencies 冒充隔离。所有归档继续走 safe-package-pack 的独占临时目录、超时、进程回收与路径检查。
+发行器分别计算 exports、声明和 JS 闭包、依赖与资源。基础不携带专项 vendor/二进制/resources 或重依赖；扩展以普通必需依赖固定同 tag 的官方基础归档，与宿主同一 canonical URL 共享唯一实例。移除 registry-only base peer，不使用 optional peer、动态 import 或 optionalDependencies 冒充隔离。所有归档继续走 safe-package-pack 的独占临时目录、超时、进程回收与路径检查。
 
-Bun 消费者用固定 GitHub Release 资产安装时，组合根的 `dependencies['@velaros-ai/velaros']` 与 `overrides['@velaros-ai/velaros']` 必须绑定**同一个基础资产 URL**，锁文件保留其实际 integrity；能力包放在 dependencies 的独立资产 URL。升级时同步基础来源的两处绑定。根 overrides 固定整个安装图中 peer 的唯一基础来源，不放入扩展包，也不增加兼容入口。临时验收使用同一规则的绝对 file 归档来源和另行核验的 SHA256。
+2026-11-10 按用户最新规则更新：正式消费者只在普通 dependencies 中固定基础和能力的 canonical GitHub Release URL，锁文件保留实际 integrity；能力包对基础声明同一个官方 URL 的普通必需依赖。正式发版不写 overrides/resolutions，覆盖此前依赖 override 或 registry-only peer 的建议。纯官方 0.9.6 peer 方案在 Bun 1.4.3 实际转向 registry 并 404，已改发行元数据；同字节 file 宿主与 HTTPS 扩展依赖仍会出现第二基础，因此生产成对来源统一 canonical URL，不通过补丁或覆盖伪装唯一实例。实际发出的两份字节在 prerelease/non-latest 阶段接受普通安装和共享 Runtime 验收，通过后才晋升正式。
 
 ## 验证、基线与风险
 

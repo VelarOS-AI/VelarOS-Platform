@@ -30,6 +30,8 @@
 
 实际 Bun 归档消费要求组合根把基础 dependencies 与根 overrides 绑定到同一个固定资产来源，再保留锁文件 integrity。这个来源绑定纳入公开接入合同；未改产品依赖。前一轮基础成功结果保留，扩展的依赖解析失败只复用同一已校验归档重试安装，没有重跑基础或已通过的行为测试。
 
+2026-11-10 修正：以上是 0.9.0 的历史验证记录，该 overrides 接入方式已被正式消费规则取代。0.9.7 使用同 tag 官方基础 URL 的普通必需依赖，消费者声明相同 canonical URL，不携带 overrides/resolutions；见 [普通依赖发行修正](plain-dependency-release-20261110.md)。
+
 发行单元独立登记，不增加空源码包或逐目录拆包。JS、声明、模板与资源分配同时切断；基础→扩展、扩展→基础私有实现、未登记依赖均拒绝。纯声明 utility-types 支持文件可随各自声明复制，不复制运行内核。模板只按显式资产登记辨认，不全局豁免虚拟 import。safe-package-pack 的目录、超时和进程组回收保持。
 
 Desktop/Workbench 明确选择基础与扩展；Server 仅基础并注入自己的运维/终端端口。Termel/Labs 按实际能力迁移。产品源码、依赖和远端服务均未修改；旧隔离补丁未重放。精确签名与删除清单见 [ADR 0028](../decisions/0028-runtime-foundation-and-capability-distributions.md)。

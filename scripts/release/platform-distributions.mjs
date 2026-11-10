@@ -1,4 +1,6 @@
 // 发行单元是安装边界；源码单元与工作区包仍由各自所有权登记管理。
+import { githubRepositoryIdentity } from './local-release-identity.mjs'
+
 export const platformModules = Object.freeze([
   'core',
   'kernel',
@@ -84,19 +86,59 @@ export function distributionExports(manifest, id) {
   )
 }
 
-// 能力归档与基础包使用同一来源版本；依赖锁定这一份基础运行时，禁止内嵌第二份。
-export function capabilityDistributionItem(item) {
+// 下载 URL 保留源仓库 owner/repo 大小写，避免包管理器把同一官方资产认作不同依赖身份。
+export function platformReleaseAssetUrl(repository, tag, fileName) {
+  githubRepositoryIdentity(repository)
+  if (typeof tag !== 'string' || !tag || tag !== tag.trim() || ['.', '..'].includes(tag))
+    throw new Error('Release asset URL requires an exact tag')
+  if (
+    typeof fileName !== 'string' ||
+    !fileName ||
+    fileName !== fileName.trim() ||
+    /[:/\\\0]/u.test(fileName) ||
+    ['.', '..'].includes(fileName)
+  )
+    throw new Error('Release asset URL requires one exact asset filename')
+  const input = typeof repository === 'string' ? repository : repository.url
+  const url = new URL(
+    input.replace(/^git\+/u, '').replace(/^git@github\.com:/u, 'ssh://git@github.com/')
+  )
+  const repositoryPath = url.pathname.replace(/\/$/u, '').replace(/\.git$/u, '')
+  return `https://github.com${repositoryPath}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(fileName)}`
+}
+
+// 能力包必需的基础运行时只指向同一正式 tag 的官方归档，不要求 registry 解析或消费者覆盖依赖。
+export function baseDistributionDependencies(rootManifest, baseVersion) {
+  if (typeof rootManifest?.version !== 'string' || !rootManifest.version)
+    throw new Error('Base distribution dependency requires the root release version')
+  if (typeof baseVersion !== 'string' || !baseVersion || baseVersion !== baseVersion.trim())
+    throw new Error('Base distribution dependency requires an exact base version')
+  return {
+    '@velaros-ai/velaros': platformReleaseAssetUrl(
+      rootManifest.repository,
+      `v${rootManifest.version}`,
+      `velaros-ai-velaros-${baseVersion}.tgz`
+    ),
+  }
+}
+
+// 能力归档与基础包使用同一来源版本；普通必需依赖锁定官方资产，禁止内嵌第二份基础实现。
+export function capabilityDistributionItem(item, rootManifest) {
+  const manifest = { ...item.manifest }
+  delete manifest.overrides
+  delete manifest.resolutions
   return {
     ...item,
     directoryName: 'capabilities',
     distribution: 'capabilities',
     manifest: {
-      ...item.manifest,
+      ...manifest,
       name: platformDistributions.capabilities.name,
       description: 'Explicit optional capabilities for the shared VelarOS Runtime.',
       exports: distributionExports(item.manifest, 'capabilities'),
-      dependencies: {},
-      peerDependencies: { '@velaros-ai/velaros': item.manifest.version },
+      dependencies: baseDistributionDependencies(rootManifest, item.manifest.version),
+      peerDependencies: {},
+      peerDependenciesMeta: undefined,
       optionalDependencies: {},
       bin: undefined,
     },
