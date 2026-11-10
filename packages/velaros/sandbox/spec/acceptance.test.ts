@@ -344,6 +344,55 @@ export default box.source`
 })
 
 describe('镜像里的危险命令', () => {
+  test('INV-7 确认等待期间改写原入参不改变获准的命令、沙箱与时限', async () => {
+    for (const timing of [
+      { requested: undefined, expected: undefined },
+      { requested: ShellLimits.timeoutMs + 1, expected: ShellLimits.timeoutMs },
+    ]) {
+      const space = fakeSpace({ root: '/repo', clamp: true })
+      let entered!: () => void
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      let approve!: () => void
+      const approved = new Promise<void>((resolve) => {
+        approve = resolve
+      })
+      const input: SandboxRunInput = {
+        id: 'sb-1',
+        command: 'rm -rf build',
+        timeoutMs: timing.requested,
+      }
+      const result = sandboxOperations.run(input, {
+        ...space.context,
+        approval: {
+          ...space.context.approval,
+          awaitConfirmation: async (message) => {
+            space.confirmations.push(message)
+            entered()
+            await approved
+          },
+        },
+      })
+      await waiting
+      expect(space.confirmations[0]).toContain('rm -rf build')
+      expect(space.runs).toEqual([])
+      input.id = 'sb-2'
+      input.command = 'rm -rf other'
+      input.timeoutMs = 1
+      approve()
+      expect(await result).toMatchObject({ id: 'sb-1', command: 'rm -rf build' })
+      expect(space.runs).toEqual([
+        {
+          sandboxId: 'sb-1',
+          command: 'rm -rf build',
+          timeoutMs: timing.expected,
+          maxOutputChars: ShellLimits.outputChars,
+        },
+      ])
+    }
+  })
+
   it('INV-7 镜像里的危险命令照常先问用户：高风险、手动、不可记忆；被拒就抛错，宿主一个进程都不起；不危险的不打扰', async () => {
     const declined = fakeSpace({ root: '/repo', clamp: true, approved: false })
     const refused = await runModelProgram(
