@@ -2581,6 +2581,155 @@ test('INV-36 a fault persisting a child result reaches wait even after the live 
   await expect(supervisor.close()).rejects.toThrow('child result disk failure')
 })
 
+test.each(['cancel', 'cancelParent', 'close'] as const)(
+  'supervisor cancellation drains the real child and preserves original cleanup failures (%s)',
+  async (mode) => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const cancelled = Promise.withResolvers<void>()
+    const cancelFailure = new AppError('UNAVAILABLE', 'cancel transport failed')
+    const finalFailure = new AppError('UNAVAILABLE', `${mode} finalization failed`)
+    let childClosed = false
+    const supervisor = createAgentSupervisor({
+      storage: storage(),
+      concurrency: 1,
+      maxChildren: 1,
+      ...(mode === 'cancelParent'
+        ? {
+            deliver: async () => {
+              throw finalFailure
+            },
+          }
+        : {}),
+      async open() {
+        return {
+          ...child(),
+          async *submit(_input, signal) {
+            entered.resolve()
+            yield { type: 'state', runId: 'cancel-fault', status: 'thinking' }
+            await release.promise
+            yield {
+              type: 'state',
+              runId: 'cancel-fault',
+              status: signal?.aborted ? 'cancelled' : 'completed',
+            }
+          },
+          cancel() {
+            cancelled.resolve()
+            throw cancelFailure
+          },
+          async close() {
+            childClosed = true
+            if (mode === 'close') throw finalFailure
+          },
+        }
+      },
+    })
+    try {
+      const job = await supervisor.start(
+        'p',
+        { task: 'keep the child owner until actual settlement', profile: 'read' },
+        new AbortController().signal
+      )
+      await entered.promise
+      const stopping =
+        mode === 'cancel'
+          ? supervisor.cancel('p', job.id)
+          : mode === 'cancelParent'
+            ? supervisor.cancelParent('p')
+            : supervisor.close()
+      let settled = false
+      const outcome = stopping.then(
+        () => {
+          settled = true
+          return { error: undefined as unknown }
+        },
+        (error: unknown) => {
+          settled = true
+          return { error }
+        }
+      )
+      await cancelled.promise
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(settled).toBe(false)
+      expect(childClosed).toBe(false)
+      expect(supervisor.pending('p')).toBe(true)
+      release.resolve()
+      const { error } = await outcome
+      expect(childClosed).toBe(true)
+      if (mode === 'cancel') {
+        expect(error).toBe(cancelFailure)
+        await expect(supervisor.wait('p', job.id, new AbortController().signal)).rejects.toBe(
+          cancelFailure
+        )
+      } else {
+        expect(error).toMatchObject({ code: 'UNAVAILABLE' })
+        const errors = (error as { errors: readonly unknown[] }).errors
+        expect(errors).toHaveLength(2)
+        expect(errors[0]).toBe(cancelFailure)
+        expect(errors[1]).toBe(finalFailure)
+      }
+    } finally {
+      release.resolve()
+      await Promise.allSettled([supervisor.close()])
+    }
+  }
+)
+
+test('supervisor cancellation waits for parent admissions and permits a later explicit start', async () => {
+  const store = storage()
+  const put = store.put
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let first = true
+  store.put = async (id, body) => {
+    if (first) {
+      first = false
+      entered.resolve()
+      await release.promise
+    }
+    return put(id, body)
+  }
+  const supervisor = createAgentSupervisor({
+    storage: store,
+    concurrency: 1,
+    maxChildren: 2,
+    async open() {
+      return child(true)
+    },
+  })
+  const signal = new AbortController().signal
+  const starting = supervisor.start(
+    'p',
+    { task: 'accepted before parent cancellation', profile: 'read' },
+    signal
+  )
+  try {
+    await entered.promise
+    let settled = false
+    const cancelled = supervisor.cancelParent('p').then(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    release.resolve()
+    const job = await starting
+    await cancelled
+    expect(supervisor.pending('p')).toBe(false)
+    expect((await supervisor.status('p', job.id)).status).toBe('cancelled')
+    const next = await supervisor.start(
+      'p',
+      { task: 'new explicit dispatch', profile: 'read' },
+      signal
+    )
+    expect((await supervisor.cancel('p', next.id)).status).toBe('cancelled')
+  } finally {
+    release.resolve()
+    await starting
+    await supervisor.close()
+  }
+})
+
 test('INV-37 steering preserves the current response while slow input persistence queues the next turn', async () => {
   const f = runFixture()
   let release!: () => void
