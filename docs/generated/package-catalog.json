@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "10.1.1",
+      "version": "10.1.2",
       "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",
@@ -18,7 +18,7 @@
       "domain": "core",
       "directory": "packages/core",
       "name": "@velaros-ai/core",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "description": "VelarOS 跨领域共享的底层：断言、错误、结果、类型守卫与无领域语义的通用原语，外加三个底层单元——platform（跨平台约定：路径文本、shell 命令规格、进程与系统信息命令、应用与数据目录、VelarOS 共享资源目录）、text-files（磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读）与 path-rules（glob 匹配、.gitignore 的解析与判定、遍历时的忽略策略）。",
       "exportSubpaths": [
         ".",
@@ -42,7 +42,7 @@
       "domain": "evaluation",
       "directory": "packages/agent-lab",
       "name": "@velaros-ai/agent-lab",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "可复现的连续旅程评测：诊断、统计与认证，连同 velaros-agent-lab 命令行；不认宿主。",
       "exportSubpaths": [
         ".",
@@ -54,7 +54,7 @@
       "domain": "foundations",
       "directory": "packages/context",
       "name": "@velaros-ai/context",
-      "version": "0.12.0",
+      "version": "0.12.1",
       "description": "Shared task state, immutable evidence and runtime materialization for ScriptAct.",
       "exportSubpaths": [
         ".",
@@ -91,7 +91,7 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.9.5",
+      "version": "0.9.6",
       "description": "Agent runtime with Node.js, Execa and diff; on-demand project transactions and application capabilities; host execution infrastructure.",
       "exportSubpaths": [
         ".",
@@ -141,7 +141,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",
@@ -156,7 +156,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.10.6",
+      "version": "0.10.7",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",

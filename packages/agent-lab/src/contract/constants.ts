@@ -29,7 +29,7 @@ export const CertificationReportSchemaId = 'agent-lab/certification@1' as const
  * 原来缺省写死 `0.1.0`，而 CLI 与宿主调 `runJourney` 时都不传，于是每份归档里的 harness 版本都是错的，
  * 复跑可比性按它判等于按一个常量判。与 `package.json` 的一致由验收用例核对。
  */
-export const AgentLabPackageVersion = '0.2.0' as const
+export const AgentLabPackageVersion = '0.2.1' as const
 
 // ── 观测面 ─────────────────────────────────────────────────────
 
