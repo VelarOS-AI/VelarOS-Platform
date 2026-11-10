@@ -6,6 +6,7 @@ import { test } from 'node:test'
 
 import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -23,7 +24,7 @@ async function fixture(
   stream = async function* (request) {
     yield* done(request)
   },
-  { declareObservationSupport = false } = {}
+  { declareObservationSupport = false, runner } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'script-submit-'))
   const path = join(root, 'state.sqlite')
@@ -70,6 +71,7 @@ async function fixture(
   let storage = localContextStorage({ path })
   let executionEnvironment
   const openRuntime = async () => {
+    if (runner) return createRuntime({ storage, modules, model, runner })
     // 只有登记、校验和执行幂等夹具显式声明支持；其他分支读取真实支持，run 均不作只读回退。
     const host = createLocalShellHost({
       cwd: root,
@@ -111,7 +113,7 @@ async function fixture(
     frames,
     path,
     get observationSupport() {
-      return executionEnvironment.observationSupport()
+      return runner ? runner.observationSupport?.() : executionEnvironment.observationSupport()
     },
     get session() {
       return session
@@ -319,6 +321,141 @@ test('a recovery storage failure releases model admission without accepting the 
   assert.equal((await f.storage.load('s')).records.filter((r) => r.kind === 'user').length, 1)
   await f.submit()
   assert.equal(f.frames.length, 1)
+})
+
+async function rejectSavedSourceReadOnce(f, sourceRef, failure, expectedModelCalls = 0) {
+  const source = (await f.storage.records('s', { refId: sourceRef, limit: 1 })).items[0]
+  assert.equal(source.title, `script:${sourceRef}`)
+  if (expectedModelCalls) {
+    const task = await f.session.view.inspect()
+    assert(task && source.sequence > task.startedSequence, 'the source belongs to the current task')
+  }
+  const get = f.storage.get.bind(f.storage)
+  let failures = 0
+  f.storage.get = async (id, objectId) => {
+    if (id === 's' && objectId === source.objectId && failures === 0) {
+      failures++
+      assert.equal(f.frames.length, expectedModelCalls, 'the fault belongs to source preparation')
+      throw failure
+    }
+    return get(id, objectId)
+  }
+  return () => failures
+}
+
+for (const path of ['host', 'model']) {
+  test(`script preparation faults preserve the original source storage failure through ${path}`, async (t) => {
+    const runs = { execute: 0, observe: 0 }
+    const runner = {
+      observationSupport: () => ({ available: true }),
+      async run(request) {
+        if (request.mode === 'execute') {
+          runs.execute++
+          assert.fail('source preparation must fail before dispatch')
+        }
+        // 非 Node 运行器的 mode 可省略；本夹具只允许已登记的 B 源码进入自动采集。
+        assert.equal(request.mode, undefined)
+        assert(request.source.includes('current observer'))
+        runs.observe++
+        return { ok: true, value: { current: true }, logs: [] }
+      },
+    }
+    const f = await fixture(
+      t,
+      async function* (request, frames) {
+        if (frames.length === 1) {
+          yield turn(request, { execute: { sourceRef } })
+          yield { type: 'finish', reason: 'stop' }
+        } else yield* done(request)
+      },
+      { runner }
+    )
+    if (path === 'model') {
+      // 在同一合法任务内保存两份源码，只有后登记的观察可被正常自动采集。
+      const goal = (await f.session.context.inspect()).protected[0]
+      await f.session.view.begin(goal)
+      await f.session.view.end()
+    }
+    // 通过正式检查和发布归档有效源码，登记本身不调用运行器。
+    const sourceRef = (
+      await f.session.observe({ source: "import {output} from 'velaros'; output('saved');" })
+    ).sourceRef
+    if (path === 'model') {
+      const current = await f.session.observe({
+        source: "import {output} from 'velaros'; output('current observer');",
+      })
+      assert.notEqual(current.sourceRef, sourceRef)
+    }
+    const failure =
+      path === 'host'
+        ? new Error(`saved source storage unavailable during ${path}`)
+        : new AppError('UNAVAILABLE', `saved source backend unavailable during ${path}`)
+    const failures = await rejectSavedSourceReadOnce(
+      f,
+      sourceRef,
+      failure,
+      path === 'model' ? 1 : 0
+    )
+    const events = []
+    if (path === 'host') {
+      await assert.rejects(
+        f.session.script({ execute: { sourceRef } }),
+        (error) => error === failure
+      )
+      assert.equal(f.frames.length, 0)
+    } else {
+      let rejection
+      try {
+        for await (const event of f.session.submit('Run the saved program.')) events.push(event)
+      } catch (error) {
+        rejection = error
+      }
+      assert.equal(failures(), 1, 'the accepted response must read the requested saved source')
+      assert.equal(runs.execute, 0)
+      assert.equal(rejection, failure)
+      assert.equal(f.frames.length, 1)
+      assert(
+        events.some((event) => event.type === 'error' && event.message.includes(failure.message))
+      )
+      assert.equal(events.at(-1).type, 'state')
+      assert.equal(events.at(-1).status, 'failed')
+      assert(!events.some((event) => event.type === 'state' && event.status === 'completed'))
+    }
+    assert.equal(failures(), 1)
+    assert.deepEqual(runs, { execute: 0, observe: path === 'model' ? 1 : 0 })
+    assert.deepEqual(f.world, { value: 1, writes: 0, reads: 0 })
+    assert.equal(
+      (await f.storage.load('s')).records.filter((record) => {
+        if (!record.title.startsWith('script:execution:')) return false
+        return record.sources.some((ref) => ref.id === sourceRef)
+      }).length,
+      0
+    )
+  })
+}
+
+test('script preparation faults keep syntax, import and missing reference refusals before dispatch', async (t) => {
+  let runs = 0
+  const f = await fixture(t, undefined, {
+    runner: {
+      async run() {
+        runs++
+        assert.fail('invalid source must not reach the runner')
+      },
+    },
+  })
+  for (const [program, code] of [
+    [{ source: 'const = ;' }, 'SCRIPT_CHECK'],
+    [{ source: "import {missing} from 'test:world'; await missing();" }, 'SCRIPT_CHECK'],
+    [{ sourceRef: crypto.randomUUID() }, 'REF_NOT_FOUND'],
+  ]) {
+    const receipt = await f.session.script({ execute: program })
+    assert.equal(receipt.status, 'rejected')
+    assert.equal(receipt.execute.code, code)
+    assert.equal(receipt.executed, false)
+  }
+  assert.equal(runs, 0)
+  assert.deepEqual(f.world, { value: 1, writes: 0, reads: 0 })
 })
 
 for (const cancel of ['source', 'session']) {

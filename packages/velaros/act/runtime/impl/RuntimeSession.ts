@@ -1568,6 +1568,8 @@ export class RuntimeSession implements VelarosSession {
           if (event.type === 'input') this.runInputs.add(event.ref.id)
           yield event
         }
+        // Agent 已完整交付失败事件并完成真实收尾；基础故障仍向宿主传播原对象。
+        if (this.backgroundFailure) throw this.backgroundFailure
       } finally {
         controller.abort()
         await this.dependencies.agents?.cancelParent(this.id)
@@ -2076,9 +2078,22 @@ export class RuntimeSession implements VelarosSession {
       }
     } catch (error) {
       signal.throwIfAborted()
-      const failure = error as {
-        code?: string
-        message?: string
+      // 只有确定的源码、引用或版本拒绝才形成控制回执；存储与检查后端故障仍由宿主接收原错。
+      if (
+        !(error instanceof AppError) ||
+        ![
+          'VALIDATION',
+          'PERMISSION',
+          'SCOPE_MISMATCH',
+          'REF_NOT_FOUND',
+          'SCRIPT_REF',
+          'SCRIPT_EDIT',
+          'SCRIPT_CONFLICT',
+          'TOO_LARGE',
+        ].includes(error.code)
+      )
+        throw error
+      const failure = error as AppError & {
         editIndex?: number
         currentRef?: LooseOptional<string>
       }
@@ -2098,8 +2113,8 @@ export class RuntimeSession implements VelarosSession {
         receipt: {
           status: 'rejected',
           executed: false,
-          code: failure.code ?? 'SCRIPT_REF',
-          message: failure.message ?? String(error),
+          code: failure.code,
+          message: failure.message,
           editIndex: failure.editIndex,
           currentRef: failure.currentRef ?? active,
           sourceRef: ref ?? fallbackVersion?.sourceRef,
@@ -3273,7 +3288,24 @@ export class RuntimeSession implements VelarosSession {
       return !failed
     } catch (error) {
       if (signal.aborted) throw error
-      const failure = error as { code?: string; message?: string; effect?: string }
+      // 准备、派发和收尾都可能访问存储；未知故障不能被合成的无效果材料遮蔽。
+      if (
+        !(error instanceof AppError) ||
+        ![
+          'SCRIPT_QUEUE_LIMIT',
+          'SCRIPT_UNRESOLVED',
+          'SCRIPT_CALL_CONFLICT',
+          'SCRIPT_CONFLICT',
+          'SCRIPT_BUSY',
+          'SCRIPT_REF',
+          'STALE_VIEW',
+          'TOO_LARGE',
+        ].includes(error.code)
+      ) {
+        this.backgroundFailure ??= error
+        throw error
+      }
+      const failure = error as AppError & { effect?: string }
       const executionId = crypto.randomUUID()
       const source = await this.context.append({
         kind: 'audit',
