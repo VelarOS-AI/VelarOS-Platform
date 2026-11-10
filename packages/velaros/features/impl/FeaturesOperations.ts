@@ -71,21 +71,28 @@ class FeaturesOperations implements FeaturesOperationsApi {
     ctx: FeaturesOperationContext
   ): Promise<FeatureSummary> {
     ctx.recordEffect('none')
-    await this.validate(input, ctx)
-    await ctx.authorize('install', input, ctx.abortSignal)
+    ctx.abortSignal.throwIfAborted()
+    const path = featurePath(input)
+    const allowDependencyScripts = input.allowDependencyScripts
+    const request: FeatureInstallInput = Object.freeze({
+      path,
+      ...(allowDependencyScripts === undefined ? {} : { allowDependencyScripts }),
+    })
+    await ctx.features.validate({ path }, ctx.abortSignal)
+    await ctx.authorize('install', request, ctx.abortSignal)
     ctx.abortSignal.throwIfAborted()
     ctx.recordEffect('unknown')
-    const result = await ctx.features.install(input, ctx.abortSignal)
+    const result = await ctx.features.install(request, ctx.abortSignal)
     ctx.recordEffect('committed')
     return result
   }
   public async remove(input: FeatureIdInput, ctx: FeaturesOperationContext): Promise<void> {
     ctx.recordEffect('none')
-    featureIdentity(input)
-    await ctx.authorize('remove', input, ctx.abortSignal)
+    const request: FeatureIdInput = Object.freeze({ id: featureIdentity(input) })
+    await ctx.authorize('remove', request, ctx.abortSignal)
     ctx.abortSignal.throwIfAborted()
     ctx.recordEffect('unknown')
-    await ctx.features.remove(input, ctx.abortSignal)
+    await ctx.features.remove(request, ctx.abortSignal)
     ctx.recordEffect('committed')
   }
 }
