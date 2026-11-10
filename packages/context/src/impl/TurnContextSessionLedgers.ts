@@ -20,7 +20,7 @@ export interface TurnContextSessionLedgersApi {
   append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
   /** 状态型 source 的写入口：清空这个会话的账本只留这一条，同样广播变更——界面上的状态提示要立刻换成新的，而不是等下一次事件。 */
   replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
-  /** 读这个会话还没被消费的 delta。这个会话还没有账本时交出一份空基底（generation 为进程代次、headSeq 1、tailSeq 0），不会为一次只读 peek 建账本。 */
+  /** 读这个会话还没被消费的 delta。还没有账本时交出空基底（进程代次、headSeq 1、tailSeq 0），它能衔接此后首次写入；只读 peek 不建账本。 */
   peek(
     sessionId: string,
     input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
@@ -100,7 +100,12 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
     input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
   ): TurnContextLedgerPeekResult {
     const existing = this.ledgers.get(sessionId)
-    if (existing) return existing.peek(input)
+    if (existing)
+      return existing.peek(
+        input.generation === this.generation && input.afterSeq === 0
+          ? { ...input, generation: null }
+          : input
+      )
 
     // 无账本 = 该会话尚无事件：交出空基底，不为只读 peek 创建实例。
     return {

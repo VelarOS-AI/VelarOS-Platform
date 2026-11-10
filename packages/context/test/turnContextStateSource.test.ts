@@ -18,6 +18,32 @@ function peekLabels(ledger: TurnContextLedger, afterSeq = 0): string[] {
   return ledger.peek({ afterSeq, generation: null }).deltas.map((delta) => delta.label)
 }
 
+test.each(['append', 'replaceLatest'] as const)(
+  'an empty activity baseline retains the first real delta (%s)',
+  (method) => {
+    const ledgers = new TurnContextSessionLedgers(SourceId)
+    const empty = ledgers.peek('first', { generation: null, afterSeq: 0 })
+    expect(empty.deltas).toEqual([])
+    expect(empty.tailSeq).toBe(0)
+    const first = ledgers[method]('first', {
+      label: 'first event',
+      summaryText: 'first event body',
+    })
+    const next = ledgers.peek('first', { generation: empty.generation, afterSeq: empty.tailSeq })
+    expect(next.deltas).toEqual([first])
+    expect(next.tailSeq).toBe(first.seq)
+    expect(
+      ledgers.peek('first', { generation: next.generation, afterSeq: next.tailSeq }).deltas
+    ).toEqual([])
+
+    ledgers.clearSession('first')
+    ledgers.append('first', { label: 'new ledger', summaryText: 'after a real retirement' })
+    const retired = ledgers.peek('first', { generation: next.generation, afterSeq: next.tailSeq })
+    expect(retired.generation).not.toBe(next.generation)
+    expect(retired.deltas).toEqual([])
+  }
+)
+
 describe('state-like turn context sources supersede instead of accumulate', () => {
   test('host append notifications depend on a structural bus rather than a concrete class', () => {
     const emitted: Array<[string, string]> = []
