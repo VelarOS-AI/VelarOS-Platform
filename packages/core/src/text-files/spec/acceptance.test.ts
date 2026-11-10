@@ -131,6 +131,17 @@ describe('编码', () => {
       textCodec.encodePreserving(original, `${before.content}x`, after, 'gb18030')
     ).toThrow(expect.objectContaining({ code: TextFileErrorCodes.lossy }))
   })
+
+  test.each([
+    [Buffer.from('a'), 'b', 'c'],
+    [textCodec.encode('中文', 'gb18030'), '正文', '内容'],
+    [Buffer.from('a'), 'b', 'b'],
+    [Buffer.from([0x81]), '', 'c'],
+  ] as const)('INV-2 GB18030 原始字节与原文不一致时抛 lossy：%j', (original, before, after) => {
+    expect(() => textCodec.encodePreserving(original, before, after, 'gb18030')).toThrow(
+      expect.objectContaining({ code: TextFileErrorCodes.lossy })
+    )
+  })
 })
 
 describe('原子写入', () => {
