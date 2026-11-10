@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | INV-1 | 结果只由独立验证决定：`void` 判据落成丢弃记录；无可判权重时段的 passed 与 score 均未知，门判不了时 passed 未知，已知判据事实保留。可靠性只认完整且唯一覆盖旅程的真实通过结论，分数不替代门结论；丢弃与不可判不进能力分子分母 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 一个试验失败不影响其它试验：`runJob` 当场停止派发、等在飞的试验收尾，再把第一个错误抛给调用方；不留「调用方已经拿不到归档、执行体还在后台跑」的会话 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 归档读写只接受当前 v3，未声明的字段与旧格式一律拒收；唯一 report.json 只有 ENOENT 表示缺席，坏档和读取故障必须报错，原件不回写、不迁移 | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | 归档读写只接受当前 v3，未声明的字段与旧格式一律拒收；运行归档原子首次发布，同 runId 仅本次序列化字节完全相同可幂等，差异报错并保留原件；唯一 report.json 只有 ENOENT 表示缺席，坏档和读取故障必须报错，原件不回写、不迁移 | 测试 | `spec/acceptance.test.ts`、`test/archive-report.test.ts` |
 | INV-4 | 真实任务 HTML 只展示闭集状态、现有数值与问题分类/严重度计数，不嵌入记录或发现的自由文本、标识、提示词、回答、绝对路径与产物正文；完整事实与来源仍原样留在私有 JSON，内容分类不放宽此边界 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 工具调用按 `toolCallId` 去重计数（`unique-tool-call`）：累计快照重复上报同一次调用不重复计数 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 纯测量与渲染代码不做 I/O：`utils/measure/`、`utils/render/`、`utils/wire/` 不碰 Node 内置模块，也不发网络请求 | 门禁 | `check:agent-lab-package` |

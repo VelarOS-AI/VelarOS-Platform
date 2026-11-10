@@ -56,6 +56,71 @@ describe('current archive boundaries and reports', () => {
     })
   })
 
+  test('INV-3 publishes each run once and accepts only identical serialized bytes', async () => {
+    await withDirectory(async (root) => {
+      const value = archive()
+      const path = await labArchives.writeRunArchive(root, value)
+      const original = await readFile(path)
+      expect(await labArchives.writeRunArchive(root, structuredClone(value))).toBe(path)
+      expect(await readFile(path)).toEqual(original)
+      for (const changed of [
+        { ...value, manifest: { ...value.manifest, finishedAt: 3 } },
+        { ...value, extensions: { note: 'different evidence' } },
+      ]) {
+        await expect(labArchives.writeRunArchive(root, changed)).rejects.toThrow(
+          '运行归档已存在且内容不同'
+        )
+        expect(await readFile(path)).toEqual(original)
+      }
+      expect(await readdir(join(root, value.manifest.runId))).toEqual(['report.json'])
+    })
+  })
+
+  test('INV-3 keeps an existing archive byte-for-byte instead of normalizing it', async () => {
+    await withDirectory(async (root) => {
+      const value = archive()
+      const path = await labArchives.writeRunArchive(root, value)
+      const original = JSON.stringify(value)
+      await writeFile(path, original)
+      await expect(labArchives.writeRunArchive(root, value)).rejects.toThrow(
+        '运行归档已存在且内容不同'
+      )
+      expect(await readFile(path, 'utf8')).toBe(original)
+      expect(await readdir(join(root, value.manifest.runId))).toEqual(['report.json'])
+    })
+  })
+
+  test('INV-3 concurrent different archives have one winner and cannot replace it', async () => {
+    await withDirectory(async (root) => {
+      const first = archive()
+      const values = [first, { ...first, extensions: { note: 'competing evidence' } }]
+      const outcomes = await Promise.allSettled(
+        values.map((value) => labArchives.writeRunArchive(root, value))
+      )
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1)
+      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1)
+      const winner = outcomes.findIndex((outcome) => outcome.status === 'fulfilled')
+      const path = join(root, first.manifest.runId, 'report.json')
+      const published = await readFile(path)
+      expect(await labArchives.readRunArchive(path)).toEqual(values[winner])
+      await expect(labArchives.writeRunArchive(root, values[1 - winner]!)).rejects.toThrow(
+        '运行归档已存在且内容不同'
+      )
+      expect(await readFile(path)).toEqual(published)
+      expect(await readdir(join(root, first.manifest.runId))).toEqual(['report.json'])
+    })
+  })
+
+  test('ordinary report files retain replacement writes', async () => {
+    await withDirectory(async (root) => {
+      const path = join(root, 'report.html')
+      await labArchives.writeReportFile(path, 'previous report')
+      expect(await labArchives.writeReportFile(path, 'updated report')).toBe(path)
+      expect(await readFile(path, 'utf8')).toBe('updated report')
+      expect(await readdir(root)).toEqual(['report.html'])
+    })
+  })
+
   test('rejects old, malformed and extra-field reports without consulting progress or changing originals', async () => {
     await withDirectory(async (root) => {
       const value = archive()
