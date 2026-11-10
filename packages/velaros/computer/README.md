@@ -71,3 +71,4 @@ export function shutdown() {
 - 原生请求复用 Core 的串行队列，同一时刻只下发一条。超时回收 helper，并拒绝该代次排队动作，不能在新进程中自动重放；超时动作的实际效果需要重新观察确认。旧进程的迟到事件不能清掉新进程。
 - 宿主端口接受可选取消信号，模型操作始终转发本次调用的信号；排队期间取消的动作不再下发。已经进入系统调用的动作不能保证抢占，拖拽仍保证异常释放，录像有时长上限；运行中取消后应重新观察实际效果。
 - 换成自己的 sidecar（`spawnProcess`）要说同一套 stdio 行协议：每行一个 JSON，请求 `{"id","command","payload"}`，应答 `{"id","ok","result"}` 或 `{"id","ok":false,"error":{"code","message"}}`，启动完成先发 `id: 0` 的握手；命令与截图绑定以 `computer/runtime/computer_helper_common.py` 为准。
+- Sidecar 启动与释放共用同一个资源归属；启动回调中发生释放时，迟到子进程仍会回收，不会重新发布为可用连接。

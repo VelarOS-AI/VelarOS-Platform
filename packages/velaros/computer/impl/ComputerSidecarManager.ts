@@ -155,9 +155,9 @@ export interface ComputerSidecarManagerPendingRequest {
  * **两个曾经真实存在的死锁（2026-07-30 Q3b 修复，别改回去）**：
  * 1. `start()` 失败后若不把 `startPromise` 归零，后续每次 `start()` 都会拿到**同一个已拒绝的
  *    promise**——一次瞬时失败（helper 未装 / spawn 抛错）就把 sidecar 永久钉死，用户装好插件
- *    也活不过来，只能重启应用。异步失败走 `onFail → teardown()` 归零；**同步**失败走 `start()`
- *    尾部那段带身份校验的 `catch`（executor 体在 `this.startPromise = …` 赋值**之前**就跑完了，
- *    那时 teardown 清的是上一轮的值）。
+ *    也活不过来，只能重启应用。异步失败走 `onFail → teardown()` 归零；解析/启动失败走尾部
+ *    带身份校验的 `catch`。启动 Promise 先登记，再调用宿主解析与 spawn；回调重入 dispose
+ *    时，迟到 child 只进入独立 EOF 清理，不能重新装回已经释放的管理器。
  * 2. `exit` 事件在 ready **之后**到达时 `onFail` 已 settled、不会再 teardown，于是 `ready` 停在
  *    true、`child` 指着死进程：后续每个请求都写进死管道再干等一整个超时，且永不重启。所以
  *    `exit` 处理器结尾无条件 `teardown()`（幂等），把状态机拉回 idle，下一次请求自然重启。
@@ -505,166 +505,199 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     if (this.ready) return Promise.resolve()
     if (this.startPromise) return this.startPromise
 
-    const startPromise = new Promise<void>((resolvePromise, rejectPromise) => {
-      const spec = this.resolveHelper()
-      if (!spec) {
-        // 这条失败由错误码分类（见 classifyStartError），不靠文字，所以文案可以是中文。
-        rejectPromise(
-          new AppError(
-            ComputerErrorCodes.helperMissing,
-            '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。'
-          )
-        )
-        return
-      }
-
-      let child: ComputerSidecarProcess
-      try {
-        child = this.spawnProcess(spec)
-      } catch (error) {
-        // arch-guard:silent-catch-ok 启动失败会通过 rejectPromise 作为启动错误返回调用方。
-        rejectPromise(AppError.from(error, ComputerErrorCodes.sidecarSpawnFailed))
-        return
-      }
-      this.child = child
-
-      let settled = false
-      let startupTimer: Nullable<TimerLease> = null
-      const onReady = () => {
-        if (settled) return
-        settled = true
-        startupTimer?.cancel()
-        this.rejectStartup = null
-        this.ready = true
-        resolvePromise()
-      }
-      const onFail = (error: Error) => {
-        if (settled) return
-        settled = true
-        startupTimer?.cancel()
-        this.teardown()
-        rejectPromise(error)
-      }
-      this.rejectStartup = onFail
-      const onDecodeFailure = (error: unknown) => {
-        const failure = new AppError(
-          'PROTOCOL',
-          '桌面控制 helper 输出包含无效 UTF-8，已终止这一代进程。',
-          error
-        )
-        onFail(failure)
-        this.rejectAllPending(failure)
-        this.teardown()
-      }
-      // helper 卡在导入阶段不打握手、或握手行被上一轮残片吞掉时，这道闸是唯一出口：
-      // 没有它 start() 永不 settle，而请求的超时计时器要等 start() 返回才装，调用方永远挂起。
-      startupTimer = this.timers.after(
-        this.startupTimeoutMs,
-        () => {
-          onFail(
-            new AppError(
-              ComputerErrorCodes.sidecarStartupTimeout,
-              `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
-              undefined,
-              { timeoutMs: this.startupTimeoutMs }
+    const startPromise = Promise.resolve().then(
+      () =>
+        new Promise<void>((resolvePromise, rejectPromise) => {
+          if (this.disposed) {
+            rejectPromise(
+              new AppError(
+                ComputerErrorCodes.sidecarDisposed,
+                '桌面控制 sidecar 已释放，无法继续使用。'
+              )
             )
-          )
-        },
-        { label: 'computer-startup' }
-      )
+            return
+          }
+          const spec = this.resolveHelper()
+          if (this.disposed) {
+            rejectPromise(
+              new AppError(
+                ComputerErrorCodes.sidecarDisposed,
+                '桌面控制 sidecar 已释放，无法继续使用。'
+              )
+            )
+            return
+          }
+          if (!spec) {
+            // 这条失败由错误码分类（见 classifyStartError），不靠文字，所以文案可以是中文。
+            rejectPromise(
+              new AppError(
+                ComputerErrorCodes.helperMissing,
+                '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。'
+              )
+            )
+            return
+          }
 
-      child.stdout.on('data', (chunk) => {
-        // 上一轮进程被 teardown 后管道里还可能吐出残余数据，它属于已死的那一轮：
-        // 混进共享的行缓冲会把新进程的握手行从中间劈开（C3 的另一半）。
-        if (this.child !== child) return
-        let decoded: string
-        try {
-          decoded =
-            typeof chunk === 'string' ? chunk : this.stdoutDecoder.decode(chunk, { stream: true })
-        } catch (error) {
-          onDecodeFailure(error)
-          return
-        }
-        this.handleStdout(decoded, onReady)
-      })
-      child.stderr.on('data', (chunk) => {
-        if (this.child !== child) return
-        let decoded: string
-        try {
-          decoded =
-            typeof chunk === 'string' ? chunk : this.stderrDecoder.decode(chunk, { stream: true })
-        } catch (error) {
-          onDecodeFailure(error)
-          return
-        }
-        this.stderrBuffer += decoded
-        if (this.stderrBuffer.length > ComputerTuning.stderrTailChars) {
-          this.stderrBuffer = this.stderrBuffer.slice(-ComputerTuning.stderrTailChars)
-        }
-      })
-      // 管道写错误（EPIPE）是异步事件，不接住就是宿主进程的未捕获异常。接住后按「写失败」
-      // 清账：在飞的请求一次性拒绝、状态机回 idle，下一次调用重新拉起 helper。
-      child.stdin.on?.('error', (error) => {
-        if (this.child !== child) return
-        this.log(`sidecar stdin error: ${error.message}`)
-        const writeError = new AppError(
-          ComputerErrorCodes.sidecarWriteFailed,
-          `桌面控制 helper 的输入管道已断开：${error.message}`,
-          error
-        )
-        onFail(writeError)
-        this.rejectAllPending(writeError)
-        this.teardown()
-      })
-      child.on('error', (error) => {
-        if (this.child !== child) return
-        this.log(`sidecar process error: ${error.message}`)
-        onFail(error)
-        this.rejectAllPending(error)
-        this.teardown()
-      })
-      child.on('exit', (code) => {
-        if (this.child !== child) return
-        let stdoutTail: string
-        let stderrTail: string
-        try {
-          stdoutTail = this.stdoutDecoder.decode()
-          stderrTail = this.stderrDecoder.decode()
-        } catch (error) {
-          onDecodeFailure(error)
-          return
-        }
-        this.handleStdout(stdoutTail, onReady)
-        this.stderrBuffer += stderrTail
-        this.log(`sidecar exited with code ${code ?? 'null'}`)
-        // helper 自己打在 stderr 上的话（多半是 Python 报错）比任何转述都有用，优先原样带出。
-        const reason =
-          this.stderrBuffer.trim() ||
-          `桌面控制 helper 在准备就绪前退出（退出码 ${code ?? 'null'}）。`
-        onFail(
-          new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code })
-        )
-        this.rejectAllPending(
-          new AppError(
-            ComputerErrorCodes.sidecarExited,
-            '桌面控制 helper 进程已退出，这次请求没有完成。',
-            undefined,
-            {
-              exitCode: code,
-            }
+          let child: ComputerSidecarProcess
+          try {
+            child = this.spawnProcess(spec)
+          } catch (error) {
+            // arch-guard:silent-catch-ok 启动失败会通过 rejectPromise 作为启动错误返回调用方。
+            rejectPromise(AppError.from(error, ComputerErrorCodes.sidecarSpawnFailed))
+            return
+          }
+          if (this.disposed) {
+            this.releaseChild(child, true)
+            rejectPromise(
+              new AppError(
+                ComputerErrorCodes.sidecarDisposed,
+                '桌面控制 sidecar 已释放，无法继续使用。'
+              )
+            )
+            return
+          }
+          this.child = child
+
+          let settled = false
+          let startupTimer: Nullable<TimerLease> = null
+          const onReady = () => {
+            if (settled) return
+            settled = true
+            startupTimer?.cancel()
+            this.rejectStartup = null
+            this.ready = true
+            resolvePromise()
+          }
+          const onFail = (error: Error) => {
+            if (settled) return
+            settled = true
+            startupTimer?.cancel()
+            this.teardown(this.disposed)
+            rejectPromise(error)
+          }
+          this.rejectStartup = onFail
+          const onDecodeFailure = (error: unknown) => {
+            const failure = new AppError(
+              'PROTOCOL',
+              '桌面控制 helper 输出包含无效 UTF-8，已终止这一代进程。',
+              error
+            )
+            onFail(failure)
+            this.rejectAllPending(failure)
+            this.teardown()
+          }
+          // helper 卡在导入阶段不打握手、或握手行被上一轮残片吞掉时，这道闸是唯一出口：
+          // 没有它 start() 永不 settle，而请求的超时计时器要等 start() 返回才装，调用方永远挂起。
+          startupTimer = this.timers.after(
+            this.startupTimeoutMs,
+            () => {
+              onFail(
+                new AppError(
+                  ComputerErrorCodes.sidecarStartupTimeout,
+                  `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
+                  undefined,
+                  { timeoutMs: this.startupTimeoutMs }
+                )
+              )
+            },
+            { label: 'computer-startup' }
           )
-        )
-        // ready 之后才退出时 onFail 已 settled、不会再 teardown，状态机会卡在「ready=true 但进程
-        // 已死」——后续每个请求写进死管道再干等一整个超时，且永不重启。teardown 幂等，无条件调用
-        // 把状态机拉回 idle，下一次请求自然重新拉起 sidecar。
-        this.teardown()
-      })
-    })
+
+          child.stdout.on('data', (chunk) => {
+            // 上一轮进程被 teardown 后管道里还可能吐出残余数据，它属于已死的那一轮：
+            // 混进共享的行缓冲会把新进程的握手行从中间劈开（C3 的另一半）。
+            if (this.child !== child) return
+            let decoded: string
+            try {
+              decoded =
+                typeof chunk === 'string'
+                  ? chunk
+                  : this.stdoutDecoder.decode(chunk, { stream: true })
+            } catch (error) {
+              onDecodeFailure(error)
+              return
+            }
+            this.handleStdout(decoded, onReady)
+          })
+          child.stderr.on('data', (chunk) => {
+            if (this.child !== child) return
+            let decoded: string
+            try {
+              decoded =
+                typeof chunk === 'string'
+                  ? chunk
+                  : this.stderrDecoder.decode(chunk, { stream: true })
+            } catch (error) {
+              onDecodeFailure(error)
+              return
+            }
+            this.stderrBuffer += decoded
+            if (this.stderrBuffer.length > ComputerTuning.stderrTailChars) {
+              this.stderrBuffer = this.stderrBuffer.slice(-ComputerTuning.stderrTailChars)
+            }
+          })
+          // 管道写错误（EPIPE）是异步事件，不接住就是宿主进程的未捕获异常。接住后按「写失败」
+          // 清账：在飞的请求一次性拒绝、状态机回 idle，下一次调用重新拉起 helper。
+          child.stdin.on?.('error', (error) => {
+            if (this.child !== child) return
+            this.log(`sidecar stdin error: ${error.message}`)
+            const writeError = new AppError(
+              ComputerErrorCodes.sidecarWriteFailed,
+              `桌面控制 helper 的输入管道已断开：${error.message}`,
+              error
+            )
+            onFail(writeError)
+            this.rejectAllPending(writeError)
+            this.teardown()
+          })
+          child.on('error', (error) => {
+            if (this.child !== child) return
+            this.log(`sidecar process error: ${error.message}`)
+            onFail(error)
+            this.rejectAllPending(error)
+            this.teardown()
+          })
+          child.on('exit', (code) => {
+            if (this.child !== child) return
+            let stdoutTail: string
+            let stderrTail: string
+            try {
+              stdoutTail = this.stdoutDecoder.decode()
+              stderrTail = this.stderrDecoder.decode()
+            } catch (error) {
+              onDecodeFailure(error)
+              return
+            }
+            this.handleStdout(stdoutTail, onReady)
+            this.stderrBuffer += stderrTail
+            this.log(`sidecar exited with code ${code ?? 'null'}`)
+            // helper 自己打在 stderr 上的话（多半是 Python 报错）比任何转述都有用，优先原样带出。
+            const reason =
+              this.stderrBuffer.trim() ||
+              `桌面控制 helper 在准备就绪前退出（退出码 ${code ?? 'null'}）。`
+            onFail(
+              new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code })
+            )
+            this.rejectAllPending(
+              new AppError(
+                ComputerErrorCodes.sidecarExited,
+                '桌面控制 helper 进程已退出，这次请求没有完成。',
+                undefined,
+                {
+                  exitCode: code,
+                }
+              )
+            )
+            // ready 之后才退出时 onFail 已 settled、不会再 teardown，状态机会卡在「ready=true 但进程
+            // 已死」——后续每个请求写进死管道再干等一整个超时，且永不重启。teardown 幂等，无条件调用
+            // 把状态机拉回 idle，下一次请求自然重新拉起 sidecar。
+            this.teardown()
+          })
+        })
+    )
 
     this.startPromise = startPromise
-    // 同步失败路径的归零点：executor 体在上面这行赋值**之前**就已跑完，onFail → teardown() 那时
-    // 清的是上一轮的值。不补这一手，一次瞬时启动失败就把 sidecar 永久钉死（详见类头导览）。
-    // 身份校验保证不会误清掉后来那一轮的 startPromise。
+    // 解析或 spawn 在装监听器之前失败也要允许下一次显式请求重试；只清本次启动身份。
     void startPromise.catch(() => {
       // arch-guard:silent-catch-ok 拒绝由 startPromise 原样返回调用方；此处理器只修复内部状态。
       if (this.startPromise === startPromise) this.startPromise = null
@@ -754,34 +787,46 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     this.stderrDecoder = new TextDecoder('utf-8', { fatal: true })
     const child = this.child
     this.child = null
-    if (child) {
-      try {
-        child.stdin.end()
-      } catch {
-        // arch-guard:silent-catch-ok 释放阶段 best-effort：进程可能已退出，管道关闭失败无补救动作也无诊断价值。
-      }
-      const shutdown = () => {
-        try {
-          child.kill('SIGTERM')
-        } catch (error) {
-          // arch-guard:silent-catch-ok 退出失败通过注入的 onLog 接收器报告，进程可能已先行退出。
-          this.log(`sidecar shutdown: ${AppError.getMessage(error)}`)
-        }
-      }
-      if (graceful) {
-        // 先让 helper 在 EOF 的 finally 中释放持有的输入，再回收不响应的进程。
-        const cleanup = new TimerScope({ name: 'ComputerSidecarCleanup' })
-        cleanup.after(
-          1_000,
-          () => {
-            shutdown()
-            cleanup.dispose()
-          },
-          { label: 'computer-shutdown' }
-        )
-        child.on('exit', () => cleanup.dispose())
-      } else shutdown()
+    if (child) this.releaseChild(child, graceful)
+  }
+
+  /** 已退休或迟到的真实 child 独立收尾，不再借用管理器的状态与计时域。 */
+  private releaseChild(child: ComputerSidecarProcess, graceful: boolean): void {
+    child.on('error', (error) => this.log(`sidecar cleanup error: ${AppError.getMessage(error)}`))
+    child.stdin.on?.('error', (error) =>
+      this.log(`sidecar cleanup stdin error: ${AppError.getMessage(error)}`)
+    )
+    const cleanup = graceful ? new TimerScope({ name: 'ComputerSidecarCleanup' }) : null
+    let exited = false
+    child.on('exit', () => {
+      exited = true
+      cleanup?.dispose()
+    })
+    try {
+      child.stdin.end()
+    } catch {
+      // arch-guard:silent-catch-ok 释放阶段 best-effort：进程可能已退出，管道关闭失败无补救动作也无诊断价值。
     }
+    const shutdown = () => {
+      try {
+        child.kill('SIGTERM')
+      } catch (error) {
+        // arch-guard:silent-catch-ok 退出失败通过注入的 onLog 接收器报告，进程可能已先行退出。
+        this.log(`sidecar shutdown: ${AppError.getMessage(error)}`)
+      }
+    }
+    if (graceful) {
+      // 先让 helper 在 EOF 的 finally 中释放持有的输入，再回收不响应的进程。
+      if (exited) return
+      cleanup!.after(
+        1_000,
+        () => {
+          shutdown()
+          cleanup!.dispose()
+        },
+        { label: 'computer-shutdown' }
+      )
+    } else shutdown()
   }
 
   private log(message: string): void {
