@@ -92,6 +92,128 @@ test('INV-1 超时撤销请求并通知宿主，迟到回复不会恢复租约',
   model.close()
 })
 
+test('INV-1 请求发送与撤销都失败时保留两个原始错误', async () => {
+  const primary = new Error('send failed')
+  const cleanup = new Error('cancel failed')
+  const model = driver(
+    async () => {
+      throw primary
+    },
+    {
+      cancel: async () => {
+        throw cleanup
+      },
+    }
+  )
+  await assert.rejects(
+    Array.fromAsync(model.stream(request, new AbortController().signal)),
+    (error) => {
+      assert.equal(error.code, 'UNAVAILABLE')
+      assert.equal(error.errors[0], primary)
+      assert.equal(error.errors[1], cleanup)
+      return true
+    }
+  )
+})
+
+test('INV-2 协议失败不会被撤销失败覆盖', async () => {
+  const cleanup = new Error('cancel failed')
+  const model = driver(
+    async (value) =>
+      model.deliver({
+        type: 'finished',
+        requestId: value.requestId,
+        lease: value.lease,
+        text: 'unverified',
+        reason: 'stop',
+        evidence: '',
+      }),
+    {
+      cancel: async () => {
+        throw cleanup
+      },
+    }
+  )
+  await assert.rejects(
+    Array.fromAsync(model.stream(request, new AbortController().signal)),
+    (error) => {
+      assert.equal(error.errors[0].code, 'PROTOCOL')
+      assert.equal(error.errors[1], cleanup)
+      return true
+    }
+  )
+})
+
+test('INV-1 单个请求错误或完成后的撤销错误保持原对象', async () => {
+  const primary = new Error('send failed')
+  const failed = driver(async () => {
+    throw primary
+  })
+  await assert.rejects(
+    Array.fromAsync(failed.stream(request, new AbortController().signal)),
+    (error) => error === primary
+  )
+  const cleanup = new Error('cancel failed')
+  const model = driver(
+    async (value) =>
+      model.deliver({
+        type: 'finished',
+        requestId: value.requestId,
+        lease: value.lease,
+        text: 'raw',
+        reason: 'stop',
+        evidence: 'provider.done',
+      }),
+    {
+      cancel: async () => {
+        throw cleanup
+      },
+    }
+  )
+  const stream = model.stream(request, new AbortController().signal)[Symbol.asyncIterator]()
+  assert.deepEqual((await stream.next()).value, { type: 'text', text: 'raw' })
+  assert.deepEqual((await stream.next()).value, { type: 'finish', reason: 'stop' })
+  await assert.rejects(stream.next(), (error) => error === cleanup)
+})
+
+test('INV-1 消费者提前 return 仍撤销租约且拒绝迟到回复', async () => {
+  let sent
+  const cancelled = []
+  const model = driver(
+    async (value) => {
+      sent = value
+      model.deliver({
+        type: 'finished',
+        requestId: value.requestId,
+        lease: value.lease,
+        text: 'raw',
+        reason: 'stop',
+        evidence: 'provider.done',
+      })
+    },
+    {
+      cancel: async (...identity) => {
+        cancelled.push(identity)
+      },
+    }
+  )
+  const stream = model.stream(request, new AbortController().signal)[Symbol.asyncIterator]()
+  assert.deepEqual((await stream.next()).value, { type: 'text', text: 'raw' })
+  await stream.return()
+  assert.deepEqual(cancelled, [[sent.requestId, sent.lease]])
+  assert.equal(
+    model.deliver({
+      type: 'finished',
+      requestId: sent.requestId,
+      lease: sent.lease,
+      text: 'late',
+      reason: 'stop',
+      evidence: 'provider.done',
+    }),
+    false
+  )
+})
+
 test('INV-3 信封严格核对身份、可选字段和对象载荷，保留载荷内容', () => {
   const envelope = {
     service: ScriptActBridge.service,

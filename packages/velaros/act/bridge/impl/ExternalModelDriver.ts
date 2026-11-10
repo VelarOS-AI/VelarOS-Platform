@@ -57,6 +57,7 @@ class ExternalModelDriver implements ExternalModelDriverApi {
     const lease = this.options.createId()
     const timers = new TimerScope({ name: 'ExternalModelDriver.stream' })
     let onAbort: (() => void) | undefined
+    let failure: { error: unknown } | undefined
     try {
       const reply = await new Promise<ExternalModelReply>((resolve, reject) => {
         this.pending.set(requestId, { lease, resolve, reject })
@@ -114,11 +115,29 @@ class ExternalModelDriver implements ExternalModelDriverApi {
         yield { type: 'output', value: modelRequestEncoder.output(request.response, value) }
       } else yield { type: 'text', text: reply.text }
       yield { type: 'finish', reason: reply.reason }
+    } catch (error) {
+      failure = { error }
+      throw error
     } finally {
       this.pending.delete(requestId)
       timers.dispose()
       if (onAbort) signal.removeEventListener('abort', onAbort)
+      await this.cancel(requestId, lease, failure)
+    }
+  }
+
+  private async cancel(
+    requestId: string,
+    lease: string,
+    failure?: { error: unknown }
+  ): Promise<void> {
+    try {
       await this.options.cancel(requestId, lease)
+    } catch (error) {
+      if (!failure) throw error
+      throw AppError.withFields('UNAVAILABLE', '网页模型请求与撤销均失败', {
+        errors: [failure.error, error],
+      })
     }
   }
 
