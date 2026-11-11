@@ -86,6 +86,8 @@
 
 | INV-70 | 失败脚本提供已有调用日志的可发现召回索引，正常执行不复制原始 payload。read 必须绑定当前授权的失败结果引用、会话、执行与调用身份；按原回执分页保留 outcome/effect/value/error，不重派调用、不把未知或失败装成成功、不签发 required 交付证明。释放及封段仅退展示；异步日志读取后再次核对授权，重置及跨会话/执行拒绝，显式重新授权沿原规则。旧宿主忽略 invocation 时明确拒绝。 | 测试 | `test/failed-call-recall.test.mjs` |
 
+| INV-71 | 子任务首轮执行前由宿主装配独立指令与资源环境；准备完成后取消或会话关闭时释放已返回的资源，不调用已取消分支的模型 | 测试 | `test/act-children.test.mjs` |
+
 ## INV-47 有界关闭保留真实收束与存储
 
 Runtime.close 的等待期限覆盖 openings、会话关闭、模块和存储。超时返回 TIMEOUT 与 pending/phase，继续拒绝新会话；后台只在真实处理器、journal 及已受理的任务材料、trace、inspect、events 读取收束后关闭存储。Session.close 只结束执行与交互；历史读取由仍活动 Runtime 的存储 owner 逐次核验原根身份与授权，包括已移出活动表的 Session 句柄。Runtime 关闭才停止新历史读取并排空已受理操作，不为读取激活执行环境。取消观察者不能释放仍在执行的写操作锁，迟到提交必须保留 committed。
