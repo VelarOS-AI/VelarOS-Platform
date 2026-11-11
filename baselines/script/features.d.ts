@@ -1,14 +1,14 @@
-/** Feature 能力目录、按需加载和安装管理。用户显式选择表示本次任务要求；其余能力按调用策略发现。说明、工具实现与 npm 依赖由同一能力版本管理。 */
+/** Feature 能力目录、按需加载和安装管理。默认引用只指定初始上下文，全部已安装能力均可发现和按需加载。说明、工具实现与 npm 依赖由同一能力版本管理。 */
 declare module 'velaros:features' {
   /** 查询原生 Feature 格式、Codex Skill 导入和宿主 SDK 规范。
    */
   export function guide(): Promise<string>
 
-  /** 列出能力的用途、安装、启用和兼容状态。正文按需 load。
+  /** 列出全部能力的用途、安装状态与默认引用，正文按需 load。
    */
   export function list(): Promise<readonly FeatureSummary[]>
 
-  /** 按身份加载本轮可用能力的完整 Skill 说明和资源目录。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
+  /** 按身份加载已安装能力的完整 Skill 说明和资源目录，不要求预先引用。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
    */
   export function load(input: FeatureIdInput): Promise<FeatureLoaded>
 
@@ -24,13 +24,12 @@ declare module 'velaros:features' {
    */
   export function remove(input: FeatureIdInput): Promise<void>
 
-  /** 当前能力的安装和启用状态；generation 固定实际文件与启用代次。 */
+  /** 当前能力的安装状态；generation 固定实际安装版本，默认引用不改变可用范围。 */
   interface FeatureSummary extends FeatureDefinition {
     readonly selected?: boolean
     readonly availableVersion?: string
     readonly generation: string | null
     readonly installed: boolean
-    readonly enabled: boolean
     readonly builtin: boolean
     readonly grants: readonly string[]
   }
@@ -61,7 +60,6 @@ declare module 'velaros:features' {
     readonly version: string
     readonly prompt: string
     readonly instructions?: string
-    readonly implicit: boolean
     readonly source: 'native' | 'markdown' | 'codex'
     readonly diagnostics: readonly string[]
     readonly toolDependencies: readonly string[]

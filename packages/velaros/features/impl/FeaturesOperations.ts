@@ -10,17 +10,17 @@ import type {
 import { featureGuide } from '../utils/guide.js'
 import { featureIdentity, featurePath } from '../utils/identity.js'
 
-/** @AgentView Feature 能力目录、按需加载和安装管理。用户显式选择表示本次任务要求；其余能力按调用策略发现。说明、工具实现与 npm 依赖由同一能力版本管理。 */
+/** @AgentView Feature 能力目录、按需加载和安装管理。默认引用只指定初始上下文，全部已安装能力均可发现和按需加载。说明、工具实现与 npm 依赖由同一能力版本管理。 */
 export interface FeaturesOperationsApi {
   /** @AgentView 查询原生 Feature 格式、Codex Skill 导入和宿主 SDK 规范。
    * @OperationEffect none
    */
   guide(ctx: FeaturesOperationContext): Promise<string>
-  /** @AgentView 列出能力的用途、安装、启用和兼容状态。正文按需 load。
+  /** @AgentView 列出全部能力的用途、安装状态与默认引用，正文按需 load。
    * @OperationEffect none
    */
   list(ctx: FeaturesOperationContext): Promise<readonly FeatureSummary[]>
-  /** @AgentView 按身份加载本轮可用能力的完整 Skill 说明和资源目录。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
+  /** @AgentView 按身份加载已安装能力的完整 Skill 说明和资源目录，不要求预先引用。id 最多 214 个字符。新 npm 包从下一次程序执行生效。
    * @OperationEffect none
    */
   load(input: FeatureIdInput, ctx: FeaturesOperationContext): Promise<FeatureLoaded>

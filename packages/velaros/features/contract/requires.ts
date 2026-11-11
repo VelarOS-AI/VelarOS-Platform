@@ -8,11 +8,11 @@ import type {
   FeatureSummary,
 } from '../types/features.js'
 
-/** 产品提供唯一能力库；资源绑定、安装分发和选择授权由宿主持有。 */
+/** 产品提供唯一能力库；默认引用与按需加载共用安装目录。 */
 export interface FeatureHost {
-  /** 用户本次任务明确选择的安装与授权快照。 */
+  /** 初始上下文的能力引用，仅供预载与展示，不限制发现和加载。 */
   readonly selection?: readonly FeatureSelection[]
-  /** 查询当前产品能力及兼容状态。 */
+  /** 查询全部产品能力及安装状态，不按默认引用过滤。 */
   list(): Promise<readonly FeatureSummary[]>
   /** 在本轮固定目录里加载知识和依赖。 */
   load(input: FeatureIdInput, signal: AbortSignal): Promise<FeatureLoaded>

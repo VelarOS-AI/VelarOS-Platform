@@ -22,7 +22,6 @@ test('INV-1 拒绝安装不调用写入口', async () => {
         description: '',
         version: '1.0.0',
         prompt: '',
-        implicit: true,
         source: 'native',
         diagnostics: [],
         toolDependencies: [],
@@ -53,6 +52,59 @@ test('INV-2 取消后不加载资源', async () => {
   ).rejects.toThrow()
 })
 
+test('INV-3 默认引用不筛选目录，也不阻止加载未引用能力', async () => {
+  const selected: FeatureSummary = {
+    schemaVersion: 1,
+    id: 'selected',
+    name: 'Selected',
+    description: '',
+    version: '1.0.0',
+    prompt: '',
+    source: 'native',
+    diagnostics: [],
+    toolDependencies: [],
+    generation: 'selected-installation',
+    installed: true,
+    builtin: false,
+    grants: [],
+  }
+  const available = { ...selected, id: 'available', generation: 'available-installation' }
+  const loaded: string[] = []
+  const signal = new AbortController().signal
+  const unexpected = async (): Promise<never> => {
+    throw new AppError('INVARIANT', 'Discovery and loading must not request management changes.')
+  }
+  const context: FeaturesOperationContext = {
+    abortSignal: signal,
+    authorize: unexpected,
+    recordEffect: () => {},
+    features: {
+      selection: [{ id: selected.id, generation: 'selected-installation' }],
+      list: async () => [selected, available],
+      load: async (input, cancellation) => {
+        expect(cancellation).toBe(signal)
+        loaded.push(input.id)
+        return {
+          feature: available,
+          directory: '/features/available',
+          instructions: 'Use as needed.',
+        }
+      },
+      validate: unexpected,
+      install: unexpected,
+      remove: unexpected,
+    },
+  }
+  expect(
+    (await featuresOperations.list(context)).map(({ id, selected }) => ({ id, selected }))
+  ).toEqual([
+    { id: 'selected', selected: true },
+    { id: 'available', selected: false },
+  ])
+  expect((await featuresOperations.load({ id: available.id }, context)).feature).toBe(available)
+  expect(loaded).toEqual(['available'])
+})
+
 test('INV-1 安装授权等待期间修改原输入不改变已核验的来源与依赖脚本选择', async () => {
   const entered = Promise.withResolvers<void>()
   const approval = Promise.withResolvers<void>()
@@ -67,13 +119,11 @@ test('INV-1 安装授权等待期间修改原输入不改变已核验的来源�
     description: '',
     version: '1.0.0',
     prompt: '',
-    implicit: true,
     source: 'native',
     diagnostics: [],
     toolDependencies: [],
     generation: 'one',
     installed: true,
-    enabled: true,
     builtin: false,
     grants: [],
   }

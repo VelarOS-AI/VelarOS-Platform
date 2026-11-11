@@ -7,7 +7,6 @@ export interface FeatureDefinition {
   readonly version: string
   readonly prompt: string
   readonly instructions?: string
-  readonly implicit: boolean
   readonly source: 'native' | 'markdown' | 'codex'
   readonly diagnostics: readonly string[]
   readonly toolDependencies: readonly string[]
@@ -15,13 +14,12 @@ export interface FeatureDefinition {
   readonly permissions?: readonly string[]
 }
 
-/** @AgentView 当前能力的安装和启用状态；generation 固定实际文件与启用代次。 */
+/** @AgentView 当前能力的安装状态；generation 固定实际安装版本，默认引用不改变可用范围。 */
 export interface FeatureSummary extends FeatureDefinition {
   readonly selected?: boolean
   readonly availableVersion?: string
   readonly generation: Nullable<string>
   readonly installed: boolean
-  readonly enabled: boolean
   readonly builtin: boolean
   readonly grants: readonly string[]
 }
@@ -48,9 +46,8 @@ export interface FeatureInstallInput extends FeaturePathInput {
   readonly allowDependencyScripts?: boolean
 }
 
-/** 一次提交保存的能力安装代次与授权快照。 */
+/** 初始上下文引用的能力与安装代次，不声明或裁剪调用权限。 */
 export interface FeatureSelection {
   readonly id: string
   readonly generation: string
-  readonly grants: readonly string[]
 }
