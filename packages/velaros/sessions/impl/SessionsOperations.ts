@@ -17,26 +17,24 @@ import { askRequest, tellRequest } from '../utils/input.js'
 
 /**
  * @AgentView
- * 同一个对话里的几个会话互相交活、传话。每个会话有自己的工作区与能力：
- * 浏览器会话（browser）有内置浏览器，要在网页上动手的事（登录、填表、下单、到处点）交给它；
- * 项目会话（project）在自己的项目里干活，别的项目里的事交给那个项目的会话；系统会话（system）在本机上干活。
- * list 看这个对话里有哪些会话；ask 启动一件事并等它这一轮的结果；tell 只向正在跑的会话追加引导，不另开一轮、不等回答。
+ * 现有会话之间交活、传话。list 查看宿主目录中可寻址的会话；ask 启动一件事并等它这一轮的结果；
+ * tell 只向正在跑的会话追加引导，不另开一轮、不等回答。本模块不创建会话，也不根据工作区分类限制能力。
  * 对方看不到你们的对话：task、message 里把要做什么、做到哪一步、交回什么写清楚。
  * 互不相干的几件事可以同时 ask（Promise.all）；不要让两个会话互相等对方的回答，宿主会拒绝。
- * 入参不对抛 SESSIONS_ 开头的码（message 写明哪里不对、怎么改）；对方不在这个对话里、互相等待这类情况宿主会拒绝，错误原样抛给你。
+ * 入参不对抛 SESSIONS_ 开头的码（message 写明哪里不对、怎么改）；目标不存在、互相等待这类情况宿主会拒绝，错误原样抛给你。
  */
 export interface SessionsOperationsApi {
-  /** @AgentView 列出这个对话里的会话（self 为真的是你自己）：交活之前先看有没有合适的。
+  /** @AgentView 列出现有会话（self 为真的是你自己）：交活之前先查看标题与运行状态。
    * @OperationEffect none
    */
   list(ctx: SessionsOperationContext): Promise<SessionPeer[]>
-  /** @AgentView 交一件事给这个对话里的一个会话，等它这一轮跑完，交回它说的话。
-   * 用 to 交给已有的会话；没有合适的就给 workspace 开一个新的，它加进这个对话、在后台跑，用户可以切过去看。对方正在跑时，等它这一轮跑完再交给它。
+  /** @AgentView 用 to 交一件事给现有会话，等它这一轮跑完，交回它说的话。
+   * 对方正在跑时，等它这一轮跑完再交给它。不创建新会话。
    * @OperationEffect none
    * @OperationModes execute
    */
   ask(input: SessionAskInput, ctx: SessionsOperationContext): Promise<SessionAnswer>
-  /** @AgentView 给这个对话里正在跑的会话追加一句引导，进入当前运行的引导队列，不等回答、不另开一轮。
+  /** @AgentView 给正在跑的现有会话追加一句引导，进入当前运行的引导队列，不等回答、不另开一轮。
    * 空闲目标会拒绝；要启动任务并等结果，用 ask。list 的 running 只是查询时的状态，投递时仍以宿主实际准入为准。
    * @OperationEffect none
    * @OperationModes execute

@@ -667,7 +667,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
   }
 
   /**
-   * 请宿主用此刻这一屏盖住界面里的页面，交回拿掉定格图的函数；只对 `<webview>`（后台窗口看不见，不用盖）。
+   * 请宿主用此刻这一屏盖住可见的内部页面，交回拿掉定格图的函数。
    * 宿主没接、页面不在界面里、取不到图交回 null。
    */
   private freezeForCapture(
@@ -675,8 +675,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     session: BrowserSession
   ): Promise<Nullable<() => void>> {
     const webContents = session.webContents
-    if (webContents.isDestroyed() || webContents.getType() !== 'webview')
-      return Promise.resolve(null)
+    if (webContents.isDestroyed() || !session.visible) return Promise.resolve(null)
 
     return this.kernel.freezePageForCapture(sessionId, async () => {
       const image = await webContents.capturePage()

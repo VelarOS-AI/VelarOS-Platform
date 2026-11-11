@@ -32,28 +32,19 @@ import { sessionsOperations } from '../index'
 export const DefaultPeers: SessionPeer[] = [
   {
     id: 'project-1',
-    workspace: 'project',
     title: '商城前端',
-    root: '/home/me/shop-web',
-    site: null,
     running: true,
     self: true,
   },
   {
     id: 'browser-1',
-    workspace: 'browser',
     title: '京东',
-    root: null,
-    site: 'https://www.jd.com/',
     running: true,
     self: false,
   },
   {
     id: 'system-1',
-    workspace: 'system',
     title: null,
-    root: null,
-    site: null,
     running: false,
     self: false,
   },
@@ -69,7 +60,7 @@ export interface FakeHostRecord {
 /** 缺省的回答：交给谁就是谁（开新会话的叫「工作区-new」），做完了，把 task 复述一遍。 */
 function doneAnswer(input: SessionAskInput): SessionAnswer {
   return {
-    session: input.to ?? `${input.workspace ?? 'unknown'}-new`,
+    session: input.to,
     status: 'completed',
     answer: `做完了：${input.task}`,
     reason: null,

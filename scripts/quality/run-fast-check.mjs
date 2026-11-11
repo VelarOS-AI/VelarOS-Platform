@@ -84,6 +84,12 @@ if (built) {
     './packages/velaros/project/test/commit.test.ts',
     './packages/script/test/project-commit-client.test.ts',
   ])
+  run('session coordination and visible browser capture', bun, [
+    'test',
+    './packages/velaros/sessions/spec/acceptance.test.ts',
+    './packages/velaros/sessions/test/template.test.ts',
+    './packages/velaros/browser/test/runtime/capture-freeze.test.mjs',
+  ])
 } else skipped.push('typecheck（构建失败）', 'core runtime behavior（构建失败）')
 
 const durationMs = Math.round(performance.now() - started)

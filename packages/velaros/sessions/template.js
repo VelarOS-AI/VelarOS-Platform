@@ -1,39 +1,30 @@
-// velaros:sessions 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
-// 对方看不到你们的对话：task、message 里把要做什么、做到哪一步、交回什么写清楚。ask 与 tell 只能在 execute 里调用。
+// 现有会话之间分工；先用 list 查真实身份，不从标题推断权限或自动创建会话。
+// 对方看不到当前对话，task、message 应写明范围、交付要求及必要资源路径。
 import { ask, list, tell } from 'velaros:sessions'
 
-// 在网页上下单：交给浏览器会话。已经有浏览器会话就交给它，没有就开一个（site 是先打开的网站）；付款之前让它停下来问。
-async function placeOrder(item = '一包 A4 打印纸', site = 'https://www.jd.com') {
-  const browser = (await list()).find((peer) => peer.workspace === 'browser' && !peer.self)
-  const task = `在 ${site} 上买${item}：挑销量高、评价好的一款，数量 1，用默认收货地址下单；到付款那一步停下来问我，不要付款。交回商品名、价格和订单页地址。`
-  const reply = browser ? await ask({ to: browser.id, task }) : await ask({ workspace: 'browser', site, task })
-  // waiting：对方停下来问问题，answer 就是它的问题；答得上来就把答案写进 task，用 to 再交给它一次
+// 指定真实会话处理任务；waiting 表示需要补充回答，后续继续使用相同 session。
+async function delegateTask(session, task) {
+  const reply = await ask({ to: session, task })
   if (reply.status === 'waiting') return { session: reply.session, question: reply.answer }
   return { session: reply.session, status: reply.status, answer: reply.answer, reason: reply.reason }
 }
 
-// 对方停下来问的问题答得上来：把答案写进 task，用 to 交回给同一个会话，它接着做。
-async function answerQuestion(session = 'browser-1', answer = '可以付款，用默认的支付方式。') {
-  const reply = await ask({ to: session, task: `你刚才问的问题，答复是：${answer}照这个接着做完，交回订单号。` })
-  return { status: reply.status, answer: reply.answer }
+// 回答现有任务的问题，继续原来的工作。
+async function answerQuestion(session, answer) {
+  return ask({ to: session, task: `你刚才问题的答复是：${answer}。按此继续完成任务并交回结果。` })
 }
 
-// 两件互不相干的事同时交出去：两个项目里各查一件事，一起等。已有那个项目的其他会话就交给它，只有自己或没有就按 root 开同组新会话。
-async function compareProjects(frontend = '/home/me/shop-web', backend = '/home/me/shop-api') {
-  const peers = await list()
-  const inProject = (root, task) => {
-    const peer = peers.find((candidate) => !candidate.self && candidate.workspace === 'project' && candidate.root === root)
-    return peer ? ask({ to: peer.id, task }) : ask({ workspace: 'project', root, task })
-  }
-  const [web, api] = await Promise.all([
-    inProject(frontend, '列出前端调用的订单接口：方法、路径、参数，交回一张 Markdown 表。'),
-    inProject(backend, '列出后端实现的订单接口：方法、路径、参数，交回一张 Markdown 表。'),
+// 独立任务可并行提交；两个身份应来自 list，且不能是自己。
+async function compareTasks(left, right) {
+  const [first, second] = await Promise.all([
+    ask({ to: left, task: '核对已分配范围中的接口定义，交回方法、路径与参数表。' }),
+    ask({ to: right, task: '核对已分配范围中的接口实现，交回方法、路径与参数表。' }),
   ])
-  return { web: web.answer, api: api.answer }
+  return { first: first.answer, second: second.answer }
 }
 
-// 给正在跑的项目会话追加引导（queued），不另开一轮、不等回答。空闲目标拒绝；要启动任务并等结果用 ask。
-async function notifyProjects(message = '订单接口的路径改成了 /api/v2/orders，后面的改动照新路径来。') {
-  const peers = (await list()).filter((peer) => !peer.self && peer.workspace === 'project' && peer.running)
+// 只给正在工作的其他会话追加引导；查询状态是快照，投递仍以宿主准入为准。
+async function notifyRunning(message) {
+  const peers = (await list()).filter((peer) => !peer.self && peer.running)
   return Promise.all(peers.map((peer) => tell({ to: peer.id, message })))
 }
