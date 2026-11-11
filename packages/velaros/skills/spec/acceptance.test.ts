@@ -294,6 +294,98 @@ test('INV-9 按需会话发现全部 Skill，未勾选也能加载，重复并�
   expect(await Bun.file(join(loaded[0]!.directory, 'SKILL.md')).exists()).toBe(false)
 })
 
+test('INV-11 共用能力合同按真实执行会话激活 Skill 并使用各自 Node 环境', async () => {
+  const f = await fixture()
+  const directory = await source(f.root, 'session-proof', '1.0.0', {
+    capabilities: [{ module: 'feature:session-proof', entry: 'index.mjs', contract: 'api.d.ts' }],
+    hostCapabilities: ['velaros:browser'],
+  })
+  await writeFile(
+    join(directory, 'index.mjs'),
+    'export function identity() { return process.cwd() }'
+  )
+  await writeFile(
+    join(directory, 'api.d.ts'),
+    '/** @OperationEffect none */\nexport function identity(): Promise<string>;'
+  )
+  await f.registry.install({ directory }, new AbortController().signal)
+  const main = await createSkillSession({ registry: f.registry })
+  const child = await createSkillSession({ registry: f.registry })
+  const mainNode = await nodeOptions(join(f.root, 'main'))
+  const childNode = await nodeOptions(join(f.root, 'child'))
+  const contexts = new Map([
+    ['main', { lease: main, session: main, node: mainNode }],
+    ['child', { lease: child, session: child, node: childNode }],
+  ])
+  const modules = await skillCapabilityModules.create({
+    registry: f.registry,
+    lease: main,
+    session: main,
+    node: mainNode,
+    context: (id) => {
+      const current = contexts.get(id)
+      if (!current) throw new AppError('NOT_FOUND', 'Unknown execution session')
+      return current
+    },
+    hostModules: {
+      'velaros:browser': {
+        binding: {
+          moduleId: 'velaros:browser',
+          instanceId: 'host',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'session host',
+        operations: {
+          identity: {
+            summary: 'session identity',
+            input: { type: 'object' },
+            output: { type: 'string' },
+            effects: 'none',
+            prepare: (input) => input,
+            run: (_input, context) => context.invocation.sessionId,
+          },
+        },
+      },
+    },
+  })
+  function call(module: (typeof modules)[number], sessionId: string): OperationContext {
+    return {
+      invocation: {
+        id: sessionId,
+        sessionId,
+        executionId: sessionId,
+        binding: module.binding,
+        operation: 'identity',
+        input: {},
+        inputFingerprint: 'test',
+        requestFingerprint: 'test',
+      },
+      signal: new AbortController().signal,
+      recordEffect: () => {},
+      attach: () => {},
+    }
+  }
+  try {
+    const host = modules.find((module) => module.binding.moduleId === 'velaros:browser')!
+    await host.operations.identity!.prepare!({}, { signal: new AbortController().signal })
+    expect(main.skills).toHaveLength(0)
+    expect(child.skills).toHaveLength(0)
+    expect(await host.operations.identity!.run({}, call(host, 'child'))).toBe('child')
+    expect(child.skills).toHaveLength(1)
+    expect(main.skills).toHaveLength(0)
+    const provider = modules.find((module) => module.binding.moduleId === 'feature:session-proof')!
+    expect(await provider.operations.identity!.run(null, call(provider, 'child'))).toBe(
+      childNode.cwd
+    )
+    expect(main.skills).toHaveLength(0)
+    expect(await provider.operations.identity!.run(null, call(provider, 'main'))).toBe(mainNode.cwd)
+    expect(main.skills).toHaveLength(1)
+  } finally {
+    await Promise.all([main.release(), child.release()])
+  }
+}, 30000)
+
 test('INV-9 取消加载的新租约释放失败后仍由会话持有，关闭重试再允许回收', async () => {
   const f = await fixture()
   const installed = await f.registry.install(

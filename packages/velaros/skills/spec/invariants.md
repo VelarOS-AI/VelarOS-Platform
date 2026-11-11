@@ -12,3 +12,4 @@
 | INV-8 | 已退役：Registry 的 plugins 注入轨及插件内部 Skill 合并不再提供，产品 Feature 分发由宿主负责；编号不复用。 | 文字 | |
 | INV-9 | SkillSession 经 catalog 发现、activate 按需加载、acquireRuntime 固定每次程序的依赖快照；未勾选也可加载，重复并发加载只保留一份活动项，安装状态消失或代次变化拒绝旧项，关闭不得复活授权。 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | Feature 模块只能调用声明且获授权的宿主 SDK；派生调用沿用父身份、模式和取消，并经过 Kernel，禁止只读操作派发写入。 | 测试 | `spec/acceptance.test.ts` |
+| INV-11 | 共用安装目录的多个执行会话可共用能力合同；宿主按真实调用身份提供独立 Skill 会话、租约和 Node 环境，准备阶段不激活其他会话，按需加载不污染其他会话的活动选择。 | 测试 | `spec/acceptance.test.ts` |

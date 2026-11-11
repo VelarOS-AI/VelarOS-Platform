@@ -42,7 +42,7 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
             continue
           throw new AppError('UNAVAILABLE', `Skill 需要的宿主能力未绑定：${name}`)
         }
-        const authorize = async (signal: AbortSignal): Promise<void> => {
+        const authorize = async (signal: AbortSignal, sessionId?: string): Promise<void> => {
           const grants = await Promise.allSettled(
             owners.map((owner) =>
               options.registry.assertGranted(owner.manifest.name, owner.generation, name)
@@ -57,13 +57,16 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
                 throw grant.reason
             throw new AppError('PERMISSION', `Skill 能力授权已失效：${name}`)
           }
-          if (options.session) {
+          // prepare 没有执行会话身份，只核对安装授权；实际激活留到带真实身份的调用阶段。
+          if (options.context && !sessionId) return
+          const current = options.context && sessionId ? options.context(sessionId) : options
+          if (current.session) {
             const available = owners.filter((_, index) => grants[index]!.status === 'fulfilled')
             const owner =
               available.find((candidate) =>
-                options.lease.skills.some((active) => active.generation === candidate.generation)
+                current.lease.skills.some((active) => active.generation === candidate.generation)
               ) ?? available[0]!
-            await options.session.activate(owner.manifest.name, signal)
+            await current.session.activate(owner.manifest.name, signal)
           }
         }
         const operations: Record<string, OperationDefinition> = Object.create(null)
@@ -79,7 +82,7 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
             observe: definition.observe
               ? async (input, context) => {
                   try {
-                    await authorize(context.signal)
+                    await authorize(context.signal, context.invocation.sessionId)
                   } catch (error) {
                     context.recordEffect('none')
                     throw error
@@ -89,13 +92,13 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
               : undefined,
             reconcile: definition.reconcile
               ? async (invocation, signal) => {
-                  await authorize(signal)
+                  await authorize(signal, invocation.sessionId)
                   return definition.reconcile!(invocation, signal)
                 }
               : undefined,
             run: async (input, context) => {
               try {
-                await authorize(context.signal)
+                await authorize(context.signal, context.invocation.sessionId)
               } catch (error) {
                 context.recordEffect('none')
                 throw error
@@ -120,14 +123,6 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
           source,
           capability.module
         )
-        const runner = createNodeCodeRunner({
-          ...options.node,
-          runtime: options.lease.environment,
-          acquireRuntime: options.session
-            ? (signal) => options.session!.acquireRuntime(signal)
-            : options.node.acquireRuntime,
-          execute: (request, output, signal) => options.node.execute(request, output, signal),
-        })
         const operations: Record<string, OperationDefinition> = Object.create(null)
         for (const name of surface.methods) {
           const { hasInput, ...descriptor } = surface.operations[name]!
@@ -135,8 +130,11 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
             ...descriptor,
             run: async (input, context) => {
               context.signal.throwIfAborted()
+              const current = options.context
+                ? options.context(context.invocation.sessionId)
+                : options
               try {
-                await options.session?.activate(skill.manifest.name, context.signal)
+                await current.session?.activate(skill.manifest.name, context.signal)
                 await options.registry.assertGranted(
                   skill.manifest.name,
                   skill.generation,
@@ -146,6 +144,14 @@ class SkillCapabilityModules implements SkillCapabilityModulesApi {
                 context.recordEffect('none')
                 throw error
               }
+              const runner = createNodeCodeRunner({
+                ...current.node,
+                runtime: current.lease.environment,
+                acquireRuntime: current.session
+                  ? (signal) => current.session!.acquireRuntime(signal)
+                  : current.node.acquireRuntime,
+                execute: (request, output, signal) => current.node.execute(request, output, signal),
+              })
               const result = await runner.run(
                 {
                   source: `import * as provider from ${JSON.stringify(pathToFileURL(entry).href)};\nimport {input} from 'velaros:program';\nimport {invoke} from 'velaros:host';\nexport default await provider[${JSON.stringify(name)}](${hasInput ? (optionalInputs.includes(name) ? 'input === null ? undefined : input' : 'input') : 'undefined'}, {host:{invoke}});`,

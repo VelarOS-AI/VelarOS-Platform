@@ -37,4 +37,6 @@ async function withEnvironment<T>(
 
 宿主用 `createSkillSession({ registry, selection })` 启用按需加载，将同一个 session 传入能力装配，并以其 `acquireRuntime` 提供每次 Node 执行的固定快照。selection 只预加载默认项与显式选择；其他已安装项经 session.catalog 发现、activate 加载。执行与后台任务全部收束后释放 session；固定授权宿主仍可使用 `registry.acquire()`。产品管理、开发说明与模型按需加载由 `velaros:features` 提供。
 
+多个执行会话共用能力合同和安装目录时，能力装配的 `context(sessionId)` 按真实调用身份提供各自的 lease、session 和 node。宿主维持这些环境的生命周期，调用只激活当前会话的 Skill，不继承其他会话已加载的选择。
+
 内置 browser 与专项 jsts 共用目录、发现、租约和授权。项目事务与代码查询由宿主根据项目根装配。hostCapabilities 声明宿主能力。产品用 `skillCapabilityModules.create` 显式绑定当前资源，把返回模块交给 Runtime 的 `modules`；缺少资源时显式失败。按需加载的产品同时通过 `moduleAccess` 按同一 Skill 会话的 catalog 与活动授权控制发现和派发。标准 npm 包的 API、README 和类型保持原样，Skill 正文按任务需要读取。

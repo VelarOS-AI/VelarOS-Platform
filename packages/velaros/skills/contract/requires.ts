@@ -49,16 +49,22 @@ export interface NpmSkillInstallerOptions {
   readonly host: ShellHostPort
 }
 
-/** 已选环境中的宿主能力只通过 Kernel 模块公开。 */
-export interface SkillCapabilityModuleOptions {
-  /** 每次调用重新查询当前授权。 */
-  readonly registry: Pick<SkillRegistryApi, 'assertGranted'>
+/** 一个执行会话持有的依赖环境与按需加载状态。 */
+export interface SkillCapabilityContext {
   /** 当前会话持有的安装代次和依赖集合。 */
   readonly lease: SkillEnvironmentLease
   /** 按需模式的发现目录和加载所有者；不提供时沿用固定授权租约。 */
   readonly session?: SkillSessionApi
   /** 第三方代码使用同一受控 Node 执行口。 */
   readonly node: NodeCodeRunnerOptions
+}
+
+/** 已选环境中的宿主能力只通过 Kernel 模块公开。 */
+export interface SkillCapabilityModuleOptions extends SkillCapabilityContext {
+  /** 每次调用重新查询当前授权。 */
+  readonly registry: Pick<SkillRegistryApi, 'assertGranted'>
+  /** 共享安装目录的多会话宿主按真实调用身份选择独立环境；不提供时使用上述固定环境。 */
+  context?(sessionId: string): SkillCapabilityContext
   /** 宿主已绑定资源的能力；只装配租约授予的模块。 */
   readonly hostModules?: Readonly<Record<string, OperationModuleDefinition>>
 }

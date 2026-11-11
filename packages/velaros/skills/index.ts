@@ -8,6 +8,7 @@ export type { SkillCompositionApi } from './contract/provides.js'
 export type { SkillSessionApi } from './contract/provides.js'
 export type {
   NpmSkillInstallerOptions,
+  SkillCapabilityContext,
   SkillCapabilityModuleOptions,
   SkillDependencyInstaller,
   SkillRegistryOptions,
