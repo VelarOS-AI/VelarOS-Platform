@@ -82,7 +82,7 @@ test('child startup preserves the original failure when durable activity release
   assert.equal(f.runtime.getSession(sessionId), undefined)
 })
 
-test('host prepares isolated child instructions and resource environment before the first model call', async (t) => {
+test('INV-96 host prepares isolated child instructions and resource environment before the first model call', async (t) => {
   const prepared = []
   const closed = []
   const frames = []
@@ -93,21 +93,22 @@ test('host prepares isolated child instructions and resource environment before 
   })
   const f = await setup(t, {
     instructions: 'PARENT_PRIVATE_CONTEXT',
+    prepareSession: async (request, signal) => {
+      if (request.parentSessionId === null) return {}
+      signal.throwIfAborted()
+      prepared.push({ sessionId: request.sessionId, profile: request.profile, task: request.task })
+      return {
+        instructions: 'CHILD_PERSON_CONTEXT',
+        environment: () => ({ childBrowser: 'isolated-external-browser' }),
+        close: async () => {
+          closed.push(request.sessionId)
+        },
+      }
+    },
     agents: {
       concurrency: 1,
       maxChildren: 1,
       profiles: { member: { model: child, modules: [], instructions: 'GENERIC_PROFILE_CONTEXT' } },
-      prepareSession: async (job, input, signal) => {
-        signal.throwIfAborted()
-        prepared.push({ sessionId: job.sessionId, profile: job.profile, task: input.task })
-        return {
-          instructions: 'CHILD_PERSON_CONTEXT',
-          environment: () => ({ childBrowser: 'isolated-external-browser' }),
-          close: async () => {
-            closed.push(job.sessionId)
-          },
-        }
-      },
     },
     model: model(async function* (request) {
       if (++main === 1) {
@@ -138,7 +139,7 @@ test('host prepares isolated child instructions and resource environment before 
   assert.deepEqual(closed, [prepared[0].sessionId])
 })
 
-test('cancelling a child during host preparation releases its returned resources before any model call', async (t) => {
+test('INV-96 cancelling a child during host preparation releases its returned resources before any model call', async (t) => {
   const entered = Promise.withResolvers()
   const release = Promise.withResolvers()
   let closed = 0
@@ -149,19 +150,20 @@ test('cancelling a child during host preparation releases its returned resources
     yield* done(request, 'unexpected child call')
   })
   const f = await setup(t, {
+    prepareSession: async (request) => {
+      if (request.parentSessionId === null) return {}
+      entered.resolve()
+      await release.promise
+      return {
+        close: async () => {
+          closed++
+        },
+      }
+    },
     agents: {
       concurrency: 1,
       maxChildren: 1,
       profiles: { member: { model: child, modules: [] } },
-      prepareSession: async () => {
-        entered.resolve()
-        await release.promise
-        return {
-          close: async () => {
-            closed++
-          },
-        }
-      },
     },
     model: model(async function* (request) {
       if (++main === 1) {

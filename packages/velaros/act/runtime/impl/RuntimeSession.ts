@@ -238,7 +238,7 @@ export interface RuntimeSessionDependencies {
   /** 当前子运行可按普通文件读取的父任务输入快照入口。 */
   readonly parentTask?: string
   /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
-  closed?(): void
+  closed?(): void | Promise<void>
   /** 固定授权的持久状态及订阅交付。 */
   readonly stores?: StoreSessionApi
   /** 主线：回合与墙钟上限到点时封段续跑，而不是结束运行。 */
@@ -3907,7 +3907,11 @@ export class RuntimeSession implements VelarosSession {
       Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
       failures.push(error)
     }
-    this.dependencies.closed?.()
+    try {
+      await this.dependencies.closed?.()
+    } catch (error) {
+      failures.push(error)
+    }
     if (!isEmpty(failures))
       throw AppError.withFields('UNAVAILABLE', '会话关闭失败', { errors: [...failures] })
   }

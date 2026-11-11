@@ -47,7 +47,7 @@ import {
   VelarosAgentRunLimits,
   VelarosRunLimits,
 } from '../contract/constants.js'
-import type { AgentSessionContext, VelarosRuntimeOptions } from '../contract/requires.js'
+import type { RuntimeSessionContext, VelarosRuntimeOptions } from '../contract/requires.js'
 import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
 import { BudgetedModelDriver } from './BudgetedModelDriver.js'
@@ -110,6 +110,7 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly memories = new Map<string, MemoryScopePort>()
   private readonly stores = new Map<string, StoreSessionApi>()
   private readonly openings = new Map<string, Promise<VelarosSession>>()
+  private readonly lifetime = new AbortController()
   private readonly historyReads = new Set<Promise<unknown>>()
 
   private readonly binding: SessionExecutionBinding
@@ -538,12 +539,20 @@ class ComposedRuntime implements VelarosRuntime {
       parent: activity.budget,
       signal: activity.signal,
     })
-    let prepared: Optional<AgentSessionContext>
+    let prepared: Optional<RuntimeSessionContext>
     let materials: Optional<ChildTaskMaterials>
     let session: VelarosSession
     let parentTask: Optional<Awaited<ReturnType<ChildTaskMaterials['open']>>>
     try {
-      prepared = await this.options.agents?.prepareSession?.(job, input, activity.signal)
+      prepared = await this.options.prepareSession?.(
+        {
+          sessionId: job.sessionId,
+          parentSessionId: job.parentSessionId,
+          profile: job.profile,
+          task: input?.task ?? null,
+        },
+        activity.signal
+      )
       activity.signal.throwIfAborted()
       const node = profile.node ? (prepared?.node ?? this.options.node) : undefined
       materials = node ? new ChildTaskMaterials(this.options.storage, node.directory) : undefined
@@ -822,7 +831,18 @@ class ComposedRuntime implements VelarosRuntime {
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     let session = this.sessions.get(id)
     if (!session) {
+      let prepared: Optional<RuntimeSessionContext>
       try {
+        prepared = await this.options.prepareSession?.(
+          {
+            sessionId: id,
+            parentSessionId: null,
+            profile: null,
+            task: null,
+          },
+          this.lifetime.signal
+        )
+        this.lifetime.signal.throwIfAborted()
         const configuration = this.options.stores
           ? this.options.stores(id)
           : this.options.storage.stores
@@ -843,11 +863,11 @@ class ComposedRuntime implements VelarosRuntime {
         if (this.options.model) this.taskModels.set(id, this.options.model)
         session = new RuntimeSession(id, {
           readHistory: (read) => this.readHistory(id, read),
-          node: this.options.node,
-          instructions: this.options.instructions,
+          node: prepared?.node ?? this.options.node,
+          instructions: prepared?.instructions ?? this.options.instructions,
           executionDepth: this.options.executionDepth,
           residentModules: this.options.residentModules,
-          environment: this.options.environment,
+          environment: prepared?.environment ?? this.options.environment,
           maintain:
             this.maintenance &&
             (this.options.model ||
@@ -870,8 +890,9 @@ class ComposedRuntime implements VelarosRuntime {
           model: this.options.model ? this.tools.model(id, this.options.model) : undefined,
           limits: this.options.limits ?? VelarosRunLimits,
           renewRuns: true,
-          closed: () => {
+          closed: async () => {
             if (this.sessions.get(id) === session) this.releaseMain(id)
+            await prepared?.close?.()
           },
           register: (access) => {
             this.programAccess.set(id, access)
@@ -880,6 +901,14 @@ class ComposedRuntime implements VelarosRuntime {
         this.sessions.set(id, session)
       } catch (error) {
         this.releaseMain(id)
+        const cleanup = await Promise.allSettled([prepared?.close?.()])
+        const failures = cleanup.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : []
+        )
+        if (!isEmpty(failures))
+          throw AppError.withFields('UNAVAILABLE', '主会话建立和资源清理失败', {
+            errors: [error, ...failures],
+          })
         throw error
       }
     }
@@ -963,6 +992,7 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   private async shutdown(): Promise<void> {
+    this.lifetime.abort(new AppError('CLOSED', '运行时正在关闭'))
     const failures: unknown[] = []
     // 先向现有会话广播关闭；一个未合作的 opening 或子会话不能延迟其他会话的取消。
     const sessions = Promise.allSettled([

@@ -30,7 +30,8 @@ export type {
 } from './contract/requires.js'
 export type {
   AgentProfile,
-  AgentSessionContext,
+  RuntimeSessionContext,
+  RuntimeSessionContextRequest,
   VelarosAgentsOptions,
 } from './contract/requires.js'
 export type { McpModuleOptions } from './contract/requires.js'
