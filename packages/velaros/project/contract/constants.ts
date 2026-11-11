@@ -4,7 +4,7 @@
  */
 
 /** 本单元的版本，写进内置插件；和 `@velaros-ai/velaros` 的 package.json 一致，check:project-arch 核对。 */
-export const ProjectPackageVersion = '0.9.7' as const
+export const ProjectPackageVersion = '0.9.8' as const
 
 /** 当前事务状态文件格式；其他版本直接拒绝。 */
 export const ProjectTransactionStateFormat = Object.freeze({
