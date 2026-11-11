@@ -1,6 +1,12 @@
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 
-import type { ActContextPolicy, ActRunEvent, ActRunLimits, AgentJob } from '@velaros-ai/agent'
+import type {
+  ActContextPolicy,
+  ActRunEvent,
+  ActRunLimits,
+  AgentJob,
+  AgentStart,
+} from '@velaros-ai/agent'
 import type { ContextSourcePort, ContextStorage, ContextViewLimits } from '@velaros-ai/context'
 import type {
   ModuleBinding,
@@ -347,8 +353,26 @@ export interface AgentProfile {
   readonly limits?: Partial<ActRunLimits>
 }
 
+/** 宿主为单个子会话装配的上下文与资源；业务身份由宿主自行解析。 */
+export interface AgentSessionContext {
+  /** 替换配置档案中的通用说明，仅作用于当前子会话。 */
+  readonly instructions?: string
+  /** 当前子会话的独立 Node 工作环境。 */
+  readonly node?: RuntimeNodeOptions
+  /** 当前子会话每帧的资源环境信息。 */
+  readonly environment?: () => Readonly<Record<string, string>>
+  /** 子会话关闭或建立失败后释放本次返回的资源。 */
+  close?(): Promise<void>
+}
+
 /** 子任务调度的宿主配置。 */
 export interface VelarosAgentsOptions {
+  /** 在子会话运行前解析当前档案，装配独立上下文；准备失败由宿主释放尚未返回的资源。 */
+  prepareSession?(
+    job: Readonly<AgentJob>,
+    input: Optional<AgentStart>,
+    signal: AbortSignal
+  ): Promise<AgentSessionContext>
   /** 子任务有序实时事件，只用于宿主展示；回调异常记录日志，不改变执行或持久事实。 */
   onEvent?(job: Readonly<AgentJob>, event: ActRunEvent): void
   /** 可选配置及其能力范围。 */

@@ -29,6 +29,110 @@ const setup = async (t, options) => {
 }
 const task = (request, source) => turn(request, { execute: { source } })
 
+test('host prepares isolated child instructions and resource environment before the first model call', async (t) => {
+  const prepared = []
+  const closed = []
+  const frames = []
+  let main = 0
+  const child = model(async function* (request) {
+    frames.push(`${request.instructions}\n${modelText(request)}`)
+    yield* done(request, 'prepared child completed')
+  })
+  const f = await setup(t, {
+    instructions: 'PARENT_PRIVATE_CONTEXT',
+    agents: {
+      concurrency: 1,
+      maxChildren: 1,
+      profiles: { member: { model: child, modules: [], instructions: 'GENERIC_PROFILE_CONTEXT' } },
+      prepareSession: async (job, input, signal) => {
+        signal.throwIfAborted()
+        prepared.push({ sessionId: job.sessionId, profile: job.profile, task: input.task })
+        return {
+          instructions: 'CHILD_PERSON_CONTEXT',
+          environment: () => ({ childBrowser: 'isolated-external-browser' }),
+          close: async () => {
+            closed.push(job.sessionId)
+          },
+        }
+      },
+    },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,wait} from 'velaros:agents';const job=await start({task:'specific child task',profile:'member'});await wait({id:job.id});"
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request, 'parent complete')
+    }),
+  })
+  for await (const event of f.session.submit('run prepared child')) {
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  }
+  assert.equal(prepared.length, 1)
+  assert.equal(prepared[0].task, 'specific child task')
+  assert.equal(prepared[0].profile, 'member')
+  assert(frames.length > 0)
+  assert(frames.every((frame) => frame.includes('CHILD_PERSON_CONTEXT')))
+  assert(
+    frames.every(
+      (frame) =>
+        !frame.includes('PARENT_PRIVATE_CONTEXT') && !frame.includes('GENERIC_PROFILE_CONTEXT')
+    )
+  )
+  assert(frames.some((frame) => frame.includes('isolated-external-browser')))
+  await f.runtime.close()
+  assert.deepEqual(closed, [prepared[0].sessionId])
+})
+
+test('cancelling a child during host preparation releases its returned resources before any model call', async (t) => {
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  let closed = 0
+  let childCalls = 0
+  let main = 0
+  const child = model(async function* (request) {
+    childCalls++
+    yield* done(request, 'unexpected child call')
+  })
+  const f = await setup(t, {
+    agents: {
+      concurrency: 1,
+      maxChildren: 1,
+      profiles: { member: { model: child, modules: [] } },
+      prepareSession: async () => {
+        entered.resolve()
+        await release.promise
+        return {
+          close: async () => {
+            closed++
+          },
+        }
+      },
+    },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,wait} from 'velaros:agents';const job=await start({task:'prepare then cancel',profile:'member'});await wait({id:job.id});"
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request, 'parent complete')
+    }),
+  })
+  const running = (async () => {
+    for await (const event of f.session.submit('start cancellable preparation')) void event
+  })()
+  await entered.promise
+  const cancelling = f.session.cancel()
+  release.resolve()
+  await cancelling
+  await running
+  await f.runtime.close()
+  assert.equal(childCalls, 0)
+  assert.equal(closed, 1)
+})
+
 test('immediate child guidance reaches the same real runtime run before completion', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'child-guidance-'))
   const path = join(root, 'state.sqlite')

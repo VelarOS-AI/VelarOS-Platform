@@ -47,7 +47,7 @@ import {
   VelarosAgentRunLimits,
   VelarosRunLimits,
 } from '../contract/constants.js'
-import type { VelarosRuntimeOptions } from '../contract/requires.js'
+import type { AgentSessionContext, VelarosRuntimeOptions } from '../contract/requires.js'
 import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
 import { BudgetedModelDriver } from './BudgetedModelDriver.js'
@@ -532,22 +532,24 @@ class ComposedRuntime implements VelarosRuntime {
       parent: activity.budget,
       signal: activity.signal,
     })
-    const materials =
-      profile.node && this.options.node
-        ? new ChildTaskMaterials(this.options.storage, this.options.node.directory)
-        : undefined
+    let prepared: Optional<AgentSessionContext>
+    let materials: Optional<ChildTaskMaterials>
     let session: VelarosSession
     let parentTask: Optional<Awaited<ReturnType<ChildTaskMaterials['open']>>>
     try {
+      prepared = await this.options.agents?.prepareSession?.(job, input, activity.signal)
+      activity.signal.throwIfAborted()
+      const node = profile.node ? (prepared?.node ?? this.options.node) : undefined
+      materials = node ? new ChildTaskMaterials(this.options.storage, node.directory) : undefined
       parentTask = await materials?.open(job, activity.signal)
       session = new RuntimeSession(job.sessionId, {
         audience: 'worker',
         executionDepth: this.options.executionDepth,
-        node: profile.node ? this.options.node : undefined,
-        environment: this.options.environment,
+        node,
+        environment: prepared?.environment ?? this.options.environment,
         parentTask: parentTask?.path,
         instructions: [
-          profile.instructions,
+          prepared?.instructions ?? profile.instructions,
           parentTask
             ? '你负责本次派发指定的范围，父任务输入用于核对相关要求。环境中的 parentTask 是原始输入的文件索引；goals 按输入顺序列出原文和附件 path，摘录有缺口时用 Shell 或 node:fs 补读。'
             : undefined,
@@ -587,6 +589,7 @@ class ComposedRuntime implements VelarosRuntime {
         model.close(),
         activity.close(),
         materials?.close(),
+        prepared?.close?.(),
       ])
       this.programAccess.delete(job.sessionId)
       this.scopes.delete(job.sessionId)
@@ -639,7 +642,7 @@ class ComposedRuntime implements VelarosRuntime {
       }
     } catch (error) {
       const cleanup = await Promise.allSettled([session.close(), model.close()])
-      cleanup.push(...(await Promise.allSettled([materials?.close()])))
+      cleanup.push(...(await Promise.allSettled([materials?.close(), prepared?.close?.()])))
       try {
         await activity.close()
       } finally {
@@ -686,7 +689,7 @@ class ComposedRuntime implements VelarosRuntime {
       cancel: () => session.cancel(),
       close: async () => {
         const results = await Promise.allSettled([session.close(), model.close()])
-        results.push(...(await Promise.allSettled([materials?.close()])))
+        results.push(...(await Promise.allSettled([materials?.close(), prepared?.close?.()])))
         this.sessions.delete(job.sessionId)
         this.programAccess.delete(job.sessionId)
         this.scopes.delete(job.sessionId)

@@ -24,7 +24,11 @@ export type {
   McpConnectionOptions,
   McpConnectionSpec,
 } from './contract/requires.js'
-export type { AgentProfile, VelarosAgentsOptions } from './contract/requires.js'
+export type {
+  AgentProfile,
+  AgentSessionContext,
+  VelarosAgentsOptions,
+} from './contract/requires.js'
 export type { McpModuleOptions } from './contract/requires.js'
 export type { CapabilityContext } from './contract/requires.js'
 export type { ContextMaintenanceOptions } from './contract/requires.js'
