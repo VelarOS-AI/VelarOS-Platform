@@ -1,7 +1,6 @@
-import { first, isBlank, toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/core'
 
 import {
-  CustomModelProviderIds,
   OpenRouterCompatibleProviderIds,
   VelarCloudManagedProviderIds,
 } from '../../contract/constants.js'
@@ -11,11 +10,7 @@ import type {
   VelarCloudManagedProviderId,
 } from '../../types/model'
 import type { SharedProviderCatalog } from '../../types/providers'
-import { createReadonlySetSnapshot } from '../snapshots'
-
-import { findSharedProviderCatalogDefinition, listOpenAiOnlyModelIds } from './provider-catalogs'
-
-const OpenAiOnlyModelIds = createReadonlySetSnapshot(listOpenAiOnlyModelIds())
+import { findSharedProviderCatalogDefinition } from './provider-catalogs'
 
 /** 官方能力默认值只用于官方 HTTPS 端点，兼容端点由宿主显式声明能力。 */
 export function isOfficialOpenAiEndpoint(baseURL: string): boolean {
@@ -27,28 +22,22 @@ export function isOpenRouterCompatibleProvider(providerId: ChatProviderId): bool
   return (OpenRouterCompatibleProviderIds as readonly string[]).includes(providerId)
 }
 
-/** 这个 provider 允不允许用户直接输入模型名（目录只是建议，不是白名单）。 */
-export function isCustomModelProvider(providerId: ChatProviderId): boolean {
-  return (CustomModelProviderIds as readonly string[]).includes(providerId)
-}
-
-/** 按 provider id 取静态目录；没有这个 provider 时返回 null。 */
+/** 同步入口只给服务商身份；可选模型必须通过鉴权作用域的动态目录取得。 */
 export function getSharedProviderCatalogOrNull(
   providerId: ChatProviderId
 ): Nullable<SharedProviderCatalog> {
-  return toNullable(findSharedProviderCatalogDefinition(providerId))
+  const metadata = findSharedProviderCatalogDefinition(providerId)
+  return toNullable(metadata ? { provider: metadata.provider, defaultModel: '', models: [] } : null)
 }
 
-/** 这个 provider 静态目录里的全部模型 id。 */
+/** 同步元数据不枚举模型，调用方应使用 ProviderModelCatalogService。 */
 export function listSharedProviderModels(providerId: ChatProviderId): string[] {
-  return findSharedProviderCatalogDefinition(providerId)?.models.map((model) => model.id) ?? []
+  return getSharedProviderCatalogOrNull(providerId)?.models.map((model) => model.id) ?? []
 }
 
-/** 这个 provider 推荐给用户看的模型：滤掉只在 OpenAI 直连下可选的那几个。 */
+/** 不再提供硬编码的推荐候选。 */
 export function listSharedProviderSuggestedModels(providerId: ChatProviderId): string[] {
-  return (findSharedProviderCatalogDefinition(providerId)?.models ?? [])
-    .filter((model) => !model.openAiOnly)
-    .map((model) => model.id)
+  return listSharedProviderModels(providerId)
 }
 
 /** 去掉空模型与重复项，保留原有顺序。 */
@@ -67,45 +56,25 @@ function dedupeModelsPreservingOrder(models: string[]): string[] {
   return normalizedModels
 }
 
-/** 一份模型清单在某个 provider 下的可见子集：非 OpenAI 直连要滤掉 OpenAI 专属模型。 */
+/** 远端目录自己决定可用身份；只去空值和重复项，不用静态型号表筛选。 */
 export function filterVisibleProviderModels(
-  providerId: ChatProviderId,
+  _providerId: ChatProviderId,
   models: string[]
 ): string[] {
-  const visibleModels =
-    providerId === 'openai' ? models : models.filter((model) => !OpenAiOnlyModelIds.has(model))
-
-  return dedupeModelsPreservingOrder(visibleModels)
+  return dedupeModelsPreservingOrder(models)
 }
 
 /**
- * 在同一个 provider 内选一个可用模型。
- *
- * 允许直接输入模型名的 provider 一律尊重用户填的名字；其余的先看它在不在建议表里，
- * 不在就回退到第一条建议并把 `didFallback` 标出来，让界面看得见降级发生过。
+ * 只保留调用方明确选择的模型；没有选择时留空，不从静态型号中推定默认值。
  */
 export function resolveSharedProviderModelSelection(
-  providerId: ChatProviderId,
+  _providerId: ChatProviderId,
   currentModel?: string
 ): ProviderModelResolution {
   const requestedModel = currentModel?.trim() ?? ''
-  const suggestions = filterVisibleProviderModels(providerId, listSharedProviderModels(providerId))
-
-  if (isCustomModelProvider(providerId) && !isBlank(requestedModel))
-    return {
-      model: requestedModel,
-      didFallback: false,
-    }
-
-  if (!isBlank(requestedModel) && suggestions.includes(requestedModel))
-    return {
-      model: requestedModel,
-      didFallback: false,
-    }
-
   return {
-    model: first(suggestions) ?? requestedModel,
-    didFallback: !isBlank(requestedModel) && (first(suggestions) ?? '') !== requestedModel,
+    model: requestedModel,
+    didFallback: false,
   }
 }
 

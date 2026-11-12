@@ -46,7 +46,7 @@ export interface ModelProviderCollectionOptions {
 export interface ModelProviderCollectionApi {
   /** 列出全部运营清单：内置的加上本装配注入的 provider script。 */
   listOperationalManifests(): ModelProviderOperationalManifest[]
-  /** 列出全部预设：运营清单加上静态目录算出来的建议模型与缺省模型。 */
+  /** 列出服务商预设；型号候选和首次默认型号留空，由动态目录或显式选择提供。 */
   listPresets(): ModelProviderPreset[]
   /** 取一个 provider 的运营清单；不认识这个 provider 就抛。 */
   requireOperationalManifest(provider: ChatProviderId): ModelProviderOperationalManifest
@@ -144,12 +144,8 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     if (script)
       return structuredClone({
         provider,
-        defaultModel: script.manifest.defaultModel,
-        models: script.manifest.models.map((model) => ({
-          id: model.id,
-          contextWindow: model.contextWindow,
-          inputModalities: model.inputModalities,
-        })),
+        defaultModel: '',
+        models: [],
       })
 
     const catalog = getSharedProviderCatalogOrNull(provider)
@@ -164,21 +160,8 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     provider: ChatProviderId,
     currentModel?: string
   ): ProviderModelResolution {
-    const script = this.providerScripts.getProviderScript(provider)
-    if (!script) {
-      this.requireOperationalManifest(provider)
-      return resolveSharedProviderModelSelection(provider, currentModel)
-    }
-
-    const requestedModel = currentModel?.trim() ?? ''
-    const models = script.manifest.models.map((model) => model.id)
-    if (requestedModel && models.includes(requestedModel))
-      return { model: requestedModel, didFallback: false }
-
-    return {
-      model: script.manifest.defaultModel,
-      didFallback: requestedModel.length > 0 && requestedModel !== script.manifest.defaultModel,
-    }
+    this.requireOperationalManifest(provider)
+    return resolveSharedProviderModelSelection(provider, currentModel)
   }
 
   public resolveModel(provider: ChatProviderId, currentModel?: string): string {

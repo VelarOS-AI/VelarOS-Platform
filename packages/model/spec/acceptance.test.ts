@@ -25,7 +25,6 @@ import {
   type ModelSelection,
   modelUsage,
 } from '../src/index'
-import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
 import { ModelTuning } from '../src/utils/tuning'
 
 const InjectedProviderId = 'velaros-spec-provider' as ChatProviderId
@@ -181,7 +180,7 @@ describe('model 不变量验收', () => {
     )
   })
 
-  test('INV-1 只在同一个 provider 内回退模型，绝不换 provider', () => {
+  test('INV-1 只保留明确选择的模型，绝不换 provider 或静态回退', () => {
     // 逐个内置 provider 核对：拿别家的模型名来解析，结果要么是用户填的原名（目录只是建议的
     // 那几家），要么是**本家**目录里的模型，绝不会解析成别家目录独有的模型。
     for (const manifest of ModelProviderOperationalManifests) {
@@ -303,9 +302,12 @@ describe('model 不变量验收', () => {
     expect(await invokeFailureCode('supports_provider', {})).toBe('VALIDATION')
   })
 
-  test('INV-8 静态目录与常量表始终一致', () => {
+  test('INV-8 服务商元数据不冒充模型候选，公开快照保持隔离', () => {
     const fromCatalog = Object.fromEntries(
-      SharedProviderCatalogs.map((catalog) => [catalog.provider, catalog.defaultModel])
+      ModelProviderOperationalManifests.map((manifest) => [
+        manifest.id,
+        modelCatalog.catalog(manifest.id)?.defaultModel,
+      ])
     )
 
     expect({ ...DefaultProviderModels }).toEqual(fromCatalog)
@@ -321,11 +323,10 @@ describe('model 不变量验收', () => {
     const expectedCatalog = structuredClone(modelCatalog.catalog('openai')!)
     const catalog = modelCatalog.catalog('openai')!
     catalog.defaultModel = 'snapshot-only'
-    catalog.models[0].contextWindow = 1
     catalog.models.push({ id: 'snapshot-only', contextWindow: 1 })
     expect(modelCatalog.catalog('openai')).toEqual(expectedCatalog)
     const collectionCatalog = first.providerCollection.requireCatalog('openai')
-    collectionCatalog.models[0].id = 'snapshot-only'
+    collectionCatalog.models.push({ id: 'snapshot-only' })
     expect(first.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
     expect(second.providerCollection.requireCatalog('openai')).toEqual(expectedCatalog)
 
@@ -360,17 +361,14 @@ describe('model 不变量验收', () => {
     first.providerCollection.getDefaultRuntimeConfig(InjectedProviderId).providerScript!.label =
       'snapshot-only'
     const scriptCatalog = first.providerCollection.requireCatalog(InjectedProviderId)
-    const catalogModalities = scriptCatalog.models[0].inputModalities as string[]
-    catalogModalities[0] = 'audio'
+    scriptCatalog.models.push({ id: 'snapshot-only', inputModalities: ['audio'] })
     expect(first.providerCollection.requireOperationalManifest(InjectedProviderId)).toEqual(
       expectedScript
     )
     expect(first.providerScriptRegistry.getProviderScript(InjectedProviderId)?.manifest).toEqual(
       expectedScript.providerScript
     )
-    expect(
-      first.providerCollection.requireCatalog(InjectedProviderId).models[0].inputModalities
-    ).toEqual(['text', 'image'])
+    expect(first.providerCollection.requireCatalog(InjectedProviderId).models).toEqual([])
   })
 
   test('INV-9 账本永远非负，查不到单价就不算钱', () => {

@@ -298,30 +298,27 @@ export const ModelProviderOperationalManifests = Object.freeze([
 ] as const)
 
 /**
- * 每个内置 provider 的缺省模型。
- *
- * 直接写成字面量而不是由静态目录算出来：这是对外承诺的约定，产品照着它建首次配置。
- * 与静态目录的一致性由 `test/default-provider-models.test.ts` 逐条核对。
+ * 首次配置不推定具体型号；模型必须来自当前鉴权目录或用户明确输入。
  */
 export const DefaultProviderModels = Object.freeze({
-  openrouter: OpenRouterAutoModelId,
-  openai: 'gpt-5.5',
-  anthropic: 'claude-sonnet-4-6',
-  google: 'gemini-3.1-pro-preview',
-  deepseek: 'deepseek-v4-flash',
-  xai: 'grok-4.20',
-  qwen: 'qwen3.6-plus',
-  moonshot: 'kimi-k2.6',
-  zhipu: 'glm-5.1',
-  mistral: 'mistral-medium-3.1',
-  minimax: 'MiniMax-M2.7',
-  groq: 'llama-3.3-70b-versatile',
-  volcengine: 'doubao-seed-1-6',
-  ollama: 'gpt-oss:20b',
-  lmstudio: 'openai/gpt-oss-20b',
+  openrouter: '',
+  openai: '',
+  anthropic: '',
+  google: '',
+  deepseek: '',
+  xai: '',
+  qwen: '',
+  moonshot: '',
+  zhipu: '',
+  mistral: '',
+  minimax: '',
+  groq: '',
+  volcengine: '',
+  ollama: '',
+  lmstudio: '',
   'openai-compatible-gateway': '',
   custom: '',
-  velaros: VelarAutoModelId,
+  velaros: '',
   'velar-dev': '',
 })
 

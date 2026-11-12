@@ -57,13 +57,16 @@ const title = await client.generateText({
 })
 ```
 
-渲染进程只从 `./catalog` 取目录：
+模型列表由宿主经当前服务商、地址与密钥动态获取，传给渲染进程；同步元数据不再返回可选列表或默认型号。远端失败和空结果不由预置型号补齐。
+
+渲染进程只从 `./catalog` 取服务商与能力元数据：
 
 ```ts
 import { ModelEnvironmentVariables, modelCatalog } from '@velaros-ai/model/catalog'
 
-const suggestions = modelCatalog.suggestedModels('anthropic')
-const model = modelCatalog.resolveModel('anthropic', suggestions[0])
+// 具体型号来自宿主动态目录中的选择，或用户明确输入。
+declare const selectedRemoteModel: string
+const model = modelCatalog.resolveModel('anthropic', selectedRemoteModel)
 const contextWindow = modelCatalog.contextWindow('anthropic', model) ?? 128_000
 
 // 可移植面不读 process.env：Ollama 地址这类环境值由调用方经端口给

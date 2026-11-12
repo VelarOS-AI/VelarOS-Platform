@@ -26,7 +26,7 @@ import {
 import { LocalModelEnvironment } from './LocalModelEnvironment'
 
 /**
- * 内置 provider 的静态目录与选型规则，外加本机 Ollama 的地址与模型解析。
+ * 内置服务商元数据、已知能力规格与显式模型身份；可选列表由动态目录服务提供。
  *
  * 这一份是**可移植**的：整条引用链不碰 Node 内置模块，渲染进程经 `./catalog` 入口直接加载。
  * 要读环境变量的三个 Ollama 方法都收一个可选的 `ModelEnvironmentPort`——本类自己从不去摸
@@ -35,17 +35,17 @@ import { LocalModelEnvironment } from './LocalModelEnvironment'
 export interface ModelCatalogApi {
   /** 取一个内置 provider 的运营清单；不是内置 provider 时返回 null。 */
   manifest(providerId: ChatProviderId): Nullable<ModelProviderOperationalManifest>
-  /** 取一个 provider 的静态目录；没有这个 provider 时返回 null。 */
+  /** 同步查询只返回服务商身份和空候选；可用模型经动态目录服务取得。 */
   catalog(providerId: ChatProviderId): Nullable<SharedProviderCatalog>
-  /** 这个 provider 静态目录里的全部模型 id。 */
+  /** 同步元数据不枚举型号，返回空列表。 */
   models(providerId: ChatProviderId): string[]
-  /** 这个 provider 推荐给用户看的模型。 */
+  /** 不再提供静态推荐列表。 */
   suggestedModels(providerId: ChatProviderId): string[]
   /** 一份模型清单在某个 provider 下的可见子集。 */
   visibleModels(providerId: ChatProviderId, models: string[]): string[]
-  /** 在同一个 provider 内选一个可用模型，并说明有没有发生回退。 */
+  /** 保留显式模型身份；空输入留空，不从静态表推定默认值。 */
   resolveModelSelection(providerId: ChatProviderId, currentModel?: string): ProviderModelResolution
-  /** 在同一个 provider 内选一个可用模型，只要结果。 */
+  /** 只返回调用方明确选择的模型。 */
   resolveModel(providerId: ChatProviderId, currentModel?: string): string
   /** 这个 provider 走不走 OpenRouter 的路由语义。 */
   isOpenRouterCompatible(providerId: ChatProviderId): boolean

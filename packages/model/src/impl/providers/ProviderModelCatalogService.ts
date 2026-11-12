@@ -239,7 +239,11 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       return this.listProviderScriptModels(resolvedRequest, preset, fetchedAt, signal)
 
     if (!canListRemoteProviderModels(preset.validationKind))
-      return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
+      return createEmptyRemoteCatalog(
+        request.provider,
+        fetchedAt,
+        `${preset.label} 未提供动态模型目录，请由宿主提供目录或手动指定模型。`
+      )
 
     if (
       isBlank(resolvedRequest.apiKey) &&
@@ -303,9 +307,6 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
         { ...request, baseURL: this.providerCollection.resolveBaseURL(request) },
         signal
       )
-      if (isEmpty(models))
-        return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
-
       return {
         provider: request.provider,
         source: 'remote',
@@ -390,29 +391,5 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     }
 
     return models
-  }
-
-  private createPresetCatalog(
-    provider: ChatProviderId,
-    fetchedAt: number,
-    purpose: ListProviderModelsRequest['purpose'] = 'chat'
-  ): ProviderModelCatalog {
-    const preset = this.getProviderPreset(provider)
-    const values =
-      purpose === 'embedding'
-        ? [this.providerCollection.defaultEmbeddingModel(provider), ...preset.modelSuggestions]
-        : preset.modelSuggestions
-    return {
-      provider,
-      source: 'preset',
-      models: filterModelsForPurpose(
-        purpose,
-        this.normalizeModels(
-          provider,
-          values.map((id) => ({ id }))
-        )
-      ),
-      fetchedAt,
-    }
   }
 }

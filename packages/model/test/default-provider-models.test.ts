@@ -1,22 +1,33 @@
 /**
  * @test-meta
- * title: 缺省模型常量表与静态目录一致
- * summary: 包 · 模型运行时：常量表里直接写的缺省模型必须与静态目录逐条对得上。
+ * title: 型号只能由动态目录或明确输入提供
+ * summary: 同步入口不得给出硬编码候选或默认型号，也不能根据静态表改写远端身份。
  * area: package
  */
 import { describe, expect, test } from 'bun:test'
 
 import { DefaultProviderModels, ModelProviderOperationalManifests } from '../src/contract/constants'
 import { modelCatalog } from '../src/index'
-import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
 
 describe('缺省模型常量表', () => {
-  test('每个内置 provider 的缺省模型与静态目录一致', () => {
-    const fromCatalog = Object.fromEntries(
-      SharedProviderCatalogs.map((catalog) => [catalog.provider, catalog.defaultModel])
+  test('所有内置服务商的首次默认型号和同步候选均为空', () => {
+    for (const manifest of ModelProviderOperationalManifests) {
+      expect(DefaultProviderModels[manifest.id]).toBe('')
+      expect(modelCatalog.catalog(manifest.id)?.models).toEqual([])
+      expect(modelCatalog.models(manifest.id)).toEqual([])
+      expect(modelCatalog.suggestedModels(manifest.id)).toEqual([])
+      expect(modelCatalog.resolveModel(manifest.id)).toBe('')
+    }
+    expect(modelCatalog.resolveModel('openai', ' remote-private-model ')).toBe(
+      'remote-private-model'
     )
-
-    expect({ ...DefaultProviderModels }).toEqual(fromCatalog)
+    expect(
+      modelCatalog.visibleModels('openai-compatible-gateway', [
+        'gpt-4o-mini',
+        ' private ',
+        'private',
+      ])
+    ).toEqual(['gpt-4o-mini', 'private'])
   })
 
   test('常量表覆盖全部内置 provider，且没有多余条目', () => {

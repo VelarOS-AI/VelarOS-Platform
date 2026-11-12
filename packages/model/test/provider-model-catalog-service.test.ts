@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { ModelProviderCollection } from '../src/impl/providers/ModelProviderCollection'
 import { ProviderModelCatalogService } from '../src/impl/providers/ProviderModelCatalogService'
-import type { ProviderScriptRegistryPort } from '../src/index'
+import { ProviderScriptRegistry } from '../src/impl/providers/ProviderScriptRegistry'
+import type { ChatProviderId, ProviderScriptRegistryPort } from '../src/index'
 import { ModelTuning } from '../src/utils/tuning'
 
 const EmptyProviderScripts: ProviderScriptRegistryPort = {
@@ -30,6 +31,57 @@ function createService(
 }
 
 describe('ProviderModelCatalogService', () => {
+  test('脚本没有动态列表时不把 manifest 的型号当作可用目录', async () => {
+    const registry = new ProviderScriptRegistry({ configPaths: [] })
+    const provider = 'dynamic-empty-script' as ChatProviderId
+    registry.registerSource({
+      scriptPath: '/tmp/velaros-model-dynamic-empty.cjs',
+      source: `module.exports = {
+        manifest: { id: 'dynamic-empty-script', label: 'Dynamic Empty', description: '空目录回归', defaultModel: 'manifest-only', models: [{id: 'manifest-only'}] },
+        createLanguageModelFactory() { return () => ({}) }
+      }`,
+    })
+    const service = new ProviderModelCatalogService({
+      providerCollection: new ModelProviderCollection(registry),
+      providerScriptRegistry: registry,
+      fetch: async () => {
+        throw new Error('unexpected HTTP request')
+      },
+    })
+    const result = await service.listProviderModels({
+      provider,
+      apiKey: 'key',
+      baseURL: 'https://example.test/v1',
+    })
+    expect(result.source).toBe('remote')
+    expect(result.models).toEqual([])
+  })
+
+  test('空远端目录不由静态型号补齐，专用运行时不冒充远端目录', async () => {
+    let calls = 0
+    const service = createService(async () => {
+      calls++
+      return Response.json({ data: [] })
+    })
+    const empty = await service.listProviderModels({
+      provider: 'openai',
+      apiKey: 'secret',
+      baseURL: '',
+    })
+    expect(empty.source).toBe('remote')
+    expect(empty.models).toEqual([])
+    expect(empty.error).toBeUndefined()
+    const managed = await service.listProviderModels({
+      provider: 'velaros',
+      apiKey: '',
+      baseURL: '',
+    })
+    expect(managed.source).toBe('remote')
+    expect(managed.models).toEqual([])
+    expect(managed.error).toContain('动态模型目录')
+    expect(calls).toBe(1)
+  })
+
   test('loads and normalizes OpenAI-compatible remote models', async () => {
     let capturedUrl = ''
     let capturedAuthorization = ''
