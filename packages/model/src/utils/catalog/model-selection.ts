@@ -10,6 +10,7 @@ import type {
   VelarCloudManagedProviderId,
 } from '../../types/model'
 import type { SharedProviderCatalog } from '../../types/providers'
+
 import { findSharedProviderCatalogDefinition } from './provider-catalogs'
 
 /** 官方能力默认值只用于官方 HTTPS 端点，兼容端点由宿主显式声明能力。 */
