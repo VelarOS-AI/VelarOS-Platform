@@ -23,6 +23,8 @@ export interface WebSpacePort {
   openPage(signal: AbortSignal): Promise<WebPage>
   /** 用户设置里的搜索引擎：搜索先用它，搜不通再换另一个。 */
   searchEngine(): WebSearchEngineId
+  /** 可选：读取本机设置的 Tavily 密钥。空字符串表示没有配置。密钥只供搜索请求使用。 */
+  tavilyApiKey?(): string | Promise<string>
   /**
    * 可选：跟一跳服务端跳转、不加载目标页面，交回它跳去的地址（响应头里的 Location）；不是跳转交回 null。
    * Google 的结果链接是 `/goto?url=…` 这种不透明的跳转，真实地址不在页面里，只有问一次 Google 才知道；宿主给了它，这些链接才换成真实地址，

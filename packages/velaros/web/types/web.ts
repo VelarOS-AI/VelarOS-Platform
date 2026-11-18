@@ -8,6 +8,9 @@
 /** @AgentView 搜索引擎：用户在设置里选的那个，或者搜不通时换上的另一个。 */
 export type WebSearchEngineId = 'google' | 'bing'
 
+/** @AgentView 实际返回搜索结果的来源，配置 Tavily 时返回 tavily。 */
+export type WebSearchSourceId = WebSearchEngineId | 'tavily'
+
 /** @AgentView 搜什么：query 是搜索词（最多 1000 个字符）；limit 最多要几条结果，默认 8 条、最多 20 条。 */
 export interface WebSearchInput {
   query: string
@@ -27,12 +30,12 @@ export interface WebSearchResult {
 
 /**
  * @AgentView
- * engine 是这次实际用的搜索引擎（用户选的那个搜不通时换成了另一个）。
+ * engine 是这次实际用的搜索来源。
  * results 按搜索引擎排的顺序，重复的地址只留第一条；是空数组就是没搜到，换个说法再搜。
  */
 export interface WebSearchResults {
   query: string
-  engine: WebSearchEngineId
+  engine: WebSearchSourceId
   results: WebSearchResult[]
 }
 

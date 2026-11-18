@@ -29,3 +29,5 @@
 | INV-19 | 结果一出现在 DOM 里就抓，不等整页（图片、脚本）加载完：文档落下之后每 `WebTuning.search.resultsPollMs` 看一眼结果页，认出了结果、并且 DOM 已经解析完（readyState 不是 loading）或条数稳住 `WebTuning.search.resultsSteadyMs`，就用这一眼并叫停剩下的加载；一条结果都没有时不提前下结论，照旧等页面真加载完或到加载时限再看；加载完之后页面又自己跳走的（宿主报 `WebPage.loading`），接着看跳过去的那一页，直到加载时限；落在验证页、同意页上的当场认成被拦、换下一个搜索引擎；落下时限、加载时限、验证页的认法都照旧；Google 与 Bing 都这样。要快起来，宿主的 `evaluate` 得当场跑（Electron 用 `mainFrame.executeJavaScript`） | 测试 | `spec/acceptance.test.ts` |
 | INV-20 | read 读纯文本文件（文档的媒体类型是 text/ 下除 HTML、XML 之外的，或 JSON、JavaScript：源码、Markdown、YAML 这类）时正文原样交回：缩进、行内空白、制表符、行尾空白、连着的空行都留着，只把换行统一成 `\n`、去掉开头的空行与末尾的空白；网页照 INV-7 收拾，切段照 INV-8 | 测试 | `spec/acceptance.test.ts` |
 | INV-21 | 页面禁了脚本（响应头 CSP 带 sandbox、没给 allow-scripts，比如 raw.githubusercontent.com 上的文件）照样读得出：本单元读页面不靠页面自己的脚本，宿主按 `WebPage.evaluate` 的约定在这种页上也跑得了（Electron 遇 `'Script not run'` 改经 DevTools 协议的 `Runtime.evaluate`）；读出来的纯文本文件照 INV-20 原样、网页照常删导航页脚只读正文 | 文字 | |
+| INV-22 | 配置 Tavily 时，search 只请求 Tavily 并返回 `engine: 'tavily'`，空结果、失败和取消均不打开浏览器；空密钥沿用浏览器搜索。API 错误不带响应正文或密钥 | 测试 | `spec/acceptance.test.ts` |
+| INV-23 | Bing 地区参数被重复追加并触发重定向上限时，用规范搜索地址和单个地区参数最多重试一次；再次遇到循环只报告简明原因 | 测试 | `spec/acceptance.test.ts` |

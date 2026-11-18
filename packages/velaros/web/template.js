@@ -1,8 +1,8 @@
 // velaros:web 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
-// 搜索和读网页都在一个不显示的浏览器里跑；要在网页上点、填、登录，用浏览器，不用这个。
+// 配置 Tavily 后搜索用接口，否则用浏览器搜索。read 打开指定网址；要点、填、登录，用 velaros:browser。
 import { read, search } from 'velaros:web'
 
-// 搜一次，看标题、地址与摘要：结果只是线索，engine 是实际用的搜索引擎（Google 搜不通时换成了 Bing）。
+// 搜一次，看标题、地址与摘要：结果只是线索，engine 是实际用的搜索来源。
 async function lookup(query = 'Node.js 事件循环') {
   const { engine, results } = await search({ query, limit: 5 })
   return { engine, results: results.map(({ title, url, snippet }) => ({ title, url, snippet })) }
@@ -48,7 +48,7 @@ async function research(query = 'Bun 和 Node.js 的区别', count = 3) {
   return sources
 }
 
-// 两个搜索引擎都搜不了时抛 WEB_SEARCH_FAILED：message 写着两边各自为什么，照实告诉用户。
+// 搜索失败时抛 WEB_SEARCH_FAILED：message 写着实际使用的来源为什么失败。
 async function searchOrExplain(query = 'VelarOS 发布说明') {
   try {
     return await search({ query })

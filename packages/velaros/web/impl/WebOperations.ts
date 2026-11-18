@@ -5,7 +5,15 @@
  * 宿主给了退避记忆（`WebEngineBackoff`）就同时记在那里，重启之后还在。
  */
 
-import { isEmpty, isFiniteNumber, isPresent, Log, toNullable } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isFiniteNumber,
+  isPlainObject,
+  isPresent,
+  isString,
+  Log,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -29,6 +37,7 @@ import type {
   WebSearchResults,
 } from '../types/web.js'
 import {
+  bingRegionalRetryUrl,
   blockedAddress,
   blockedReason,
   engineOrder,
@@ -77,11 +86,11 @@ export interface WebOperationsClock {
 
 /**
  * @AgentView
- * 网上查资料：search 用搜索引擎搜，read 把一个网页读成文字。都在一个不显示的浏览器里跑：用户看不到，不留浏览痕迹，也碰不到用户的登录。
- * 搜索引擎按用户的设置（Google 或 Bing）；它打不开、被拦成验证页或认不出结果时自动换另一个，结果里的 engine 写着实际用的是哪个。
+ * 网上查资料：search 搜索，read 把一个网页读成文字。配置 Tavily 后搜索只用 Tavily 接口；未配置时在不显示的浏览器里用首选搜索引擎，失败会换另一个。
+ * 结果的 engine 写着实际来源。read 在不显示的浏览器里打开指定网址，不留浏览痕迹，也碰不到用户的登录。
  * 搜索结果只是线索：要紧的事读原文核对，交给用户时带上出处（url）。
  * 要在网页上动手（登录、填表、点按钮）、看页面长什么样、读登录之后才看得到的内容，用浏览器（velaros:browser），不用这个。
- * 失败抛的错误带 code：WEB_SEARCH_FAILED 两个搜索引擎都搜不了（message 写着两边各自为什么）；
+ * 失败抛的错误带 code：WEB_SEARCH_FAILED Tavily 接口失败或两个浏览器搜索引擎都搜不了（message 写明原因）；
  * WEB_PAGE_UNREACHABLE 网页打不开（连不上、加载出错，或者超时了什么都没出来）；WEB_PAGE_UNREADABLE 打开了却读不成文字（比如是 PDF）。入参不对是 VALIDATION。
  */
 export interface WebOperationsApi {
@@ -102,11 +111,16 @@ export class WebOperations implements WebOperationsApi {
   /** 并行子任务共用搜索源，只允许一个 Google 探测在途，不把其他 query 的结果混用。 */
   private googleAttemptRunning = false
 
-  constructor(private readonly clock: WebOperationsClock) {}
+  constructor(
+    private readonly clock: WebOperationsClock,
+    private readonly fetcher: typeof fetch = fetch
+  ) {}
 
   public async search(input: WebSearchInput, ctx: WebOperationContext): Promise<WebSearchResults> {
     ctx.abortSignal.throwIfAborted()
     const request = searchRequest(input)
+    const api = await this.searchTavily(request, ctx)
+    if (api) return api
     const googleUntil = this.googleBackoff(ctx)
     const failures: WebEngineFailure[] = []
     for (const engine of engineOrder(ctx.web.searchEngine())) {
@@ -126,6 +140,12 @@ export class WebOperations implements WebOperationsApi {
       let attempt: WebEngineAttempt
       try {
         attempt = await this.searchWith(engine, request, ctx)
+        if (engine === 'bing' && !attempt.ok) {
+          const retry = bingRegionalRetryUrl(attempt.reason, request.query, request.limit)
+          if (retry) attempt = await this.searchWith(engine, request, ctx, retry)
+          if (!attempt.ok && attempt.reason.includes('ERR_TOO_MANY_REDIRECTS'))
+            attempt = { ok: false, reason: '地区跳转循环，无法打开结果页' }
+        }
         if (engine === 'google') this.noteGoogle(attempt, ctx)
       } finally {
         if (engine === 'google') this.googleAttemptRunning = false
@@ -134,6 +154,71 @@ export class WebOperations implements WebOperationsApi {
       failures.push({ engine, reason: attempt.reason })
     }
     throw new AppError(WebErrorCodes.searchFailed, searchFailedMessage(request.query, failures))
+  }
+
+  /** 配了 Tavily 就只取接口结果；把状态码转换为可操作的提示，不转发响应错误正文。 */
+  private async searchTavily(
+    request: WebSearchRequest,
+    ctx: WebOperationContext
+  ): Promise<Nullable<WebSearchResults>> {
+    if (!ctx.web.tavilyApiKey) return null
+    const deadline = this.clock.timeout(WebTuning.search.apiTimeoutMs)
+    const signal = AbortSignal.any([ctx.abortSignal, deadline])
+    try {
+      const apiKey = (await untilAborted(Promise.resolve(ctx.web.tavilyApiKey()), signal)).trim()
+      if (!apiKey) return null
+      const response = await untilAborted(
+        this.fetcher('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          redirect: 'error',
+          body: JSON.stringify({
+            query: request.query,
+            max_results: request.limit,
+            search_depth: 'basic',
+          }),
+          signal,
+        }),
+        signal
+      )
+      if (!response.ok) {
+        await response.body?.cancel()
+        const hint =
+          response.status === 401 || response.status === 403
+            ? '请检查设置中的 Tavily API Key'
+            : '请检查 Tavily 服务状态或账户额度'
+        throw new AppError(
+          WebErrorCodes.searchFailed,
+          `Tavily 请求失败（HTTP ${response.status}）。${hint}。`
+        )
+      }
+      const payload: unknown = await untilAborted(response.json(), signal)
+      if (!isPlainObject(payload) || !Array.isArray(payload.results))
+        throw new AppError(WebErrorCodes.searchFailed, 'Tavily 返回的搜索结果格式不正确。')
+      const hits: WebRawHit[] = []
+      for (const item of payload.results) {
+        if (!isPlainObject(item) || !isString(item.url)) continue
+        hits.push({
+          href: item.url,
+          title: isString(item.title) ? item.title : '',
+          snippet: isString(item.content) ? item.content : '',
+        })
+      }
+      return {
+        query: request.query,
+        engine: 'tavily',
+        results: searchResults('tavily', hits, request.limit),
+      }
+    } catch (error) {
+      ctx.abortSignal.throwIfAborted()
+      if (error instanceof AppError && error.code === WebErrorCodes.searchFailed) throw error
+      throw new AppError(
+        WebErrorCodes.searchFailed,
+        deadline.aborted
+          ? 'Tavily 搜索请求超时。'
+          : '无法完成 Tavily 搜索，请检查 API Key 或网络连接。'
+      )
+    }
   }
 
   public async read(input: WebReadInput, ctx: WebOperationContext): Promise<WebPageText> {
@@ -211,11 +296,12 @@ export class WebOperations implements WebOperationsApi {
   private async searchWith(
     engine: WebSearchEngineId,
     request: WebSearchRequest,
-    ctx: WebOperationContext
+    ctx: WebOperationContext,
+    url = searchPageUrl(engine, request.query, request.limit)
   ): Promise<WebEngineAttempt> {
     const page = await this.openPage(ctx)
     try {
-      return await this.scanResults(page, engine, request, ctx)
+      return await this.scanResults(page, engine, request, ctx, url)
     } catch (error) {
       ctx.abortSignal.throwIfAborted()
       log.debug('a search engine attempt failed', { engine, error: AppError.getMessage(error) })
@@ -233,7 +319,8 @@ export class WebOperations implements WebOperationsApi {
     page: WebPage,
     engine: WebSearchEngineId,
     request: WebSearchRequest,
-    ctx: WebOperationContext
+    ctx: WebOperationContext,
+    url: string
   ): Promise<WebEngineAttempt> {
     const timeoutMs =
       engine === 'google'
@@ -243,12 +330,7 @@ export class WebOperations implements WebOperationsApi {
     const commitMs = engine === 'google' ? WebTuning.search.googleCommitMs : null
     const script = engine === 'google' ? GoogleResultsScript : BingResultsScript
     const stop = new AbortController()
-    const loading = this.load(
-      page,
-      searchPageUrl(engine, request.query, request.limit),
-      { loadMs: timeoutMs, commitMs, stop: stop.signal },
-      ctx
-    )
+    const loading = this.load(page, url, { loadMs: timeoutMs, commitMs, stop: stop.signal }, ctx)
     let early: Nullable<WebSearchScan> = null
     try {
       early = await this.earlyResults(

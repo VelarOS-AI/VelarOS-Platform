@@ -13,6 +13,7 @@ import { describe, expect, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 
 import { VelarWebModule } from '../contract/surface'
+import { WebOperations } from '../impl/WebOperations'
 import { WebErrorCodes, WebLimits } from '../index'
 import { WebTuning } from '../utils/tuning'
 
@@ -61,6 +62,74 @@ function pageSite(text: string, extra: { title?: string; landed?: string } = {})
 }
 
 describe('搜索', () => {
+  test('INV-22 配置 Tavily 时成功、空结果和接口错误都不打开浏览器', async () => {
+    const clock = fakeClock()
+    const space = webSpace({ clock, sites: sitesOf({ bing: { scan: BingResults } }) })
+    space.context.web.tavilyApiKey = async () => ' test-key '
+    let response = Response.json({
+      results: [
+        { title: 'Doc', url: 'https://example.com/doc', content: 'Snippet' },
+        { title: 'Duplicate', url: 'https://example.com/doc#section' },
+        { title: 'Invalid', url: 'file:///doc' },
+      ],
+    })
+    const operations = new WebOperations(clock, (async (input, init) => {
+      expect(input).toBe('https://api.tavily.com/search')
+      expect(init?.redirect).toBe('error')
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer test-key')
+      expect(JSON.parse(String(init?.body))).toEqual({
+        query: 'docs',
+        max_results: 3,
+        search_depth: 'basic',
+      })
+      return response
+    }) as typeof fetch)
+    const search = () => operations.search({ query: ' docs ', limit: 3 }, space.context)
+    expect(await search()).toEqual({
+      query: 'docs',
+      engine: 'tavily',
+      results: [{ title: 'Doc', url: 'https://example.com/doc', snippet: 'Snippet' }],
+    })
+    response = Response.json({ results: [] })
+    expect(await search()).toMatchObject({ engine: 'tavily', results: [] })
+    response = new Response('test-key should not appear', { status: 401 })
+    const failure = await failureOf(search())
+    expect(failure.code).toBe(WebErrorCodes.searchFailed)
+    expect(failure.message).toContain('HTTP 401')
+    expect(failure.message).not.toContain('test-key')
+    expect(space.record.opened).toBe(0)
+    space.context.web.tavilyApiKey = () => ''
+    expect((await search()).engine).toBe('bing')
+  })
+
+  test('INV-23 Bing 地区参数重复时用一个参数重试一次，失败时压缩报错', async () => {
+    const redirectLoop = new AppError(
+      'NETWORK',
+      "ERR_TOO_MANY_REDIRECTS (-310) loading 'https://www.bing.com/?q=docs&count=10&mkt=zh-CN&mkt=zh-CN'"
+    )
+    for (const recovers of [true, false]) {
+      const space = webSpace({
+        engine: 'bing',
+        backoff: { stored: { google: Number.MAX_SAFE_INTEGER } },
+        sites: (url) =>
+          recovers && new URL(url).searchParams.has('mkt')
+            ? { scan: BingResults }
+            : { load: redirectLoop },
+      })
+      const searching = space.operations.search({ query: 'docs', limit: 10 }, space.context)
+      if (recovers) expect((await searching).engine).toBe('bing')
+      else {
+        const failure = await failureOf(searching)
+        expect(failure.message).toContain('Bing：地区跳转循环')
+        expect(failure.message).not.toContain('mkt=')
+      }
+      expect(space.record.loads).toEqual([
+        'https://www.bing.com/search?q=docs&count=10',
+        'https://www.bing.com/search?q=docs&count=10&mkt=zh-CN',
+      ])
+      expect(space.record.opened).toBe(space.record.closed)
+    }
+  })
   test('INV-1 按用户选的搜索引擎先搜：结果页地址拼好，交回搜索词、实际用的搜索引擎与结果，用完的页面关掉', async () => {
     const google = webSpace({ sites: sitesOf({ google: { scan: GoogleResults } }) })
     const found = await google.operations.search(

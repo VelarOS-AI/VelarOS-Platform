@@ -6,7 +6,7 @@
 import { isNonBlankString, truncate } from '@velaros-ai/core'
 
 import type { WebEngineFailure, WebRawHit } from '../types/page.js'
-import type { WebSearchEngineId, WebSearchResult } from '../types/web.js'
+import type { WebSearchEngineId, WebSearchResult, WebSearchSourceId } from '../types/web.js'
 
 import { WebTuning } from './tuning.js'
 import { httpUrl } from './urls.js'
@@ -50,6 +50,25 @@ export function searchPageUrl(engine: WebSearchEngineId, query: string, limit: n
   url.searchParams.set('q', query)
   if (engine === 'bing') url.searchParams.set('count', String(limit))
   return url.href
+}
+
+/** Bing 地区重定向把同一个市场反复追加时，通过搜索入口显式设置一次市场。 */
+export function bingRegionalRetryUrl(
+  message: string,
+  query: string,
+  limit: number
+): Nullable<string> {
+  if (!message.includes('ERR_TOO_MANY_REDIRECTS')) return null
+  const target = /loading '(https:\/\/[^']+)'/u.exec(message)?.[1]
+  const url = target ? httpUrl(target) : null
+  if (!url || url.hostname !== 'www.bing.com' || url.pathname !== '/') return null
+  const markets = url.searchParams.getAll('mkt')
+  const market = markets[0]
+  if (!market || !/^[a-z]{2}-[A-Z]{2}$/u.test(market) || markets.length < 2) return null
+  if (!markets.every((value) => value === market)) return null
+  const retry = new URL(searchPageUrl('bing', query, limit))
+  retry.searchParams.set('mkt', market)
+  return retry.href
 }
 
 /** 是不是 Google 的站：google.com 与 google.com.hk、google.co.jp 这类各地域名，含子域。 */
@@ -132,7 +151,7 @@ function dedupeKey(url: string): string {
  * 标题空着的用地址顶上，标题与摘要各按上限截断。
  */
 export function searchResults(
-  engine: WebSearchEngineId,
+  engine: WebSearchSourceId,
   hits: readonly WebRawHit[],
   limit: number
 ): WebSearchResult[] {
@@ -140,7 +159,7 @@ export function searchResults(
   const seen = new Set<string>()
   for (const hit of hits) {
     if (results.length >= limit) break
-    const url = resultUrl(engine, hit.href)
+    const url = engine === 'tavily' ? httpUrl(hit.href)?.href : resultUrl(engine, hit.href)
     if (!url || seen.has(dedupeKey(url))) continue
     seen.add(dedupeKey(url))
     results.push({

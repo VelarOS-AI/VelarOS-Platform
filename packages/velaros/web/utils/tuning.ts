@@ -14,6 +14,8 @@ export const WebTuning = Object.freeze({
   }),
   /** 搜索。 */
   search: Object.freeze({
+    /** Tavily 密钥读取和 HTTP 请求共用的时限。 */
+    apiTimeoutMs: 15_000,
     /**
      * Google 搜不通之后，多久以内的搜索直接走 Bing，毫秒。
      * 短暂断网不应让备用搜索源整天失效；到期仅恢复正常的一次尝试，不自动循环重试。

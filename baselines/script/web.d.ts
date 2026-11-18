@@ -1,9 +1,9 @@
 /**
- * 网上查资料：search 用搜索引擎搜，read 把一个网页读成文字。都在一个不显示的浏览器里跑：用户看不到，不留浏览痕迹，也碰不到用户的登录。
- * 搜索引擎按用户的设置（Google 或 Bing）；它打不开、被拦成验证页或认不出结果时自动换另一个，结果里的 engine 写着实际用的是哪个。
+ * 网上查资料：search 搜索，read 把一个网页读成文字。配置 Tavily 后搜索只用 Tavily 接口；未配置时在不显示的浏览器里用首选搜索引擎，失败会换另一个。
+ * 结果的 engine 写着实际来源。read 在不显示的浏览器里打开指定网址，不留浏览痕迹，也碰不到用户的登录。
  * 搜索结果只是线索：要紧的事读原文核对，交给用户时带上出处（url）。
  * 要在网页上动手（登录、填表、点按钮）、看页面长什么样、读登录之后才看得到的内容，用浏览器（velaros:browser），不用这个。
- * 失败抛的错误带 code：WEB_SEARCH_FAILED 两个搜索引擎都搜不了（message 写着两边各自为什么）；
+ * 失败抛的错误带 code：WEB_SEARCH_FAILED Tavily 接口失败或两个浏览器搜索引擎都搜不了（message 写明原因）；
  * WEB_PAGE_UNREACHABLE 网页打不开（连不上、加载出错，或者超时了什么都没出来）；WEB_PAGE_UNREADABLE 打开了却读不成文字（比如是 PDF）。入参不对是 VALIDATION。
  */
 declare module 'velaros:web' {
@@ -23,12 +23,12 @@ declare module 'velaros:web' {
   }
 
   /**
-   * engine 是这次实际用的搜索引擎（用户选的那个搜不通时换成了另一个）。
+   * engine 是这次实际用的搜索来源。
    * results 按搜索引擎排的顺序，重复的地址只留第一条；是空数组就是没搜到，换个说法再搜。
    */
   interface WebSearchResults {
     query: string
-    engine: WebSearchEngineId
+    engine: WebSearchSourceId
     results: WebSearchResult[]
   }
 
@@ -57,8 +57,8 @@ declare module 'velaros:web' {
     nextOffset: number | null
   }
 
-  /** 搜索引擎：用户在设置里选的那个，或者搜不通时换上的另一个。 */
-  type WebSearchEngineId = 'google' | 'bing'
+  /** 实际返回搜索结果的来源，配置 Tavily 时返回 tavily。 */
+  type WebSearchSourceId = WebSearchEngineId | 'tavily'
 
   /**
    * 一条结果：url 是目标地址，搜索引擎的跳转链接已经解开（个别解不开的是 google.com/goto 跳转，read 照样读得到跳过去的那一页）；
@@ -69,4 +69,7 @@ declare module 'velaros:web' {
     url: string
     snippet: string
   }
+
+  /** 搜索引擎：用户在设置里选的那个，或者搜不通时换上的另一个。 */
+  type WebSearchEngineId = 'google' | 'bing'
 }
