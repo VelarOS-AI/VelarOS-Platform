@@ -28,7 +28,7 @@ export function nodeRuntimeInstructions(
     `默认 ${CodeSurfaceLimits.timeoutMs}ms；options.timeoutMs 为 1..${CodeSurfaceLimits.maxExecutionTimeoutMs} 整数。I/O/子进程计时，宿主等待停表；父期限/取消优先，引用不继承时限。核终态，未知先查回执。`,
     '非交互命令设 stdin:"ignore"、timeout；有输入时用 execa(cmd,args,{input:text,timeout:10000}) 或写完关闭 child.stdin。execFile 不支持 input；stdin 需 EOF。',
     'runtime.inventory:runtimeImport/fallbackVersion=宿主依赖；裸名按工作区解析。',
-    '文件处理使用 node:fs/promises。基础 npm 只含命令、搜索、路径与差异工具；专项依赖由工作区或能力模块提供，版本/README 查目录。长文本用 velaros:program blobs；复用仍有效的材料，结果按需提取。',
+    '用 node:fs/promises 处理文件。专项 npm 依赖由工作区或能力模块提供，版本和 README 见目录。复用有效材料，按需提取结果。',
     ...(modules.includes('velaros:system-environment')
       ? [
           'velaros:system.environment 管 npm：list/search/describe 查询，apply 安装/换版/卸载，rollback 回退。跨会话持久，单次固定版本；核该版 README/类型并验证。',

@@ -39,9 +39,6 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
     allowed.includes('execute') || allowed.includes('observe')
       ? 'code 是 JavaScript 源码字符串，options 直接传 JSON 对象。程序无需选项时可省略 options。'
       : '',
-    allowed.includes('execute')
-      ? `${name('execute')} 调用示例：{"code":"console.log(1)","options":{"timeoutMs":60000}}。timeoutMs 用整数毫秒。`
-      : '',
     hasProgram
       ? 'code 中的引号、换行和反斜线按工具 JSON 规则编码。options.input 与 options.inputRef:"host:名称" 二选一，通过 import {input} from "velaros:program" 读取。附属模块放 options.modules，原文放 options.blobs。'
       : '',

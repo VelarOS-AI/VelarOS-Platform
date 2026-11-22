@@ -733,11 +733,8 @@ test('actual requests carry only their selected transport syntax with scoped nam
             assert(support, 'The real runner support query must precede model dispatch')
             instructions.set(transport, request.instructions)
             assert.match(request.instructions, /完整响应全部校验后才执行/)
-            assert.match(
-              request.instructions,
-              /大段原文放入 blobs[^\n]+多行脚本（如 PowerShell、Bash）/
-            )
-            assert.match(request.instructions, /不要用 String\.raw[^\n]+内嵌到 JavaScript 源码/)
+            assert.match(request.instructions, /大段原文放入 blobs[^\n]+多行 PowerShell、Bash、SQL/)
+            assert.match(request.instructions, /JavaScript 从 velaros:program 导入 blobs/)
             if (transport === 'tools') {
               assert.equal(request.response.type, 'tools')
               const tool = request.response.tools.find((item) => item.name === 'watch')
@@ -760,10 +757,6 @@ test('actual requests carry only their selected transport syntax with scoped nam
               assert.match(request.instructions, /options\.sourceRef/)
               assert.match(request.instructions, /literal 用 name\/text/)
               assert.match(request.instructions, /options 直接传 JSON 对象/)
-              assert.match(
-                request.instructions,
-                /run 调用示例：\{"code":"console.log\(1\)","options":\{"timeoutMs":60000\}\}/
-              )
               assert.doesNotMatch(
                 request.instructions + request.compiledPrompt + request.protocol,
                 /控制头|源码段|空段|闭合标记|当前帧标记|@@s/

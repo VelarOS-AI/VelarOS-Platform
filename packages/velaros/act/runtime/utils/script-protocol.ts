@@ -236,7 +236,7 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
       ? '命名原文唯一，同批程序共享并各自保存；新程序需提供自己的绑定。'
       : '',
     allowed.includes('execute') || (allowed.includes('observe') && !isFalse(observationPrograms))
-      ? '本轮新写的大段原文放入 blobs，包括文件正文、补丁、传给其他解释器的多行脚本（如 PowerShell、Bash）和多行 SQL。JavaScript 程序通过 velaros:program 读取 blobs，再把原文传给目标操作。不要用 String.raw、模板字符串或拼接把这些原文内嵌到 JavaScript 源码。已有原文直接从文件或授权引用读取。'
+      ? '新写的大段原文放入 blobs，如多行 PowerShell、Bash、SQL、文件正文和补丁。JavaScript 从 velaros:program 导入 blobs，读取原文并传给目标操作。已有原文直接从来源读取。'
       : '',
     allowed.includes('execute') || allowed.includes('observe')
       ? '引用仅用当前会话归档；编辑原文需唯一匹配，冲突后按当前版本重改。'
