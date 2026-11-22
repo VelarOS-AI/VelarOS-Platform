@@ -55,7 +55,8 @@ export class ModelAdapterRegistry implements ModelAdapterRegistryApi {
     providers: ModelProviderCollectionApi,
     velarCloudRuntime: VelarCloudModelRuntimeLookup,
     localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
-    injectedAdapters: readonly ModelProviderAdapter[] = []
+    injectedAdapters: readonly ModelProviderAdapter[] = [],
+    private readonly fetch?: typeof globalThis.fetch
   ) {
     this.adapters = [
       ...injectedAdapters,
@@ -81,7 +82,7 @@ export class ModelAdapterRegistry implements ModelAdapterRegistryApi {
 
   /** 创建 AI SDK LanguageModel factory。 */
   public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
-    return this.getAdapter(config.provider).createLanguageModelFactory(config)
+    return this.getAdapter(config.provider).createLanguageModelFactory(config, this.fetch)
   }
 
   /** 创建 embedding 请求；不支持的 provider 会由具体 adapter 抛出可读错误。 */

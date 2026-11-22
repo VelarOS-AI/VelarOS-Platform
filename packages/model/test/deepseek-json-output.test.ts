@@ -74,6 +74,41 @@ function request(abortSignal?: AbortSignal) {
   }
 }
 
+test('a host transport handles provider validation, discovery and compatible model requests', async () => {
+  const paths: string[] = []
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+    fetch: (async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input)
+      paths.push(url.pathname)
+      if (url.pathname === '/v1/models')
+        return Response.json({ data: [{ id: 'fixture', object: 'model' }] })
+      return response('through host')
+    }) as typeof fetch,
+  })
+  const settings = {
+    provider: 'openai-compatible-gateway' as const,
+    apiKey: 'sk-fixture',
+    baseURL: 'https://fixture.test/v1',
+  }
+  expect(
+    await composition.providerModelCatalogService.validateProviderRuntime(settings)
+  ).toMatchObject({ ok: true })
+  expect(
+    (await composition.providerModelCatalogService.listProviderModels(settings)).models
+  ).toContainEqual(expect.objectContaining({ id: 'fixture' }))
+  expect(
+    await createModelRequestClient().generateText({
+      endpoint: 'fixture.host-network',
+      model: composition.agentModelRuntime.createAgentProvider(settings)('fixture'),
+      prompt: 'hello',
+      maxRetries: 0,
+    })
+  ).toBe('through host')
+  expect(paths).toEqual(['/v1/models', '/v1/models', '/v1/chat/completions'])
+})
+
 test('DeepSeek structured output sends json_object with schema data in the prompt and preserves local validation', async () => {
   const bodies: Array<Record<string, unknown>> = []
   await withFetch(

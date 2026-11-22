@@ -71,6 +71,14 @@ export type ActRunEvent =
       readonly turnId: string
       readonly message: string
     }
+  | {
+      readonly type: 'model-retry'
+      readonly runId: string
+      readonly turnId: string
+      readonly message: string
+      readonly attempt: number
+      readonly maxAttempts: number
+    }
   | { readonly type: 'interaction'; readonly runId: string; readonly request: ActInteraction }
   | {
       readonly type: 'input'

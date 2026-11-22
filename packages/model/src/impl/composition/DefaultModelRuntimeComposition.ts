@@ -63,7 +63,10 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
     // 本地变量拿的是具体实现：适配器要用注册表上不出包的取脚本方法，Cloud 绑定要用不出包的查绑定方法。
     // 字段一律按接口收窄，外面看到的只有接口那一面。
     const environment = new NodeLocalModelEnvironment(options.environment)
-    const providerScriptRegistry = new ProviderScriptRegistry(options.providerScripts)
+    const providerScriptRegistry = new ProviderScriptRegistry({
+      fetch: options.fetch,
+      ...options.providerScripts,
+    })
     const velarCloudRuntime = new VelarCloudModelRuntime()
     this.localModelEnvironment = environment
     this.providerScriptRegistry = providerScriptRegistry
@@ -76,9 +79,11 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
       this.providerCollection,
       velarCloudRuntime,
       environment,
-      options.adapters
+      options.adapters,
+      options.fetch
     )
     this.providerModelCatalogService = new ProviderModelCatalogService({
+      fetch: options.fetch,
       ...options.providerCatalog,
       providerCollection: this.providerCollection,
       providerScriptRegistry,

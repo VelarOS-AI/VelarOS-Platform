@@ -176,7 +176,9 @@ export function injectOpenRouterRouting(
 }
 
 /** 造一个会把这次 routing 注进请求体的 fetch，交给 AI SDK 的 OpenRouter 客户端用。 */
-export function createOpenRouterFetch(routing: OpenRouterRequestRouting): OpenAIModelFetch {
-  return async (input, init) =>
-    globalThis.fetch(input, injectOpenRouterRouting(init, routing) || undefined)
+export function createOpenRouterFetch(
+  routing: OpenRouterRequestRouting,
+  fetch: OpenAIModelFetch = (input, init) => globalThis.fetch(input, init)
+): OpenAIModelFetch {
+  return async (input, init) => fetch(input, injectOpenRouterRouting(init, routing) || undefined)
 }

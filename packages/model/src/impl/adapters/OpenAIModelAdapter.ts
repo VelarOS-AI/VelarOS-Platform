@@ -34,7 +34,10 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
   }
 
   /** 创建 AI SDK LanguageModel 工厂。 */
-  public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+  public createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory {
     const apiKey = this.requireApiKey(config)
     const baseURL = this.resolveBaseURL(config)
 
@@ -43,7 +46,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         const openai = createOpenAI({
           apiKey,
           baseURL,
-          fetch: createResponsesFetch(),
+          fetch: createResponsesFetch(fetch),
         })
 
         return languageModelWrappers.withPromptCache(
@@ -77,7 +80,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         apiKey,
         baseURL,
         name: config.provider,
-        fetch: createOpenRouterFetch(routing),
+        fetch: createOpenRouterFetch(routing, fetch),
       })
 
       return languageModelWrappers.withPromptCache(openrouter.chat(routing.model), {

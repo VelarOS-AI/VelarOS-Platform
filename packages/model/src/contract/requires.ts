@@ -80,7 +80,10 @@ export interface ModelProviderAdapter {
   /** 这个适配器认不认这个 provider。 */
   supports(provider: ChatProviderId): boolean
   /** 按这次调用的配置造一个语言模型工厂。 */
-  createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory
+  createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory
   /** 按这次调用的配置造一个 embedding 请求；不支持 embedding 时抛 embeddingUnsupported。 */
   createEmbeddingRequest(
     config: ModelAdapterConfig,
@@ -98,6 +101,8 @@ export interface ModelProviderAdapter {
 export interface CreateModelRuntimeCompositionOptions {
   /** 环境变量快照；缺席时装配自己读一次 `process.env`。 */
   readonly environment?: Readonly<Record<string, string | undefined>>
+  /** 模型 SDK、供应商脚本和远端模型目录共用的宿主网络传输。 */
+  readonly fetch?: typeof globalThis.fetch
   /** provider script 注册表的配置来源与宿主桥。 */
   readonly providerScripts?: ProviderScriptRegistryOptions
   /** 远端模型目录服务的 transport、超时与归属信息。 */
@@ -119,6 +124,8 @@ export interface CreateModelRuntimeCompositionOptions {
  * 全部可选：不给配置路径就按 `<cwd>/.velaros/dev.json` 与 `<home>/.velaros/dev.json` 找。
  */
 export interface ProviderScriptRegistryOptions {
+  /** 注入脚本 SDK 帮手与 fetch 的宿主网络传输。 */
+  fetch?: typeof globalThis.fetch
   /** 找配置文件的工作目录；缺席时用 `process.cwd()`。 */
   cwd?: string
   /** 找配置文件的用户目录；缺席时用 `os.homedir()`。 */

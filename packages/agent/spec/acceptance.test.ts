@@ -4118,6 +4118,13 @@ test('INV-47 retrying an interrupted unaccepted frame resets decoding and never 
   expect(events.filter((event) => event.type === 'turn')).toHaveLength(4)
   expect(events.filter((event) => event.type === 'usage')).toHaveLength(3)
   expect(events.filter((event) => event.type === 'rejected')).toHaveLength(1)
+  const retryEventIndex = events.findIndex((event) => event.type === 'model-retry')
+  expect(retryEventIndex).toBeGreaterThan(events.findIndex((event) => event.type === 'rejected'))
+  expect(events[retryEventIndex]).toMatchObject({
+    attempt: 1,
+    message: 'fixture transport ended before terminal',
+  })
+  expect(events.slice(retryEventIndex + 1).find((event) => event.type === 'turn')).toBeDefined()
   expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
   const { budgetRequestId: previousBudget, ...previousRequest } = JSON.parse(history[1])
   const { budgetRequestId: retriedBudget, ...retriedRequest } = JSON.parse(history[2])

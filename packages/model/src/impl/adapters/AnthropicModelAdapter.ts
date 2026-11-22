@@ -16,12 +16,16 @@ class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter
   }
 
   /** 创建 Anthropic AI SDK LanguageModel 工厂。 */
-  public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+  public createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory {
     const apiKey = this.requireApiKey(config)
     const baseURL = this.resolveBaseURL(config)
     const anthropic = createAnthropic({
       apiKey,
       baseURL,
+      fetch,
     })
 
     return (modelId) =>

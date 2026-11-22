@@ -105,6 +105,7 @@ export class ProviderScriptRegistry
   private configPaths: readonly string[]
   private readonly clearRequireCache: boolean
   private readonly runtimeMetadataTimeoutMs: number
+  private readonly fetch: typeof globalThis.fetch
   private hostBridge: Partial<ProviderScriptHostBridge>
   private loadState: 'unloaded' | 'loading' | 'loaded' | AppError = 'unloaded'
   private activeConfigPath: Nullable<string> = null
@@ -119,6 +120,7 @@ export class ProviderScriptRegistry
   private readonly memorySources = new Map<ChatProviderId, RegisteredProviderScriptSource>()
 
   constructor(options: ProviderScriptRegistryOptions = {}) {
+    this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
     this.cwd = options.cwd ?? process.cwd()
     this.homeDir = options.homeDir ?? homedir()
     this.configPaths =
@@ -451,10 +453,13 @@ export class ProviderScriptRegistry
     const scriptRequire = createRequire(input.scriptPath)
     const scriptLog = logRuntime.tag(`ProviderScript.${input.scriptPath}`)
     return {
-      createOpenAI,
-      createAnthropic,
-      createGoogleGenerativeAI,
-      fetch: globalThis.fetch.bind(globalThis),
+      createOpenAI: (settings?: Parameters<typeof createOpenAI>[0]) =>
+        createOpenAI({ fetch: this.fetch, ...settings }),
+      createAnthropic: (settings?: Parameters<typeof createAnthropic>[0]) =>
+        createAnthropic({ fetch: this.fetch, ...settings }),
+      createGoogleGenerativeAI: (settings?: Parameters<typeof createGoogleGenerativeAI>[0]) =>
+        createGoogleGenerativeAI({ fetch: this.fetch, ...settings }),
+      fetch: this.fetch,
       require: scriptRequire,
       hostRequire: this.hostRequire,
       log: scriptLog,

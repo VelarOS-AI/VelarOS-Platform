@@ -31,6 +31,17 @@ const NetworkErrorCodes = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_SOCKET',
   'STREAM_READ_ERROR',
+  'ERR_CONNECTION_ABORTED',
+  'ERR_CONNECTION_CLOSED',
+  'ERR_CONNECTION_REFUSED',
+  'ERR_CONNECTION_RESET',
+  'ERR_CONNECTION_TIMED_OUT',
+  'ERR_INTERNET_DISCONNECTED',
+  'ERR_NETWORK_CHANGED',
+  'ERR_NAME_NOT_RESOLVED',
+  'ERR_PROXY_CONNECTION_FAILED',
+  'ERR_TIMED_OUT',
+  'ERR_TUNNEL_CONNECTION_FAILED',
 ])
 
 /** HTTP 成功建立流后，供应商仍可用机器码报告暂时服务故障。 */
@@ -250,6 +261,8 @@ function collectMessage(facts: ModelRetryErrorFacts, value: string, prefer = fal
   const index = facts.messages.indexOf(compact)
   if (prefer && index > 0) facts.messages.unshift(...facts.messages.splice(index, 1))
   if (/^[a-z][a-z0-9_]*$/iu.test(compact)) facts.codes.add(compact.toUpperCase())
+  const chromiumNetworkError = /\bnet::(ERR_[A-Z_]+)\b/u.exec(compact)?.[1]
+  if (chromiumNetworkError) facts.codes.add(chromiumNetworkError)
 }
 
 /** 文本里有没有出现名单里的任意一条。 */

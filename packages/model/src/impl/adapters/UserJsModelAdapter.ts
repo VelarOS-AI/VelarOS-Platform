@@ -104,7 +104,10 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
     super(providerIds, providers)
   }
 
-  public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+  public createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory {
     const adapter = this.evaluateAdapter(config)
     const createFactory = readUserAdapterExport(
       adapter,
@@ -164,7 +167,8 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
       return languageModelWrappers.withPromptCache(
         createLanguageModelFromDescriptor(
           config,
-          normalizeLanguageModelDescriptor(descriptor, 'Custom adapter model factory 执行失败')
+          normalizeLanguageModelDescriptor(descriptor, 'Custom adapter model factory 执行失败'),
+          fetch
         )
       )
     }

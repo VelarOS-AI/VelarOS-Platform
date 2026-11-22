@@ -17,7 +17,10 @@ class DeepSeekModelAdapter extends ModelAdapter implements ModelProviderAdapter 
   }
 
   /** 创建 DeepSeek chat model 工厂。 */
-  public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+  public createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory {
     const deepseek = createOpenAI({
       apiKey: this.requireApiKey(config),
       baseURL: this.resolveBaseURL(config),
@@ -26,6 +29,7 @@ class DeepSeekModelAdapter extends ModelAdapter implements ModelProviderAdapter 
       fetch: this.reasoningFallback.chatFetch({
         provider: config.provider,
         level: config.reasoningLevel ?? DefaultReasoningLevel,
+        fetch,
       }),
     })
 

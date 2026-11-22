@@ -611,6 +611,15 @@ export class ActLoop implements ActLoopApi {
                   },
                   controller.signal
                 )
+                if (!attemptSignal.aborted)
+                  yield {
+                    type: 'model-retry',
+                    runId,
+                    turnId: audit.ref.id,
+                    message: error instanceof Error ? error.message : String(error),
+                    attempt: repair + 1,
+                    maxAttempts: this.policy.recoveryAttempts,
+                  }
                 await modelProviderRetry.wait(
                   Math.min(30000, retryDelay! * 2 ** repair),
                   attemptSignal

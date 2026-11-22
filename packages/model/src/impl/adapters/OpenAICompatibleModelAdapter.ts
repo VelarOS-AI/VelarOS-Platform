@@ -40,7 +40,10 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
   }
 
   /** 创建兼容 provider 的 chat model 工厂。 */
-  public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
+  public createLanguageModelFactory(
+    config: ModelAdapterConfig,
+    fetch?: typeof globalThis.fetch
+  ): LanguageModelFactory {
     const apiKey = this.requireApiKey(config)
     const compatible = createOpenAI({
       apiKey,
@@ -50,7 +53,7 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
       fetch: this.reasoningFallback.chatFetch({
         provider: config.provider,
         level: config.reasoningLevel ?? DefaultReasoningLevel,
-        fetch: this.createCompatibleFetch(config.provider, apiKey),
+        fetch: this.createCompatibleFetch(config.provider, apiKey, fetch),
       }),
     })
 
@@ -77,14 +80,15 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
   /** 本地 OpenAI-compatible provider 需要在 SDK 请求前做少量 body/header 兼容。 */
   private createCompatibleFetch(
     provider: ChatProviderId,
-    apiKey: string
-  ): OpenAIModelFetch | undefined {
+    apiKey: string,
+    fetch: OpenAIModelFetch = (input, init) => globalThis.fetch(input, init)
+  ): OpenAIModelFetch {
     const shouldStripBlankAuth = isBlank(apiKey)
     const shouldInjectOllamaContext =
       provider === OllamaProviderId &&
       Boolean(this.localModelEnvironment.resolveOllamaContextWindow())
 
-    if (!shouldStripBlankAuth && !shouldInjectOllamaContext) return undefined
+    if (!shouldStripBlankAuth && !shouldInjectOllamaContext) return fetch
 
     return async (input, init) => {
       let nextInit = shouldStripBlankAuth ? stripBlankAuthorization(init) : init
@@ -92,7 +96,7 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
         ? this.injectOllamaContextOptions(input, nextInit)
         : nextInit
 
-      return globalThis.fetch(input, nextInit || undefined)
+      return fetch(input, nextInit || undefined)
     }
   }
 

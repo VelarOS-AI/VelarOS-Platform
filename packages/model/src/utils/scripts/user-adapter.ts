@@ -489,9 +489,13 @@ export function normalizeLanguageModelDescriptor(
 /** 在宿主侧按描述符造真正的 SDK 语言模型；脚本永远碰不到真实 fetch 与 apiKey 载体。 */
 export function createLanguageModelFromDescriptor(
   config: ModelAdapterConfig,
-  descriptor: UserAdapterLanguageModelDescriptor
+  descriptor: UserAdapterLanguageModelDescriptor,
+  fetch?: typeof globalThis.fetch
 ): LanguageModel {
-  const settings = normalizeProviderSettings(config, descriptor.settings)
+  const settings = {
+    ...normalizeProviderSettings(config, descriptor.settings),
+    fetch,
+  }
 
   switch (descriptor.providerKind) {
     case 'openai': {

@@ -45,7 +45,7 @@ export interface ProviderScriptHelpers {
   createAnthropic: OpaqueProviderFactory
   /** Google SDK 的 provider 工厂。 */
   createGoogleGenerativeAI: OpaqueProviderFactory
-  /** 全局 fetch。 */
+  /** 模型运行时的宿主网络传输。 */
   fetch: typeof fetch
   /** 以脚本自己的路径为基准的 require。 */
   require: NodeRequire

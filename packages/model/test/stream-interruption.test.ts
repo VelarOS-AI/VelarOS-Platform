@@ -90,6 +90,18 @@ test('INV-19 genuine socket failure retains transient classification and the rec
   })
 })
 
+test('Chromium proxy and network disruptions qualify for the existing retry budget', () => {
+  for (const code of [
+    'ERR_NETWORK_CHANGED',
+    'ERR_PROXY_CONNECTION_FAILED',
+    'ERR_CONNECTION_RESET',
+  ]) {
+    expect(planProviderRetry(new TypeError(`net::${code}`), { retryIndex: 1 })).toMatchObject({
+      kind: 'network',
+    })
+  }
+})
+
 test('INV-19 a failed terminal retains its measured usage and exact provider message without retrying authentication', async () => {
   const events = await collect([
     ...prefix,
