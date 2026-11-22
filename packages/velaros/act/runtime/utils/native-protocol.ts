@@ -1,9 +1,9 @@
-import { isFalse } from '@velaros-ai/core'
+import { isFalse, isPlainObject, isString } from '@velaros-ai/core'
 
 import { ObservationLimits } from '../contract/constants.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
 
-import { protocolConfig } from './script-protocol.js'
+import { protocolConfig, protocolFailure } from './script-protocol.js'
 
 /** 保留 exec 的原生入口名，其余声明遵循宿主命名。 */
 export function nativeToolName(
@@ -15,6 +15,18 @@ export function nativeToolName(
     : (options.names?.[kind] ?? (kind === 'execute' ? 'exec' : kind))
 }
 
+/** 部分工具传输会把 options 对象编码成字符串。解开一层后仍按原合同检查。 */
+export function nativeProgramToolInput(input: unknown): unknown {
+  if (!isPlainObject(input) || !isString(input.options)) return input
+  try {
+    const options: unknown = JSON.parse(input.options)
+    if (isPlainObject(options)) return { ...input, options }
+  } catch {
+    // 解析失败和解析后不是对象都提示模型提交对象。
+  }
+  throw protocolFailure('options 请直接传 JSON 对象，外层使用花括号。')
+}
+
 /** 原生传输的固定用法：按工具名称与 JSON 参数描述，示例随当前许可裁剪。 */
 export function nativeProtocolRules(options: ScriptProtocolOptions): string {
   const config = protocolConfig(options)
@@ -24,8 +36,14 @@ export function nativeProtocolRules(options: ScriptProtocolOptions): string {
   const hasProgram = allowed.includes('execute') || observationPrograms
   return [
     '需要操作时使用已提供的原生工具，参数是符合工具 Schema 的 JSON 对象。同一响应可提交多个独立工具调用，各自拥有调用身份和回执；实际执行次序由 Runtime 调度。已有工作仍在运行且当前只需等待时，仅返回普通文本进度，Runtime 挂起模型调用并在执行进展、子任务结果或新输入后恢复。',
+    allowed.includes('execute') || allowed.includes('observe')
+      ? 'code 是 JavaScript 源码字符串，options 直接传 JSON 对象。程序无需选项时可省略 options。'
+      : '',
+    allowed.includes('execute')
+      ? `${name('execute')} 调用示例：{"code":"console.log(1)","options":{"timeoutMs":60000}}。timeoutMs 用整数毫秒。`
+      : '',
     hasProgram
-      ? '程序源码放 code，程序选项放 options。code 按 JSON 字符串编码，解码后的值作为 JavaScript 源码执行；引号、换行和反斜线按 JSON 规则转义。options.input 与 options.inputRef:"host:名称" 互斥；通过 import {input} from "velaros:program" 读取参数。其他字段包括 options.modules、options.blobs:{名称:额外原文}。'
+      ? 'code 中的引号、换行和反斜线按工具 JSON 规则编码。options.input 与 options.inputRef:"host:名称" 二选一，通过 import {input} from "velaros:program" 读取。附属模块放 options.modules，原文放 options.blobs。'
       : '',
     hasProgram
       ? `复制或转换已有内容时，先在程序内读取文件或授权来源引用，再由实际读到的值生成输出及校验预期；模型重写的副本只能证明自洽。新写的文档、补丁和源码片段随使用它的程序一次提交到 ${allowed.includes('execute') ? name('execute') : name('observe')} 的 options.blobs，code 写读取和应用逻辑。编辑中的大段或多行 oldText/newText 同样放 options.blobs，通过 blobs.oldText/blobs.newText 引用，不内嵌为字符串、模板字符串或字符串拼接；从文件读取并截取的旧文直接用读取值，短定位文本可内联；反引号、插值标记和反斜线保持原样，只经过工具 JSON 编码。原文示例：${JSON.stringify({ code: 'import {blobs} from "velaros:program"; console.log(blobs.content)', options: { blobs: { content: '新写的内容' } } })}。`

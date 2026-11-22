@@ -235,6 +235,9 @@ export function protocolProgramRules(options: ScriptProtocolOptions): string {
     allowed.includes('blobs')
       ? '命名原文唯一，同批程序共享并各自保存；新程序需提供自己的绑定。'
       : '',
+    allowed.includes('execute') || (allowed.includes('observe') && !isFalse(observationPrograms))
+      ? '本轮新写的大段原文放入 blobs，包括文件正文、补丁、传给其他解释器的多行脚本（如 PowerShell、Bash）和多行 SQL。JavaScript 程序通过 velaros:program 读取 blobs，再把原文传给目标操作。不要用 String.raw、模板字符串或拼接把这些原文内嵌到 JavaScript 源码。已有原文直接从文件或授权引用读取。'
+      : '',
     allowed.includes('execute') || allowed.includes('observe')
       ? '引用仅用当前会话归档；编辑原文需唯一匹配，冲突后按当前版本重改。'
       : '',
@@ -353,13 +356,13 @@ export function protocolInstructions(
   return [
     `ScriptAct 本帧控制。本次允许声明：${allowed.map((name) => names[name]).join(', ')}；其他声明禁止。当前帧标记：${marker}。普通 Markdown 展示范围：首个控制头前的进度与 done 后的答复；控制段之间及闭合后的文字只保留在审计原文中。固定语法见系统指令，只使用本帧标记。`,
     program
-      ? `继续工作时，响应从下面的控制头开始，在段内编写本轮实际需要的${program === 'observe' ? '只读' : ''}程序，再以闭合行结束。每个实际程序只声明一次；同一响应里重复声明会真实执行多次。省略执行前的进度说明，结果由下一轮回执确认。\n${marker} ${names[program]}()\n// 在这里编写本轮任务程序。\n${marker}`
+      ? `继续工作时，用下面的控制头声明本轮实际需要的${program === 'observe' ? '只读' : ''}程序，再以闭合行结束。每个实际程序只声明一次，同一响应里重复声明会真实执行多次。省略执行前的进度说明，结果由下一轮回执确认。\n${marker} ${names[program]}()\n// 在这里编写本轮任务程序。\n${marker}`
       : '',
     allowed.includes('observe') && !observationPrograms
       ? `当前只读程序不可用，历史选择与退订仍可用；空段示例：\n${marker} ${names.observe}({history:{kind:"list"}})\n${marker}\n退订将头选项整体改为 {clear:true}。`
       : '',
     allowed.includes('blobs') && program
-      ? `需要大段原文时可先声明 ${names.blobs}("名称")；${names.blobs} 原文结束后也必须先独立输出闭合行：\n${marker}\n再另起下一控制头。下一控制头不能代替闭合行，每个原文段和程序段分别闭合。`
+      ? `本轮新写的大段原文先用 ${names.blobs}("名称") 声明，再提交读取它的程序。${names.blobs} 原文结束后也必须先独立输出闭合行：\n${marker}\n再另起下一控制头。下一控制头不能代替闭合行，每个原文段和程序段分别闭合。`
       : '',
     allowed.includes('done')
       ? `任务确已完成时，先输出完成控制行，再写总结与验证结果：\n${marker} ${names.done}\n任务完成的说明文字。\nruntime.goal 为 active 且目标已达成时，第一行改为：\n${marker} ${names.done}("完成依据")\n完成仍需通过 Runtime 校验。`

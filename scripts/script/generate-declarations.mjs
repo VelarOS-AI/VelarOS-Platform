@@ -1424,7 +1424,20 @@ if (!OutputOption && IncludeNative) {
           definitions: generatedSchema.definitions,
         }
       : generatedSchema
-    return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(schema)} as const\n`
+    // 在工具参数的第一层公开对象类型，兼容不解析 $ref 的服务端工具解析器。
+    const options = schema.properties?.options
+    const nativeSchema = options
+      ? {
+          ...schema,
+          properties: {
+            ...schema.properties,
+            options: options.$ref
+              ? schema.definitions[options.$ref.slice('#/definitions/'.length)]
+              : { type: 'object', ...options },
+          },
+        }
+      : schema
+    return `/** ${name} 的正式入参合同。 */\nexport const ${name}Schema = ${JSON.stringify(nativeSchema)} as const\n`
   })
   nativeSurfaceBlocks.set(NativeSurfacePath, [declarations.join('\n').trimEnd()])
 }

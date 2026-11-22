@@ -17,6 +17,8 @@
 
 宿主可用 `allowed` 裁剪控制面，用 `names` 配置名称。系统说明、工具 Schema 和当前帧示例都随所选传输生成。文本控制段的边界规则见 [文本协议](scriptact-text-protocol.md)。
 
+原生 `exec` 和 `observe` 的 `code` 是字符串，`options` 是对象。服务端把 `options` 包成一层 JSON 字符串时，Runtime 解码为对象后继续按原合同和程序规则校验。新写的多行外部脚本、文件正文和补丁作为原文通过 `blobs` 传递。
+
 ## 一次运行
 
 1. Agent 的 `ActRunService` 与 `ActLoop` 接纳并保存输入，维护运行身份、预算、取消和事件序号。

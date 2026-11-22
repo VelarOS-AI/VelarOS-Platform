@@ -23,7 +23,7 @@ import type {
 } from '../types/native-tools.js'
 import type { ScriptProtocolRecord } from '../types/program.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
-import { nativeToolName } from '../utils/native-protocol.js'
+import { nativeProgramToolInput, nativeToolName } from '../utils/native-protocol.js'
 import { scriptInputCopy } from '../utils/program-context.js'
 import { protocolConfig, protocolFailure } from '../utils/script-protocol.js'
 import { compileScriptRecords } from '../utils/script-records.js'
@@ -62,7 +62,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
       throw protocolFailure('原生工具名称必须唯一')
     const descriptions = {
       execute:
-        '执行一次程序。code 写 JavaScript 逻辑；复制或转换已有内容时，直接读取来源，在程序内由该值生成输出及校验预期。options.blobs 传递新写的文档、补丁和源码片段；编辑中的大段或多行 oldText/newText 也必须放 blobs，code 只引用，不内嵌大块字符串；旧文可直接使用文件读取值，通过 import {blobs} from "velaros:program" 读取，独立于 JavaScript 字面量编码。省略 options.async 使用短等待返回；true 立即后台，false 优先等待完成；新输入、并行程序收束或子任务进展会提前返回执行身份，原程序继续。options.retain 控制结果保留。等待已有执行完成时，用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}；单次等待 1..60000 毫秒，默认 60000，到期返回当前状态，目标继续运行，无需循环 read 或运行定时器。检查/停止用 kind:"read"/"stop"；read/wait 可加 cursor/limit。每次只受理一个等待，等待与检查/停止通道独立，普通执行槽满时仍可用。依赖步骤顺序 await；检查执行结果后继续。',
+        '执行一次程序。code 填 JavaScript 源码字符串。options 直接填 JSON 对象，无选项时省略。新写的大段原文（如多行 PowerShell、文件正文、补丁）放 options.blobs，程序通过 import {blobs} from "velaros:program" 读取。已有内容直接从来源读取，用实际读取值生成输出及校验预期。省略 options.async 使用短等待返回，true 立即后台，false 优先等待完成。新输入、并行程序收束或子任务进展会提前返回执行身份，原程序继续。options.retain 控制结果保留。等待已有执行完成时，用空 code 与 options.control:{kind:"wait",executionId,waitMs:60000}。单次等待 1..60000 毫秒，默认 60000，到期返回当前状态，目标继续运行，无需循环 read 或运行定时器。检查或停止用 kind:"read" 或 "stop"。read/wait 可加 cursor/limit。每次只受理一个等待，等待与检查/停止通道独立，普通执行槽满时仍可用。依赖步骤顺序 await，检查执行结果后继续。',
       observe: isFalse(this.config.observationPrograms)
         ? `只读程序观察不可用：${this.config.observationUnavailableReason ?? '宿主未声明只读程序约束支持'}。空 code 仍可配 options.clear:true 退订，或 options.history:{kind:"list",cursor?,limit?}/{kind:"read",snapshotId,pointer?,offset?,limit?} 选择已授权局部历史；list 默认 ${ObservationLimits.defaultList}、最多 ${ObservationLimits.maxList} 项，read 默认 ${ObservationLimits.defaultReadChars}、最多 ${ObservationLimits.maxReadChars} 字符。history 只选择下一帧 dynamic，不替换持续观察；history 与 clear 互斥且不能附其他选项或源码，不能与 exec 同响应，也不能用普通 exec 冒充只读观察。`
         : `持续关注跨轮会变化的小状态、摘要、差异或引用时登记只读观察，下个正常业务轮采集；按任务需要使用，不必每轮调用。观察正文只进入当前 dynamic，默认 ${ObservationLimits.defaultChars}、最多 ${ObservationLimits.maxChars} 字符；普通读取、大文件与动作结果用 exec，按正常结果增量交付。每份响应至多一次 observe，不能与 exec 同响应。options.clear:true 退订，options.edits 局部修改。空 code 配 options.history:{kind:"list",cursor?,limit?} 或 {kind:"read",snapshotId,pointer?,offset?,limit?}，只选择下一帧的局部历史，不替换持续观察；list 默认 ${ObservationLimits.defaultList}、最多 ${ObservationLimits.maxList} 项，read 默认 ${ObservationLimits.defaultReadChars}、最多 ${ObservationLimits.maxReadChars} 字符。history 不得附带其他选项或源码；引用、编辑、快照和清除同样使用空 code。只读采集不可用时不得用普通 exec 冒充观察。`,
@@ -136,10 +136,12 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
             ? this.observationSchema
             : NativeExecutionSchema
     let input: NativeExecutionInput | NativeObservationInput | NativeBlobInput | NativeDoneInput
+    const toolInput =
+      kind === 'execute' || kind === 'observe' ? nativeProgramToolInput(call.input) : call.input
     try {
       input = modelRequestEncoder.output(
         { type: 'json', name: call.name, description: '控制声明', schema },
-        call.input
+        toolInput
       ) as typeof input
     } catch (error) {
       throw protocolFailure(

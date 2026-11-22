@@ -581,7 +581,9 @@ test('native observation and execution expose only their own options', () => {
   const decoder = new NativeTurnDecoder()
   const options = (name) => {
     const schema = decoder.response.tools.find((tool) => tool.name === name).schema
-    return schema.definitions[schema.properties.options.$ref.split('/').at(-1)].properties
+    assert.equal(schema.properties.options.type, 'object')
+    assert.equal(schema.properties.options.$ref, undefined)
+    return schema.properties.options.properties
   }
   const observation = options('observe')
   const execution = options('exec')
@@ -591,6 +593,38 @@ test('native observation and execution expose only their own options', () => {
   assert(observation.snapshot && observation.refresh)
   assert(execution.async && execution.retain)
   for (const key of ['snapshot', 'refresh', 'clear']) assert.equal(execution[key], undefined)
+  assert.equal(NativeObservationControlSchema.properties.options.type, 'object')
+})
+
+test('native program tools unwrap quoted options once and still validate the decoded object', () => {
+  const options = { timeoutMs: 60000, blobs: { content: raw }, input: '{"keep":"this string"}' }
+  assert.deepEqual(
+    decode('tools', [{ kind: 'execute', code: source, options: JSON.stringify(options) }]),
+    decode('tools', [{ kind: 'execute', code: source, options }])
+  )
+
+  for (const observationPrograms of [true, false]) {
+    const result = decode('tools', [{ kind: 'observe', options: '{"clear":true}' }], {
+      observationPrograms,
+    })
+    assert.equal(result.submission.observe, null)
+  }
+
+  for (const options of ['{', 'null', '[]', 'true', JSON.stringify('{"timeoutMs":60000}')])
+    assert.throws(
+      () => decode('tools', [{ kind: 'execute', code: source, options }]),
+      /options 请直接传 JSON 对象/
+    )
+  for (const options of ['{"timeoutMs":"60000"}', '{"unexpected":true}', '{"blobs":[]}'])
+    assert.throws(
+      () => decode('tools', [{ kind: 'execute', code: source, options }]),
+      /工具入参不符合声明合同/
+    )
+  assert.throws(() =>
+    decode('tools', [
+      { kind: 'execute', code: source, options: '{"control":{"kind":"read","executionId":"job"}}' },
+    ])
+  )
 })
 
 test('native raw-text guidance produces self-contained executable calls for scoped names', () => {
@@ -681,6 +715,7 @@ test('actual requests carry only their selected transport syntax with scoped nam
   const instructions = new Map()
   for (const transport of ['tools', 'text']) {
     let support
+    let nativeRound = 0
     const runtime = await createRuntime(
       {
         storage: await createTestStorage(join(root, transport)),
@@ -698,6 +733,11 @@ test('actual requests carry only their selected transport syntax with scoped nam
             assert(support, 'The real runner support query must precede model dispatch')
             instructions.set(transport, request.instructions)
             assert.match(request.instructions, /完整响应全部校验后才执行/)
+            assert.match(
+              request.instructions,
+              /大段原文放入 blobs[^\n]+多行脚本（如 PowerShell、Bash）/
+            )
+            assert.match(request.instructions, /不要用 String\.raw[^\n]+内嵌到 JavaScript 源码/)
             if (transport === 'tools') {
               assert.equal(request.response.type, 'tools')
               const tool = request.response.tools.find((item) => item.name === 'watch')
@@ -719,13 +759,34 @@ test('actual requests carry only their selected transport syntax with scoped nam
               )
               assert.match(request.instructions, /options\.sourceRef/)
               assert.match(request.instructions, /literal 用 name\/text/)
+              assert.match(request.instructions, /options 直接传 JSON 对象/)
+              assert.match(
+                request.instructions,
+                /run 调用示例：\{"code":"console.log\(1\)","options":\{"timeoutMs":60000\}\}/
+              )
               assert.doesNotMatch(
                 request.instructions + request.compiledPrompt + request.protocol,
                 /控制头|源码段|空段|闭合标记|当前帧标记|@@s/
               )
-              yield {
-                type: 'tool-call',
-                value: { id: 'done', name: 'finish', input: { message: 'Checked' } },
+              nativeRound += 1
+              if (nativeRound === 1) {
+                yield {
+                  type: 'tool-call',
+                  value: {
+                    id: 'run',
+                    name: 'run',
+                    input: { code: 'console.log(1)', options: '{"timeoutMs":60000}' },
+                  },
+                }
+              } else {
+                const exchange = request.history.findLast((item) =>
+                  item.toolExchange?.calls.some((call) => call.name === 'run')
+                )?.toolExchange
+                assert(exchange?.results[0].output.resultRef)
+                yield {
+                  type: 'tool-call',
+                  value: { id: 'done', name: 'finish', input: { message: 'Checked' } },
+                }
               }
             } else {
               assert.equal(request.response.type, 'text')
@@ -762,6 +823,7 @@ test('actual requests carry only their selected transport syntax with scoped nam
       const events = await Array.fromAsync(session.submit('Explain the supported protocol.'))
       assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
       assert.equal(events.filter((event) => event.type === 'error').length, 0)
+      if (transport === 'tools') assert.equal(nativeRound, 2)
     } finally {
       await runtime.close()
     }

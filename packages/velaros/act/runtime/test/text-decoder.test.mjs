@@ -415,6 +415,10 @@ test('INV-63 a new header before closure names the active declaration and exact 
     )
   }
   assert(new ScriptTurnDecoder(marker).instructions.includes('blobs 原文结束后也必须'))
+  assert.match(
+    new ScriptTurnDecoder(marker, { names: { blobs: 'raw', execute: 'run' } }).instructions,
+    /先用 raw\("名称"\) 声明，再提交读取它的程序/
+  )
   assert(
     !new ScriptTurnDecoder(marker, { allowed: ['execute'] }).instructions.includes(
       '原文结束后也必须'
