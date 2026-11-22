@@ -63,6 +63,8 @@ declare module 'velaros:agents' {
       readonly plannedWrites: readonly string[]
     }
     readonly task: string
+    /** 可选的展示标题。任务正文由 task 单独提供。 */
+    readonly title?: string
     readonly profile?: string
     readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
   }
@@ -173,6 +175,8 @@ declare module 'velaros:agents' {
     readonly collaboration?: AgentStart['collaboration']
     /** 新一阶段的目标与说明。 */
     readonly input: string
+    /** 本次续跑可单独给一个展示标题。 */
+    readonly title?: string
     /** 可选替换为另一个宿主已配置的能力档案。 */
     readonly profile?: string
     /** 本次继续附加的父会话材料。 */

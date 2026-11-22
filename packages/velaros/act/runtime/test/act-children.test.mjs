@@ -427,6 +427,7 @@ test('turn traces summarise the sub-tasks their executions started, with the lat
   const [agent] = first.agents
   assert.equal(agent.profile, 'read')
   assert.equal(agent.task, '数一数根目录的文件')
+  assert.equal(agent.title, undefined)
   assert.equal(agent.status, 'completed')
   assert.match(agent.answer, /找到三个文件/)
   assert.equal(agent.answerTruncated, false)
@@ -450,30 +451,34 @@ test('a resumed sub-task is summarised per phase: each start or resume shows onl
       if (++main === 1) {
         yield task(
           request,
-          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'先看一遍',profile:'read'});output(await wait({id:job.id}));"
+          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({title:'  初次检查  ',task:'先看一遍',profile:'read'});output(await wait({id:job.id}));"
         )
         yield { type: 'finish', reason: 'stop' }
       } else if (main === 2) {
         const job = runtimeFrame(request).children[0]
         yield task(
           request,
-          `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},input:'再看一遍'});output(await wait({id:job.id}));`
+          `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},title:'复查结果',input:'再看一遍'});output(await wait({id:job.id}));`
         )
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request, 'parent complete')
     }),
   })
   const turns = []
-  for await (const event of f.session.submit('look twice'))
+  for await (const event of f.session.submit('look twice')) {
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
     if (event.type === 'turn') turns.push(event.turnId)
+  }
   const [first, second] = await Promise.all(turns.slice(0, 2).map((id) => f.session.trace(id)))
   assert.equal(first.agents.length, 1)
   assert.equal(second.agents.length, 1)
   assert.equal(second.agents[0].id, first.agents[0].id)
   assert.equal(first.agents[0].task, '先看一遍')
+  assert.equal(first.agents[0].title, '初次检查')
   assert.equal(first.agents[0].status, 'completed')
   assert.match(first.agents[0].answer, /第一段回答/)
   assert.equal(second.agents[0].task, '再看一遍')
+  assert.equal(second.agents[0].title, '复查结果')
   assert.equal(second.agents[0].status, 'completed')
   assert.match(second.agents[0].answer, /第二段回答/)
   assert(Number.isFinite(first.agents[0].durationMs))

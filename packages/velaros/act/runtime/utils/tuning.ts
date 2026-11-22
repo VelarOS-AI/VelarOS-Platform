@@ -28,6 +28,8 @@ export const ActRuntimeTuning = Object.freeze({
   modelToolContextChars: 32000,
   /** 子任务派发正文内父输入摘录的总字符上限，完整原文仍由普通文件提供。 */
   parentTaskPreviewChars: 8192,
+  /** 子任务追踪中单行展示标题的字符上限。 */
+  agentTitleChars: 120,
   /** 原始状态中同类成功回执的汇总起点；模型展示另按实际编码大小选择。 */
   receiptGroupCount: 9,
   /** 同一观察代码连续失败后暂停自动重跑的次数。 */

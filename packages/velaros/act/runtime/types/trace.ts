@@ -152,6 +152,8 @@ export interface ActAgentSummary {
   readonly executionId: string
   /** 选用的配置名。 */
   readonly profile: string
+  /** 本次派发或续跑指定的展示标题。 */
+  readonly title?: string
   /** 派发时交代的任务（续跑时是这一阶段的说明），受本页正文预算约束。 */
   readonly task: string
   /** 这一段现在的状态。 */

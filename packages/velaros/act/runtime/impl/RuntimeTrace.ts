@@ -822,7 +822,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const item of dispatched) {
       if (!item.executionId) continue
       for (const invocation of journal.get(item.executionId) ?? []) {
-        const { binding, operation } = invocation.prepared
+        const { binding, input, operation } = invocation.prepared
         const job: unknown = invocation.receipt?.value
         if (
           binding.moduleId !== 'velaros:agents' ||
@@ -838,6 +838,14 @@ export class RuntimeTrace implements RuntimeTraceApi {
         const phase = (await childPhases(job.id))[index]
         const latest = phase?.job ?? job
         const taskText = agentTasks.get(invocation) ?? ''
+        const title =
+          isPlainObject(input) && isString(input.title)
+            ? input.title
+                .trim()
+                .replace(/\s+/gu, ' ')
+                .slice(0, ActRuntimeTuning.agentTitleChars)
+                .trimEnd()
+            : ''
         const resultId =
           isPlainObject(latest.result) && isString(latest.result.id) ? latest.result.id : ''
         const resultRecord = recordById.get(resultId)
@@ -857,6 +865,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
           sessionId: job.sessionId,
           executionId: item.executionId,
           profile: isString(latest.profile) ? latest.profile : job.profile,
+          ...(title ? { title } : {}),
           task: taskText,
           status,
           error: isString(latest.error) ? latest.error : null,

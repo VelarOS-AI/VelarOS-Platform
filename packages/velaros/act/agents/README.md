@@ -65,6 +65,7 @@ try {
 
 ## 约定
 
+- `start({ title, task })` 和 `resume({ id, title, input })` 可用 `title` 单独设置本次任务的显示标题。回合追踪将标题整理成一行，最多 120 字符，并保留原任务正文。
 - 提供 `agents` 才挂载子任务；profile 名称、模型、模块白名单与预算由宿主显式指定。省略时不挂载，不接受布尔开关。需要 Node 操作系统范围的 profile 须显式设置 `node: true`，并由父运行时提供 Node 执行口。
 - 只有主线能派子任务，子任务里没有 `velaros:agents`；`velaros:interaction` 主线与子任务都有，搜索与整理支线没有。
 - `start` 只要 `task`，立刻交回 job，子任务在后台开会话；不给 `profile` 用宿主给的第一个配置。配置的 `modules` 是子任务能用的模块，超出父任务实际有的能力时子任务直接失败，原因在 job 的 `error` 里；续跑时重新核对。
