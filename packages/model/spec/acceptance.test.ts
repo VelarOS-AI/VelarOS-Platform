@@ -101,7 +101,7 @@ describe('model 不变量验收', () => {
           defaultModel: selection.model,
           enabled: true,
           apiKey: 'system-key',
-          baseURL: 'https://system.example/v1',
+          baseURL: 'https://system.example',
         },
       ],
       openRouter: { useFreeModelsForDebug: false },
@@ -137,7 +137,7 @@ describe('model 不变量验收', () => {
       ).rejects.toMatchObject({ code: 'MODEL_PROVIDER_UNAVAILABLE' })
     }
     expect(context.providerRuntimeConfigs[0]!.apiKey).toBe('system-key')
-    expect(context.providerRuntimeConfigs[0]!.baseURL).toBe('https://system.example/v1')
+    expect(context.providerRuntimeConfigs[0]!.baseURL).toBe('https://system.example')
     expect(requests).toEqual([
       { url: 'https://system.example/v1/models', authorization: 'Bearer system-key' },
       { url: 'https://request.example/v1/models', authorization: 'Bearer request-key' },

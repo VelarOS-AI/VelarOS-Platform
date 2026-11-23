@@ -59,6 +59,8 @@ const title = await client.generateText({
 
 模型列表由宿主经当前服务商、地址与密钥动态获取，传给渲染进程；同步元数据不再返回可选列表或默认型号。远端失败和空结果不由预置型号补齐。
 
+OpenAI 兼容网关的服务地址可以省略 `/v1`，例如 `https://gateway.example/proxy` 和 `https://gateway.example/proxy/v1` 使用同一地址。已有的 API 版本路径会保留。
+
 渲染进程只从 `./catalog` 取服务商与能力元数据：
 
 ```ts

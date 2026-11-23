@@ -70,7 +70,7 @@ export interface ModelProviderCollectionApi {
     selection: Pick<ModelSelection, 'apiKey' | 'provider'>,
     env?: Readonly<Record<string, string | undefined>>
   ): string
-  /** 取这次调用的 baseURL：selection 里写了就用它，否则用清单里的缺省地址；末尾分隔符一律去掉。 */
+  /** 取本次调用的服务地址，去掉末尾分隔符，并补齐 OpenAI 兼容网关省略的版本路径。 */
   resolveBaseURL(selection: Pick<ModelSelection, 'baseURL' | 'provider'>): string
   /** 这个 provider 的缺省运行时配置，产品首次配置照着它建。 */
   getDefaultRuntimeConfig(provider: ChatProviderId): AgentProviderRuntimeConfig
@@ -205,7 +205,18 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
       ? selection.baseURL
       : this.requireOperationalManifest(selection.provider).defaultBaseURL
 
-    return trimTrailingPathSeparators(raw)
+    const baseURL = trimTrailingPathSeparators(raw)
+    if (selection.provider !== 'openai-compatible-gateway' || !URL.canParse(baseURL)) return baseURL
+
+    // 网关可能部署在代理前缀下，也可能明确选用了其他 API 版本。
+    const url = new URL(baseURL)
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      /\/v\d+(?:(?:alpha|beta)\d*)?(?:\/|$)/u.test(url.pathname)
+    )
+      return baseURL
+
+    return `${baseURL}/v1`
   }
 
   public getDefaultRuntimeConfig(provider: ChatProviderId): AgentProviderRuntimeConfig {
