@@ -1,6 +1,7 @@
 import type {
   AgentProviderRuntimeConfig,
   ChatProviderId,
+  MediaGenerationKind,
   ModelInputModality,
   OpenRouterProviderRoutingPreferences,
   ProviderModelCatalog,
@@ -43,6 +44,8 @@ export interface ProviderModelListRequest {
 
 /** 从远端 `/models` 响应里读出来的一条模型；字段缺席表示这家没给。 */
 export interface RemoteProviderModelEntry {
+  readonly mediaGeneration?: MediaGenerationKind
+  readonly speechVoice?: string
   readonly id: string
   readonly label?: string
   readonly contextWindow?: number

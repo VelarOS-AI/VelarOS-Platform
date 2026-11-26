@@ -87,6 +87,10 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 | `@velaros-ai/model/catalog` | 任何进程（含渲染进程） | 可移植数据加一份 `modelCatalog`：内置 provider 清单与静态目录、同 provider 内选型、上下文窗口、本机 Ollama 解析 |
 | `@velaros-ai/model/contracts` | 任何进程 | 常量表（provider 清单、错误码 `ModelErrorCodes`、环境变量表）与可移植数据类型 |
 
+### 专用媒体生成
+
+解析器在已识别的图片、视频或语音模型上返回 `mediaGenerator`。宿主可以直接用本轮文字调用该端口，并用取消信号约束请求、轮询和下载，把成功结果中的二进制数据保存为宿主自己的媒体文件。支持 OpenRouter 专用图片、视频和语音端点，以及 OpenAI 兼容的图片和语音端点。
+
 ## 约定
 
 - `ModelSelection` 只必填 provider 与 model。未提供的 apiKey/baseURL 从当次 `ModelRuntimeContext.providerRuntimeConfigs` 解析；非空覆盖仅作用于该次请求，不回写供应商配置。直接解析器与 unknown 输入入口使用同一套规则，未启用、无适配器或缺凭据时仍报错。

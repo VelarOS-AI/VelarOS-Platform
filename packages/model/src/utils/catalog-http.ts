@@ -157,6 +157,15 @@ export function readRemoteModelEntries(
         return [
           {
             id: item.id,
+            speechVoice: isArray(item.supported_voices)
+              ? item.supported_voices.flatMap((voice) =>
+                  isString(voice)
+                    ? [voice]
+                    : isPlainObject(voice) && isString(voice.id)
+                      ? [voice.id]
+                      : []
+                )[0]
+              : undefined,
             contextWindow: toOptional(
               toPositiveInteger(item.context_length ?? item.context_window)
             ),

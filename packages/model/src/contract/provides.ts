@@ -27,6 +27,7 @@ export type {
 export type { ProviderScriptRegistryApi } from '../impl/providers/ProviderScriptRegistry'
 export type { VelarCloudModelRuntimeApi } from '../impl/providers/VelarCloudModelRuntime'
 export type { AiSdkModelRequestTransportOptions } from '../impl/requests/AiSdkModelRequestTransport'
+export type { MediaGenerationApi } from '../impl/requests/MediaGeneration'
 export type { ModelProfilesApi } from '../impl/requests/ModelProfiles'
 export type { ModelProviderRetryApi } from '../impl/requests/ModelProviderRetry'
 export type {

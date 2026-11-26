@@ -32,7 +32,11 @@ export interface AgentProviderAdapterConfig {
   source: string
 }
 
+export type MediaGenerationKind = 'image' | 'video' | 'audio'
+
 export interface ProviderModelCatalogEntry {
+  mediaGeneration?: MediaGenerationKind
+  speechVoice?: string
   id: string
   label: string
   contextWindow?: number

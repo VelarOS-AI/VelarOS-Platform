@@ -2,6 +2,8 @@ import type { OpenAIProviderSettings } from '@ai-sdk/openai'
 import type { LanguageModelV3CallOptions } from '@ai-sdk/provider'
 import type { LanguageModel } from 'ai'
 
+import type { MediaGenerationApi } from '../contract/provides'
+
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
@@ -51,10 +53,16 @@ export interface ResolvedAgentModelRuntime {
   contextWindow?: number
   /** Explicit concrete-model input contract; unknown metadata allows a provider attempt. */
   supportedInputModalities: readonly ModelInputModality[]
+  mediaGenerator?: MediaGenerationApi
   modelRequestOptions?: ModelRequestOptions
   resolutionSource: 'provider-collection'
   resolutionTrace: ModelResolutionTraceEntry[]
   fallbackReason?: string
+}
+
+export interface MediaGenerationResult {
+  readonly mediaType: string
+  readonly bytes: Uint8Array
 }
 
 /** 解析轨迹的一行：这个 provider/模型被选中还是跳过，跳过的话为什么。 */

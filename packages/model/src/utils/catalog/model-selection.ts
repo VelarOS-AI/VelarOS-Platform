@@ -6,12 +6,20 @@ import {
 } from '../../contract/constants.js'
 import type {
   ChatProviderId,
+  MediaGenerationKind,
   ProviderModelResolution,
   VelarCloudManagedProviderId,
 } from '../../types/model'
 import type { SharedProviderCatalog } from '../../types/providers'
 
 import { findSharedProviderCatalogDefinition } from './provider-catalogs'
+
+/** 识别 OpenAI 专用图片和语音端点的模型系列。 */
+export function openAiMediaKind(model: string): MediaGenerationKind | undefined {
+  if (/^(gpt-image-|dall-e-|chatgpt-image-)/iu.test(model)) return 'image'
+  if (/^(tts-1|gpt-4o-mini-tts)(?:$|-)/iu.test(model)) return 'audio'
+  return undefined
+}
 
 /** 官方能力默认值只用于官方 HTTPS 端点，兼容端点由宿主显式声明能力。 */
 export function isOfficialOpenAiEndpoint(baseURL: string): boolean {

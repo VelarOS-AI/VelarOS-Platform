@@ -93,7 +93,8 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
       providerScriptRegistry,
       this.providerCollection,
       environment,
-      this.providerModelCatalogService
+      this.providerModelCatalogService,
+      options.fetch
     )
     this.agentModelRuntime = new AgentModelRuntime(
       this.modelAdapterRegistry,

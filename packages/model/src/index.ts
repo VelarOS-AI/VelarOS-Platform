@@ -15,6 +15,7 @@ export type {
   AgentModelRuntimeApi,
   AiSdkModelRequestTransportOptions,
   LocalModelEnvironmentApi,
+  MediaGenerationApi,
   ModelAdapterRegistryApi,
   ModelCatalogApi,
   ModelProfilesApi,
@@ -69,6 +70,7 @@ export type {
   EmbeddingRequest,
   LanguageModelFactory,
   ModelAdapterConfig,
+  MediaGenerationResult,
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'

@@ -7,6 +7,9 @@ import {
   OpenRouterAutoModelId,
   OpenRouterFreeModelId,
 } from '../../contract/constants.js'
+import { MediaGeneration } from '../requests/MediaGeneration'
+import { openAiMediaKind } from '../../utils/catalog/model-selection'
+
 import type { ResolvedAgentModelRuntime } from '../../types/adapters'
 import type {
   AgentProviderAdapterConfig,
@@ -73,7 +76,8 @@ class AgentModelResolver implements AgentModelResolverApi {
     private readonly providerScriptRegistry: ProviderScriptRegistryPort,
     private readonly providers: ModelProviderCollectionApi,
     private readonly localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
-    private readonly modelCatalog?: Pick<ProviderModelCatalogApi, 'resolveModelCapabilities'>
+    private readonly modelCatalog?: Pick<ProviderModelCatalogApi, 'resolveModelCapabilities'>,
+    private readonly fetch: typeof globalThis.fetch = globalThis.fetch
   ) {}
 
   public async resolve(
@@ -220,6 +224,12 @@ class AgentModelResolver implements AgentModelResolverApi {
       }
     })
 
+    const mediaKind =
+      input.providerId === 'openrouter'
+        ? discoveredModel?.mediaGeneration
+        : input.providerId === 'openai' || input.providerId === 'openai-compatible-gateway'
+          ? openAiMediaKind(runtimeModel)
+          : undefined
     return {
       provider: this.modelAdapterRegistry.createLanguageModelFactory({
         provider: input.providerId,
@@ -239,6 +249,19 @@ class AgentModelResolver implements AgentModelResolverApi {
         discoveredModel?.inputModalities ??
         catalogInputModalities ??
         UnknownModelInputModalities,
+      mediaGenerator: mediaKind
+        ? new MediaGeneration(
+            {
+              provider: input.providerId,
+              apiKey: input.apiKey,
+              baseURL: input.baseURL,
+              model: runtimeModel,
+              voice: discoveredModel?.speechVoice,
+              fetch: this.fetch,
+            },
+            mediaKind
+          )
+        : undefined,
       modelRequestOptions,
       resolutionSource: 'provider-collection',
       resolutionTrace: runtimeTrace,

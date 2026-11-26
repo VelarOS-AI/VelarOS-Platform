@@ -1,4 +1,4 @@
-import { isBlank, isEmpty, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, isEmpty, Log, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -25,6 +25,8 @@ import {
   readRemoteModelEntries,
 } from '../../utils/catalog-http'
 import { ModelTuning } from '../../utils/tuning'
+
+import { openAiMediaKind } from '../../utils/catalog/model-selection'
 
 import type { ModelProviderCollectionApi } from './ModelProviderCollection'
 import { ProviderModelCatalogCache } from './ProviderModelCatalogCache'
@@ -73,6 +75,8 @@ export interface ProviderModelCatalogApi {
 }
 
 export class ProviderModelCatalogService implements ProviderModelCatalogApi {
+  private static readonly MediaCatalogTimeoutMs = 3500
+  private readonly log = Log.tag('ProviderModelCatalogService')
   private readonly providerCollection: ModelProviderCollectionApi
   private readonly providerScriptRegistry?: ProviderScriptRegistryPort
   private readonly fetch: typeof globalThis.fetch
@@ -346,11 +350,59 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       )
     }
 
-    return this.parseRemoteProviderModels(
+    const models = this.parseRemoteProviderModels(
       request.provider,
       preset.validationKind,
       await response.json()
     )
+    if (request.purpose === 'embedding') return models
+    if (request.provider === 'openai' || request.provider === 'openai-compatible-gateway')
+      return models.map((model) => ({ ...model, mediaGeneration: openAiMediaKind(model.id) }))
+    if (request.provider !== 'openrouter' || new URL(baseURL).origin !== 'https://openrouter.ai')
+      return models
+    const mediaModels = await this.listOpenRouterMediaModels(baseURL, headers, signal)
+    const entries = new Map(models.map((model) => [model.id, model]))
+    for (const model of mediaModels) entries.set(model.id, { ...entries.get(model.id), ...model })
+    return [...entries.values()]
+  }
+
+  private async listOpenRouterMediaModels(
+    baseURL: string,
+    headers: Headers,
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalogEntry[]> {
+    const deadline = AbortSignal.timeout(ProviderModelCatalogService.MediaCatalogTimeoutMs)
+    const requestSignal = signal ? AbortSignal.any([deadline, signal]) : deadline
+    const catalogs = [
+      ['image', 'images/models'],
+      ['video', 'videos/models'],
+      ['audio', 'models?output_modalities=speech'],
+    ] as const
+    const results = await Promise.allSettled(
+      catalogs.map(async ([mediaGeneration, path]) => {
+        const response = await this.fetch(baseURL.replace(/\/+$/u, '') + '/' + path, {
+          headers,
+          signal: requestSignal,
+        })
+        if (!response.ok) {
+          await response.body?.cancel()
+          throw new AppError('UNAVAILABLE', `媒体目录请求失败：HTTP ${response.status}`)
+        }
+        return readRemoteModelEntries('openrouter-key', await response.json())
+          .map((entry) => ({
+            ...entry,
+            label: entry.label ?? entry.id,
+            mediaGeneration,
+          }))
+          .filter((entry) => mediaGeneration !== 'audio' || entry.speechVoice)
+      })
+    )
+    signal?.throwIfAborted()
+    return results.flatMap((result) => {
+      if (result.status === 'fulfilled') return result.value
+      this.log.debug('媒体模型目录不可用', { error: AppError.getMessage(result.reason) })
+      return []
+    })
   }
 
   private parseRemoteProviderModels(
