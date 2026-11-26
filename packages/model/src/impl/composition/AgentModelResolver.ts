@@ -7,9 +7,6 @@ import {
   OpenRouterAutoModelId,
   OpenRouterFreeModelId,
 } from '../../contract/constants.js'
-import { MediaGeneration } from '../requests/MediaGeneration'
-import { openAiMediaKind } from '../../utils/catalog/model-selection'
-
 import type { ResolvedAgentModelRuntime } from '../../types/adapters'
 import type {
   AgentProviderAdapterConfig,
@@ -26,6 +23,7 @@ import {
   resolveProviderScriptContextWindow,
   resolveProviderScriptMetadataContextWindow,
 } from '../../utils/catalog/context-windows'
+import { openAiMediaKind } from '../../utils/catalog/model-selection'
 import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
 import {
   buildResolutionTrace,
@@ -40,6 +38,7 @@ import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironmen
 import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { ProviderModelCatalogApi } from '../providers/ProviderModelCatalogService'
+import { MediaGeneration } from '../requests/MediaGeneration'
 
 import type { ModelAdapterRegistryApi } from './ModelAdapterRegistry'
 

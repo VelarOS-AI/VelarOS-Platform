@@ -69,8 +69,8 @@ export type {
   AgentProvider,
   EmbeddingRequest,
   LanguageModelFactory,
-  ModelAdapterConfig,
   MediaGenerationResult,
+  ModelAdapterConfig,
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'

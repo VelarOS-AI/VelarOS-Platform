@@ -46,7 +46,7 @@ export class MediaGeneration implements MediaGenerationApi {
     const { options, kind } = this
     const headers = { Authorization: `Bearer ${options.apiKey}` }
     const request = async (path: string, body?: Record<string, string>): Promise<Response> => {
-      const response = await options.fetch(options.baseURL.replace(/\/+$/u, '') + '/' + path, {
+      const response = await options.fetch(`${options.baseURL.replace(/\/+$/u, '')}/${path}`, {
         method: body ? 'POST' : 'GET',
         headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
         body: body ? JSON.stringify(body) : undefined,

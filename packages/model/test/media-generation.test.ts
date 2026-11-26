@@ -30,7 +30,7 @@ test('目录中的专用模型按图片、视频和语音端点生成二进制�
         case '/api/v1/audio/speech':
           return new Response(Uint8Array.of(1, 2, 3), { headers: { 'Content-Type': 'audio/mpeg' } })
         default:
-          throw new Error('Unexpected model path: ' + url.pathname)
+          throw new Error(`Unexpected model path: ${url.pathname}`)
       }
     },
   })

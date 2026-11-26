@@ -16,6 +16,7 @@ import type { RemoteProviderModelEntry } from '../../types/providers'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import { resolveProviderModelContextWindow } from '../../utils/catalog/context-windows'
 import { filterModelsForPurpose } from '../../utils/catalog/embedding'
+import { openAiMediaKind } from '../../utils/catalog/model-selection'
 import {
   canListRemoteProviderModels,
   createEmptyRemoteCatalog,
@@ -25,8 +26,6 @@ import {
   readRemoteModelEntries,
 } from '../../utils/catalog-http'
 import { ModelTuning } from '../../utils/tuning'
-
-import { openAiMediaKind } from '../../utils/catalog/model-selection'
 
 import type { ModelProviderCollectionApi } from './ModelProviderCollection'
 import { ProviderModelCatalogCache } from './ProviderModelCatalogCache'
@@ -380,7 +379,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     ] as const
     const results = await Promise.allSettled(
       catalogs.map(async ([mediaGeneration, path]) => {
-        const response = await this.fetch(baseURL.replace(/\/+$/u, '') + '/' + path, {
+        const response = await this.fetch(`${baseURL.replace(/\/+$/u, '')}/${path}`, {
           headers,
           signal: requestSignal,
         })
