@@ -140,6 +140,9 @@ test('default path uses the ready shell until refresh while explicit environment
   const environment = new ShellEnvironment({ platform: 'win32' }, shells)
   try {
     await environment.getEnvironment()
+    expect(environment.getShellPath()).toBe('shell')
+    resolve.mockClear()
+    await environment.resolveShell()
     expect(environment.getShellPath()).toBe('ready-first')
     expect(environment.getShellPath()).toBe('ready-first')
     expect(resolve).not.toHaveBeenCalled()
@@ -147,6 +150,7 @@ test('default path uses the ready shell until refresh while explicit environment
     expect(resolve).toHaveBeenCalledTimes(1)
     source = 'second'
     await environment.refresh()
+    await environment.resolveShell()
     expect(environment.getShellPath()).toBe('ready-second')
     expect(resolve).toHaveBeenCalledTimes(1)
   } finally {
@@ -154,6 +158,29 @@ test('default path uses the ready shell until refresh while explicit environment
     await environment.dispose()
   }
   expect(() => environment.getShellPath()).toThrow()
+})
+
+test('Windows environment reads and refreshes succeed even when no shell passes its probe', async () => {
+  const shells = resolver(async () => ({
+    env: { PATH: 'native-tools' },
+    revision: '',
+    refreshed: true,
+  }))
+  const resolveReady = spyOn(shells, 'resolveReady').mockRejectedValue(
+    new Error('shell probe failed')
+  )
+  const environment = new ShellEnvironment({ platform: 'win32' }, shells)
+  try {
+    expect((await environment.getEnvironment()).PATH).toBe('native-tools')
+    expect((await environment.refresh()).PATH).toBe('native-tools')
+    expect(resolveReady).not.toHaveBeenCalled()
+    await expect(environment.resolveShell()).rejects.toThrow('shell probe failed')
+    expect((await environment.getEnvironment()).PATH).toBe('native-tools')
+    expect(resolveReady).toHaveBeenCalledTimes(1)
+  } finally {
+    resolveReady.mockRestore()
+    await environment.dispose()
+  }
 })
 
 test('older refreshes cannot overwrite newer environments or publish stale notifications', async () => {

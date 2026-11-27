@@ -93,15 +93,17 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     if (!this.resolved) {
       const revision = this.revision
       const resolving = this.getEnvironment()
-        .then(
-          (env) =>
-            (revision === this.revision ? this.cached?.shell : undefined) ??
-            this.shells.resolveReady({
-              platform: this.platform,
-              env,
-              signal: this.controller.signal,
-            })
+        .then((env) =>
+          this.shells.resolveReady({
+            platform: this.platform,
+            env,
+            signal: this.controller.signal,
+          })
         )
+        .then((shell) => {
+          if (revision === this.revision && this.cached) this.cached.shell = shell
+          return shell
+        })
         .catch((error) => {
           if (revision === this.revision) this.resolved = undefined
           throw error
@@ -212,13 +214,8 @@ export class ShellEnvironment implements ShellEnvironmentApi {
       )
       this.controller.signal.throwIfAborted()
       replaceEnvironment(env, refreshed.env)
-      const shell = await this.shells.resolveReady({
-        platform: this.platform,
-        env,
-        signal: this.controller.signal,
-      })
-      // 自检标记只属于选中的 shell，不能把共享宿主环境钉到这个候选上。
-      return { env, shell }
+      // 原生程序与 PTY 只需要环境，shell 自检由实际使用受检 shell 的调用方触发。
+      return { env }
     }
     const platform = createPlatform({ platform: this.platform, env })
     for (const shell of platform.getLoginShellCandidates(env)) {
