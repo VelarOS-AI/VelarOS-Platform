@@ -109,7 +109,8 @@ async function heldStream(
 }
 
 test('配置独立的 OpenAI Responses 网关后按其目录和凭据调用 Responses', async () => {
-  const calls: { method: string; url: string; authorization: string | null; body: unknown }[] = []
+  const calls: Array<{ method: string; url: string; authorization: string | null; body: unknown }> =
+    []
   let status = 403
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const request = new Request(input, init)
@@ -122,7 +123,7 @@ test('配置独立的 OpenAI Responses 网关后按其目录和凭据调用 Resp
     if (request.method === 'GET') return Response.json({ data: [{ id: 'gpt-5.5' }] })
     if (status === 403) return Response.json({ error: { message: 'Forbidden' } }, { status })
     return new Response(
-      [...prefix, terminal].map((event) => 'data: ' + JSON.stringify(event) + '\n\n').join(''),
+      [...prefix, terminal].map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
       { headers: { 'content-type': 'text/event-stream' } }
     )
   }
@@ -144,7 +145,7 @@ test('配置独立的 OpenAI Responses 网关后按其目录和凭据调用 Resp
   )
   expect(runtime.providerId).toBe(provider)
   const driver = createAiSdkModelDriver({
-    id: provider + '/' + model,
+    id: `${provider}/${model}`,
     model: runtime.provider(runtime.model, runtime.modelRequestOptions),
     limits: { contextTokens: 32000, inputTokens: 30000, outputTokens: 1000 },
   })
