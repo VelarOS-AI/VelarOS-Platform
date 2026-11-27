@@ -207,6 +207,15 @@ test('INV-22 SDK response bodies expose server diagnostics without including req
     }),
   }
   expect(providerErrorMessage(failure)).toBe('Account credits exhausted')
+  const forbidden = {
+    message: 'Forbidden',
+    statusCode: 403,
+    responseBody:
+      '{"error":{"message":"This account only allows Codex official clients","type":"forbidden_error"}}' +
+      'event: response.failed\ndata: {"error":{"message":"fixture stream error"}}\n\n',
+  }
+  expect(providerErrorMessage(forbidden)).toBe('This account only allows Codex official clients')
+  expect(planProviderRetry(forbidden, { retryIndex: 1 })).toBeNull()
   for (const responseBody of [
     '<html>gateway</html>',
     '{broken',

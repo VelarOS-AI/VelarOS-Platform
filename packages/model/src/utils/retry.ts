@@ -199,11 +199,14 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
   return facts
 }
 
-/** 只解 SDK 明确标识的响应体；无效、过大的正文不参与错误推断，也不原样显示。 */
+/** 只读有界错误对象。部分网关会在 HTTP JSON 错误之后再附上一条 SSE 失败事件。 */
 function readErrorResponseBody(value: unknown): unknown {
   if (!isString(value) || value.length > ModelTuning.retry.errorBodyChars) return undefined
+  const responseFailed = /(?<=\})\s*event:[ \t]*response\.failed\r?\n[ \t]*data:/u.exec(value)
   try {
-    const parsed: unknown = JSON.parse(value)
+    const parsed: unknown = JSON.parse(
+      responseFailed ? value.slice(0, responseFailed.index) : value
+    )
     return optionalWhen(isObject, parsed)
   } catch {
     Log.tag('ModelProviderRetry').debug('供应商错误响应不是 JSON，继续按状态码与错误链判断')
