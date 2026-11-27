@@ -206,12 +206,13 @@ for (const catalogOwner of [
 }
 
 // 只有这几个文件在 Node 入口链上：用户 JS adapter 的沙箱形状与搬运函数也在里面，
-// 它们只从 `./node` 进来，渲染进程加载的 `./catalog` 与 `./contracts` 走不到。
+// 它们只从 Node 根入口进来，渲染进程加载的 `./catalog` 与 `./contracts` 走不到。
 const allowedNodeSources = new Set([
   path.join(packageDirectory, 'src/impl/composition/DefaultModelRuntimeComposition.ts'),
   path.join(packageDirectory, 'src/impl/providers/NodeLocalModelEnvironment.ts'),
   path.join(packageDirectory, 'src/impl/providers/ProviderScriptRegistry.ts'),
   path.join(packageDirectory, 'src/impl/adapters/UserJsModelAdapter.ts'),
+  path.join(packageDirectory, 'src/impl/requests/MediaGeneration.ts'),
   path.join(packageDirectory, 'src/types/user-adapter.ts'),
   path.join(packageDirectory, 'src/utils/scripts/provider-scripts.ts'),
   path.join(packageDirectory, 'src/utils/scripts/user-adapter.ts'),
