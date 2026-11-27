@@ -79,7 +79,9 @@ class AgentModelResolver implements AgentModelResolverApi {
     private readonly providers: ModelProviderCollectionApi,
     private readonly localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
     private readonly modelCatalog?: Pick<ProviderModelCatalogApi, 'resolveModelCapabilities'>,
-    private readonly fetch: typeof globalThis.fetch = globalThis.fetch
+    private readonly fetchForProvider?: (
+      provider: ChatProviderId
+    ) => typeof globalThis.fetch | undefined
   ) {}
 
   public async resolve(
@@ -259,7 +261,7 @@ class AgentModelResolver implements AgentModelResolverApi {
               baseURL: input.baseURL,
               model: runtimeModel,
               voice: discoveredModel?.speechVoice,
-              fetch: this.fetch,
+              fetch: this.fetchForProvider?.(input.providerId) ?? globalThis.fetch,
             },
             mediaKind
           )

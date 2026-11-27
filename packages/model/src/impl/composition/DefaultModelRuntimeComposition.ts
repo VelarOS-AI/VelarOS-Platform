@@ -1,4 +1,5 @@
 import type { CreateModelRuntimeCompositionOptions } from '../../contract/requires'
+import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import { ModelProviderCollection } from '../providers/ModelProviderCollection'
 import type { NodeLocalModelEnvironmentApi } from '../providers/NodeLocalModelEnvironment'
@@ -68,6 +69,9 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
       ...options.providerScripts,
     })
     const velarCloudRuntime = new VelarCloudModelRuntime()
+    const { fetch, fetchForProvider: resolveProviderFetch } = options
+    const fetchForProvider = (provider: ChatProviderId): typeof globalThis.fetch | undefined =>
+      resolveProviderFetch?.(provider) ?? fetch
     this.localModelEnvironment = environment
     this.providerScriptRegistry = providerScriptRegistry
     this.providerCollection = new ModelProviderCollection(providerScriptRegistry, {
@@ -80,11 +84,12 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
       velarCloudRuntime,
       environment,
       options.adapters,
-      options.fetch
+      fetchForProvider
     )
     this.providerModelCatalogService = new ProviderModelCatalogService({
-      fetch: options.fetch,
+      fetch,
       ...options.providerCatalog,
+      fetchForProvider: resolveProviderFetch,
       providerCollection: this.providerCollection,
       providerScriptRegistry,
     })
@@ -94,7 +99,7 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
       this.providerCollection,
       environment,
       this.providerModelCatalogService,
-      options.fetch
+      fetchForProvider
     )
     this.agentModelRuntime = new AgentModelRuntime(
       this.modelAdapterRegistry,

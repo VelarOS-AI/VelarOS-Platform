@@ -103,6 +103,8 @@ export interface CreateModelRuntimeCompositionOptions {
   readonly environment?: Readonly<Record<string, string | undefined>>
   /** 模型 SDK、供应商脚本和远端模型目录共用的宿主网络传输。 */
   readonly fetch?: typeof globalThis.fetch
+  /** 按供应商覆盖内置模型、媒体及远端目录的传输，缺席时沿用各自默认传输。 */
+  readonly fetchForProvider?: (provider: ChatProviderId) => typeof globalThis.fetch | undefined
   /** provider script 注册表的配置来源与宿主桥。 */
   readonly providerScripts?: ProviderScriptRegistryOptions
   /** 远端模型目录服务的 transport、超时与归属信息。 */

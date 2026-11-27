@@ -2,7 +2,10 @@ import { isBlank, isEmpty, Log, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { ProviderModelCatalogAttribution } from '../../contract/requires'
+import type {
+  CreateModelRuntimeCompositionOptions,
+  ProviderModelCatalogAttribution,
+} from '../../contract/requires'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
@@ -38,6 +41,8 @@ export interface ProviderModelCatalogServiceOptions {
   readonly providerScriptRegistry?: ProviderScriptRegistryPort
   /** 宿主注入的 transport，让测试与非浏览器运行时都显式。 */
   readonly fetch?: typeof globalThis.fetch
+  /** 内置远端目录可按供应商使用专用传输。 */
+  readonly fetchForProvider?: CreateModelRuntimeCompositionOptions['fetchForProvider']
   /** 一次目录或凭据探测的硬超时，毫秒，包含响应正文读取。 */
   readonly timeoutMs?: number
   /** OpenRouter 的请求归属信息。 */
@@ -78,7 +83,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
   private readonly log = Log.tag('ProviderModelCatalogService')
   private readonly providerCollection: ModelProviderCollectionApi
   private readonly providerScriptRegistry?: ProviderScriptRegistryPort
-  private readonly fetch: typeof globalThis.fetch
+  private readonly fetchForProvider: (provider: ChatProviderId) => typeof globalThis.fetch
   private readonly timeoutMs: number
   private attribution: ProviderModelCatalogAttribution
   private readonly snapshots = new ProviderModelCatalogCache()
@@ -88,7 +93,9 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
   public constructor(options: ProviderModelCatalogServiceOptions) {
     this.providerCollection = options.providerCollection
     this.providerScriptRegistry = options.providerScriptRegistry
-    this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+    const defaultFetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+    const resolveProviderFetch = options.fetchForProvider
+    this.fetchForProvider = (provider) => resolveProviderFetch?.(provider) ?? defaultFetch
     this.timeoutMs = Math.max(1, options.timeoutMs ?? ModelTuning.catalog.requestTimeoutMs)
     this.attribution = options.attribution ?? {}
   }
@@ -127,7 +134,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
             preset.validationKind,
             this.attribution
           )
-          const response = await this.fetch(probe.url, {
+          const response = await this.fetchForProvider(request.provider)(probe.url, {
             method: 'GET',
             headers: [...probe.headers],
             signal: operationSignal,
@@ -340,7 +347,8 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     const headers = new Headers()
     for (const [name, value] of listRequest.headers) headers.append(name, value)
     // 外层目录请求拥有完整期限，响应头与正文读取共用同一取消信号。
-    const response = await this.fetch(listRequest.url, { method: 'GET', headers, signal })
+    const fetch = this.fetchForProvider(request.provider)
+    const response = await fetch(listRequest.url, { method: 'GET', headers, signal })
     if (!response.ok) {
       const responseText = (await response.text()).trim()
       throw new AppError(
@@ -359,13 +367,14 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       return models.map((model) => ({ ...model, mediaGeneration: openAiMediaKind(model.id) }))
     if (request.provider !== 'openrouter' || new URL(baseURL).origin !== 'https://openrouter.ai')
       return models
-    const mediaModels = await this.listOpenRouterMediaModels(baseURL, headers, signal)
+    const mediaModels = await this.listOpenRouterMediaModels(fetch, baseURL, headers, signal)
     const entries = new Map(models.map((model) => [model.id, model]))
     for (const model of mediaModels) entries.set(model.id, { ...entries.get(model.id), ...model })
     return [...entries.values()]
   }
 
   private async listOpenRouterMediaModels(
+    fetch: typeof globalThis.fetch,
     baseURL: string,
     headers: Headers,
     signal?: AbortSignal
@@ -379,7 +388,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     ] as const
     const results = await Promise.allSettled(
       catalogs.map(async ([mediaGeneration, path]) => {
-        const response = await this.fetch(`${baseURL.replace(/\/+$/u, '')}/${path}`, {
+        const response = await fetch(`${baseURL.replace(/\/+$/u, '')}/${path}`, {
           headers,
           signal: requestSignal,
         })

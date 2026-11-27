@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { ChatProviderId, ModelRuntimeCompositionApi } from '../src/index'
-import { createModelRuntimeComposition } from '../src/index'
+import { createModelRequestClient, createModelRuntimeComposition } from '../src/index'
 
 const IsolatedProviderId = 'test-isolated-provider' as ChatProviderId
 
@@ -103,6 +103,53 @@ describe('model runtime composition', () => {
         baseURL: '',
       })
     ).toThrow('模型 selection.provider 必须显式提供。')
+  })
+
+  test('routes inference, validation and model discovery by provider on the same gateway', async () => {
+    const calls: string[] = []
+    const request = { baseURL: 'https://gateway.example/v1', apiKey: 'test-key' }
+    const response = { data: [{ id: 'gpt-5.4' }] }
+    const logFetch = (route: string): typeof globalThis.fetch =>
+      Object.assign(
+        async (input: Parameters<typeof globalThis.fetch>[0]): Promise<Response> => {
+          calls.push(`${route} ${String(input)}`)
+          if (String(input).endsWith('/models')) return Response.json(response)
+          return Response.json({ error: { message: 'test stop' } }, { status: 400 })
+        },
+        { preconnect: globalThis.fetch.preconnect }
+      )
+    const responsesFetch = logFetch('responses')
+    const composition = createModelRuntimeComposition({
+      providerScripts: { configPaths: [] },
+      fetch: logFetch('default'),
+      providerCatalog: { fetch: logFetch('catalog') },
+      fetchForProvider: (provider) =>
+        provider === 'openai-responses' ? responsesFetch : undefined,
+    })
+    const client = createModelRequestClient()
+    for (const provider of ['openai-responses', 'openai-compatible-gateway'] as const) {
+      const selection = { ...request, provider }
+      expect(
+        await composition.providerModelCatalogService.validateProviderRuntime(selection)
+      ).toEqual({
+        ok: true,
+        message: null,
+      })
+      const catalog = await composition.providerModelCatalogService.listProviderModels(selection)
+      expect(catalog.models.map((model) => model.id)).toEqual(['gpt-5.4'])
+      const model = composition.agentModelRuntime.createAgentProvider(selection)('gpt-5.4')
+      await expect(
+        client.generateText({ endpoint: 'test.scoped-fetch', model, prompt: 'ping' })
+      ).rejects.toThrow('test stop')
+    }
+    expect(calls).toEqual([
+      'responses https://gateway.example/v1/models',
+      'responses https://gateway.example/v1/models',
+      'responses https://gateway.example/v1/responses',
+      'catalog https://gateway.example/v1/models',
+      'catalog https://gateway.example/v1/models',
+      'default https://gateway.example/v1/chat/completions',
+    ])
   })
 
   test('requires an explicitly injected model runtime context', async () => {
