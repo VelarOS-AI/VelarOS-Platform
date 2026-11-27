@@ -4177,7 +4177,22 @@ test('INV-47 interrupted response retries are bounded and permanent rejection or
     const service = createActRunService(f.options)
     const events = []
     for await (const event of service.submit('work', controller.signal)) events.push(event)
-    expect(calls).toBe(mode === 'transient' ? 3 : 1)
+    expect(calls).toBe(mode === 'transient' ? 6 : 1)
+    expect(
+      events
+        .filter((event) => event.type === 'model-retry')
+        .map(({ attempt, maxAttempts }) => [attempt, maxAttempts])
+    ).toEqual(
+      mode === 'transient'
+        ? [
+            [1, 5],
+            [2, 5],
+            [3, 5],
+            [4, 5],
+            [5, 5],
+          ]
+        : []
+    )
     expect(executed).toBe(0)
     expect(events.some((event) => event.type === 'accepted')).toBe(false)
     expect(events.some((event) => event.type === 'usage')).toBe(false)

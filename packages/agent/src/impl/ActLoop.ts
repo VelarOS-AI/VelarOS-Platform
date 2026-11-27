@@ -31,7 +31,7 @@ import type { ActRequestPrefix } from '../types/runtime.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, remainingFrameImages, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
-import { ContextPlanTuning } from '../utils/tuning.js'
+import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
 
 import { ContextPlanner } from './ContextPlanner.js'
 
@@ -281,7 +281,11 @@ export class ActLoop implements ActLoopApi {
         let acceptedInputTokens: Optional<number>
         let acceptedText = ''
         let acceptedResponseRef: Optional<{ sessionId: string; id: string }>
-        for (let repair = 0; repair <= Math.max(2, this.policy.recoveryAttempts); repair++) {
+        let providerRetries = 0
+        const requestRepairs =
+          Math.max(2, this.policy.recoveryAttempts) + AgentTuning.providerRetries
+        for (let repair = 0; repair <= requestRepairs; repair++) {
+          const recovery = repair - providerRetries
           decoder.reset()
           const taskId = (await this.options.view.inspect())?.id
           if (!taskId) throw new AppError('MODEL_REQUEST_TASK', '模型调用没有活动任务身份')
@@ -595,18 +599,20 @@ export class ActLoop implements ActLoopApi {
                 (error as { code?: string }).code === 'MODEL_PROVIDER' &&
                 Number.isFinite(retryDelay) &&
                 retryDelay! >= 0 &&
-                repair < this.policy.recoveryAttempts
+                providerRetries < AgentTuning.providerRetries
               ) {
                 // 此响应尚未被接受，没有任何脚本被派发；每次重新请求继续计入预算和追踪。
+                const delayMs = Math.min(30_000, retryDelay! * 2 ** providerRetries)
+                const attempt = ++providerRetries
                 await this.options.context.append(
                   {
                     kind: 'event',
                     title: 'model-retry',
                     body: JSON.stringify({
                       turnId: audit.ref.id,
-                      attempt: repair + 1,
+                      attempt,
                       executed: false,
-                      delayMs: Math.min(30000, retryDelay! * 2 ** repair),
+                      delayMs,
                     }),
                   },
                   controller.signal
@@ -617,19 +623,16 @@ export class ActLoop implements ActLoopApi {
                     runId,
                     turnId: audit.ref.id,
                     message: error instanceof Error ? error.message : String(error),
-                    attempt: repair + 1,
-                    maxAttempts: this.policy.recoveryAttempts,
+                    attempt,
+                    maxAttempts: AgentTuning.providerRetries,
                   }
-                await modelProviderRetry.wait(
-                  Math.min(30000, retryDelay! * 2 ** repair),
-                  attemptSignal
-                )
+                await modelProviderRetry.wait(delayMs, attemptSignal)
                 continue
               }
               if (
                 !controller.signal.aborted &&
                 (error as { code?: string }).code === 'CONTEXT_BUDGET' &&
-                repair < this.policy.recoveryAttempts
+                recovery < this.policy.recoveryAttempts
               ) {
                 // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
                 this.planner.rejected()
@@ -637,7 +640,7 @@ export class ActLoop implements ActLoopApi {
                 this.prefix.visualTranscript = undefined
                 const repaired = await this.frame(controller.signal, decoder, {
                   provider: true,
-                  recovery: repair > 0,
+                  recovery: recovery > 0,
                 })
                 if (!repaired) throw error
                 frame = repaired
@@ -647,7 +650,7 @@ export class ActLoop implements ActLoopApi {
               if (
                 controller.signal.aborted ||
                 (error as { code?: string }).code !== 'SCRIPT_PROTOCOL' ||
-                repair === 2
+                recovery >= 2
               )
                 throw error
               const message = error instanceof Error ? error.message : String(error)

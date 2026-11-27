@@ -2,6 +2,8 @@
 export const AgentTuning = Object.freeze({
   /** 持久事件默认分页条数。 */
   eventPage: 100,
+  /** 一次模型回合在首次请求后的最大传输重连次数。 */
+  providerRetries: 5,
 })
 /** 上下文规划的缺省值；宿主经 frames.policy 覆盖容量与恢复策略。 */
 export const ContextPlanTuning = Object.freeze({

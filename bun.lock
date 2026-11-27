@@ -40,7 +40,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "10.1.2",
+      "version": "10.1.3",
       "dependencies": {
         "@velaros-ai/context": "workspace:*",
         "@velaros-ai/core": "workspace:*",
@@ -159,7 +159,7 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.12.12",
+      "version": "0.12.13",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@modelcontextprotocol/sdk": "^1.31.0",
