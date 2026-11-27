@@ -1,3 +1,4 @@
+import { APICallError } from '@ai-sdk/provider'
 import { jsonSchema, Output, streamText } from 'ai'
 
 import { Log } from '@velaros-ai/core'
@@ -331,6 +332,8 @@ class AiSdkModelDriver implements ModelDriver {
           ? planProviderRetry(error, { retryIndex: 1 })
           : null
       const failure: Extract<ModelTurnDelta, { type: 'error' }> = { type: 'error', code, message }
+      if (APICallError.isInstance(error) && !isUndefined(error.statusCode))
+        Object.assign(failure, { httpStatus: error.statusCode })
       if (retry) Object.assign(failure, { retryAfterMs: retry.delayMs })
       yield failure
     } finally {

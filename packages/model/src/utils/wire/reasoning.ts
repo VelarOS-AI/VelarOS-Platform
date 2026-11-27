@@ -126,6 +126,7 @@ export function createReasoningProviderOptions(
   const effective = level ?? DefaultReasoningLevel
 
   switch (provider) {
+    case 'openai-responses':
     case 'openai': {
       if (!matchesOpenAiReasoningModel(model)) return null
       const openai: Record<string, unknown> = {

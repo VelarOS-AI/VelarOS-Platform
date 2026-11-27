@@ -23,8 +23,11 @@ import {
   resolveProviderScriptContextWindow,
   resolveProviderScriptMetadataContextWindow,
 } from '../../utils/catalog/context-windows'
-import { openAiMediaKind } from '../../utils/catalog/model-selection'
-import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
+import {
+  isOpenAiMediaProvider,
+  isOpenRouterCompatibleProvider,
+  openAiMediaKind,
+} from '../../utils/catalog/model-selection'
 import {
   buildResolutionTrace,
   createUnavailableProviderError,
@@ -226,7 +229,7 @@ class AgentModelResolver implements AgentModelResolverApi {
     const mediaKind =
       input.providerId === 'openrouter'
         ? discoveredModel?.mediaGeneration
-        : input.providerId === 'openai' || input.providerId === 'openai-compatible-gateway'
+        : isOpenAiMediaProvider(input.providerId)
           ? openAiMediaKind(runtimeModel)
           : undefined
     return {

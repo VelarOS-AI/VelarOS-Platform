@@ -211,6 +211,8 @@ export type ModelTurnDelta =
       readonly type: 'error'
       readonly code: 'context-limit' | 'provider'
       readonly message: string
+      /** SDK 确认的 HTTP 状态；已建立流内的错误可能没有 HTTP 状态。 */
+      readonly httpStatus?: number
       /** 驱动确认是瞬时传输故障时给出的退避毫秒；宿主仅可重试尚未接受的响应。 */ readonly retryAfterMs?: number
     }
   | { readonly type: 'finish'; readonly reason: 'stop' | 'length' }

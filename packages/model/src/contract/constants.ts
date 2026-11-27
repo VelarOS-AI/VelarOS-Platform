@@ -102,6 +102,7 @@ export const CustomModelProviderIds = Object.freeze([
   'google',
   'deepseek',
   ...DirectOpenAICompatibleProviderIds,
+  'openai-responses',
   'custom',
 ] as const)
 
@@ -286,6 +287,16 @@ export const ModelProviderOperationalManifests = Object.freeze([
     baseURLConfigurable: true,
   },
   {
+    id: 'openai-responses',
+    label: 'OpenAI Responses',
+    defaultBaseURL: OpenAICompatibleGatewayDefaultBaseURL,
+    description: '连接支持 OpenAI Responses API 的网关或本地服务。',
+    defaultApiKeyEnv: 'OPENAI_RESPONSES_API_KEY',
+    adapterKind: 'openai-sdk',
+    validationKind: 'openai-compatible-models',
+    baseURLConfigurable: true,
+  },
+  {
     id: 'custom',
     label: 'Custom Adapter',
     defaultBaseURL: '',
@@ -317,6 +328,7 @@ export const DefaultProviderModels = Object.freeze({
   ollama: '',
   lmstudio: '',
   'openai-compatible-gateway': '',
+  'openai-responses': '',
   custom: '',
   velaros: '',
   'velar-dev': '',

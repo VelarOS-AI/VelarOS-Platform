@@ -16,7 +16,7 @@ import type { RemoteProviderModelEntry } from '../../types/providers'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import { resolveProviderModelContextWindow } from '../../utils/catalog/context-windows'
 import { filterModelsForPurpose } from '../../utils/catalog/embedding'
-import { openAiMediaKind } from '../../utils/catalog/model-selection'
+import { isOpenAiMediaProvider, openAiMediaKind } from '../../utils/catalog/model-selection'
 import {
   canListRemoteProviderModels,
   createEmptyRemoteCatalog,
@@ -355,7 +355,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       await response.json()
     )
     if (request.purpose === 'embedding') return models
-    if (request.provider === 'openai' || request.provider === 'openai-compatible-gateway')
+    if (isOpenAiMediaProvider(request.provider))
       return models.map((model) => ({ ...model, mediaGeneration: openAiMediaKind(model.id) }))
     if (request.provider !== 'openrouter' || new URL(baseURL).origin !== 'https://openrouter.ai')
       return models

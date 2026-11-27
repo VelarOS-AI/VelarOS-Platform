@@ -206,7 +206,12 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
       : this.requireOperationalManifest(selection.provider).defaultBaseURL
 
     const baseURL = trimTrailingPathSeparators(raw)
-    if (selection.provider !== 'openai-compatible-gateway' || !URL.canParse(baseURL)) return baseURL
+    if (
+      (selection.provider !== 'openai-compatible-gateway' &&
+        selection.provider !== 'openai-responses') ||
+      !URL.canParse(baseURL)
+    )
+      return baseURL
 
     // 网关可能部署在代理前缀下，也可能明确选用了其他 API 版本。
     const url = new URL(baseURL)

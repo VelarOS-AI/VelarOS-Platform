@@ -322,6 +322,7 @@ const sharedProviderCatalogs = [
   OllamaProviderCatalog,
   LmStudioProviderCatalog,
   OpenAICompatibleGatewayProviderCatalog,
+  { provider: 'openai-responses', defaultModel: '', models: [] },
   CustomProviderCatalog,
   VelarSharedProviderCatalog,
   VelarDevSharedProviderCatalog,

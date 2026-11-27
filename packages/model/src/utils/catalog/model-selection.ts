@@ -14,6 +14,15 @@ import type { SharedProviderCatalog } from '../../types/providers'
 
 import { findSharedProviderCatalogDefinition } from './provider-catalogs'
 
+/** 使用 OpenAI 专用图片和语音端点的供应商。 */
+export function isOpenAiMediaProvider(provider: ChatProviderId): boolean {
+  return (
+    provider === 'openai' ||
+    provider === 'openai-compatible-gateway' ||
+    provider === 'openai-responses'
+  )
+}
+
 /** 识别 OpenAI 专用图片和语音端点的模型系列。 */
 export function openAiMediaKind(model: string): MediaGenerationKind | undefined {
   if (/^(gpt-image-|dall-e-|chatgpt-image-)/iu.test(model)) return 'image'

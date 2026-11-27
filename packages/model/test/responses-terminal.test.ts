@@ -108,6 +108,71 @@ async function heldStream(
   }
 }
 
+test('配置独立的 OpenAI Responses 网关后按其目录和凭据调用 Responses', async () => {
+  const calls: { method: string; url: string; authorization: string | null; body: unknown }[] = []
+  let status = 403
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init)
+    calls.push({
+      method: request.method,
+      url: request.url,
+      authorization: request.headers.get('authorization'),
+      body: request.method === 'POST' ? await request.json() : null,
+    })
+    if (request.method === 'GET') return Response.json({ data: [{ id: 'gpt-5.5' }] })
+    if (status === 403) return Response.json({ error: { message: 'Forbidden' } }, { status })
+    return new Response(
+      [...prefix, terminal].map((event) => 'data: ' + JSON.stringify(event) + '\n\n').join(''),
+      { headers: { 'content-type': 'text/event-stream' } }
+    )
+  }
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+    fetch,
+  })
+  const provider = 'openai-responses'
+  const baseURL = 'https://gateway.test/proxy/'
+  const apiKey = 'fixture-key'
+  const model = 'gpt-5.5'
+  const runtime = await composition.agentModelRuntime.resolveRoleRuntime(
+    { provider, model, reasoningLevel: 'high' },
+    {
+      providerRuntimeConfigs: [{ provider, baseURL, apiKey, enabled: true, defaultModel: '' }],
+      openRouter: { useFreeModelsForDebug: false },
+    }
+  )
+  expect(runtime.providerId).toBe(provider)
+  const driver = createAiSdkModelDriver({
+    id: provider + '/' + model,
+    model: runtime.provider(runtime.model, runtime.modelRequestOptions),
+    limits: { contextTokens: 32000, inputTokens: 30000, outputTokens: 1000 },
+  })
+  const events: ModelTurnDelta[] = []
+  const signal = new AbortController().signal
+  for await (const event of driver.stream(request, signal)) events.push(event)
+  expect(events).toEqual([
+    { type: 'error', code: 'provider', message: 'Forbidden', httpStatus: 403 },
+  ])
+  expect(calls.some((call) => call.url === 'https://gateway.test/proxy/v1/models')).toBe(true)
+  status = 200
+  calls.length = 0
+  for await (const event of driver.stream(request, signal)) events.push(event)
+  expect(events.at(-1)).toEqual({ type: 'finish', reason: 'stop' })
+  expect(calls.filter((call) => call.method === 'POST')).toEqual([
+    {
+      method: 'POST',
+      url: 'https://gateway.test/proxy/v1/responses',
+      authorization: 'Bearer fixture-key',
+      body: expect.objectContaining({
+        model,
+        store: false,
+        reasoning: { effort: 'high', summary: 'auto' },
+      }),
+    },
+  ])
+})
+
 test('INV-20 built-in Responses finalizes SDK usage and continuation before an unrelated held-open tail', async () => {
   const { events, cancelled } = await heldStream([...prefix, terminal])
   expect(events.at(-1)).toEqual({ type: 'finish', reason: 'stop' })
