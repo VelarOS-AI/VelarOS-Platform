@@ -160,7 +160,9 @@ export function searchResults(
   for (const hit of hits) {
     if (results.length >= limit) break
     const url =
-      engine === 'google' || engine === 'bing' ? resultUrl(engine, hit.href) : httpUrl(hit.href)?.href
+      engine === 'google' || engine === 'bing'
+        ? resultUrl(engine, hit.href)
+        : httpUrl(hit.href)?.href
     if (!url || seen.has(dedupeKey(url))) continue
     seen.add(dedupeKey(url))
     results.push({
