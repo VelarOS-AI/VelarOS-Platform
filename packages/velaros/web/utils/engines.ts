@@ -159,7 +159,8 @@ export function searchResults(
   const seen = new Set<string>()
   for (const hit of hits) {
     if (results.length >= limit) break
-    const url = engine === 'tavily' ? httpUrl(hit.href)?.href : resultUrl(engine, hit.href)
+    const url =
+      engine === 'google' || engine === 'bing' ? resultUrl(engine, hit.href) : httpUrl(hit.href)?.href
     if (!url || seen.has(dedupeKey(url))) continue
     seen.add(dedupeKey(url))
     results.push({

@@ -8,8 +8,8 @@
 /** @AgentView 搜索引擎：用户在设置里选的那个，或者搜不通时换上的另一个。 */
 export type WebSearchEngineId = 'google' | 'bing'
 
-/** @AgentView 实际返回搜索结果的来源，配置 Tavily 时返回 tavily。 */
-export type WebSearchSourceId = WebSearchEngineId | 'tavily'
+/** @AgentView 实际返回搜索结果的来源，配置搜索接口时返回 tavily 或 custom。 */
+export type WebSearchSourceId = WebSearchEngineId | 'tavily' | 'custom'
 
 /** @AgentView 搜什么：query 是搜索词（最多 1000 个字符）；limit 最多要几条结果，默认 8 条、最多 20 条。 */
 export interface WebSearchInput {

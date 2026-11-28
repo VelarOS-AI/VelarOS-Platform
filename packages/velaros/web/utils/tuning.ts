@@ -14,7 +14,7 @@ export const WebTuning = Object.freeze({
   }),
   /** 搜索。 */
   search: Object.freeze({
-    /** Tavily 密钥读取和 HTTP 请求共用的时限。 */
+    /** 搜索连接读取和 HTTP 请求共用的时限。 */
     apiTimeoutMs: 15_000,
     /**
      * Google 搜不通之后，多久以内的搜索直接走 Bing，毫秒。

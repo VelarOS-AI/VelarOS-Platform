@@ -1,5 +1,5 @@
 // velaros:web 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
-// 配置 Tavily 后搜索用接口，否则用浏览器搜索。read 打开指定网址；要点、填、登录，用 velaros:browser。
+// search 使用宿主选定的搜索接口或无头浏览器。read 打开指定网址；要点、填、登录，用 velaros:browser。
 import { read, search } from 'velaros:web'
 
 // 搜一次，看标题、地址与摘要：结果只是线索，engine 是实际用的搜索来源。

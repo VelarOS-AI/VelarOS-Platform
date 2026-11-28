@@ -86,11 +86,11 @@ export interface WebOperationsClock {
 
 /**
  * @AgentView
- * 网上查资料：search 搜索，read 把一个网页读成文字。配置 Tavily 后搜索只用 Tavily 接口；未配置时在不显示的浏览器里用首选搜索引擎，失败会换另一个。
+ * 网上查资料：search 搜索，read 把一个网页读成文字。搜索使用宿主选定的接口或无头浏览器；浏览器搜索失败会换另一个搜索引擎。
  * 结果的 engine 写着实际来源。read 在不显示的浏览器里打开指定网址，不留浏览痕迹，也碰不到用户的登录。
  * 搜索结果只是线索：要紧的事读原文核对，交给用户时带上出处（url）。
  * 要在网页上动手（登录、填表、点按钮）、看页面长什么样、读登录之后才看得到的内容，用浏览器（velaros:browser），不用这个。
- * 失败抛的错误带 code：WEB_SEARCH_FAILED Tavily 接口失败或两个浏览器搜索引擎都搜不了（message 写明原因）；
+ * 失败抛的错误带 code：WEB_SEARCH_FAILED 搜索接口失败或两个浏览器搜索引擎都搜不了（message 写明原因）；
  * WEB_PAGE_UNREACHABLE 网页打不开（连不上、加载出错，或者超时了什么都没出来）；WEB_PAGE_UNREADABLE 打开了却读不成文字（比如是 PDF）。入参不对是 VALIDATION。
  */
 export interface WebOperationsApi {
@@ -119,7 +119,7 @@ export class WebOperations implements WebOperationsApi {
   public async search(input: WebSearchInput, ctx: WebOperationContext): Promise<WebSearchResults> {
     ctx.abortSignal.throwIfAborted()
     const request = searchRequest(input)
-    const api = await this.searchTavily(request, ctx)
+    const api = await this.searchApi(request, ctx)
     if (api) return api
     const googleUntil = this.googleBackoff(ctx)
     const failures: WebEngineFailure[] = []
@@ -156,26 +156,34 @@ export class WebOperations implements WebOperationsApi {
     throw new AppError(WebErrorCodes.searchFailed, searchFailedMessage(request.query, failures))
   }
 
-  /** 配了 Tavily 就只取接口结果；把状态码转换为可操作的提示，不转发响应错误正文。 */
-  private async searchTavily(
+  /** 接口错误只报告状态和操作提示，避免转发含密钥的响应正文。 */
+  private async searchApi(
     request: WebSearchRequest,
     ctx: WebOperationContext
   ): Promise<Nullable<WebSearchResults>> {
-    if (!ctx.web.tavilyApiKey) return null
+    if (!ctx.web.searchApi) return null
     const deadline = this.clock.timeout(WebTuning.search.apiTimeoutMs)
     const signal = AbortSignal.any([ctx.abortSignal, deadline])
+    let label = '搜索接口'
     try {
-      const apiKey = (await untilAborted(Promise.resolve(ctx.web.tavilyApiKey()), signal)).trim()
-      if (!apiKey) return null
+      const connection = await untilAborted(Promise.resolve(ctx.web.searchApi()), signal)
+      if (!connection) return null
+      const { provider, apiKey } = connection
+      const isTavily = provider === 'tavily'
+      if (isTavily) label = 'Tavily'
+      const endpoint = isTavily ? 'https://api.tavily.com/search' : connection.endpoint
+      const fetcher = ctx.web.fetchSearchApi ?? this.fetcher
       const response = await untilAborted(
-        this.fetcher('https://api.tavily.com/search', {
+        fetcher(endpoint, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${apiKey.trim()}`, 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          cache: 'no-store',
           redirect: 'error',
           body: JSON.stringify({
             query: request.query,
             max_results: request.limit,
-            search_depth: 'basic',
+            ...(isTavily && { search_depth: 'basic' }),
           }),
           signal,
         }),
@@ -185,16 +193,16 @@ export class WebOperations implements WebOperationsApi {
         await response.body?.cancel()
         const hint =
           response.status === 401 || response.status === 403
-            ? '请检查设置中的 Tavily API Key'
-            : '请检查 Tavily 服务状态或账户额度'
+            ? '请检查设置中的 API Key'
+            : '请检查搜索服务状态或账户额度'
         throw new AppError(
           WebErrorCodes.searchFailed,
-          `Tavily 请求失败（HTTP ${response.status}）。${hint}。`
+          `${label}请求失败（HTTP ${response.status}）。${hint}。`
         )
       }
       const payload: unknown = await untilAborted(response.json(), signal)
       if (!isPlainObject(payload) || !Array.isArray(payload.results))
-        throw new AppError(WebErrorCodes.searchFailed, 'Tavily 返回的搜索结果格式不正确。')
+        throw new AppError(WebErrorCodes.searchFailed, `${label}返回的搜索结果格式不正确。`)
       const hits: WebRawHit[] = []
       for (const item of payload.results) {
         if (!isPlainObject(item) || !isString(item.url)) continue
@@ -206,17 +214,15 @@ export class WebOperations implements WebOperationsApi {
       }
       return {
         query: request.query,
-        engine: 'tavily',
-        results: searchResults('tavily', hits, request.limit),
+        engine: provider,
+        results: searchResults(provider, hits, request.limit),
       }
     } catch (error) {
       ctx.abortSignal.throwIfAborted()
       if (error instanceof AppError && error.code === WebErrorCodes.searchFailed) throw error
       throw new AppError(
         WebErrorCodes.searchFailed,
-        deadline.aborted
-          ? 'Tavily 搜索请求超时。'
-          : '无法完成 Tavily 搜索，请检查 API Key 或网络连接。'
+        deadline.aborted ? `${label}请求超时。` : `无法完成${label}请求，请检查服务地址或网络连接。`
       )
     }
   }

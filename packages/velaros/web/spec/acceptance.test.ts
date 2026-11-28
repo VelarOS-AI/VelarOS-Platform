@@ -65,7 +65,7 @@ describe('搜索', () => {
   test('INV-22 配置 Tavily 时成功、空结果和接口错误都不打开浏览器', async () => {
     const clock = fakeClock()
     const space = webSpace({ clock, sites: sitesOf({ bing: { scan: BingResults } }) })
-    space.context.web.tavilyApiKey = async () => ' test-key '
+    space.context.web.searchApi = async () => ({ provider: 'tavily', apiKey: ' test-key ' })
     let response = Response.json({
       results: [
         { title: 'Doc', url: 'https://example.com/doc', content: 'Snippet' },
@@ -98,8 +98,45 @@ describe('搜索', () => {
     expect(failure.message).toContain('HTTP 401')
     expect(failure.message).not.toContain('test-key')
     expect(space.record.opened).toBe(0)
-    space.context.web.tavilyApiKey = () => ''
+    space.context.web.searchApi = () => null
     expect((await search()).engine).toBe('bing')
+  })
+
+  test('INV-22 自定义搜索转发到配置的地址，取消时关闭请求', async () => {
+    const space = webSpace({ sites: sitesOf({ bing: { scan: BingResults } }) })
+    const endpoint = 'https://gateway.example/freellm/v1/search'
+    const controller = new AbortController()
+    const cancellation = new DOMException('Search cancelled', 'AbortError')
+    space.context.web.searchApi = () => ({ provider: 'custom', endpoint, apiKey: 'test-key' })
+    let requestSignal: AbortSignal | null | undefined
+    space.context.web.fetchSearchApi = async (url, options) => {
+      expect(url).toBe(endpoint)
+      expect(options?.method).toBe('POST')
+      expect(options?.redirect).toBe('error')
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer test-key')
+      expect(JSON.parse(String(options?.body))).toEqual({ query: 'docs', max_results: 1 })
+      requestSignal = options?.signal
+      return Response.json({
+        results: [{ title: 'Doc', url: 'https://example.com/doc', content: 'Snippet' }],
+      })
+    }
+    const input = { query: 'docs', limit: 1 }
+    expect(await space.operations.search(input, space.context)).toEqual({
+      query: 'docs',
+      engine: 'custom',
+      results: [{ title: 'Doc', url: 'https://example.com/doc', snippet: 'Snippet' }],
+    })
+    const initialFetch = space.context.web.fetchSearchApi
+    space.context.web.fetchSearchApi = async (url, options) => {
+      await initialFetch(url, options)
+      controller.abort(cancellation)
+      return Response.json({ results: [] })
+    }
+    await expect(
+      space.operations.search(input, { ...space.context, abortSignal: controller.signal })
+    ).rejects.toBe(cancellation)
+    expect(requestSignal?.aborted).toBe(true)
+    expect(space.record.opened).toBe(0)
   })
 
   test('INV-23 Bing 地区参数重复时用一个参数重试一次，失败时压缩报错', async () => {

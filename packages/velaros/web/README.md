@@ -44,7 +44,7 @@ export const webModule = createCapabilityModule({
 
 ## 约定
 
-- 宿主通过 `tavilyApiKey()` 提供非空密钥时，`search` 直接请求 Tavily。接口失败抛 `WEB_SEARCH_FAILED`，并保留原配置；空密钥沿用浏览器搜索。`read` 始终由宿主开页面。
+- 宿主通过 `searchApi()` 提供 `WebSearchApiConnection` 时，`search` 向所选接口发送 Bearer 密钥与 JSON 请求。自定义接口接收 `query` 和 `max_results`，返回含 `url`、`title` 和 `content` 的 `results` 数组。接口失败抛 `WEB_SEARCH_FAILED`，返回空连接时使用浏览器搜索。`read` 始终由宿主开页面。
 - 页面和结果链接跳转由宿主处理。页面放在不落盘的临时会话里，并关闭后台节流，让单页应用正常渲染。建议使用 Chrome UA。
 - 每次尝试开一个新页面，用完在 finally 里 `close`：搜成、搜不通、打不开、超时、取消都一样；撒手之后宿主才开出来的页面也会被关掉。`close` 要能重复调用，抛错只记一笔。
 - 结果一出现在 DOM 里就抓：文档落下之后每 150 毫秒看一眼结果页，认出了结果、DOM 解析完（或条数稳住 300 毫秒）就用，并叫停剩下的加载；一条都没有时照旧等页面加载完或到点。

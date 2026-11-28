@@ -15,5 +15,6 @@ export type {
   WebEngineBackoff,
   WebOperationContext,
   WebPage,
+  WebSearchApiConnection,
   WebSpacePort,
 } from './contract/requires.js'
