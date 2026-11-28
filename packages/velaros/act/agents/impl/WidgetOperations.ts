@@ -16,7 +16,7 @@ import type { WidgetRequest } from '../types/widget.js'
  * 外部脚本只能从 cdnjs、jsdelivr、unpkg、esm.sh 加载，不能访问网络接口。
  */
 export interface WidgetOperationsApi {
-  /** @AgentView 显示一个小部件，立即返回，不等用户操作。
+  /** @AgentView 显示一个小部件，立即返回，不等用户操作。同一轮修正已显示的小部件时，沿用首次展示的 key 原位更新。要保留之前的卡片时，用不同的 key 或省略 key 新增。
    * @OperationEffect none
    * @OperationModes execute
    */
@@ -31,13 +31,21 @@ export class WidgetOperations implements WidgetOperationsApi {
       throw new AppError('VALIDATION', `小部件标题要 1 到 ${WidgetLimits.titleChars} 个字符`)
     if (!input.code.trim() || input.code.length > WidgetLimits.codeChars)
       throw new AppError('VALIDATION', `小部件代码要 1 到 ${WidgetLimits.codeChars} 个字符`)
+    const key = input.key?.trim()
+    if (key !== undefined && (!key || key.length > WidgetLimits.keyChars))
+      throw new AppError('VALIDATION', `小部件展示键要 1 到 ${WidgetLimits.keyChars} 个字符`)
     const height = Number.isFinite(input.height)
       ? Math.min(
           Math.max(Math.round(input.height!), WidgetLimits.minHeight),
           WidgetLimits.maxHeight
         )
       : WidgetLimits.defaultHeight
-    await ctx.show({ id: ctx.invocationId, title, code: input.code, height })
+    await ctx.show({
+      id: key ? `widget-key:${key}` : ctx.invocationId,
+      title,
+      code: input.code,
+      height,
+    })
     return null
   }
 }

@@ -87,7 +87,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；原生调用成功后宿主完成交付，文本协议继续声明完成。 |
 | `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |
 | `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。 |
-| `velaros:widget.show` | `execute` | `none` | 显示一个小部件，立即返回，不等用户操作。 |
+| `velaros:widget.show` | `execute` | `none` | 显示一个小部件，立即返回，不等用户操作。同一轮修正已显示的小部件时，沿用首次展示的 key 原位更新。要保留之前的卡片时，用不同的 key 或省略 key 新增。 |
 | `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。 |
 | `velaros:agents.start` | `execute` | `none` | 派发子任务，返回它的 job。 |
 | `velaros:agents.resume` | `execute` | `none` | 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。 |

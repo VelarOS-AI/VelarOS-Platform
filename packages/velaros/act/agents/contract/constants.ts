@@ -14,6 +14,8 @@ export const WidgetModuleId = 'velaros:widget' as const
 export const WidgetLimits = Object.freeze({
   /** 标题最多多少字符。 */
   titleChars: 200,
+  /** 同轮替换键最多多少字符。 */
+  keyChars: 64,
   /** 一个小部件的代码最多多少字符。 */
   codeChars: 120_000,
   /** 初始高度的下限，像素。 */

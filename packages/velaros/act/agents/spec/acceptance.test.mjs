@@ -229,6 +229,8 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
     { title: '空', code: ' ' },
     { title: 'x'.repeat(WidgetLimits.titleChars + 1), code: '<div></div>' },
     { title: '太长', code: 'x'.repeat(WidgetLimits.codeChars + 1) },
+    { title: '空键', code: '<div></div>', key: '  ' },
+    { title: '长键', code: '<div></div>', key: 'x'.repeat(WidgetLimits.keyChars + 1) },
   ])
     await assert.rejects(widgetOperations.show(bad, ctx), { code: 'VALIDATION' })
 
@@ -249,7 +251,7 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
         yield turn(request, {
           execute: {
             source:
-              "import {show} from 'velaros:widget';await show({title:'趋势',code:'<svg></svg>'});",
+              "import {show} from 'velaros:widget';await show({key:' chart ',title:'趋势',code:'<svg></svg>'});await show({key:'chart',title:'趋势（校正）',code:'<svg></svg>'});await show({title:'对比',code:'<svg></svg>'});",
           },
         })
         yield { type: 'finish', reason: 'stop' }
@@ -261,11 +263,12 @@ test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给�
   const session = await runtime.openSession('main')
   for await (const event of session.submit('画一张趋势图'))
     assert.equal(typeof event.type, 'string')
-  assert.equal(received.length, 1)
+  assert.equal(received.length, 3)
   assert.equal(received[0].title, '趋势')
   assert.equal(received[0].height, WidgetLimits.defaultHeight)
   assert.equal(received[0].sessionId, 'main')
-  assert.ok(received[0].id)
+  assert.equal(received[0].id, received[1].id)
+  assert.notEqual(received[0].id, received[2].id)
 
   const bare = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
